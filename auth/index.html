@@ -25,31 +25,16 @@
           color:var(--thelo-text);
           background-image:linear-gradient(to right,var(--grid-color) 1px,transparent 1px),linear-gradient(to bottom,var(--grid-color) 1px,transparent 1px);
           background-size:40px 40px;
-          /* Ensure body is a flex container for centering content */
-          display: flex;
-          flex-direction: column; /* Allows content to stack vertically */
-          align-items: center; /* Centers horizontally if width is set */
-          justify-content: center; /* Centers vertically */
-          min-height: 100vh; /* Ensures it takes full viewport height */
+          display: flex; /* Centering content vertically and horizontally */
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
       }
       html[lang="hy"] body{font-family:'Noto Serif Armenian',serif;}
       .window-container{background:#fff;border:1px solid var(--grid-color);border-radius:.75rem;padding:2.5rem;box-shadow:0 10px 15px -3px rgb(0 0 0/.1),0 4px 6px -4px rgb(0 0 0/.1);position:relative;}
       .window-container::before{content:" ";position:absolute;top:1rem;left:1rem;width:52px;height:12px;background-image:url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E");}
-
-      /* Styles for the new image container and image */
-      .auth-image-container {
-        width: 100%;
-        max-width: 400px; /* Adjust as needed */
-        margin-bottom: 2rem;
-      }
-      .auth-image-container img {
-        width: 100%;
-        height: auto;
-        border-radius: 0.75rem; /* Match window-container border-radius */
-        box-shadow: 0 10px 15px -3px rgb(0 0 0/.1),0 4px 6px -4px rgb(0 0 0/.1); /* Match window-container shadow */
-      }
-
-      /* Profile Photo Upload specific styles */
+      
+      /* New styles for profile photo upload */
       .profile-photo-upload-wrap {
           display: flex;
           flex-direction: column;
@@ -74,7 +59,6 @@
           display: none; /* Hide the default file input */
       }
 
-
       /* Responsive adjustments for mobile */
       @media (max-width: 767px) {
           .window-container {
@@ -86,9 +70,6 @@
               transform: scale(0.8);
               transform-origin: top left;
           }
-          .auth-image-container {
-              margin-bottom: 1.5rem; /* Smaller margin on mobile */
-          }
           .profile-photo-preview {
               width: 80px; /* Smaller on mobile */
               height: 80px;
@@ -99,10 +80,6 @@
 <body class="min-h-screen flex items-center justify-center px-6">
     <a href="/" class="fixed top-4 left-4 text-sm font-semibold text-slate-500 hover:text-[var(--thelo-blue)]"><span id="homeArrow">←</span> <span id="homeLink">Home</span></a>
   <button id="langToggle" class="fixed top-4 right-4 rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100">Հայ</button>
-
-  <div class="auth-image-container">
-    <img src="https://thelo.space/img/thelo-hero-image-placeholder.png" alt="Engaging learning image" />
-  </div>
 
     <div class="window-container w-full max-w-md">
       <h2 id="formTitle" class="text-2xl font-extrabold mb-6 text-center">Sign In</h2>
@@ -303,12 +280,15 @@
         if(password!==confirm){toast.textContent=TXT[lang].mismatch;toast.classList.remove('hidden');return;}
 
         let photoURL = '';
+        // Only attempt photo upload if a file is selected
         if (selectedFile) {
+            submitBtn.disabled = true; // Disable button during upload
             toast.textContent = TXT[lang].uploadingPhoto;
             toast.classList.remove('hidden');
             try {
-                // Upload image to Firebase Storage
-                const storageRef = ref(storage, `profile_photos/${auth.currentUser.uid}/${selectedFile.name}`);
+                // Firebase Storage Path: profile_photos/{user_uid}/profile.jpg
+                // Using a generic name like profile.jpg so it's easy to retrieve later
+                const storageRef = ref(storage, `profile_photos/${auth.currentUser ? auth.currentUser.uid : 'temp-uid'}/profile.jpg`); // auth.currentUser.uid will be available after create user
                 const snapshot = await uploadBytes(storageRef, selectedFile);
                 photoURL = await getDownloadURL(snapshot.ref);
                 toast.classList.add('hidden'); // Hide uploading message
@@ -316,6 +296,7 @@
                 console.error("Error uploading photo:", err);
                 toast.textContent = TXT[lang].errorUpload + " " + err.message;
                 toast.classList.remove('hidden');
+                submitBtn.disabled = false; // Re-enable button
                 return; // Stop signup process if photo upload fails
             }
         }
@@ -324,11 +305,24 @@
             const userCredential = await createUserWithEmailAndPassword(auth,email,password);
             const user = userCredential.user;
             
-            // Save user profile data to Firestore, including photoURL
+            // If photoURL was obtained, update the storage path with the actual UID
+            if (selectedFile && photoURL) {
+                const oldStorageRef = ref(storage, `profile_photos/temp-uid/profile.jpg`);
+                const newStorageRef = ref(storage, `profile_photos/${user.uid}/profile.jpg`);
+                await uploadBytes(newStorageRef, selectedFile); // Re-upload with correct UID path
+                photoURL = await getDownloadURL(newStorageRef); // Get new URL
+                // Optional: delete the old temp-uid file from storage if you want to be super clean
+                // deleteObject(oldStorageRef); 
+            } else if (!selectedFile) {
+                photoURL = 'https://via.placeholder.com/96/2563EB/FFFFFF?text='; // Default placeholder if no image uploaded
+            }
+
+
+            // Save user profile data to Firestore
             await setDoc(doc(db, 'artifacts', firebaseConfig.appId, 'users', user.uid, 'user_profile', 'profile'), {
                 email: user.email,
-                role: form.roleSelect.value, // Save the selected role
-                profilePhotoURL: photoURL // Save the uploaded photo URL
+                role: document.getElementById('roleSelect').value, // Use actual DOM element for role
+                profilePhotoURL: photoURL
             });
 
             toast.textContent = TXT[lang].signupSuccess;
@@ -338,6 +332,8 @@
             console.error("Error during signup:", err);
             toast.textContent=err.message;
             toast.classList.remove('hidden');
+        } finally {
+            submitBtn.disabled = false; // Always re-enable button
         }
       }else{
         try{
