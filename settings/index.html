@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="settingsTitle">Thelo Settings</title>
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+
+    <!-- Google Fonts: Manrope (for English) & Noto Serif Armenian -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            
+            /* The signature grid background */
+            background-image:
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Language-specific font rules */
+        html[lang="en"] body {
+            font-family: 'Manrope', sans-serif;
+        }
+        html[lang="hy"] body {
+            font-family: "Noto Serif Armenian", serif;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 800; /* Bolder Manrope */
+        }
+        html[lang="hy"] h1, 
+        html[lang="hy"] h2, 
+        html[lang="hy"] h3, 
+        html[lang="hy"] h4, 
+        html[lang="hy"] h5, 
+        html[lang="hy"] h6 {
+            font-weight: 700; /* Bolder Noto Serif Armenian */
+        }
+
+        /* Reusable Card/Window Style (for the main settings container) */
+        .settings-window {
+            background-color: white;
+            border: 1px solid var(--grid-color);
+            border-radius: 0.75rem; /* Consistent rounded corners */
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); /* Softer shadow */
+            padding: 2.5rem; /* Generous padding */
+            position: relative; /* For macOS dots */
+            max-width: 768px; /* Max width for settings window */
+            width: 100%;
+            margin: auto; /* Center the window */
+            flex-grow: 1; /* Allow it to grow in flex container */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* macOS style window buttons */
+        .settings-window::before {
+            content: ' ';
+            position: absolute;
+            top: 1.5rem;
+            left: 1.5rem;
+            width: 52px;
+            height: 12px;
+            background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
+            background-repeat: no-repeat;
+            z-index: 10;
+        }
+
+        /* Primary Button Style */
+        .thelo-btn {
+            background-color: var(--thelo-blue);
+            color: white;
+            font-weight: 700;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .thelo-btn:hover {
+            background-color: #1a56d2; /* Darker blue */
+            transform: translateY(-2px);
+        }
+
+        /* Secondary Button Style */
+        .thelo-btn-secondary {
+            background-color: transparent;
+            color: var(--thelo-blue);
+            border: 1px solid var(--thelo-blue);
+            font-weight: 700;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .thelo-btn-secondary:hover {
+            background-color: var(--thelo-blue);
+            color: white;
+        }
+
+        /* Destructive Button Style */
+        .thelo-btn-destructive {
+            background-color: #EF4444; /* Red-500 */
+            color: white;
+            font-weight: 700;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .thelo-btn-destructive:hover {
+            background-color: #DC2626; /* Darker Red */
+            transform: translateY(-2px);
+        }
+
+        /* Settings Item Styling (replacing old cards) */
+        .settings-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem 0; /* Vertical padding only */
+            border-bottom: 1px solid var(--grid-color); /* Subtle separator */
+        }
+        .settings-item:last-of-type {
+            border-bottom: none; /* No border for the last item */
+        }
+        .settings-item-content {
+            flex-grow: 1; /* Allows content to take space */
+            text-align: left; /* Align text left */
+        }
+        .settings-item-title {
+            font-weight: 600; /* Semi-bold */
+            font-size: 1.125rem; /* text-lg */
+            color: var(--thelo-text);
+        }
+        .settings-item-description {
+            font-size: 0.875rem; /* text-sm */
+            color: #6B7280; /* Slate-500 */
+            margin-top: 0.25rem;
+        }
+        .settings-item-action {
+            margin-left: 1.5rem; /* Space between content and action */
+            flex-shrink: 0; /* Don't shrink buttons */
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 767px) {
+            main {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+            header {
+                padding-left: 1.5rem;
+                padding-right: 1.5rem;
+            }
+            h2 {
+                font-size: 2rem; /* Adjust heading size */
+            }
+            h3 {
+                font-size: 1rem;
+            }
+            .settings-window {
+                padding: 2rem 1rem; /* Adjust padding on mobile */
+                border-radius: 1rem;
+            }
+            .settings-window::before {
+                top: 1rem;
+                left: 1rem;
+                transform: scale(0.8);
+                transform-origin: top left;
+            }
+            .settings-item {
+                flex-direction: column; /* Stack items on mobile */
+                align-items: flex-start;
+                padding: 1rem 0;
+            }
+            .settings-item-action {
+                margin-left: 0;
+                margin-top: 0.75rem; /* Space between description and button */
+                width: 100%; /* Full width button on mobile */
+            }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header Navigation -->
+    <header class="w-full bg-white/70 backdrop-blur-sm border-b border-slate-200 py-4 px-6 lg:px-8 flex items-center justify-between z-10">
+        <div class="flex items-center gap-4">
+            <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo logo" class="h-8 w-auto" />
+            <h1 class="text-2xl font-bold text-[var(--thelo-text)]" data-i18n="settingsTitleShort">Settings</h1>
+        </div>
+        <button id="back-to-dashboard-btn" class="thelo-btn-secondary text-sm px-4 py-2">
+            <i class="fas fa-arrow-left mr-2"></i> <span data-i18n="backToDashboardBtn">Dashboard</span>
+        </button>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow container mx-auto px-6 lg:px-8 py-8 md:py-12 flex justify-center items-center">
+        <div class="settings-window">
+            <h2 class="text-3xl lg:text-4xl font-extrabold text-[var(--thelo-text)] mb-8 text-center" data-i18n="settingsMainTitle">Account Settings & Support</h2>
+            
+            <div class="space-y-4">
+                <!-- Profile Management Item -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="profileManagementTitle">Profile</p>
+                        <p class="settings-item-description" data-i18n="loggedInAs">Logged in as: <span class="font-bold text-[var(--thelo-blue)]" id="user-email-display">Loading...</span></p>
+                        <p class="settings-item-description" data-i18n="yourName">Name: <span class="font-bold" id="user-name-display">Loading...</span></p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="change-profile-btn" class="thelo-btn-secondary text-sm px-4 py-2" data-i18n="changeProfileBtn">
+                            <i class="fas fa-edit mr-2"></i> Change Info
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Password Management Item -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="passwordManagementTitle">Password</p>
+                        <p class="settings-item-description" data-i18n="passwordDesc">Update your password to keep your account secure.</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="change-password-btn" class="thelo-btn-secondary text-sm px-4 py-2" data-i18n="changePasswordBtn">
+                            <i class="fas fa-key mr-2"></i> Change Password
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Language Settings Item -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="languageSettingsTitle">Language</p>
+                        <p class="settings-item-description" data-i18n="languageDesc">Select your preferred language for the dashboard.</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="langToggle" class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--thelo-blue)]/50" data-i18n="langToggleBtnText">Հայ</button>
+                    </div>
+                </div>
+
+                <!-- Support & Feedback Item -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="supportTitle">Support & Feedback</p>
+                        <p class="settings-item-description" data-i18n="supportDesc">Need help or want to report an issue? We're here for you!</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="report-problem-btn" class="thelo-btn-secondary text-sm px-4 py-2" data-i18n="reportProblemBtn">
+                            <i class="fas fa-bug mr-2"></i> Report Issue
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Logout Item -->
+                <div class="settings-item border-b-0 pt-6"> <!-- No bottom border for last item -->
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="logoutTitle">Logout</p>
+                        <p class="settings-item-description" data-i18n="logoutDesc">Sign out of your account.</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="logout-button" class="thelo-btn-destructive text-sm px-4 py-2" data-i18n="logoutBtn">
+                            <i class="fas fa-sign-out-alt mr-2"></i> Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- User ID Display (for debugging/identification) -->
+            <div class="text-center text-sm text-slate-500 mt-12">
+                <p>Your User ID: <span id="user-id-display" class="font-mono text-slate-700">Loading...</span></p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Firebase & Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signOut, onAuthStateChanged, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase configuration from environment variables
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // DOM Elements
+        const backToDashboardBtn = document.getElementById('back-to-dashboard-btn');
+        const userEmailDisplay = document.getElementById('user-email-display');
+        const userNameDisplay = document.getElementById('user-name-display');
+        const changeProfileBtn = document.getElementById('change-profile-btn');
+        const changePasswordBtn = document.getElementById('change-password-btn');
+        const reportProblemBtn = document.getElementById('report-problem-btn');
+        const logoutButton = document.getElementById('logout-button');
+        const langToggle = document.getElementById('langToggle');
+        const userIdDisplay = document.getElementById('user-id-display');
+
+        let isAuthReady = false; // Flag to ensure Firebase auth state is checked
+
+        // --- Internationalization Strings ---
+        const strings = {
+            en: {
+                settingsTitle: 'Thelo Settings',
+                settingsTitleShort: 'Settings',
+                backToDashboardBtn: 'Dashboard',
+                settingsMainTitle: 'Account Settings & Support',
+                profileManagementTitle: 'Profile',
+                loggedInAs: 'Logged in as: <span class="font-bold text-[var(--thelo-blue)]" id="user-email-display">Loading...</span>',
+                yourName: 'Name: <span class="font-bold" id="user-name-display">Loading...</span>',
+                changeProfileBtn: 'Change Profile Info',
+                passwordManagementTitle: 'Password',
+                passwordDesc: 'Update your password to keep your account secure.',
+                changePasswordBtn: 'Change Password',
+                languageSettingsTitle: 'Language',
+                languageDesc: 'Select your preferred language for the dashboard.',
+                langToggleBtnText: 'Հայ', // This button also changes text to 'EN' when clicked
+                supportTitle: 'Support & Feedback',
+                supportDesc: 'Need help or want to report an issue? We\'re here for you!',
+                reportProblemBtn: 'Report Issue', // Changed from "Report a Problem" for brevity
+                logoutTitle: 'Logout',
+                logoutDesc: 'Sign out of your account.',
+                logoutBtn: 'Logout'
+            },
+            hy: {
+                settingsTitle: 'Թելո Կարգավորումներ',
+                settingsTitleShort: 'Կարգավորումներ',
+                backToDashboardBtn: 'Վահանակ',
+                settingsMainTitle: 'Հաշվի Կարգավորումներ և Աջակցություն',
+                profileManagementTitle: 'Պրոֆիլ',
+                loggedInAs: 'Մուտք գործված է որպես: <span class="font-bold text-[var(--thelo-blue)]" id="user-email-display">Բեռնվում է...</span>',
+                yourName: 'Անուն: <span class="font-bold" id="user-name-display">Բեռնվում է...</span>',
+                changeProfileBtn: 'Փոխել պրոֆիլի տվյալները',
+                passwordManagementTitle: 'Գաղտնաբառ',
+                passwordDesc: 'Թարմացրեք ձեր գաղտնաբառը՝ ձեր հաշիվը պաշտպանելու համար։',
+                changePasswordBtn: 'Փոխել գաղտնաբառը',
+                languageSettingsTitle: 'Լեզու',
+                languageDesc: 'Ընտրեք ձեր նախընտրած լեզուն վահանակի համար։',
+                langToggleBtnText: 'EN', // This button also changes text to 'Հայ' when clicked
+                supportTitle: 'Աջակցություն և Հետադարձ Կապ',
+                supportDesc: 'Օգնությա՞ն կարիք ունեք կամ ցանկանում եք խնդիր հաղորդել: Մենք այստեղ ենք ձեզ համար:',
+                reportProblemBtn: 'Հաղորդել խնդրի մասին',
+                logoutTitle: 'Ելք',
+                logoutDesc: 'Դուրս գալ ձեր հաշվից։',
+                logoutBtn: 'Ելք'
+            }
+        };
+
+        let currentLang = 'en'; // Default language
+
+        function applyLang(lang) {
+            document.documentElement.lang = lang;
+            const t = strings[lang] || strings.en;
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const k = el.dataset.i18n;
+                if (t[k]) {
+                    el.innerHTML = t[k]; // Use innerHTML to allow for embedded spans
+                }
+            });
+            // Specific updates for dynamically inserted span values
+            userEmailDisplay.textContent = userEmailDisplay.textContent; // Retain dynamic email
+            userNameDisplay.textContent = userNameDisplay.textContent;   // Retain dynamic name
+
+            langToggle.textContent = (lang === 'hy') ? 'EN' : 'Հայ';
+        }
+
+        // Fetch user data and update settings page
+        async function updateSettingsPage(user) {
+            if (!db) {
+                console.error("Firestore is not initialized.");
+                return;
+            }
+
+            userIdDisplay.textContent = user.uid; // Display user ID
+            userEmailDisplay.textContent = user.email || 'N/A'; // Display user email
+
+            const userProfileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'user_profile', 'profile');
+            try {
+                const docSnap = await getDoc(userProfileRef);
+                if (docSnap.exists()) {
+                    const userData = docSnap.data();
+                    userNameDisplay.textContent = userData.name || 'N/A'; // Display user name
+                } else {
+                    console.warn("No user profile found for UID:", user.uid);
+                    userNameDisplay.textContent = 'N/A'; // Fallback for new user
+                }
+            } catch (error) {
+                console.error("Error fetching user profile:", error);
+                userNameDisplay.textContent = 'N/A'; // Fallback on error
+            }
+        }
+
+        // Firebase Auth State Listener
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                console.log("User is authenticated:", user.uid);
+                // If it's a Canvas custom token, try to sign in with it if not already signed in.
+                // Otherwise, if already authenticated (e.g., via email/password), proceed.
+                if (typeof __initial_auth_token !== 'undefined' && !isAuthReady) {
+                    try {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                        console.log("Signed in with initial custom token.");
+                        await updateSettingsPage(user); // Call updateSettingsPage after potential sign-in
+                    } catch (error) {
+                        console.error("Error signing in with initial custom token:", error);
+                        await signInAnonymously(auth); // Fallback to anonymous if custom token fails
+                        console.log("Signed in anonymously after custom token failure.");
+                        await updateSettingsPage(auth.currentUser); // Update settings for anonymous user
+                    }
+                } else if (!isAuthReady) {
+                    // For users authenticated via email/password (not Canvas token initially)
+                    await updateSettingsPage(user);
+                } else if (user.isAnonymous && !isAuthReady) {
+                    // If already anonymous and not ready, proceed to update
+                    console.log("User already anonymous. Proceeding to update settings.");
+                    await updateSettingsPage(user);
+                }
+
+            } else {
+                console.log("No user authenticated. Redirecting to login.");
+                // Redirect only if Firebase auth state has been fully checked and no user found
+                if (isAuthReady) { // Only redirect if initial auth check is complete
+                     window.location.href = 'index.html'; // Redirect to your main login page
+                }
+            }
+            isAuthReady = true; // Mark auth state as ready after initial check
+        });
+
+        // Event Listeners
+        backToDashboardBtn.addEventListener('click', () => {
+            window.location.href = 'student-dashboard.html'; // Navigate back to dashboard
+        });
+
+        logoutButton.addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+                console.log("User logged out successfully.");
+                window.location.href = 'index.html'; // Redirect to login page
+            } catch (error) {
+                console.error("Error logging out:", error);
+                // Optionally display an error message
+            }
+        });
+
+        changeProfileBtn.addEventListener('click', () => {
+            alert('Change Profile Info clicked!'); // Placeholder
+        });
+
+        changePasswordBtn.addEventListener('click', () => {
+            alert('Change Password clicked!'); // Placeholder
+        });
+
+        reportProblemBtn.addEventListener('click', () => {
+            alert('Report a Problem clicked!'); // Placeholder
+        });
+
+        // Initial language application
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            currentLang = params.get('lang') || 'en';
+            applyLang(currentLang);
+
+            langToggle.addEventListener('click', () => {
+                currentLang = (currentLang === 'en') ? 'hy' : 'en';
+                const url = new URL(window.location);
+                url.searchParams.set('lang', currentLang);
+                window.history.replaceState({}, '', url); // Update URL without reloading
+                applyLang(currentLang);
+            });
+        });
+    </script>
+</body>
+</html>
