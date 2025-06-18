@@ -80,6 +80,12 @@
             color: #ccc;
             font-size: 2.5rem;
             overflow: hidden; /* Ensure image fits circle */
+            cursor: pointer; /* Indicate it's clickable */
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .profile-picture-preview:hover {
+            border-color: var(--thelo-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
         }
         .profile-picture-preview img {
             width: 100%;
@@ -91,19 +97,7 @@
             position: absolute;
             z-index: -1;
         }
-        .profile-picture-label {
-            display: inline-block;
-            background-color: var(--thelo-blue);
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            cursor: pointer;
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-        .profile-picture-label:hover {
-            background-color: #1a56d2;
-        }
+        /* Removed .profile-picture-label style as it's no longer a distinct button */
         .loading-spinner {
             border: 4px solid #f3f3f3;
             border-top: 4px solid var(--thelo-blue);
@@ -153,11 +147,13 @@
         <form id="authForm" class="grid gap-y-4">
             <!-- Profile Picture Upload (Visible only on signup) -->
             <div id="pfpUploadWrap" class="hidden profile-picture-upload-area">
+                <!-- Made pfpPreview the clickable area -->
                 <div class="profile-picture-preview" id="pfpPreview">
                     <i class="fas fa-user-circle"></i>
                 </div>
-                <label for="pfpInput" class="profile-picture-label" data-i18n="uploadPfpLabel">Upload Profile Picture</label>
+                <!-- Removed explicit label, the div above acts as label -->
                 <input type="file" id="pfpInput" accept="image/*" class="profile-picture-input">
+                <span id="pfpStatusText" class="text-sm text-slate-500 mt-1" data-i18n="uploadPfpLabel">Upload Profile Picture</span>
             </div>
 
             <div>
@@ -270,7 +266,8 @@
         const pfpUploadWrap = document.getElementById('pfpUploadWrap'); // New PFP elements
         const pfpPreview = document.getElementById('pfpPreview');
         const pfpInput = document.getElementById('pfpInput');
-        const pfpLabel = document.getElementById('pfpUploadWrap').querySelector('label');
+        // const pfpLabel = document.getElementById('pfpUploadWrap').querySelector('label'); // Removed explicit label
+        const pfpStatusText = document.getElementById('pfpStatusText'); // New span for status text
 
 
         function applyLang(){
@@ -284,7 +281,7 @@
             labelRole.textContent = s.roleLabel;
             optStudent.textContent = s.student;
             optTeacher.textContent = s.teacher;
-            pfpLabel.textContent = s.uploadPfpLabel; // Update PFP label
+            pfpStatusText.textContent = s.uploadPfpLabel; // Update PFP status text
             if(mode === 'signup'){
                 formTitle.textContent = s.signUpTitle;
                 togglePrompt.textContent = s.toggleHas;
@@ -336,6 +333,12 @@
                 selectedFile = null;
                 pfpPreview.innerHTML = '<i class="fas fa-user-circle"></i>';
             }
+            pfpStatusText.textContent = TXT[lang].uploadPfpLabel; // Reset text after selection
+        });
+
+        // Make PFP preview clickable
+        pfpPreview.addEventListener('click', () => {
+            pfpInput.click(); // Programmatically click the hidden file input
         });
 
 
@@ -372,7 +375,7 @@
                     let pfpUrl = '';
                     if (selectedFile) {
                         try {
-                            pfpLabel.textContent = TXT[lang].pfpUploading; // Update PFP label to show uploading status
+                            pfpStatusText.textContent = TXT[lang].pfpUploading; // Update PFP status to show uploading
                             const fileRef = ref(storage, `artifacts/${appId}/users/${user.uid}/profile_pictures/profile.jpg`);
                             const uploadTask = await uploadBytes(fileRef, selectedFile);
                             pfpUrl = await getDownloadURL(uploadTask.ref);
@@ -414,7 +417,7 @@
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = TXT[lang].signUpBtn;
-                    pfpLabel.textContent = TXT[lang].uploadPfpLabel; // Reset PFP label
+                    pfpStatusText.textContent = TXT[lang].uploadPfpLabel; // Reset PFP status text
                 }
             } else { // Sign In mode
                 try {
