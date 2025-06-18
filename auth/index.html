@@ -1,368 +1,482 @@
-<!DOCTYPE html>  
-<html lang="en">  
-<head>  
-  <meta charset="UTF-8" />  
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />  
-  <title>thelo – Auth</title>  
-  <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />  
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>thelo – Auth</title>
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">  
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>  
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">  
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">
 
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>  
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
 
-  <style>  
-      :root {  
-          --thelo-blue:#2563EB;  
-          --thelo-bg:#F8F9FA;  
-          --thelo-text:#111827;  
-          --grid-color:#E5E7EB;  
-      }  
-      body{  
-          font-family:'Manrope',system-ui,-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;  
-          background-color:var(--thelo-bg);  
-          color:var(--thelo-text);  
-          background-image:linear-gradient(to right,var(--grid-color) 1px,transparent 1px),linear-gradient(to bottom,var(--grid-color) 1px,transparent 1px);  
-          background-size:40px 40px;  
-          /* Ensure body is a flex container for centering content */
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 100vh;
-      }  
-      html[lang="hy"] body{font-family:'Noto Serif Armenian',serif;}  
-      .window-container{background:#fff;border:1px solid var(--grid-color);border-radius:.75rem;padding:2.5rem;box-shadow:0 10px 15px -3px rgb(0 0 0/.1),0 4px 6px -4px rgb(0 0 0/.1);position:relative;}  
-      .window-container::before{content:" ";position:absolute;top:1rem;left:1rem;width:52px;height:12px;background-image:url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E");}  
+    <!-- Font Awesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
-      /* Styles for profile photo upload */
-      .profile-photo-upload-wrap {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          margin-bottom: 1rem;
-      }
-      .profile-photo-preview {
-          width: 96px;
-          height: 96px;
-          border-radius: 50%;
-          object-fit: cover;
-          border: 2px solid var(--thelo-blue);
-          margin-bottom: 0.75rem;
-      }
-      .profile-photo-label {
-          cursor: pointer;
-          font-weight: 700;
-          color: var(--thelo-blue);
-          text-decoration: underline;
-      }
-      .profile-photo-input {
-          display: none;
-      }
+    <style>
+        :root {
+            --thelo-blue:#2563EB;
+            --thelo-bg:#F8F9FA;
+            --thelo-text:#111827;
+            --grid-color:#E5E7EB;
+        }
+        body{
+            font-family:'Manrope',system-ui,-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+            background-color:var(--thelo-bg);
+            color:var(--thelo-text);
+            background-image:linear-gradient(to right,var(--grid-color) 1px,transparent 1px),linear-gradient(to bottom,var(--grid-color) 1px,transparent 1px);
+            background-size:40px 40px;
+            min-height:100vh;
+            display:flex;
+            align-items:center; /* Center vertically */
+            justify-content:center; /* Center horizontally */
+            padding:1.5rem; /* Add some padding on smaller screens */
+        }
+        html[lang="hy"] body{font-family:'Noto Serif Armenian',serif;}
+        .window-container{
+            background:#fff;
+            border:1px solid var(--grid-color);
+            border-radius:.75rem;
+            padding:2.5rem;
+            box-shadow:0 10px 15px -3px rgb(0 0 0/.1),0 4px 6px -4px rgb(0 0 0/.1);
+            position:relative;
+            max-width:400px; /* Default max-width for smaller forms */
+            width:100%; /* Fill available width up to max-width */
+        }
+        /* Increase max-width for wider signup form on desktop */
+        @media (min-width: 768px) { /* md breakpoint */
+            .window-container.signup-mode-desktop {
+                max-width: 650px; /* Wider for desktop signup layout */
+            }
+        }
 
-      /* Desktop specific form layout for signup mode */
-      @media (min-width: 768px) {
-          .window-container.signup-grid {
-              max-width: 700px; /* Make the overall card wider */
-              padding: 3rem 3.5rem; /* Increase padding for wider card */
-          }
-          .auth-form-desktop-grid {
-              display: grid;
-              grid-template-columns: 1fr 1fr; /* Two columns */
-              gap: 1.5rem 2rem; /* Row gap, Column gap */
-          }
-          /* Ensure elements that should span full width in the grid do so */
-          .auth-form-desktop-grid .profile-photo-upload-wrap,
-          .auth-form-desktop-grid .submit-btn-wrap { /* Added a wrapper for the button */
-              grid-column: span 2; /* Span both columns */
-          }
-      }
+        .window-container::before{
+            content:" ";
+            position:absolute;
+            top:1rem;
+            left:1rem;
+            width:52px;
+            height:12px;
+            background-image:url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E");
+        }
+        .form-input {
+            width: 100%;
+            border-radius: 0.5rem; /* Consistent with other elements */
+            border: 1px solid #D1D5DB;
+            background-color: white;
+            padding: 0.75rem 1rem;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-input:focus {
+            border-color: var(--thelo-blue);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+        }
 
-      /* Responsive adjustments for mobile */
-      @media (max-width: 767px) {
-          .window-container {
-              padding: 1.5rem;
-          }
-          .window-container::before {
-              top: 0.75rem;
-              left: 0.75rem;
-              transform: scale(0.8);
-              transform-origin: top left;
-          }
-          .profile-photo-preview {
-              width: 80px;
-              height: 80px;
-          }
-      }
-  </style>
+        .profile-picture-upload-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .profile-picture-preview {
+            width: 96px; /* h-24 */
+            height: 96px; /* w-24 */
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--grid-color);
+            margin-bottom: 0.5rem;
+            background-color: #f0f0f0; /* Light gray background */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ccc;
+            font-size: 2.5rem;
+            overflow: hidden; /* Ensure image fits circle */
+            cursor: pointer; /* Indicate it's clickable */
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .profile-picture-preview:hover {
+            border-color: var(--thelo-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+        }
+        .profile-picture-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .profile-picture-input {
+            opacity: 0;
+            position: absolute;
+            z-index: -1;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--thelo-blue);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 0.5rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .form-button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Responsive adjustments for fixed elements */
+        @media (max-width: 640px) {
+            .fixed.top-4.left-4, .fixed.top-4.right-4 {
+                top: 0.5rem;
+                font-size: 0.75rem;
+                padding: 0.25rem 0.5rem;
+            }
+            .fixed.top-4.left-4 { left: 0.5rem; }
+            .fixed.top-4.right-4 { right: 0.5rem; }
+        }
+    </style>
 </head>
 <body class="min-h-screen flex items-center justify-center px-6">
-    <a href="/" class="fixed top-4 left-4 text-sm font-semibold text-slate-500 hover:text-[var(--thelo-blue)]"><span id="homeArrow">←</span> <span id="homeLink">Home</span></a>
-  <button id="langToggle" class="fixed top-4 right-4 rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100">Հայ</button>
+    <!-- Fixed navigation & lang -->
+    <a href="/" class="fixed top-4 left-4 text-sm font-semibold text-slate-500 hover:text-[var(--thelo-blue)]"><span id="homeArrow">←</span> <span id="homeLink">Home</span></a>
+    <button id="langToggle" class="fixed top-4 right-4 rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100">Հայ</button>
 
-    <div id="authWindowContainer" class="window-container w-full max-w-md">
-      <h2 id="formTitle" class="text-2xl font-extrabold mb-6 text-center">Sign In</h2>
-      <p class="text-center text-sm mb-4">
-          <span id="togglePrompt">Don't have an account?</span>
-          <button id="toggleLink" class="text-[var(--thelo-blue)] font-semibold hover:underline">Create one</button>
-      </p>
+    <!-- Auth card -->
+    <div id="authWindowContainer" class="window-container w-full max-w-md">
+        <h2 id="formTitle" class="text-2xl font-extrabold mb-6 text-center">Sign In</h2>
+        <p class="text-center text-sm mb-4">
+            <span id="togglePrompt">Don't have an account?</span>
+            <button id="toggleLink" class="text-[var(--thelo-blue)] font-semibold hover:underline">Create one</button>
+        </p>
 
-      <form id="authForm" class="grid gap-y-4">
-            <div id="profilePhotoWrap" class="profile-photo-upload-wrap hidden">
-                <img id="profilePhotoPreview" class="profile-photo-preview" src="https://via.placeholder.com/96/E5E7EB/6B7280?text=+" alt="Profile Preview">
-                <label for="profilePhotoInput" class="profile-photo-label" id="labelUploadPhoto">Upload Photo</label>
-                <input type="file" id="profilePhotoInput" accept="image/*" class="profile-photo-input">
+        <form id="authForm" class="grid gap-y-4">
+            <!-- Profile Picture Upload (Visible only on signup) -->
+            <div id="pfpUploadWrap" class="hidden profile-picture-upload-area md:col-span-2">
+                <div class="profile-picture-preview" id="pfpPreview">
+                    <i class="fas fa-user-circle"></i>
+                </div>
+                <input type="file" id="pfpInput" accept="image/*" class="profile-picture-input">
+                <span id="pfpStatusText" class="text-sm text-slate-500 mt-1" data-i18n="uploadPfpLabel">Upload Profile Picture</span>
             </div>
 
-          <div id="emailFieldWrap">               <label id="labelEmail" class="block text-sm font-bold mb-1" for="email">Email</label>
-              <input id="email" type="email" required class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 shadow-sm focus:border-[var(--thelo-blue)] focus:ring-2 focus:ring-[var(--thelo-blue)]/50" />
-          </div>
-          <div id="passwordFieldWrap">               <label id="labelPassword" class="block text-sm font-bold mb-1" for="password">Password</label>
-              <input id="password" type="password" required class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 shadow-sm focus:border-[var(--thelo-blue)] focus:ring-2 focus:ring-[var(--thelo-blue)]/50" />
-          </div>
-          <div id="confirmWrap" class="hidden">
-              <label id="labelConfirm" class="block text-sm font-bold mb-1" for="confirm">Confirm Password</label>
-              <input id="confirm" type="password" class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 shadow-sm focus:border-[var(--thelo-blue)] focus:ring-2 focus:ring-[var(--thelo-blue)]/50" />
-          </div>
-          <div id="roleWrap" class="hidden">
-              <label id="labelRole" class="block text-sm font-bold mb-1" for="roleSelect">I am a:</label>
-              <select id="roleSelect" name="role" class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-4 py-3 shadow-sm focus:border-[var(--thelo-blue)] focus:ring-2 focus:ring-[var(--thelo-blue)]/50">
-                  <option value="student" id="optStudent">Student</option>
-                  <option value="teacher" id="optTeacher">Teacher</option>
-              </select>
-          </div>
-            <div class="submit-btn-wrap">               <button id="submitBtn" type="submit" class="mt-2 rounded-lg bg-[var(--thelo-blue)] px-8 py-3 font-bold text-white shadow hover:scale-105 transition-transform w-full">Sign In</button>
+            <!-- Email Input -->
+            <div id="emailDiv">
+                <label id="labelEmail" class="block text-sm font-bold mb-1" for="email">Email</label>
+                <input id="email" type="email" required class="form-input" />
             </div>
-      </form>
-      <p id="toast" class="mt-6 text-center text-sm text-red-600 hidden"></p>
-  </div>
-
-    <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    // Uncomment these if you are fully integrating Firebase Storage/Firestore
-    // import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-    // import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-
-    const firebaseConfig = {
-      apiKey:"AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
-      authDomain:"physmathacademy-722b3.firebaseapp.com",
-      projectId:"physmathacademy-722b3",
-      appId:"1:1093640992262:web:35b1bf4d2364bcf745f587"
-    };
-    const app=initializeApp(firebaseConfig);
-    const auth=getAuth(app);
-    // Initialize Firebase Storage and Firestore if you're using them
-    // const storage = getStorage(app);
-    // const db = getFirestore(app);
-
-    /* === i18n === */
-    const TXT={
-      en:{
-          home:"Home",
-          signInTitle:"Sign In",
-          signUpTitle:"Create Account",
-          signInBtn:"Sign In",
-          signUpBtn:"Create Account",
-          toggleHave:"Don't have an account?",
-          toggleHas:"Already have one?",
-          toggleCreate:"Create one",
-          toggleSignin:"Sign in",
-          email:"Email",
-          password:"Password",
-          confirm:"Confirm Password",
-          roleLabel:"I am a:",
-          student:"Student",
-          teacher:"Teacher",
-          mismatch:"Passwords do not match",
-          uploadPhoto:"Upload Photo", // New string for photo upload label
-          // Add other strings related to upload success/error if integrating full Firebase Storage logic
-          // uploadingPhoto:"Uploading Photo...", 
-          // signupSuccess:"Account created! Redirecting...", 
-          // errorUpload:"Failed to upload photo." 
-      },
-      hy:{
-          home:"Գլխավոր",
-          signInTitle:"Մուտք",
-          signUpTitle:"Ստեղծել հաշիվ",
-          signInBtn:"Մուտք",
-          signUpBtn:"Ստեղծել",
-          toggleHave:"Չունե՞ք հաշիվ?",
-          toggleHas:"Արդեն ունե՞ք հաշիվ?",
-          toggleCreate:"Ստեղծել",
-          toggleSignin:"Մուտք",
-          email:"Էլ‑փոստ",
-          password:"Գաղտնաբառ",
-          confirm:"Կրկնել գաղտնաբառը",
-          roleLabel:"Ես՝",
-          student:"Ուսանող եմ",
-          teacher:"Ուսուցիչ եմ",
-          mismatch:"Գաղտնաբառերը չեն համընկնում",
-          uploadPhoto:"Ներբեռնել լուսանկար", // New Armenian string
-          // uploadingPhoto:"Լուսանկարը ներբեռնվում է...", 
-          // signupSuccess:"Հաշիվը ստեղծված է։ Վերահղում...", 
-          // errorUpload:"Լուսանկարը չհաջողվեց ներբեռնել։" 
-      }
-    };
-
-    let lang='en';
-    let mode='signin';
-    let selectedFile = null; // To store the selected image file
-
-    /* === DOM === */
-    const authWindowContainer = document.getElementById('authWindowContainer'); // New DOM reference for the window container
-    const langBtn=document.getElementById('langToggle');
-    const homeLink=document.getElementById('homeLink');
-    const formTitle=document.getElementById('formTitle');
-    const togglePrompt=document.getElementById('togglePrompt');
-    const toggleLink=document.getElementById('toggleLink');
-    const labelEmail=document.getElementById('labelEmail');
-    const labelPassword=document.getElementById('labelPassword');
-    const labelConfirm=document.getElementById('labelConfirm');
-    const labelRole=document.getElementById('labelRole');
-    const labelUploadPhoto = document.getElementById('labelUploadPhoto');
-    const optStudent=document.getElementById('optStudent');
-    const optTeacher=document.getElementById('optTeacher');
-    const confirmWrap=document.getElementById('confirmWrap');
-    const roleWrap=document.getElementById('roleWrap');
-    const profilePhotoWrap = document.getElementById('profilePhotoWrap');
-    const profilePhotoPreview = document.getElementById('profilePhotoPreview');
-    const profilePhotoInput = document.getElementById('profilePhotoInput');
-    const emailFieldWrap = document.getElementById('emailFieldWrap'); // New
-    const passwordFieldWrap = document.getElementById('passwordFieldWrap'); // New
-    const submitBtn=document.getElementById('submitBtn');
-    const toast=document.getElementById('toast');
-
-    function applyLang(){
-      const s=TXT[lang];
-      document.documentElement.lang=lang;
-      langBtn.textContent=lang==='en'?'Հայ':'EN';
-      homeLink.textContent=s.home;
-      labelEmail.textContent=s.email;
-      labelPassword.textContent=s.password;
-      labelConfirm.textContent=s.confirm;
-      labelRole.textContent=s.roleLabel;
-      if (labelUploadPhoto) { 
-          labelUploadPhoto.textContent = s.uploadPhoto; 
-      }
-      optStudent.textContent=s.student;
-      optTeacher.textContent=s.teacher;
-      if(mode==='signup'){
-        formTitle.textContent=s.signUpTitle;
-        togglePrompt.textContent=s.toggleHas;
-        toggleLink.textContent=s.toggleSignin;
-        submitBtn.textContent=s.signUpBtn;
-      }else{
-        formTitle.textContent=s.signInTitle;
-        togglePrompt.textContent=s.toggleHave;
-        toggleLink.textContent=s.toggleCreate;
-        submitBtn.textContent=s.signInBtn;
-      }
-    }
-
-    function setMode(m){
-      mode=m;
-      if(m==='signup'){
-            // Show signup-specific fields
-            if (profilePhotoWrap) profilePhotoWrap.classList.remove('hidden');
-            if (confirmWrap) confirmWrap.classList.remove('hidden');
-            if (roleWrap) roleWrap.classList.remove('hidden');
             
-            // Apply desktop grid layout for signup form
-            if (authWindowContainer) authWindowContainer.classList.add('signup-grid');
-            if (form) form.classList.add('auth-form-desktop-grid'); // Apply grid to form itself
+            <!-- Role Select (Initially hidden, shown with signup) -->
+            <div id="roleWrap" class="hidden">
+                <label id="labelRole" class="block text-sm font-bold mb-1" for="roleSelect">I am a:</label>
+                <select id="roleSelect" name="role" class="form-input">
+                    <option value="student" id="optStudent">Student</option>
+                    <option value="teacher" id="optTeacher">Teacher</option>
+                </select>
+            </div>
+
+            <!-- Password Input -->
+            <div id="passwordDiv">
+                <label id="labelPassword" class="block text-sm font-bold mb-1" for="password">Password</label>
+                <input id="password" type="password" required class="form-input" />
+            </div>
             
-            // Reorder fields for desktop grid in signup mode
-            if (emailFieldWrap && passwordFieldWrap && confirmWrap && roleWrap) {
-                // Password and Confirm Password should be next to Email and Role
-                form.insertBefore(passwordFieldWrap, confirmWrap); // Move password next to email
-                form.insertBefore(confirmWrap, roleWrap); // Move confirm password after password
+            <!-- Confirm Password (Initially hidden, shown with signup) -->
+            <div id="confirmWrap" class="hidden">
+                <label id="labelConfirm" class="block text-sm font-bold mb-1" for="confirm">Confirm Password</label>
+                <input id="confirm" type="password" class="form-input" />
+            </div>
+
+            <button id="submitBtn" type="submit" class="mt-2 rounded-lg bg-[var(--thelo-blue)] px-8 py-3 font-bold text-white shadow hover:scale-105 transition-transform md:col-span-2">Sign In</button>
+        </form>
+        <p id="toast" class="mt-6 text-center text-sm text-red-600 hidden"></p>
+    </div>
+
+    <!-- Firebase & logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+        const firebaseConfig = {
+            apiKey:"AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain:"physmathacademy-722b3.firebaseapp.com",
+            projectId:"physmathacademy-722b3",
+            storageBucket: "physmathacademy-722b3.appspot.com", // Added storage bucket
+            appId:"1:1093640992262:web:35b1bf4d2364bcf745f587"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app); // Initialize Firebase Storage
+
+        /* === i18n === */
+        const TXT = {
+            en: {
+                home:"Home",
+                signInTitle:"Sign In",
+                signUpTitle:"Create Account",
+                signInBtn:"Sign In",
+                signUpBtn:"Create Account",
+                toggleHave:"Don't have an account?",
+                toggleHas:"Already have one?",
+                toggleCreate:"Create one",
+                toggleSignin:"Sign in",
+                email:"Email",
+                password:"Password",
+                confirm:"Confirm Password",
+                roleLabel:"I am a:",
+                student:"Student",
+                teacher:"Teacher",
+                mismatch:"Passwords do not match",
+                uploadPfpLabel:"Upload Profile Picture", // New string
+                pfpUploading:"Uploading..." // New string
+            },
+            hy: {
+                home:"Գլխավոր",
+                signInTitle:"Մուտք",
+                signUpTitle:"Ստեղծել հաշիվ",
+                signInBtn:"Մուտք",
+                signUpBtn:"Ստեղծել",
+                toggleHave:"Չունե՞ք հաշիվ?",
+                toggleHas:"Արդեն ունե՞ք հաշիվ?",
+                toggleCreate:"Ստեղծել",
+                toggleSignin:"Մուտք",
+                email:"Էլ‑փոստ",
+                password:"Գաղտնաբառ",
+                confirm:"Կրկնել գաղտնաբառը",
+                roleLabel:"Ես՝",
+                student:"Ուսանող եմ",
+                teacher:"Ուսուցիչ եմ",
+                mismatch:"Գաղտնաբառերը չեն համընկնում",
+                uploadPfpLabel:"Ներբեռնել պրոֆիլի նկար", // New string
+                pfpUploading:"Ներբեռնում..." // New string
             }
-      }else{
-            // Hide signup-specific fields
-            if (profilePhotoWrap) profilePhotoWrap.classList.add('hidden');
-            if (confirmWrap) confirmWrap.classList.add('hidden');
-            if (roleWrap) roleWrap.classList.add('hidden');
+        };
 
-            // Remove desktop grid layout for signin form
-            if (authWindowContainer) authWindowContainer.classList.remove('signup-grid');
-            if (form) form.classList.remove('auth-form-desktop-grid'); // Remove grid from form
-            
-            // Restore original order for signin form (if fields were reordered)
-            if (emailFieldWrap && passwordFieldWrap && confirmWrap && roleWrap) {
-                form.insertBefore(confirmWrap, roleWrap); // Re-insert confirm before role
-                form.insertBefore(roleWrap, submitBtn.parentNode); // Re-insert role before submit button wrapper
-            }
+        let lang = 'en';
+        let mode = 'signin';
+        let selectedFile = null; // To store the selected PFP file
 
-            // Reset profile photo preview when switching to sign-in
-            if (profilePhotoPreview) profilePhotoPreview.src = "https://via.placeholder.com/96/E5E7EB/6B7280?text=+"; // Placeholder for no image
-            selectedFile = null; // Clear selected file
-      }
-      applyLang();
-    }
+        /* === DOM === */
+        const langBtn = document.getElementById('langToggle');
+        const homeLink = document.getElementById('homeLink');
+        const authWindowContainer = document.getElementById('authWindowContainer'); // New ref to auth container
+        const formTitle = document.getElementById('formTitle');
+        const togglePrompt = document.getElementById('togglePrompt');
+        const toggleLink = document.getElementById('toggleLink');
+        const emailDiv = document.querySelector('#emailDiv'); // Get ref to parent div
+        const passwordDiv = document.querySelector('#passwordDiv'); // Get ref to parent div
+        const labelEmail = document.getElementById('labelEmail');
+        const labelPassword = document.getElementById('labelPassword');
+        const labelConfirm = document.getElementById('labelConfirm');
+        const labelRole = document.getElementById('labelRole');
+        const optStudent = document.getElementById('optStudent');
+        const optTeacher = document.getElementById('optTeacher');
+        const confirmWrap = document.getElementById('confirmWrap');
+        const roleWrap = document.getElementById('roleWrap');
+        const submitBtn = document.getElementById('submitBtn');
+        const toast = document.getElementById('toast');
+        const pfpUploadWrap = document.getElementById('pfpUploadWrap');
+        const pfpPreview = document.getElementById('pfpPreview');
+        const pfpInput = document.getElementById('pfpInput');
+        const pfpStatusText = document.getElementById('pfpStatusText');
 
-    langBtn.addEventListener('click',()=>{lang=lang==='en'?'hy':'en';applyLang();});
-    toggleLink.addEventListener('click',()=>{setMode(mode==='signin'?'signup':'signin');});
 
-    // Event listener for profile photo input change (to display preview)
-    if (profilePhotoInput) { // Ensure element exists
-        profilePhotoInput.addEventListener('change', (e) => {
-            selectedFile = e.target.files[0];
-            if (selectedFile) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    if (profilePhotoPreview) profilePhotoPreview.src = event.target.result;
-                };
-                reader.readAsDataURL(selectedFile);
+        function applyLang(){
+            const s = TXT[lang];
+            document.documentElement.lang = lang;
+            langBtn.textContent = lang === 'en' ? 'Հայ' : 'EN';
+            homeLink.textContent = s.home;
+            labelEmail.textContent = s.email;
+            labelPassword.textContent = s.password;
+            labelConfirm.textContent = s.confirm;
+            labelRole.textContent = s.roleLabel;
+            optStudent.textContent = s.student;
+            optTeacher.textContent = s.teacher;
+            pfpStatusText.textContent = s.uploadPfpLabel;
+            if(mode === 'signup'){
+                formTitle.textContent = s.signUpTitle;
+                togglePrompt.textContent = s.toggleHas;
+                toggleLink.textContent = s.toggleSignin;
+                submitBtn.textContent = s.signUpBtn;
+                pfpUploadWrap.classList.remove('hidden');
             } else {
-                if (profilePhotoPreview) profilePhotoPreview.src = "https://via.placeholder.com/96/E5E7EB/6B7280?text=+"; // Placeholder if no file selected
+                formTitle.textContent = s.signInTitle;
+                togglePrompt.textContent = s.toggleHave;
+                toggleLink.textContent = s.toggleCreate;
+                submitBtn.textContent = s.signInBtn;
+                pfpUploadWrap.classList.add('hidden');
+            }
+        }
+
+        function setMode(m){
+            mode = m;
+            // Clear PFP preview and selected file when switching modes
+            pfpPreview.innerHTML = '<i class="fas fa-user-circle"></i>';
+            selectedFile = null;
+            pfpInput.value = ''; // Clear file input selection
+            
+            if(m === 'signup'){
+                // Add grid classes for wider layout on desktop
+                authWindowContainer.classList.add('signup-mode-desktop'); // Adjust container width
+                form.classList.add('md:grid-cols-2', 'md:gap-x-4');
+                pfpUploadWrap.classList.remove('hidden'); // PFP wrapper
+                confirmWrap.classList.remove('hidden'); // Confirm password
+                roleWrap.classList.remove('hidden'); // Role select
+
+                // Ensure basic divs are not hidden
+                emailDiv.classList.remove('hidden');
+                passwordDiv.classList.remove('hidden');
+                
+            } else { // Sign In mode
+                // Remove grid classes for narrower layout
+                authWindowContainer.classList.remove('signup-mode-desktop');
+                form.classList.remove('md:grid-cols-2', 'md:gap-x-4');
+                pfpUploadWrap.classList.add('hidden');
+                confirmWrap.classList.add('hidden');
+                roleWrap.classList.add('hidden');
+            }
+            applyLang();
+            // Clear any toast messages when switching modes
+            toast.classList.add('hidden');
+            toast.textContent = '';
+        }
+
+        // PFP input change listener for preview
+        pfpInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedFile = file;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    pfpPreview.innerHTML = `<img src="${e.target.result}" alt="Profile Preview">`;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                selectedFile = null;
+                pfpPreview.innerHTML = '<i class="fas fa-user-circle"></i>';
+            }
+            pfpStatusText.textContent = TXT[lang].uploadPfpLabel; // Reset text after selection
+        });
+
+        // Make PFP preview clickable
+        pfpPreview.addEventListener('click', () => {
+            pfpInput.click(); // Programmatically click the hidden file input
+        });
+
+
+        langBtn.addEventListener('click', () => {lang = lang === 'en' ? 'hy' : 'en'; applyLang();});
+        toggleLink.addEventListener('click', () => {setMode(mode === 'signin' ? 'signup' : 'signin');});
+
+        /* === form submit === */
+        const form = document.getElementById('authForm');
+        form.addEventListener('submit', async e => {
+            e.preventDefault();
+            toast.classList.add('hidden');
+            toast.textContent = ''; // Clear previous toast message
+
+            const email = form.email.value.trim();
+            const password = form.password.value;
+
+            submitBtn.disabled = true; // Disable button during submission
+            submitBtn.innerHTML = `${TXT[lang].signUpBtn || TXT[lang].signInBtn} <span class="loading-spinner"></span>`; // Add loading spinner
+
+
+            if(mode === 'signup'){
+                const confirm = form.confirm.value;
+                if(password !== confirm){
+                    toast.textContent = TXT[lang].mismatch;
+                    toast.classList.remove('hidden');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = TXT[lang].signUpBtn;
+                    return;
+                }
+                try {
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+                    
+                    let pfpUrl = '';
+                    if (selectedFile) {
+                        try {
+                            pfpStatusText.textContent = TXT[lang].pfpUploading; // Update PFP status to show uploading
+                            const fileRef = ref(storage, `artifacts/${appId}/users/${user.uid}/profile_pictures/profile.jpg`);
+                            const uploadTask = await uploadBytes(fileRef, selectedFile);
+                            pfpUrl = await getDownloadURL(uploadTask.ref);
+                            console.log("PFP uploaded:", pfpUrl);
+                        } catch (pfpError) {
+                            console.error("Error uploading profile picture:", pfpError);
+                            toast.textContent = `Error uploading PFP: ${pfpError.message}. Proceeding without PFP.`;
+                            toast.classList.remove('hidden');
+                            pfpUrl = ''; // Ensure PFP URL is empty if upload failed
+                        }
+                    }
+
+                    const role = form.roleSelect.value;
+                    // For student/teacher specific fields, assuming they are within form for now
+                    // If you want to grab more data from specific inputs, you'd add them here
+                    const userProfileRef = doc(db, `artifacts/${appId}/users/${user.uid}/user_profile/profile`);
+                    await setDoc(userProfileRef, {
+                        name: user.displayName || user.email.split('@')[0], // Placeholder for actual name input
+                        email: user.email,
+                        role: role,
+                        pfpUrl: pfpUrl, // Save PFP URL to Firestore
+                        createdAt: new Date().toISOString()
+                        // Add more fields like classCode or schoolOrgName if available in the form
+                    });
+
+                    // Redirect or show success message
+                    toast.textContent = "Signup successful! Redirecting...";
+                    toast.classList.remove('text-red-600', 'hidden');
+                    toast.classList.add('text-green-600');
+                    setTimeout(() => {
+                        // Assuming this is a success and the user should be logged in and redirected
+                        window.location.href = '/student-dashboard.html'; // Or your intended dashboard
+                    }, 1500);
+
+                } catch(err) {
+                    toast.textContent = err.message;
+                    toast.classList.remove('hidden');
+                    toast.classList.add('text-red-600');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = TXT[lang].signUpBtn;
+                    pfpStatusText.textContent = TXT[lang].uploadPfpLabel; // Reset PFP status text
+                }
+            } else { // Sign In mode
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    toast.textContent = "Sign in successful! Redirecting...";
+                    toast.classList.remove('text-red-600', 'hidden');
+                    toast.classList.add('text-green-600');
+                    setTimeout(() => {
+                        window.location.href = '/student-dashboard.html'; // Or your intended dashboard
+                    }, 1500);
+                } catch(err) {
+                    toast.textContent = err.message;
+                    toast.classList.remove('hidden');
+                    toast.classList.add('text-red-600');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = TXT[lang].signInBtn;
+                }
             }
         });
-    }
 
-    /* === form submit === */
-    const form=document.getElementById('authForm');
-    form.addEventListener('submit',async e=>{
-      e.preventDefault();
-      toast.classList.add('hidden');
-      const email=form.email.value.trim();
-      const password=form.password.value;
-
-      if(mode==='signup'){
-        const confirm=form.confirm.value;
-        if(password!==confirm){toast.textContent=TXT[lang].mismatch;toast.classList.remove('hidden');return;}
-        
-        if (selectedFile) {
-            console.log("Profile photo selected:", selectedFile.name, selectedFile);
-        } else {
-            console.log("No profile photo selected. A default will be used or user prompted later.");
-        }
-
-        try{
-            const userCredential = await createUserWithEmailAndPassword(auth,email,password);
-            const user = userCredential.user;
-            console.log("User created with UID:", user.uid);
-            console.log("User role:", document.getElementById('roleSelect').value);
-
-          window.location.href='/'; 
-        }catch(err){
-            toast.textContent=err.message;
-            toast.classList.remove('hidden');
-        }
-      }else{ // Sign In mode
-        try{
-            await signInWithEmailAndPassword(auth,email,password);
-            window.location.href='/';
-        } catch(err){
-            toast.textContent=err.message;
-            toast.classList.remove('hidden');
-        }
-      }
-    });
-
-    // initial render
-    applyLang();
-  </script>
+        // initial render
+        applyLang();
+    </script>
 </body>
 </html>
