@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="title">thelo – Login or Sign Up</title>
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+
+    <!-- Google Fonts: Manrope (for English) & Noto Serif Armenian -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    
+    <!-- Font Awesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            /* Default to Manrope */
+            font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            
+            /* The signature grid background */
+            background-image:
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* Language-specific font rules */
+        html[lang="en"] body {
+            font-family: 'Manrope', sans-serif;
+        }
+        html[lang="hy"] body {
+            font-family: "Noto Serif Armenian", serif;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 800; /* Bolder Manrope */
+        }
+        html[lang="hy"] h1, 
+        html[lang="hy"] h2, 
+        html[lang="hy"] h3, 
+        html[lang="hy"] h4, 
+        html[lang="hy"] h5, 
+        html[lang="hy"] h6 {
+            font-weight: 700; /* Bolder Noto Serif Armenian */
+        }
+        
+        /* Animation System */
+        .anim-target {
+            opacity: 0;
+            transition: opacity 0.7s cubic-bezier(0.215, 0.610, 0.355, 1), transform 0.7s cubic-bezier(0.215, 0.610, 0.355, 1);
+            transform: translateY(20px);
+        }
+        .anim-target.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Nav link hover state */
+        .nav-link {
+             color: var(--thelo-text);
+             transition: color 0.2s;
+        }
+        .nav-link:hover {
+            color: var(--thelo-blue);
+        }
+        
+        /* macOS style window container (Not strictly needed for auth forms, but keeping for reference) */
+        .window-container {
+            position: relative;
+            background-color: white;
+            border: 1px solid var(--grid-color);
+            border-radius: 0.75rem;
+            padding: 2.5rem;
+        }
+        .window-container::before {
+            content: ' ';
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            width: 52px;
+            height: 12px;
+            background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
+            background-repeat: no-repeat;
+        }
+
+        @media (max-width: 767px){
+             #demo{display:none;} /* Hiding for the main site, irrelevant here but keeping for consistency with original if restored */
+        }
+
+        /* Styles for Auth section - Creative & Consistent */
+        #auth-section {
+            display: flex; /* Ensure flexbox for centering */
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 80px); /* Adjust based on nav height, makes form vertically centered */
+            padding: 1rem; /* Add some padding on small screens */
+        }
+        .auth-form-container {
+            max-width: 500px;
+            width: 100%; /* Ensure it takes full width up to max-width */
+            margin: 0 auto;
+            padding: 2.5rem; /* Increased padding for more space */
+            background-color: white;
+            border-radius: 1rem; /* Slightly more rounded corners */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Stronger shadow */
+            position: relative; /* For the macOS dots */
+        }
+        .auth-form-container::before {
+            content: ' ';
+            position: absolute;
+            top: 1.25rem; /* Adjust position */
+            left: 1.5rem; /* Adjust position */
+            width: 52px;
+            height: 12px;
+            background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
+            background-repeat: no-repeat;
+            z-index: 10;
+        }
+        .form-group label {
+            font-weight: 700;
+            color: var(--thelo-text);
+        }
+        .form-input {
+            margin-top: 0.375rem; /* Slightly more margin */
+            display: block;
+            width: 100%;
+            border-radius: 0.625rem; /* Consistent with new container radius */
+            border: 1px solid #D1D5DB;
+            background-color: white;
+            padding: 0.875rem 1.125rem; /* Slightly larger padding */
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        .form-input:focus {
+            border-color: var(--thelo-blue);
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.3); /* Stronger focus ring */
+        }
+        .form-button {
+            width: 100%;
+            padding: 0.875rem 1.25rem; /* Larger padding for buttons */
+            border-radius: 0.625rem; /* Consistent with input and container radius */
+            font-weight: 800; /* Bolder font for buttons */
+            color: white;
+            background-color: var(--thelo-blue);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s ease-in-out, background-color 0.2s ease-in-out;
+        }
+        .form-button:hover {
+            transform: translateY(-3px); /* More pronounced hover effect */
+            background-color: #1a56d2; /* Darker blue on hover */
+        }
+        .toggle-button {
+            color: var(--thelo-blue);
+            font-weight: 700; /* Bolder toggle text */
+            cursor: pointer;
+            text-decoration: underline;
+            transition: color 0.2s ease-in-out;
+        }
+        .toggle-button:hover {
+            color: #1a56d2; /* Darker blue on hover */
+        }
+        .error-message {
+            color: #EF4444; /* Red-500 */
+            margin-top: 0.5rem;
+            font-size: 0.875rem; /* text-sm */
+            text-align: center; /* Center error messages */
+        }
+        /* New style for the logo in the auth section */
+        .auth-logo {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2rem; /* Space below the logo */
+            position: relative;
+            z-index: 20; /* Ensure logo is above macOS dots */
+        }
+    </style>
+</head>
+
+<body class="antialiased">
+
+<!-- SECTION: Navigation (Kept for site consistency) -->
+<nav id="mainNav" class="w-full z-50 border-b border-slate-200 bg-white/50 backdrop-blur-sm">
+  <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 lg:px-8">
+    <a href="/" class="flex items-center gap-2">
+      <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo logo" class="h-9 w-auto" />
+    </a>
+    <!-- Navigation links are intentionally removed as per "Nothing else" instruction, assuming this is a dedicated auth page -->
+    <ul class="hidden gap-8 md:flex">
+        <!-- These links are not functional on this dedicated auth page -->
+        <li><a href="#" class="nav-link font-semibold">Home</a></li>
+    </ul>
+
+    <button id="langToggle"
+            class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--thelo-blue)]/50">Հայ</button>
+  </div>
+</nav>
+
+<!-- Auth Section -->
+<section id="auth-section" class="anim-target is-visible"> <!-- Added anim-target and is-visible for immediate animation -->
+    <div class="auth-form-container">
+        <div class="auth-logo">
+            <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo logo" class="h-16 w-auto" />
+        </div>
+        <h2 id="auth-title" class="text-4xl font-extrabold tracking-tight text-[var(--thelo-text)] text-center mb-8">Login to thelo</h2>
+
+        <!-- Login Form -->
+        <form id="login-form" class="space-y-6">
+            <div class="form-group">
+                <label for="login-email" class="block text-sm">Email</label>
+                <input type="email" id="login-email" class="form-input" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label for="login-password" class="block text-sm">Password</label>
+                <input type="password" id="login-password" class="form-input" required autocomplete="current-password">
+            </div>
+            <p id="login-error" class="error-message hidden"></p>
+            <button type="submit" class="form-button" id="login-button">Log In</button>
+            <p class="text-center text-sm mt-6">
+                Don't have an account? <span id="show-signup" class="toggle-button">Sign Up here</span>
+            </p>
+        </form>
+
+        <!-- Signup Form -->
+        <form id="signup-form" class="space-y-6 hidden">
+            <div class="form-group">
+                <label for="signup-name" class="block text-sm">Name</label>
+                <input type="text" id="signup-name" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label for="signup-email" class="block text-sm">Email</label>
+                <input type="email" id="signup-email" class="form-input" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label for="signup-password" class="block text-sm">Password</label>
+                <input type="password" id="signup-password" class="form-input" required autocomplete="new-password">
+                <p class="text-xs text-slate-500 mt-1">Password must be at least 6 characters long.</p>
+            </div>
+            <div class="form-group">
+                <label for="signup-role" class="block text-sm">I am a...</label>
+                <select id="signup-role" class="form-input" required>
+                    <option value="">Select Role</option>
+                    <option value="student">Student</option>
+                    <option value="teacher">Teacher</option>
+                </select>
+            </div>
+            <div id="student-specific" class="form-group hidden">
+                <label for="signup-class-code" class="block text-sm">Class Code (Optional)</label>
+                <input type="text" id="signup-class-code" class="form-input">
+            </div>
+            <div id="teacher-specific" class="form-group hidden">
+                <label for="signup-school-org" class="block text-sm">School/Organization Name (Optional)</label>
+                <input type="text" id="signup-school-org" class="form-input">
+            </div>
+            <p id="signup-error" class="error-message hidden"></p>
+            <button type="submit" class="form-button" id="signup-button">Sign Up</button>
+            <p class="text-center text-sm mt-6">
+                Already have an account? <span id="show-login" class="toggle-button">Log In here</span>
+            </p>
+        </form>
+    </div>
+</section>
+
+<footer class="py-10 text-center text-sm text-slate-500">
+  <p data-i18n="footer"></p>
+</footer>
+
+<script type="module">
+    // Firebase imports
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Global Firebase variables
+    let app;
+    let auth;
+    let db;
+    let userId = null; // To store the current user's ID
+    let isAuthReady = false; // To track if auth state has been checked
+
+    // Firebase configuration from environment variables
+    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+    // Initialize Firebase
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+
+    // DOM Elements for Auth Forms
+    const authSection = document.getElementById('auth-section');
+    const loginForm = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
+    const authTitle = document.getElementById('auth-title');
+    const showSignupButton = document.getElementById('show-signup');
+    const showLoginButton = document.getElementById('show-login');
+    const signupRoleSelect = document.getElementById('signup-role');
+    const studentSpecificFields = document.getElementById('student-specific');
+    const teacherSpecificFields = document.getElementById('teacher-specific');
+    const loginError = document.getElementById('login-error');
+    const signupError = document.getElementById('signup-error');
+    const loginButton = document.getElementById('login-button');
+    const signupButton = document.getElementById('signup-button');
+    const loginEmail = document.getElementById('login-email'); // Added for direct access
+    const loginPassword = document.getElementById('login-password'); // Added for direct access
+
+
+    // Function to display error messages
+    function displayError(element, message) {
+        element.textContent = message;
+        element.classList.remove('hidden');
+    }
+
+    // Function to hide error messages
+    function hideError(element) {
+        element.classList.add('hidden');
+        element.textContent = '';
+    }
+
+    // Function to set loading state on buttons
+    function setLoading(button, isLoading) {
+        if (isLoading) {
+            button.disabled = true;
+            button.textContent = 'Loading...';
+            button.classList.add('opacity-70', 'cursor-not-allowed');
+        } else {
+            button.disabled = false;
+            button.classList.remove('opacity-70', 'cursor-not-allowed');
+            // Restore original text or set a default
+            if (button.id === 'login-button') button.textContent = 'Log In';
+            if (button.id === 'signup-button') button.textContent = 'Sign Up';
+        }
+    }
+
+    // Firebase Auth State Listener
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            userId = user.uid;
+            console.log("User signed in:", userId);
+            // In this version, we stay on the auth page if logged in
+            // until dashboards are implemented. You might want to display
+            // a "You are logged in" message here.
+            // For now, we'll just keep the forms visible.
+        } else {
+            userId = null;
+            console.log("No user signed in.");
+            if (typeof __initial_auth_token !== 'undefined' && !isAuthReady) {
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    console.log("Signed in with initial custom token.");
+                } catch (error) {
+                    console.error("Error signing in with initial custom token:", error);
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously after custom token failure.");
+                }
+            } else if (!isAuthReady) {
+                await signInAnonymously(auth);
+                console.log("Signed in anonymously.");
+            }
+        }
+        isAuthReady = true; // Mark auth state as ready after initial check
+    });
+
+    // Handle Login Form Submission
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        hideError(loginError);
+        setLoading(loginButton, true);
+
+        const email = loginEmail.value;
+        const password = loginPassword.value;
+
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            console.log("User logged in:", userCredential.user.uid);
+            // No redirection as per instruction. User remains on this page.
+        } catch (error) {
+            console.error("Login error:", error);
+            let errorMessage = "Login failed. Please check your email and password.";
+            if (error.code === 'auth/invalid-email') {
+                errorMessage = "Invalid email address format.";
+            } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                errorMessage = "Incorrect email or password.";
+            } else if (error.code === 'auth/too-many-requests') {
+                errorMessage = "Too many failed login attempts. Please try again later.";
+            }
+            displayError(loginError, errorMessage);
+        } finally {
+            setLoading(loginButton, false);
+        }
+    });
+
+    // Handle Signup Form Submission
+    signupForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        hideError(signupError);
+        setLoading(signupButton, true);
+
+        const name = document.getElementById('signup-name').value;
+        const email = document.getElementById('signup-email').value;
+        const password = document.getElementById('signup-password').value;
+        const role = signupRoleSelect.value;
+        const classCode = document.getElementById('signup-class-code').value;
+        const schoolOrgName = document.getElementById('signup-school-org').value;
+
+        if (!name || !email || !password || !role) {
+            displayError(signupError, "Please fill in all required fields.");
+            setLoading(signupButton, false);
+            return;
+        }
+        if (password.length < 6) {
+            displayError(signupError, "Password must be at least 6 characters long.");
+            setLoading(signupButton, false);
+            return;
+        }
+
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+            console.log("User signed up:", user.uid);
+
+            // Store additional user data in Firestore
+            const userProfileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'user_profile', 'profile');
+            await setDoc(userProfileRef, {
+                name: name,
+                email: email,
+                role: role,
+                classCode: role === 'student' ? classCode : '', // Only store if student
+                schoolOrgName: role === 'teacher' ? schoolOrgName : '', // Only store if teacher
+                createdAt: new Date().toISOString() // Store ISO string for consistency
+            });
+            console.log("User profile saved to Firestore.");
+            // No redirection as per instruction. User remains on this page.
+            // You might want to show a "Signup Successful! Please log in." message here.
+            loginForm.classList.remove('hidden'); // Show login form after successful signup
+            signupForm.classList.add('hidden');
+            authTitle.textContent = "Login to thelo";
+            displayError(loginError, "Signup successful! Please log in with your new account."); // Use login error space for success
+            hideError(signupError); // Hide signup error if it was visible
+
+        } catch (error) {
+            console.error("Signup error:", error);
+            let errorMessage = "Signup failed. Please try again.";
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = "This email is already in use.";
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = "Invalid email address format.";
+            } else if (error.code === 'auth/weak-password') {
+                errorMessage = "Password is too weak. Please choose a stronger password.";
+            }
+            displayError(signupError, errorMessage);
+        } finally {
+            setLoading(signupButton, false);
+        }
+    });
+
+    // Toggle between Login and Signup forms
+    showSignupButton.addEventListener('click', () => {
+        loginForm.classList.add('hidden');
+        signupForm.classList.remove('hidden');
+        authTitle.textContent = "Sign Up for thelo";
+        hideError(loginError);
+        hideError(signupError);
+    });
+
+    showLoginButton.addEventListener('click', () => {
+        signupForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+        authTitle.textContent = "Login to thelo";
+        hideError(loginError);
+        hideError(signupError);
+    });
+
+    // Show/hide role-specific fields
+    signupRoleSelect.addEventListener('change', (e) => {
+        if (e.target.value === 'student') {
+            studentSpecificFields.classList.remove('hidden');
+            teacherSpecificFields.classList.add('hidden');
+        } else if (e.target.value === 'teacher') {
+            teacherSpecificFields.classList.remove('hidden');
+            studentSpecificFields.classList.add('hidden');
+        } else {
+            studentSpecificFields.classList.add('hidden');
+            teacherSpecificFields.classList.add('hidden');
+        }
+    });
+
+    // --- Existing website scripts (language) ---
+    // Note: Animation observer, Fullscreen button, and Contact form success logic removed
+    // as they are not relevant for a dedicated auth page.
+    const strings = {
+        en: {
+            title: 'thelo – a handwriting-first learning platform',
+            footer: '© 2025 thelo'
+        },
+        hy: {
+            title: 'թելո – ձեռագիր ուսուցման հարթակ',
+            footer: '© 2025 թելո'
+        }
+    };
+
+    function applyLang(lang) {
+        document.documentElement.lang = lang;
+        const t = strings[lang] || strings.en;
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const k = el.dataset.i18n;
+            if (t[k]) {
+                el.innerHTML = t[k];
+            }
+        });
+        document.getElementById('langToggle').textContent = (lang === 'hy') ? 'EN' : 'Հայ';
+    }
+
+    // Language switcher logic
+    const params = new URLSearchParams(window.location.search);
+    let currentLang = params.get('lang') || 'en';
+    applyLang(currentLang);
+    document.getElementById('langToggle').addEventListener('click', () => {
+        currentLang = (currentLang === 'en') ? 'hy' : 'en';
+        const url = new URL(window.location);
+        url.searchParams.set('lang', currentLang);
+        window.history.replaceState({}, '', url);
+        applyLang(currentLang);
+    });
+</script>
+
+</body>
+</html>
