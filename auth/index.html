@@ -1,1 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>thelo – Auth</title>
+  <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
 
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+
+  <style>
+      :root {
+          --thelo-blue:#2563EB;
+          --thelo-bg:#F8F9FA;
+          --thelo-text:#111827;
+          --grid-color:#E5E7EB;
+      }
+      body{
+          font-family:'Manrope',system-ui,-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+          background-color:var(--thelo-bg);
+          color:var(--thelo-text);
+          background-image:linear-gradient(to right,var(--grid-color) 1px,transparent 1px),linear-gradient(to bottom,var(--grid-color) 1px,transparent 1px);
+          background-size:40px 40px;
+      }
+      html[lang="hy"] body{font-family:'Noto Serif Armenian',serif;}
+      .window-container{background:#fff;border:1px solid var(--grid-color);border-radius:.75rem;padding:2.5rem;box-shadow:0 10px 15px -3px rgb(0 0 0/.1),0 4px 6px -4px rgb(0 0 0/.1);position:relative;}
+      .window-container::before{content:" ";position:absolute;top:1rem;left:1rem;width:52px;height:12px;background-image:url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E");}
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-6">
+  <!-- Fixed navigation & lang -->
+  <a href="/" class="fixed top-4 left-4 text-sm font-semibold text-slate-500 hover:text-[var(--thelo-blue)]"><span id="homeArrow">←</span> <span id="homeLink">Home</span></a>
+  <button id="langToggle" class="fixed top-4 right-4 rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100">Հայ</button>
+
+  <!-- Auth card -->
+  <div class="window-container w-full max-w-md">
+      <h2 id="formTitle" class="text-2xl font-extrabold mb-6 text-center">Sign In</h2>
+      <p class="text-center text-sm mb-4">
+          <span id="togglePrompt">Don't have an account?</span>
+          <button id="toggleLink" class="text-[var(--thelo-blue)] font-semibold hover:underline">Create one</button>
+      </p>
+
+      <form id="authForm" class="grid gap-y-4">
+          <div>
+              <label id="labelEmail" class="block text-sm font-bold mb-1" for="email">Email</label>
+              <input id="email" type="email" required class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 shadow-sm focus:border-[var(--thelo-blue)] focus:ring-2 focus:ring-[var(--thelo-blue)]/50" />
+          </div>
+          <div>
+              <label id="labelPassword" class="block text-sm font-bold mb-1" for="password">Password</label>
+              <input id="password" type="password" required class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 shadow-sm focus:border-[var(--thelo-blue)] focus:ring-2 focus:ring-[var(--thelo-blue)]/50" />
+          </div>
+          <div id="confirmWrap" class="hidden">
+              <label id="labelConfirm" class="block text-sm font-bold mb-1" for="confirm">Confirm Password</label>
+              <input id="confirm" type="password" class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 shadow-sm focus:border-[var(--thelo-blue)] focus:ring-2 focus:ring-[var(--thelo-blue)]/50" />
+          </div>
+          <div id="roleWrap" class="hidden">
+              <label id="labelRole" class="block text-sm font-bold mb-1" for="roleSelect">I am a:</label>
+              <select id="roleSelect" name="role" class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-4 py-3 shadow-sm focus:border-[var(--thelo-blue)] focus:ring-2 focus:ring-[var(--thelo-blue)]/50">
+                  <option value="student" id="optStudent">Student</option>
+                  <option value="teacher" id="optTeacher">Teacher</option>
+              </select>
+          </div>
+          <button id="submitBtn" type="submit" class="mt-2 rounded-lg bg-[var(--thelo-blue)] px-8 py-3 font-bold text-white shadow hover:scale-105 transition-transform">Sign In</button>
+      </form>
+      <p id="toast" class="mt-6 text-center text-sm text-red-600 hidden"></p>
+  </div>
+
+  <!-- Firebase & logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey:"AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+      authDomain:"physmathacademy-722b3.firebaseapp.com",
+      projectId:"physmathacademy-722b3",
+      appId:"1:1093640992262:web:35b1bf4d2364bcf745f587"
+    };
+    const app=initializeApp(firebaseConfig);
+    const auth=getAuth(app);
+
+    /* === i18n === */
+    const TXT={
+      en:{home:"Home",signInTitle:"Sign In",signUpTitle:"Create Account",signInBtn:"Sign In",signUpBtn:"Create Account",toggleHave:"Don't have an account?",toggleHas:"Already have one?",toggleCreate:"Create one",toggleSignin:"Sign in",email:"Email",password:"Password",confirm:"Confirm Password",roleLabel:"I am a:",student:"Student",teacher:"Teacher",mismatch:"Passwords do not match"},
+      hy:{home:"Գլխավոր",signInTitle:"Մուտք",signUpTitle:"Ստեղծել հաշիվ",signInBtn:"Մուտք",signUpBtn:"Ստեղծել",toggleHave:"Չունե՞ք հաշիվ?",toggleHas:"Արդեն ունե՞ք հաշիվ?",toggleCreate:"Ստեղծել",toggleSignin:"Մուտք",email:"Էլ‑փոստ",password:"Գաղտնաբառ",confirm:"Կրկնել գաղտնաբառը",roleLabel:"Ես՝",student:"Ուսանող եմ",teacher:"Ուսուցիչ եմ",mismatch:"Գաղտնաբառերը չեն համընկնում"}
+    };
+
+    let lang='en';
+    let mode='signin';
+
+    /* === DOM === */
+    const langBtn=document.getElementById('langToggle');
+    const homeLink=document.getElementById('homeLink');
+    const formTitle=document.getElementById('formTitle');
+    const togglePrompt=document.getElementById('togglePrompt');
+    const toggleLink=document.getElementById('toggleLink');
+    const labelEmail=document.getElementById('labelEmail');
+    const labelPassword=document.getElementById('labelPassword');
+    const labelConfirm=document.getElementById('labelConfirm');
+    const labelRole=document.getElementById('labelRole');
+    const optStudent=document.getElementById('optStudent');
+    const optTeacher=document.getElementById('optTeacher');
+    const confirmWrap=document.getElementById('confirmWrap');
+    const roleWrap=document.getElementById('roleWrap');
+    const submitBtn=document.getElementById('submitBtn');
+    const toast=document.getElementById('toast');
+
+    function applyLang(){
+      const s=TXT[lang];
+      document.documentElement.lang=lang;
+      langBtn.textContent=lang==='en'?'Հայ':'EN';
+      homeLink.textContent=s.home;
+      labelEmail.textContent=s.email;
+      labelPassword.textContent=s.password;
+      labelConfirm.textContent=s.confirm;
+      labelRole.textContent=s.roleLabel;
+      optStudent.textContent=s.student;
+      optTeacher.textContent=s.teacher;
+      if(mode==='signup'){
+        formTitle.textContent=s.signUpTitle;
+        togglePrompt.textContent=s.toggleHas;
+        toggleLink.textContent=s.toggleSignin;
+        submitBtn.textContent=s.signUpBtn;
+      }else{
+        formTitle.textContent=s.signInTitle;
+        togglePrompt.textContent=s.toggleHave;
+        toggleLink.textContent=s.toggleCreate;
+        submitBtn.textContent=s.signInBtn;
+      }
+    }
+
+    function setMode(m){
+      mode=m;
+      if(m==='signup'){
+        confirmWrap.classList.remove('hidden');
+        roleWrap.classList.remove('hidden');
+      }else{
+        confirmWrap.classList.add('hidden');
+        roleWrap.classList.add('hidden');
+      }
+      applyLang();
+    }
+
+    langBtn.addEventListener('click',()=>{lang=lang==='en'?'hy':'en';applyLang();});
+    toggleLink.addEventListener('click',()=>{setMode(mode==='signin'?'signup':'signin');});
+
+    /* === form submit === */
+    const form=document.getElementById('authForm');
+    form.addEventListener('submit',async e=>{
+      e.preventDefault();
+      toast.classList.add('hidden');
+      const email=form.email.value.trim();
+      const password=form.password.value;
+      if(mode==='signup'){
+        const confirm=form.confirm.value;
+        if(password!==confirm){toast.textContent=TXT[lang].mismatch;toast.classList.remove('hidden');return;}
+        try{await createUserWithEmailAndPassword(auth,email,password);
+          // TODO: save role if needed
+          window.location.href='/';
+        }catch(err){toast.textContent=err.message;toast.classList.remove('hidden');}
+      }else{
+        try{await signInWithEmailAndPassword(auth,email,password);window.location.href='/';}
+        catch(err){toast.textContent=err.message;toast.classList.remove('hidden');}
+      }
+    });
+
+    // initial render
+    applyLang();
+  </script>
+</body>
+</html>
