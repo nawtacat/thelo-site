@@ -375,9 +375,12 @@
         }
 
         /* REMOVED macOS style window buttons CSS */
+        #welcome-stats::before { 
+            display: none; /* Explicitly hide it */
+        }
         #welcome-stats { 
-            position: relative; /* Kept for general layout, can be removed if not needed for other elements */
-            padding-top: 0; /* Reset padding related to dots */
+            position: relative; 
+            padding-top: 0; 
         }
         #welcome-stats h2 { 
             margin-top: 0; 
@@ -457,6 +460,9 @@
                 margin-left: auto;  
             }
             /* REMOVED mobile macOS dots CSS */
+            #welcome-stats::before { 
+                display: none;
+            }
             #welcome-stats { 
                 padding-top: 0;  
             }
@@ -752,7 +758,7 @@
             storageBucket: "physmathacademy-722b3.appspot.com",
             appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
         };
-        const appId = "default-app-id"; // This 'appId' variable here seems unused, but keeping it as it was in your original context. Firestore path will use user.uid directly.
+        const appId = "default-app-id"; 
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
@@ -796,7 +802,7 @@
         const strings = {
             en: {
                 dashboardTitle: 'Thelo Student Dashboard',
-                welcomeGreetingPrefix: 'Good afternoon, ', // Changed to prefix only
+                welcomeGreetingPrefix: 'Good afternoon, ', 
                 pointsTitle: 'Points', 
                 lessonsCompletedTitle: 'Lessons Completed',
                 streakTitle: 'Current Streak',
@@ -867,7 +873,7 @@
             },
             hy: {
                 dashboardTitle: 'Թելո Ուսանողի Վահանակ',
-                welcomeGreetingPrefix: 'Բարի կեսօր, ', // Changed to prefix only
+                welcomeGreetingPrefix: 'Բարի կեսօր, ', 
                 pointsTitle: 'Միավորներ',
                 lessonsCompletedTitle: 'Ավարտված դասեր',
                 streakTitle: 'Ընթացիկ շարունակականություն',
@@ -935,7 +941,7 @@
             }
         };
 
-        let currentLang = 'en'; // Default language state
+        let currentLang = 'en'; 
 
         function applyLang(lang) {
             document.documentElement.lang = lang;
@@ -943,24 +949,14 @@
             
             // Iterate over all elements with data-i18n attribute, excluding the welcomeGreetingPrefix parent
             document.querySelectorAll('[data-i18n]').forEach(el => {
-                // Ensure we don't overwrite the span where the name will go, if data-i18n is on its parent
-                // The welcomeGreetingPrefix span handles its own translation.
-                if (el.id === 'student-name' && el.parentElement.id === 'welcome-stats') { // Or some other robust check
-                    // Skip direct update if this span is nested under a data-i18n parent
-                    return; 
-                }
-                const k = el.dataset.i18n;
-                if (t[k]) {
-                    el.innerHTML = t[k]; 
+                // Only update elements that are directly assigned a data-i18n string and not part of a dynamic composite
+                if (el.dataset.i18n === 'welcomeGreetingPrefix') {
+                    el.textContent = t.welcomeGreetingPrefix; // Use textContent for plain text prefix
+                } else if (t[el.dataset.i18n]) {
+                    el.innerHTML = t[el.dataset.i18n]; 
                 }
             });
             
-            // Explicitly set the welcome greeting prefix
-            const welcomeGreetingPrefixSpan = document.querySelector('h2 > span[data-i18n="welcomeGreetingPrefix"]');
-            if (welcomeGreetingPrefixSpan) {
-                welcomeGreetingPrefixSpan.textContent = t.welcomeGreetingPrefix;
-            }
-
             // Update placeholder text for class code input
             const classCodeInputEl = document.getElementById('class-code-input');
             if (classCodeInputEl) {
@@ -1001,14 +997,16 @@
                     console.log("Fetched student data:", studentData); // Log for debugging
 
                     // Update Student Name
-                    const studentFullName = `${studentData.name || 'Student'} ${studentData.surname || ''}`.trim();
-                    if (studentNameSpan) studentNameSpan.textContent = studentFullName;
+                    const studentFullName = `${studentData.name || ''} ${studentData.surname || ''}`.trim();
+                    if (studentNameSpan) {
+                         studentNameSpan.textContent = studentFullName || 'Student'; // Fallback to 'Student' if no name
+                    }
 
                     // Update profile photo in navbar
-                    if (profilePhotoNav && studentData.profilePicture) {
+                    if (profilePhotoNav && studentData.profilePicture && typeof studentData.profilePicture === 'string' && studentData.profilePicture.startsWith('http')) {
                         profilePhotoNav.src = studentData.profilePicture;
                     } else {
-                        // Fallback to a default placeholder if no profile picture URL is found
+                        // Fallback to a robust default placeholder if no valid profile picture URL is found
                         profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P";
                     }
 
@@ -1016,8 +1014,8 @@
                     const points = typeof studentData.points === 'string' ? parseInt(studentData.points, 10) : studentData.points;
                     if (studentPointsSpan) studentPointsSpan.textContent = points !== undefined && !isNaN(points) ? points : 0;
 
-                    // Update Streak
-                    const streak = typeof studentData.numberstreak === 'string' ? parseInt(studentData.numberstreak, 10) : studentData.numberstreak;
+                    // Update Streak (FIXED: now reads from 'streak' field)
+                    const streak = typeof studentData.streak === 'string' ? parseInt(studentData.streak, 10) : studentData.streak;
                     if (streakCountSpan) streakCountSpan.textContent = streak !== undefined && !isNaN(streak) ? streak : 0;
 
                     // --- Simulate Dashboard Data (these fields are not in your specified Firestore doc) ---
@@ -1031,7 +1029,7 @@
                         if (noInProgressMessage) noInProgressMessage.classList.add('hidden');
                         if (lastTopicNameSpan) lastTopicNameSpan.textContent = "Solving Linear Equations"; 
                         if (problemsCountSpan) problemsCountSpan.textContent = "4"; 
-                        const progress = Math.floor(Math.random() * 90) + 5; // 5-95%
+                        const progress = Math.floor(Math.random() * 90) + 5; 
                         if (progressPercentageSpan) progressPercentageSpan.textContent = `${progress}%`;
                         if (lastTopicProgressBar) lastTopicProgressBar.style.width = `${progress}%`;
                     } else {
@@ -1058,7 +1056,7 @@
                     if (studentPointsSpan) studentPointsSpan.textContent = '0';
                     if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = '0';
                     if (streakCountSpan) streakCountSpan.textContent = '0';
-                    profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P"; // Default PFP
+                    profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P"; 
                     if (inProgressLessonCard) inProgressLessonCard.classList.add('hidden');
                     if (noInProgressMessage) noInProgressMessage.classList.remove('hidden');
                     if (inClassStateDiv) inClassStateDiv.classList.add('hidden');
@@ -1071,13 +1069,13 @@
                 if (studentPointsSpan) studentPointsSpan.textContent = '0';
                 if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = '0';
                 if (streakCountSpan) streakCountSpan.textContent = '0';
-                profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P"; // Default PFP
+                profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P"; 
                 if (inProgressLessonCard) inProgressLessonCard.classList.add('hidden');
                 if (noInProgressMessage) noInProgressMessage.classList.remove('hidden');
                 if (inClassStateDiv) inClassStateDiv.classList.add('hidden');
                 if (notInClassStateDiv) notInClassStateDiv.classList.remove('hidden');
             }
-            applyLang(currentLang); // Re-apply lang to ensure dynamic spans are translated
+            applyLang(currentLang); 
         }
 
         // Firebase Auth State Listener
