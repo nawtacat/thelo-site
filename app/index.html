@@ -7,6 +7,7 @@
     <title>thelo</title>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -711,7 +712,8 @@ body.lang-en {
         <script>
     const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
     firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
     firebase.appCheck().activate(
       '6LcdgkUrAAAAANakhruotKBunN_IvJzH7X7YhXKU',
@@ -1468,7 +1470,7 @@ body.lang-en {
         playRandomFeedback('approve');
         userPoints += 5; // Points are added here
         updatePointsDisplay();
-
+	updateUserPointsInFirestore(5);
         // Construct the message to include points
         const baseFeedback = mcqDetails.feedbackCorrect || TXT.correct;
         feedbackMessageForChat = `${baseFeedback} ${formatAIMessage('pointsGained', { points: 5 })}`;
@@ -1711,7 +1713,7 @@ body.lang-en {
         if (nextCheckBtn.textContent === TXT.gotIt) {
             stopCurrentStageAudio();
             const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-            userPoints += randomPoints; updatePointsDisplay(); addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+            userPoints += randomPoints; updateUserPointsInFirestore(randomPoints); updatePointsDisplay(); addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
             if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
         }
         switch (currentStageData.type) {
@@ -1801,6 +1803,22 @@ body.lang-en {
         }
         return message;
     }
+	function updateUserPointsInFirestore(pointsToAdd) {
+        const user = auth.currentUser;
+        if (!user) {
+            console.warn("Attempted to update points for a non-logged-in user.");
+            return;
+        }
+
+        const userDocRef = db.collection('thelo-students').doc(user.uid);
+
+        // Use FieldValue.increment for atomic updates to prevent race conditions
+        return userDocRef.update({
+            points: firebase.firestore.FieldValue.increment(pointsToAdd)
+        }).catch(error => {
+            console.error("Error updating points in Firestore: ", error);
+        });
+    }
 	async function checkHandwritingAnswer(){
     if (isThelobookActive || isPageGridVisible) return;
     stopCurrentStageAudio();
@@ -1883,6 +1901,7 @@ body.lang-en {
             playRandomFeedback('approve');
             userPoints += pointsGained; // Add points to user total
             updatePointsDisplay();
+	    updateUserPointsInFirestore(pointsGained);
             nextCheckBtn.classList.add('correct');
 
             // Construct the full chat message including points
@@ -2440,24 +2459,50 @@ body.lang-en {
     }
 
     auth.onAuthStateChanged(user => {
-        if (user) console.log("User authenticated with UID:", user.uid);
-        else console.log("User not authenticated.");
+        if (user) {
+            console.log("User authenticated with UID:", user.uid);
+            
+            // ===== ADD THIS BLOCK TO FETCH INITIAL POINTS =====
+            const userDocRef = db.collection('thelo-students').doc(user.uid);
+            userDocRef.get().then(doc => {
+                if (doc.exists) {
+                    // Set the local points variable to the value from the database
+                    userPoints = doc.data().points || 0;
+                } else {
+                    // Document doesn't exist, start points at 0
+                    userPoints = 0;
+                    console.log("No points document found for user, starting at 0.");
+                }
+                // Update the UI with the correct points
+                updatePointsDisplay();
+            }).catch(error => {
+                console.error("Error fetching user points:", error);
+                userPoints = 0; // Default to 0 on error
+                updatePointsDisplay();
+            });
+            // ===== END OF ADDED BLOCK =====
 
-        if (!UI_TEXT[currentLang]) currentLang = 'hy';
-        updateAllUITexts();
+        } else {
+            userPoints = 0; // Reset points if user logs out
+            updatePointsDisplay();
+            console.log("User not authenticated.");
+        }
 
-        if (!user && !isThelobookActive && !isPageGridVisible) {
-            const TXT = getCurrentUIText();
-            if(TXT && TXT.userNotAuthHandwriting) addChatMessage('AI', formatAIMessage('userNotAuthHandwriting'));
-        }
+        if (!UI_TEXT[currentLang]) currentLang = 'hy';
+        updateAllUITexts();
 
-        if (!window.appInitialized) {
-            window.appInitialized = true;
-            initApp();
-        } else {
-            updateAllUITexts();
-        }
-    });
+        if (!user && !isThelobookActive && !isPageGridVisible) {
+            const TXT = getCurrentUIText();
+            if(TXT && TXT.userNotAuthHandwriting) addChatMessage('AI', formatAIMessage('userNotAuthHandwriting'));
+        }
+
+        if (!window.appInitialized) {
+            window.appInitialized = true;
+            initApp();
+        } else {
+            updateAllUITexts();
+        }
+    });
 </script>
 </body>
 </html>
