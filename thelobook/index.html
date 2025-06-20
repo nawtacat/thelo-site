@@ -17,7 +17,8 @@
             --thelo-bg: #F8F9FA;
             --thelo-text: #111827;
             --grid-color: #E5E7EB;
-            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --card-hover-shadow: 0 8px 15px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.05);
         }
 
         html {
@@ -26,7 +27,7 @@
         }
 
         body {
-            font-family: 'Manrope', system-ui, sans-serif;
+            font-family: 'Manrope', system-ui, -apple-system, sans-serif;
             background-color: var(--thelo-bg);
             color: var(--thelo-text);
             margin: 0;
@@ -54,39 +55,46 @@
             align-items: center;
             padding: 1rem 2rem;
             flex-shrink: 0;
-            background-color: rgba(248, 249, 250, 0.8);
-            backdrop-filter: blur(8px);
-            border-bottom: 1px solid var(--grid-color);
+            position: relative;
+            z-index: 10;
         }
         
-        #drawing-area {
+        main#drawing-area {
             flex-grow: 1;
             position: relative;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 1rem;
+            box-sizing: border-box;
+            overflow: hidden;
         }
 
         #notebook-canvas {
             background-color: white;
             box-shadow: var(--shadow-md);
-            border-radius: 0.5rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--grid-color);
             cursor: crosshair;
             touch-action: none; /* Prevents scrolling on touch devices while drawing */
         }
+
+        #notebook-canvas.eraser-active {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="rgba(0,0,0,0.5)" d="M19.78,2.22a1,1,0,0,0-1.42,0L9.12,11.46a1,1,0,0,0,0,1.41L11.24,15A1,1,0,0,0,12.66,15L22.22,5.39A1,1,0,0,0,22.22,4L19.78,2.22ZM8.41,12.88,2,19.29V21a1,1,0,0,0,1,1H4.71l6.47-6.46-1.42-1.42A1,1,0,0,0,8.41,12.88Z"/></svg>') 12 12, auto;
+        }
         
-        /* --- Controls & Navigation --- */
+        /* --- Floating Controls & Navigation --- */
         .controls-bar {
             position: absolute;
-            bottom: 20px;
+            bottom: 2rem;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
             gap: 0.5rem;
             padding: 0.5rem;
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(255, 255, 255, 0.75);
             backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             border: 1px solid var(--grid-color);
             border-radius: 9999px;
             box-shadow: var(--shadow-md);
@@ -100,14 +108,15 @@
             border: none;
             background-color: transparent;
             font-size: 1.25rem;
+            color: var(--thelo-text);
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: background-color 0.2s, color 0.2s;
         }
 
-        .tool-btn:hover {
+        .tool-btn:hover:not(:disabled) {
             background-color: rgba(0, 0, 0, 0.05);
         }
 
@@ -116,40 +125,47 @@
             color: white;
         }
 
-        .page-nav {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
+        .tool-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .page-indicator {
             font-weight: 700;
-            margin: 0 1rem;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
         }
         
-        /* --- Page Grid View --- */
+        /* --- Page Grid View Overlay --- */
         #page-grid-view {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(248, 249, 250, 0.8);
+            background-color: rgba(248, 249, 250, 0.9);
             backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             z-index: 30;
-            display: none; /* Hidden by default */
+            display: none;
+            opacity: 0;
             flex-direction: column;
             padding: 2rem;
             box-sizing: border-box;
+            transition: opacity 0.3s ease-in-out;
         }
 
         #page-grid-view.visible {
             display: flex;
+            opacity: 1;
         }
 
         #grid-header {
             text-align: center;
             margin-bottom: 2rem;
+            flex-shrink: 0;
         }
 
         #grid-content {
@@ -165,8 +181,8 @@
 
         .page-thumbnail {
             position: relative;
-            width: 160px;
-            height: 120px;
+            width: 180px;
+            height: 135px;
             background-color: white;
             border: 1px solid var(--grid-color);
             border-radius: 0.5rem;
@@ -177,7 +193,7 @@
 
         .page-thumbnail:hover {
             transform: translateY(-5px);
-            box-shadow: var(--shadow-md);
+            box-shadow: var(--card-hover-shadow);
         }
 
         .page-thumbnail img {
@@ -193,30 +209,9 @@
             right: 8px;
             font-size: 0.75rem;
             font-weight: 700;
-            background-color: rgba(255, 255, 255, 0.7);
-            padding: 2px 5px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 2px 6px;
             border-radius: 4px;
-        }
-
-        .thumb-delete-btn {
-            position: absolute;
-            top: -8px;
-            right: -8px;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background-color: #EF4444; /* Red */
-            color: white;
-            border: 2px solid white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        .page-thumbnail:hover .thumb-delete-btn {
-            opacity: 1;
         }
         
         /* --- Utility & Button Styles --- */
@@ -238,28 +233,33 @@
             transform: translateY(-1px);
         }
 
-        /* --- Loader --- */
-        #loader {
+        /* --- Loader / Message Overlay --- */
+        #message-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            display: flex;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(248, 249, 250, 0.8);
+            backdrop-filter: blur(5px);
+            display: flex; /* Changed to flex */
             align-items: center;
             justify-content: center;
             z-index: 999;
-            font-size: 2rem;
-            color: var(--thelo-blue);
+            text-align: center;
         }
-        .fa-spin {
-            animation: fa-spin 1s infinite linear;
+        #message-overlay div {
+            padding: 2rem;
+            border-radius: 1rem;
+            max-width: 400px;
         }
-        @keyframes fa-spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        #message-overlay h2 {
+            font-size: 1.5rem;
+            color: var(--thelo-text);
+            font-weight: 800;
+            margin-bottom: 0.5rem;
         }
+        #message-overlay p {
+            color: #6B7280;
+        }
+
     </style>
 </head>
 <body>
@@ -270,7 +270,9 @@
                 <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo logo" style="height: 36px; width: auto;" />
                 <h1 style="font-size: 1.5rem; font-weight: 800; margin: 0;">thelobook</h1>
             </div>
-            <a href="https://thelo.space/dashboard" class="thelo-btn"> <i class="fas fa-arrow-left"></i> Back to Dashboard
+            <!-- This button can link back to your dashboard page -->
+            <a href="#" class="thelo-btn" onclick="alert('This will link back to the student dashboard.'); return false;">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
             </a>
         </header>
 
@@ -283,11 +285,11 @@
             <button id="pen-btn" class="tool-btn active" title="Pen"><i class="fas fa-pen"></i></button>
             <button id="eraser-btn" class="tool-btn" title="Eraser"><i class="fas fa-eraser"></i></button>
             <button id="add-page-btn" class="tool-btn" title="Add New Page"><i class="fas fa-plus"></i></button>
-        </div>
+            
+            <span style="border-left: 1px solid var(--grid-color); margin: 0 0.5rem;"></span>
 
-        <div id="page-nav" class="controls-bar" style="left: auto; right: 20px; transform: none;">
             <button id="prev-page-btn" class="tool-btn" title="Previous Page"><i class="fas fa-chevron-left"></i></button>
-            <span id="page-indicator" class="page-indicator">Page 1 / 1</span>
+            <span id="page-indicator" class="page-indicator">Page 1 / 32</span>
             <button id="next-page-btn" class="tool-btn" title="Next Page"><i class="fas fa-chevron-right"></i></button>
         </div>
     </div>
@@ -297,35 +299,23 @@
             <button id="close-grid-btn" class="thelo-btn"><i class="fas fa-times"></i> Close Grid View</button>
         </div>
         <div id="grid-content">
-            </div>
+            <!-- Thumbnails will be generated here by JavaScript -->
+        </div>
     </div>
 
-    <div id="loader">
-        <i class="fas fa-sync-alt fa-spin"></i>
+    <!-- This overlay can be used for login prompts or other messages -->
+    <div id="message-overlay" style="display: none;">
+        <div>
+            <h2>Authenticating...</h2>
+            <p>Please wait while we connect your thelobook.</p>
+        </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", // Use your actual config
-            authDomain: "physmathacademy-722b3.firebaseapp.com",
-            projectId: "physmathacademy-722b3",
-            storageBucket: "physmathacademy-722b3.appspot.com",
-            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        
+    <script>
         // --- DOM Elements ---
         const canvas = document.getElementById('notebook-canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        const loader = document.getElementById('loader');
-
+        const ctx = canvas.getContext('2d');
+        
         const penBtn = document.getElementById('pen-btn');
         const eraserBtn = document.getElementById('eraser-btn');
         const addPageBtn = document.getElementById('add-page-btn');
@@ -339,80 +329,105 @@
         const closeGridBtn = document.getElementById('close-grid-btn');
 
         // --- State ---
-        let currentUser = null;
-        let pages = []; // This will hold ImageData for each page
+        const MAX_PAGES = 32;
+        // Initialize with 32 empty pages for this prototype
+        let pages = new Array(MAX_PAGES).fill(null); 
         let currentPageIndex = 0;
         let currentTool = 'pen';
         let isDrawing = false;
-        const MAX_PAGES = 32;
+        let lastPos = { x: 0, y: 0 };
+        let devicePixelRatio = window.devicePixelRatio || 1;
 
         // --- Canvas & Drawing Logic ---
         function resizeCanvas() {
             const drawingArea = document.getElementById('drawing-area');
             const rect = drawingArea.getBoundingClientRect();
             
-            // Define aspect ratio, e.g., 4:3
-            const aspectRatio = 4 / 3;
-            let canvasWidth = rect.width - 40; // Subtract padding
-            let canvasHeight = canvasWidth / aspectRatio;
+            // Fixed aspect ratio for a consistent notebook feel, e.g., US Letter Portrait
+            const aspectRatio = 8.5 / 11;
+            let canvasHeight = rect.height - 40; // Subtract padding
+            let canvasWidth = canvasHeight * aspectRatio;
 
-            if (canvasHeight > rect.height - 40) {
-                canvasHeight = rect.height - 40;
-                canvasWidth = canvasHeight * aspectRatio;
+            if (canvasWidth > rect.width - 40) {
+                canvasWidth = rect.width - 40;
+                canvasHeight = canvasWidth / aspectRatio;
             }
             
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
+            // Save the current drawing before resizing
+            saveCurrentPageToMemory(); 
+            
+            canvas.style.width = `${canvasWidth}px`;
+            canvas.style.height = `${canvasHeight}px`;
 
+            canvas.width = Math.floor(canvasWidth * devicePixelRatio);
+            canvas.height = Math.floor(canvasHeight * devicePixelRatio);
+
+            ctx.scale(devicePixelRatio, devicePixelRatio);
+            
             renderPage(currentPageIndex); // Re-render the current page after resize
         }
         
-        function getMousePos(evt) {
+        function getEventPos(evt) {
             const rect = canvas.getBoundingClientRect();
+            const source = evt.touches ? evt.touches[0] : evt;
             return {
-                x: evt.clientX - rect.left,
-                y: evt.clientY - rect.top
+                x: (source.clientX - rect.left),
+                y: (source.clientY - rect.top)
             };
         }
 
         function startDrawing(e) {
+            e.preventDefault();
             isDrawing = true;
-            draw(e);
+            lastPos = getEventPos(e);
         }
 
         function stopDrawing() {
             if (isDrawing) {
                 isDrawing = false;
                 ctx.beginPath(); // Reset the path
-                saveCurrentPageToMemory(); // Save the new state to our temporary array
             }
         }
 
         function draw(e) {
             if (!isDrawing) return;
             e.preventDefault();
+            const pos = getEventPos(e);
 
+            ctx.beginPath();
             ctx.lineWidth = currentTool === 'pen' ? 3 : 25;
             ctx.lineCap = 'round';
-            ctx.strokeStyle = 'black';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#111827';
             ctx.globalCompositeOperation = currentTool === 'pen' ? 'source-over' : 'destination-out';
-
-            const pos = getMousePos(e.touches ? e.touches[0] : e);
+            
+            ctx.moveTo(lastPos.x, lastPos.y);
             ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(pos.x, pos.y);
+            
+            lastPos = pos;
         }
 
         // --- Page Logic ---
         function saveCurrentPageToMemory() {
-            if (currentPageIndex >= 0 && currentPageIndex < pages.length) {
-                pages[currentPageIndex] = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            }
+             // Create a temporary canvas to get a clean image data without scaling issues
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(canvas, 0, 0);
+
+            // Store the unscaled ImageData
+            pages[currentPageIndex] = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
         }
 
         function renderPage(index) {
+            // Clear canvas considering the scale
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
             if (index >= 0 && index < pages.length && pages[index]) {
                 ctx.putImageData(pages[index], 0, 0);
             }
@@ -422,12 +437,11 @@
             pageIndicator.textContent = `Page ${currentPageIndex + 1} / ${pages.length}`;
             prevPageBtn.disabled = currentPageIndex === 0;
             nextPageBtn.disabled = currentPageIndex >= pages.length - 1;
-            addPageBtn.disabled = pages.length >= MAX_PAGES;
+            addPageBtn.disabled = true; // Disabled in this prototype
         }
 
-        async function changePage(direction) {
-            await savePageToFirestore(currentPageIndex); // Save the current page before leaving
-            
+        function changePage(direction) {
+            saveCurrentPageToMemory(); // Save before leaving
             const newIndex = currentPageIndex + direction;
             if (newIndex >= 0 && newIndex < pages.length) {
                 currentPageIndex = newIndex;
@@ -435,129 +449,10 @@
                 updateUI();
             }
         }
-
-        async function addNewPage() {
-            if (pages.length >= MAX_PAGES) {
-                alert(`You have reached the maximum of ${MAX_PAGES} pages.`);
-                return;
-            }
-            await savePageToFirestore(currentPageIndex);
-
-            // Add a blank page
-            pages.push(null); 
-            currentPageIndex = pages.length - 1;
-            renderPage(currentPageIndex); // Renders a blank canvas
-            saveCurrentPageToMemory(); // Save the blank state
-            updateUI();
-        }
-
-        async function deletePage(indexToDelete) {
-            if (pages.length <= 1) {
-                alert("You cannot delete the last page.");
-                return;
-            }
-            if (!confirm(`Are you sure you want to delete page ${indexToDelete + 1}? This cannot be undone.`)) {
-                return;
-            }
-
-            loader.style.display = 'flex';
-            // Delete from Firestore
-            await deleteDoc(doc(db, `thelo-students/${currentUser.uid}/thelobook`, `page_${indexToDelete}`));
-
-            // Remove from local array
-            pages.splice(indexToDelete, 1);
-
-            // Re-number subsequent pages in Firestore
-            const batch = writeBatch(db);
-            for (let i = indexToDelete; i < pages.length; i++) {
-                const oldDocRef = doc(db, `thelo-students/${currentUser.uid}/thelobook`, `page_${i + 1}`);
-                const newDocRef = doc(db, `thelo-students/${currentUser.uid}/thelobook`, `page_${i}`);
-                const pageDoc = await getDoc(oldDocRef);
-                if (pageDoc.exists()) {
-                    batch.set(newDocRef, pageDoc.data());
-                    batch.delete(oldDocRef);
-                }
-            }
-            await batch.commit();
-
-            // Adjust current page index if needed
-            if (currentPageIndex >= indexToDelete) {
-                currentPageIndex = Math.max(0, currentPageIndex - 1);
-            }
-            
-            closeGridView(); // Close the grid to re-render
-            renderPage(currentPageIndex);
-            updateUI();
-            loader.style.display = 'none';
-        }
-
-        // --- Data Persistence (Firestore) ---
-        async function savePageToFirestore(index) {
-            if (!currentUser || index < 0 || index >= pages.length || !pages[index]) return;
-            
-            // Convert ImageData to Data URL for storage
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
-            tempCanvas.getContext('2d').putImageData(pages[index], 0, 0);
-            const dataUrl = tempCanvas.toDataURL();
-            
-            const pageDocRef = doc(db, `thelo-students/${currentUser.uid}/thelobook`, `page_${index}`);
-            try {
-                await setDoc(pageDocRef, { data: dataUrl, lastModified: new Date() });
-            } catch (error) {
-                console.error("Error saving page:", error);
-            }
-        }
         
-        async function loadPagesFromFirestore() {
-            if (!currentUser) return;
-            loader.style.display = 'flex';
-            
-            const pagesCollectionRef = collection(db, `thelo-students/${currentUser.uid}/thelobook`);
-            const querySnapshot = await getDocs(pagesCollectionRef);
-            
-            const loadedPages = [];
-            querySnapshot.forEach(doc => {
-                const pageId = parseInt(doc.id.split('_')[1], 10);
-                loadedPages[pageId] = doc.data().data; // Store the Data URL
-            });
-            
-            // Convert Data URLs back to ImageData
-            const imageDataPromises = loadedPages.map(dataUrl => {
-                return new Promise(resolve => {
-                    if (!dataUrl) {
-                        resolve(null);
-                        return;
-                    }
-                    const image = new Image();
-                    image.onload = () => {
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = canvas.width;
-                        tempCanvas.height = canvas.height;
-                        const tempCtx = tempCanvas.getContext('2d');
-                        tempCtx.drawImage(image, 0, 0, canvas.width, canvas.height);
-                        resolve(tempCtx.getImageData(0, 0, canvas.width, canvas.height));
-                    };
-                    image.onerror = () => resolve(null); // Resolve null if image fails to load
-                    image.src = dataUrl;
-                });
-            });
-
-            pages = await Promise.all(imageDataPromises);
-
-            if (pages.length === 0) {
-                pages.push(null); // Start with one blank page if notebook is empty
-            }
-            
-            currentPageIndex = 0;
-            renderPage(currentPageIndex);
-            updateUI();
-            loader.style.display = 'none';
-        }
-
         // --- Grid View Logic ---
         function renderGridView() {
+            saveCurrentPageToMemory(); // Ensure the last drawing is captured
             gridContent.innerHTML = '';
             pages.forEach((pageData, index) => {
                 const thumb = document.createElement('div');
@@ -565,31 +460,24 @@
                 
                 const thumbImg = document.createElement('img');
                 if (pageData) {
+                    // Use a temporary canvas to generate a data URL from ImageData
                     const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = canvas.width;
-                    tempCanvas.height = canvas.height;
+                    tempCanvas.width = pageData.width;
+                    tempCanvas.height = pageData.height;
                     tempCanvas.getContext('2d').putImageData(pageData, 0, 0);
                     thumbImg.src = tempCanvas.toDataURL();
                 } else {
-                    thumbImg.src = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="; // Transparent pixel
+                    // Show a placeholder for empty pages
+                    thumbImg.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3C/svg%3E";
+                    thumb.style.backgroundColor = '#f9fafb';
                 }
 
                 const pageNumSpan = document.createElement('span');
                 pageNumSpan.className = 'thumb-page-number';
                 pageNumSpan.textContent = index + 1;
 
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'thumb-delete-btn';
-                deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
-                deleteBtn.title = `Delete Page ${index + 1}`;
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    deletePage(index);
-                };
-
                 thumb.appendChild(thumbImg);
                 thumb.appendChild(pageNumSpan);
-                thumb.appendChild(deleteBtn);
 
                 thumb.onclick = () => {
                     currentPageIndex = index;
@@ -610,29 +498,30 @@
         function initApp() {
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
-
-            // Drawing Listeners
+            
+            // Full-screen mouseup listener to catch leaving the canvas while drawing
+            window.addEventListener('mouseup', stopDrawing);
+            window.addEventListener('touchend', stopDrawing);
+            
             canvas.addEventListener('mousedown', startDrawing);
-            canvas.addEventListener('mouseup', stopDrawing);
-            canvas.addEventListener('mouseout', stopDrawing);
             canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('touchstart', startDrawing);
-            canvas.addEventListener('touchend', stopDrawing);
-            canvas.addEventListener('touchcancel', stopDrawing);
-            canvas.addEventListener('touchmove', draw);
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
 
             // Tool Listeners
             penBtn.onclick = () => {
                 currentTool = 'pen';
                 penBtn.classList.add('active');
                 eraserBtn.classList.remove('active');
+                canvas.classList.remove('eraser-active');
             };
             eraserBtn.onclick = () => {
                 currentTool = 'eraser';
                 eraserBtn.classList.add('active');
                 penBtn.classList.remove('active');
+                canvas.classList.add('eraser-active');
             };
-            addPageBtn.onclick = addNewPage;
+            addPageBtn.onclick = () => alert("This feature will be enabled with Firebase. This prototype has a fixed 32 pages.");
             
             // Page Nav Listeners
             prevPageBtn.onclick = () => changePage(-1);
@@ -641,19 +530,13 @@
             // Grid View Listeners
             viewPagesBtn.onclick = renderGridView;
             closeGridBtn.onclick = closeGridView;
+
+            updateUI(); // Initial UI state
         }
 
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                currentUser = user;
-                initApp();
-                await loadPagesFromFirestore();
-            } else {
-                console.log("No user signed in. Redirecting...");
-                // Redirect to your login page
-                window.location.href = 'https://thelo.space/login'; // CHANGE THIS to your actual login page
-            }
-        });
+        // --- Run the app ---
+        // In a real app, this would be inside onAuthStateChanged
+        document.addEventListener('DOMContentLoaded', initApp);
 
     </script>
 </body>
