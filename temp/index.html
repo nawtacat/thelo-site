@@ -376,7 +376,7 @@
 
         /* REMOVED macOS style window buttons CSS */
         #welcome-stats::before { 
-            display: none; /* Explicitly hide it */
+            display: none; 
         }
         #welcome-stats { 
             position: relative; 
@@ -476,7 +476,7 @@
             <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo logo" class="h-10 w-auto" />
         </div>
         <div class="flex items-center gap-4">
-            <button id="open-thelobook-btn" class="thelobook-nav-btn" data-i18n="openThelobookBtn">
+            <button id="open-thelobook-btn" class="thelobook-nav-btn">
                 <i class="fas fa-book-open mr-2"></i> <span data-i18n="thelobookBtnText">thelobook</span>
             </button>
             <img id="profile-photo-nav" src="https://via.placeholder.com/150/2563EB/FFFFFF?text=P" alt="Profile Photo" class="profile-photo-nav" title="Profile Settings">
@@ -808,7 +808,8 @@
                 streakTitle: 'Current Streak',
                 pointsDisplay: 'Points', 
                 lessonsCompletedDisplay: 'Lessons', 
-                streakDisplay: 'Streak: <span id="streak-count" class="text-[var(--thelo-blue)]">0</span> 🔥',
+                // Changed streakDisplay to not use a span inside a span
+                streakDisplay: 'Streak: {streakValue} 🔥', // Placeholder for JS to inject number
                 
                 // Section 2: Continue Practice
                 continuePracticeTitle: 'Continue Practice',
@@ -868,8 +869,8 @@
                 leaveClassBtn: 'Leave Class',
 
                 settingsBtn: 'Settings', // Title for profile photo acting as settings
-                openThelobookBtn: 'thelobook',
-                thelobookBtnText: 'thelobook' // New string for Thelobook button text
+                openThelobookBtn: 'thelobook', // This is no longer used for the button's data-i18n directly
+                thelobookBtnText: 'thelobook' // This is the span's text
             },
             hy: {
                 dashboardTitle: 'Թելո Ուսանողի Վահանակ',
@@ -879,7 +880,7 @@
                 streakTitle: 'Ընթացիկ շարունակականություն',
                 pointsDisplay: 'Միավորներ',
                 lessonsCompletedDisplay: 'Դասեր',
-                streakDisplay: 'Շարունակականություն: <span id="streak-count" class="text-[var(--thelo-blue)]">0</span> 🔥',
+                streakDisplay: 'Շարունակականություն: {streakValue} 🔥', // Placeholder for JS to inject number
 
                 continuePracticeTitle: 'Շարունակել Գործնական Աշխատանքը',
                 lastTopicContext: 'Վերջին թեման: <span class="font-semibold text-[var(--thelo-blue)]" id="last-topic-name">Շրջանների Մակերեսը</span>',
@@ -936,8 +937,8 @@
                 leaveClassBtn: 'Դուրս գալ դասարանից',
 
                 settingsBtn: 'Կարգավորումներ',
-                openThelobookBtn: 'Թելոգիրք',
-                thelobookBtnText: 'Թելոգիրք'
+                openThelobookBtn: 'Թելոգիրք', // This is no longer used for the button's data-i18n directly
+                thelobookBtnText: 'Թելոգիրք' // This is the span's text
             }
         };
 
@@ -947,13 +948,15 @@
             document.documentElement.lang = lang;
             const t = strings[lang] || strings.en;
             
-            // Iterate over all elements with data-i18n attribute, excluding the welcomeGreetingPrefix parent
+            // Iterate over all elements with data-i18n attribute
             document.querySelectorAll('[data-i18n]').forEach(el => {
-                // Only update elements that are directly assigned a data-i18n string and not part of a dynamic composite
-                if (el.dataset.i18n === 'welcomeGreetingPrefix') {
-                    el.textContent = t.welcomeGreetingPrefix; // Use textContent for plain text prefix
-                } else if (t[el.dataset.i18n]) {
-                    el.innerHTML = t[el.dataset.i18n]; 
+                const k = el.dataset.i18n;
+                // Specifically handle elements where content might be dynamically injected later
+                if (k === 'welcomeGreetingPrefix' || k === 'streakDisplay') {
+                    // For these, we only set the textContent (or parts of it)
+                    el.textContent = t[k]; // Will be handled by JS later to insert dynamic values
+                } else if (t[k]) {
+                    el.innerHTML = t[k]; 
                 }
             });
             
@@ -963,7 +966,7 @@
                 classCodeInputEl.placeholder = t.classCodePlaceholder;
             }
 
-            // Update thelobook button text
+            // Update thelobook button text (targets the span inside the button)
             const thelobookBtnTextElement = document.querySelector('#open-thelobook-btn span[data-i18n="thelobookBtnText"]');
             if (thelobookBtnTextElement) {
                 thelobookBtnTextElement.textContent = t.thelobookBtnText;
@@ -999,31 +1002,33 @@
                     // Update Student Name
                     const studentFullName = `${studentData.name || ''} ${studentData.surname || ''}`.trim();
                     if (studentNameSpan) {
-                         studentNameSpan.textContent = studentFullName || 'Student'; // Fallback to 'Student' if no name
+                         studentNameSpan.textContent = studentFullName || 'Student'; 
                     }
 
                     // Update profile photo in navbar
                     if (profilePhotoNav && studentData.profilePicture && typeof studentData.profilePicture === 'string' && studentData.profilePicture.startsWith('http')) {
                         profilePhotoNav.src = studentData.profilePicture;
                     } else {
-                        // Fallback to a robust default placeholder if no valid profile picture URL is found
-                        profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P";
+                        profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P"; 
                     }
 
                     // Update Points
                     const points = typeof studentData.points === 'string' ? parseInt(studentData.points, 10) : studentData.points;
                     if (studentPointsSpan) studentPointsSpan.textContent = points !== undefined && !isNaN(points) ? points : 0;
 
-                    // Update Streak (FIXED: now reads from 'streak' field)
+                    // Update Streak (FIXED: now reads from 'streak' field AND uses innerHTML to keep emoji)
                     const streak = typeof studentData.streak === 'string' ? parseInt(studentData.streak, 10) : studentData.streak;
-                    if (streakCountSpan) streakCountSpan.textContent = streak !== undefined && !isNaN(streak) ? streak : 0;
+                    if (streakCountSpan) {
+                        const actualStreak = streak !== undefined && !isNaN(streak) ? streak : 0;
+                        streakCountSpan.innerHTML = `${actualStreak} <span class="text-orange-500">🔥</span>`;
+                    }
 
                     // --- Simulate Dashboard Data (these fields are not in your specified Firestore doc) ---
                     const simulatedLessonsCompleted = Math.floor(Math.random() * 30) + 5;
                     if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = simulatedLessonsCompleted;
 
                     // Simulate In-Progress Lesson (show/hide section)
-                    const hasInProgressLesson = Math.random() > 0.5; // 50% chance of in-progress
+                    const hasInProgressLesson = Math.random() > 0.5; 
                     if (hasInProgressLesson) {
                         if (inProgressLessonCard) inProgressLessonCard.classList.remove('hidden');
                         if (noInProgressMessage) noInProgressMessage.classList.add('hidden');
@@ -1038,7 +1043,7 @@
                     }
 
                     // Simulate Class Join Status
-                    const isInClass = Math.random() > 0.5; // 50% chance of being in a class
+                    const isInClass = Math.random() > 0.5; 
                     if (isInClass) {
                         if (inClassStateDiv) inClassStateDiv.classList.remove('hidden');
                         if (notInClassStateDiv) notInClassStateDiv.classList.add('hidden');
@@ -1051,11 +1056,10 @@
 
                 } else {
                     console.warn("No student profile found for UID:", user.uid, "in 'thelo-students' collection.");
-                    // Set default/empty states for dashboard if no data found
                     if (studentNameSpan) studentNameSpan.textContent = 'New Student';
                     if (studentPointsSpan) studentPointsSpan.textContent = '0';
                     if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = '0';
-                    if (streakCountSpan) streakCountSpan.textContent = '0';
+                    if (streakCountSpan) streakCountSpan.innerHTML = `0 <span class="text-orange-500">🔥</span>`; // Default with emoji
                     profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P"; 
                     if (inProgressLessonCard) inProgressLessonCard.classList.add('hidden');
                     if (noInProgressMessage) noInProgressMessage.classList.remove('hidden');
@@ -1065,10 +1069,9 @@
             } catch (error) {
                 console.error("Error fetching student profile from Firestore:", error);
                 if (studentNameSpan) studentNameSpan.textContent = 'Error Loading Student';
-                // Fallback to empty/default states on error
                 if (studentPointsSpan) studentPointsSpan.textContent = '0';
                 if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = '0';
-                if (streakCountSpan) streakCountSpan.textContent = '0';
+                if (streakCountSpan) streakCountSpan.innerHTML = `0 <span class="text-orange-500">🔥</span>`; // Default with emoji
                 profilePhotoNav.src = "https://via.placeholder.com/150/2563EB/FFFFFF?text=P"; 
                 if (inProgressLessonCard) inProgressLessonCard.classList.add('hidden');
                 if (noInProgressMessage) noInProgressMessage.classList.remove('hidden');
