@@ -714,7 +714,6 @@ body.lang-en {
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
-    const storage = firebase.storage();
 
     firebase.appCheck().activate(
       '6LcdgkUrAAAAANakhruotKBunN_IvJzH7X7YhXKU',
@@ -2140,41 +2139,27 @@ body.lang-en {
         updateColorIndicator(); updateThelobookPageControls();
     }
 
-    // MODIFIED FUNCTION
-// 2. This function now triggers the master save to Firebase.
-function closeThelobook(savePage = true) {
-    if (!isThelobookActive) return;
+    function closeThelobook(savePage = true) {
+        if (!isThelobookActive) return;
+        if (savePage) saveCurrentThelobookPageDrawing();
+        isThelobookActive = false; const TXT = getCurrentUIText();
 
-    if (savePage) {
-        // First, save the current view into the local JS array
-        saveCurrentThelobookPageDrawing();
-        // Then, trigger the function to upload the entire book to Firebase
-        saveThelobookToFirebase();
+        thelobookCanvas.classList.remove('active');
+        thelobookCanvas.classList.remove('grid-underlay');
+        thelobookControlsEl.classList.remove('visible');
+        removeThelobookDrawListeners(); addBoardDrawListeners();
+        thelobookBtn.textContent = TXT.thelobookOpen;
+        
+        resumeMediaState();
+        
+        if (currentStageData) {
+            // renderStageUI is called by resumeMediaState
+        } else {
+            updateColorIndicator();
+            canvas.style.pointerEvents = 'none';
+        }
+        wasMediaPlayingBeforeThelobook = false; 
     }
-    
-    isThelobookActive = false;
-    const TXT = getCurrentUIText();
-
-    thelobookCanvas.classList.remove('active');
-    thelobookCanvas.classList.remove('grid-underlay');
-    thelobookControlsEl.classList.remove('visible');
-    
-    removeThelobookDrawListeners();
-    addBoardDrawListeners();
-    
-    thelobookBtn.textContent = TXT.thelobookOpen;
-
-    // Resume the lesson state
-    resumeMediaState();
-
-    if (currentStageData) {
-        // renderStageUI is called by resumeMediaState
-    } else {
-        updateColorIndicator();
-        canvas.style.pointerEvents = 'none';
-    }
-    wasMediaPlayingBeforeThelobook = false;
-}
 
     function openPageGridView() {
         if (isPageGridVisible) return;
@@ -2401,159 +2386,6 @@ function closeThelobook(savePage = true) {
             lastFrameTimestampForManualAdvance = performance.now(); event.preventDefault();
         }
     }
-    /**
- * =================================================================
- * NEW: FIREBASE THELOBOOK PERSISTENCE
- * =================================================================
- */
-
-/**
- * A helper function to convert an ImageData object to a WebP Data URL for uploading.
- * @param {ImageData} imageData - The ImageData object from a canvas.
- * @returns {string} A base64 encoded Data URL.
- */
-function imageDataToDataUrl(imageData) {
-    // Create a temporary canvas to hold the ImageData
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = imageData.width;
-    tempCanvas.height = imageData.height;
-    const tempCtx = tempCanvas.getContext('2d');
-
-    // Put the ImageData onto the temporary canvas
-    tempCtx.putImageData(imageData, 0, 0);
-
-    // Export the canvas as a WebP image for efficiency.
-    // The second parameter is quality (0.9 = 90%).
-    return tempCanvas.toDataURL('image/webp', 0.9);
-}
-
-/**
- * Loads the user's thelobook pages from Firestore and Firebase Storage.
- * This should be called after a user logs in and a lesson is loaded.
- */
-async function loadThelobookFromFirebase() {
-    const user = auth.currentUser;
-    const urlParams = new URLSearchParams(window.location.search);
-    const lessonId = urlParams.get('lessonFile');
-
-    if (!user || !lessonId) {
-        console.log("Thelobook: User or lesson not available for loading. Starting with a blank page.");
-        thelobookPages = [null]; // Start with one blank page if not logged in or no lesson
-        updateThelobookPageControls();
-        return;
-    }
-
-    // Define the reference to the specific thelobook document for this user and lesson
-    const thelobookDocRef = db.collection('thelobooks').doc(`${user.uid}_${lessonId}`);
-
-    try {
-        const doc = await thelobookDocRef.get();
-        if (doc.exists) {
-            const data = doc.data();
-            const pagesFromDb = data.pages || [];
-
-            if (pagesFromDb.length === 0) {
-                thelobookPages = [null]; // If the saved book is empty, start with a blank page
-            } else {
-                // Create a correctly-sized array to hold the incoming ImageData
-                const loadedPages = new Array(pagesFromDb.length).fill(null);
-
-                // Create an array of promises to load all images concurrently
-                const imageLoadPromises = pagesFromDb.map(async (pageData) => {
-                    if (pageData && pageData.imageURL && typeof pageData.pageIndex === 'number') {
-                        try {
-                            const img = new Image();
-                            img.crossOrigin = "anonymous"; // This is crucial
-                            img.src = pageData.imageURL;
-                            await img.decode(); // Wait for the image to fully download
-
-                            // Draw the loaded image to a temp canvas to extract its ImageData
-                            const tempCanvas = document.createElement('canvas');
-                            tempCanvas.width = img.width; // Use the actual image dimensions
-                            tempCanvas.height = img.height;
-                            const tempCtx = tempCanvas.getContext('2d');
-                            tempCtx.drawImage(img, 0, 0);
-
-                            // Store the ImageData in the correct position
-                            loadedPages[pageData.pageIndex] = tempCtx.getImageData(0, 0, img.width, img.height);
-                        } catch (e) {
-                            console.error(`Error loading page ${pageData.pageIndex} from URL:`, e);
-                            loadedPages[pageData.pageIndex] = null; // Mark as null if loading fails
-                        }
-                    }
-                });
-
-                await Promise.all(imageLoadPromises);
-                thelobookPages = loadedPages;
-            }
-            console.log(`Thelobook for lesson '${lessonId}' loaded successfully with ${thelobookPages.length} page(s).`);
-        } else {
-            console.log(`No saved thelobook found for lesson '${lessonId}'. Starting fresh.`);
-            thelobookPages = [null]; // If no document exists, start with one blank page
-        }
-    } catch (error) {
-        console.error("Error loading thelobook from Firebase:", error);
-        thelobookPages = [null]; // Default to a blank page on any error
-    }
-
-    // Update the UI with the loaded (or new) book state
-    currentThelobookPageIndex = 0;
-    updateThelobookPageControls();
-}
-
-
-/**
- * Saves the entire thelobook (all pages) to Firestore and Firebase Storage.
- */
-async function saveThelobookToFirebase() {
-    const user = auth.currentUser;
-    const urlParams = new URLSearchParams(window.location.search);
-    const lessonId = urlParams.get('lessonFile');
-
-    if (!user || !lessonId) {
-        console.warn("Thelobook: Cannot save without a logged-in user and a lessonId.");
-        return;
-    }
-
-    console.log("Saving thelobook to Firebase...");
-
-    const pageMetadataForFirestore = [];
-    const uploadPromises = thelobookPages.map(async (imageData, index) => {
-        // Only process pages that have actual drawings (are not null)
-        if (imageData instanceof ImageData) {
-            const pagePath = `thelobooks/${user.uid}/${lessonId}/page_${index}.webp`;
-            const storageRef = storage.ref(pagePath);
-            const dataUrl = imageDataToDataUrl(imageData);
-
-            try {
-                const snapshot = await storageRef.putString(dataUrl, 'data_url');
-                const downloadURL = await snapshot.ref.getDownloadURL();
-                pageMetadataForFirestore.push({ pageIndex: index, imageURL: downloadURL });
-            } catch (error) {
-                console.error(`Failed to upload page ${index}:`, error);
-                // Decide if you want to stop the whole save or just skip this page
-            }
-        }
-    });
-
-    // Wait for all page uploads to complete
-    await Promise.all(uploadPromises);
-
-    // Now, save the collected metadata array to a single Firestore document
-    const thelobookDocRef = db.collection('thelobooks').doc(`${user.uid}_${lessonId}`);
-    try {
-        await thelobookDocRef.set({
-            userId: user.uid,
-            lessonId: lessonId,
-            // Sort by index to ensure the array is always in the correct order in Firestore
-            pages: pageMetadataForFirestore.sort((a, b) => a.pageIndex - b.pageIndex),
-            lastModified: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        console.log("Thelobook metadata saved to Firestore successfully.");
-    } catch (error) {
-        console.error("Error saving thelobook metadata to Firestore:", error);
-    }
-}
 
     function initApp() {
         const audioIdsToLoad = [
@@ -2626,59 +2458,51 @@ async function saveThelobookToFirebase() {
         window.appInitialized = false;
     }
 
-    // MODIFIED FUNCTION
-// 3. This now calls loadThelobookFromFirebase after authentication and initialization.
-auth.onAuthStateChanged(user => {
-    if (user) {
-        console.log("User authenticated with UID:", user.uid);
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            console.log("User authenticated with UID:", user.uid);
+            
+            // ===== ADD THIS BLOCK TO FETCH INITIAL POINTS =====
+            const userDocRef = db.collection('thelo-students').doc(user.uid);
+            userDocRef.get().then(doc => {
+                if (doc.exists) {
+                    // Set the local points variable to the value from the database
+                    userPoints = doc.data().points || 0;
+                } else {
+                    // Document doesn't exist, start points at 0
+                    userPoints = 0;
+                    console.log("No points document found for user, starting at 0.");
+                }
+                // Update the UI with the correct points
+                updatePointsDisplay();
+            }).catch(error => {
+                console.error("Error fetching user points:", error);
+                userPoints = 0; // Default to 0 on error
+                updatePointsDisplay();
+            });
+            // ===== END OF ADDED BLOCK =====
 
-        // ===== ADD THIS BLOCK TO FETCH INITIAL POINTS =====
-        const userDocRef = db.collection('thelo-students').doc(user.uid);
-        userDocRef.get().then(doc => {
-            if (doc.exists) {
-                // Set the local points variable to the value from the database
-                userPoints = doc.data().points || 0;
-            } else {
-                // Document doesn't exist, start points at 0
-                userPoints = 0;
-                console.log("No points document found for user, starting at 0.");
-            }
-            // Update the UI with the correct points
+        } else {
+            userPoints = 0; // Reset points if user logs out
             updatePointsDisplay();
-        }).catch(error => {
-            console.error("Error fetching user points:", error);
-            userPoints = 0; // Default to 0 on error
-            updatePointsDisplay();
-        });
-        // ===== END OF ADDED BLOCK =====
+            console.log("User not authenticated.");
+        }
 
-    } else {
-        userPoints = 0; // Reset points if user logs out
-        updatePointsDisplay();
-        console.log("User not authenticated.");
-    }
+        if (!UI_TEXT[currentLang]) currentLang = 'hy';
+        updateAllUITexts();
 
-    if (!UI_TEXT[currentLang]) currentLang = 'hy';
-    updateAllUITexts();
+        if (!user && !isThelobookActive && !isPageGridVisible) {
+            const TXT = getCurrentUIText();
+            if(TXT && TXT.userNotAuthHandwriting) addChatMessage('AI', formatAIMessage('userNotAuthHandwriting'));
+        }
 
-    if (!user && !isThelobookActive && !isPageGridVisible) {
-        const TXT = getCurrentUIText();
-        if (TXT && TXT.userNotAuthHandwriting) addChatMessage('AI', formatAIMessage('userNotAuthHandwriting'));
-    }
-
-    if (!window.appInitialized) {
-        window.appInitialized = true;
-        initApp();
-    } else {
-        updateAllUITexts();
-    }
-
-    // --- NEW LOGIC TO LOAD SAVED NOTES ---
-    // After the main app is initialized and we know the user,
-    // we attempt to load their saved notes for the current lesson.
-    // A small delay ensures lesson parameters are available in the URL.
-    setTimeout(loadThelobookFromFirebase, 500);
-});
+        if (!window.appInitialized) {
+            window.appInitialized = true;
+            initApp();
+        } else {
+            updateAllUITexts();
+        }
+    });
 </script>
 </body>
 </html>
