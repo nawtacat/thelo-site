@@ -714,6 +714,7 @@ body.lang-en {
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
+    const storage = firebase.storage();
 
     firebase.appCheck().activate(
       '6LcdgkUrAAAAANakhruotKBunN_IvJzH7X7YhXKU',
@@ -870,9 +871,6 @@ body.lang-en {
     const PAGES_PER_GRID_BATCH = 32;
     let tempFullPageCanvasForThumbnails = null;
     let pageGridInstructionsShown = false;
-        let currentThelobookStroke = null;
-    let areThelobookPagesLoaded = false;
-    let saveThelobookTimeout;
 
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
@@ -1222,85 +1220,56 @@ body.lang-en {
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
-    // ===================================================================
-    // NEW THELOBOOK DRAWING LOGIC (REPLACE OLD FUNCTIONS WITH THESE)
-    // ===================================================================
+    function handleDrawingStart(e) {
+        const currentTargetCanvas = e.currentTarget;
+        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+        if (!activeCtx ) return;
+        if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+        if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+        if (!isStudentInputAllowed && !isThelobookActive) return;
 
-    function handleThelobookDrawingStart(e) {
-        if (!isThelobookActive || isPageSwitchingAnimation) return;
-        e.preventDefault();
+        const pos = getPos(e, currentTargetCanvas); if (!pos) return;
+        if (e.touches) e.preventDefault();
         drawing = true;
-        
-        const pos = getPos(e, thelobookCanvas);
-        currentThelobookStroke = {
-            tool: isThelobookEraserActive ? 'eraser' : 'pen',
-            lineWidth: isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH,
-            points: [pos]
-        };
+        if (!isThelobookActive) userDrawingOccurred = true;
+        lastPos = pos;
 
-        if (!thelobookPages[currentThelobookPageIndex]) {
-            thelobookPages[currentThelobookPageIndex] = { strokes: [] };
+        if (isThelobookActive) {
+            activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+            activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+            if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
+        } else {
+            activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+            activeCtx.globalCompositeOperation = 'source-over';
         }
-        thelobookPages[currentThelobookPageIndex].strokes.push(currentThelobookStroke);
-        
-        // Start drawing immediately for responsiveness
-        thelobookCtx.lineWidth = currentThelobookStroke.lineWidth;
-        thelobookCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
-        thelobookCtx.strokeStyle = '#111827';
-        thelobookCtx.beginPath();
-        thelobookCtx.moveTo(pos.x, pos.y);
+
+        activeCtx.beginPath(); activeCtx.moveTo(pos.x, pos.y);
+        if (!isThelobookActive && currentColor === 'blue') {
+            finalCtx.strokeStyle = INK_COLORS.blue; finalCtx.beginPath(); finalCtx.moveTo(pos.x, pos.y);
+        }
     }
-
-    function handleThelobookDrawingMove(e) {
-        if (!drawing || !isThelobookActive) return;
-        e.preventDefault();
-        
-        const pos = getPos(e, thelobookCanvas);
-        currentThelobookStroke.points.push(pos);
-        
-        thelobookCtx.lineTo(pos.x, pos.y);
-        thelobookCtx.stroke();
+    function handleDrawingMove(e) {
+        if (!drawing) return;
+        const currentTargetCanvas = e.currentTarget;
+        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+        if (!activeCtx) return;
+        if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+        if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+        if (!isStudentInputAllowed && !isThelobookActive) return;
+        const pos = getPos(e, currentTargetCanvas); if (!pos) return;
+        if (e.touches) e.preventDefault();
+        activeCtx.lineTo(pos.x, pos.y); activeCtx.stroke();
+        if (!isThelobookActive && currentColor === 'blue') {
+            if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
+            finalCtx.lineTo(pos.x, pos.y); finalCtx.stroke();
+        }
+        lastPos = pos;
     }
-
-    function handleThelobookDrawingEnd() {
-        if (!drawing || !isThelobookActive) return;
-        drawing = false;
-        thelobookCtx.beginPath(); // Reset the path
-        
-        // Debounced save to Firestore
-        clearTimeout(saveThelobookTimeout);
-        saveThelobookTimeout = setTimeout(() => saveThelobookPageToFirestore(currentThelobookPageIndex), 1500);
-    }
-    
-    function redrawThelobookPage(pageIndex) {
-        if (!thelobookCtx) return;
-        
-        // Clear the canvas
-        thelobookCtx.save();
-        thelobookCtx.setTransform(1, 0, 0, 1, 0, 0);
-        thelobookCtx.clearRect(0, 0, thelobookCanvas.width, thelobookCanvas.height);
-        thelobookCtx.restore();
-
-        const page = thelobookPages[pageIndex];
-        if (!page || !page.strokes) return; // Nothing to draw
-
-        page.strokes.forEach(stroke => {
-            thelobookCtx.beginPath();
-            thelobookCtx.lineWidth = stroke.lineWidth;
-            thelobookCtx.globalCompositeOperation = stroke.tool === 'pen' ? 'source-over' : 'destination-out';
-            thelobookCtx.strokeStyle = stroke.tool === 'pen' ? '#111827' : 'rgba(0,0,0,1)';
-
-            if (stroke.points.length > 0) {
-                thelobookCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
-                for (let i = 1; i < stroke.points.length; i++) {
-                    ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-                }
-            }
-            thelobookCtx.stroke();
-        });
-        
-        // Reset composite operation for next draw
-        thelobookCtx.globalCompositeOperation = 'source-over';
+    function handleDrawingEnd(e) {
+        if (!drawing) return;
+        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+        if (!activeCtx) return;
+        drawing = false; activeCtx.beginPath();
     }
 
     function addBoardDrawListeners() {
@@ -1320,16 +1289,15 @@ body.lang-en {
         canvas.removeEventListener('touchcancel', handleDrawingEnd);
     }
     function addThelobookDrawListeners() {
-        if (thelobookDrawListenersAttached) return;
-        thelobookCanvas.addEventListener('mousedown', handleThelobookDrawingStart);
-        thelobookCanvas.addEventListener('mousemove', handleThelobookDrawingMove);
-        thelobookCanvas.addEventListener('touchstart', handleThelobookDrawingStart, { passive: false });
-        thelobookCanvas.addEventListener('touchmove', handleThelobookDrawingMove, { passive: false });
-        // Add window listeners to catch mouseup/touchend even if outside canvas
-        window.addEventListener('mouseup', handleThelobookDrawingEnd);
-        window.addEventListener('touchend', handleThelobookDrawingEnd);
-        thelobookDrawListenersAttached = true;
-    }
+        if (thelobookDrawListenersAttached) return;
+        thelobookCanvas.addEventListener('mousedown', handleDrawingStart);
+        thelobookCanvas.addEventListener('mousemove', handleDrawingMove);
+        thelobookCanvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
+        thelobookCanvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
+        thelobookCanvas.addEventListener('touchend', handleDrawingEnd);
+        thelobookCanvas.addEventListener('touchcancel', handleDrawingEnd);
+        thelobookDrawListenersAttached = true;
+    }
     function removeThelobookDrawListeners() {
         if (!thelobookDrawListenersAttached) return;
         thelobookCanvas.removeEventListener('mousedown', handleDrawingStart);
@@ -2016,61 +1984,6 @@ body.lang-en {
         if (thelobookEraserBtn) thelobookEraserBtn.disabled = isPageSwitchingAnimation;
         if (thelobookPagesBtn) thelobookPagesBtn.disabled = isPageSwitchingAnimation;
     }
-    // ===================================================================
-    // NEW THELOBOOK FIRESTORE LOGIC
-    // ===================================================================
-
-    async function saveThelobookPageToFirestore(pageIndex) {
-        const user = auth.currentUser;
-        if (!user || pageIndex < 0 || pageIndex >= thelobookPages.length) return;
-        
-        const pageData = thelobookPages[pageIndex];
-        if (!pageData || !pageData.strokes || pageData.strokes.length === 0) return; // Don't save empty/un-drawn pages
-
-        const pageDocRef = db.collection('thelo-students').doc(user.uid).collection('thelobook-pages').doc(`page_${pageIndex}`);
-
-        try {
-            await pageDocRef.set({
-                lastModified: firebase.firestore.FieldValue.serverTimestamp(),
-                strokes: pageData.strokes
-            }, { merge: true });
-            console.log(`Thelobook page ${pageIndex} saved to Firestore.`);
-        } catch (error) {
-            console.error("Error saving Thelobook page:", error);
-        }
-    }
-
-    async function loadThelobookPagesFromFirestore() {
-        const user = auth.currentUser;
-        if (!user || areThelobookPagesLoaded) return;
-        
-        console.log("Loading Thelobook pages from Firestore...");
-        const pagesCollectionRef = db.collection('thelo-students').doc(user.uid).collection('thelobook-pages');
-        
-        try {
-            const querySnapshot = await pagesCollectionRef.get();
-            const loadedPages = [];
-            querySnapshot.forEach(doc => {
-                const pageId = parseInt(doc.id.split('_')[1], 10);
-                loadedPages[pageId] = doc.data();
-            });
-
-            thelobookPages = loadedPages;
-
-            if (thelobookPages.length === 0) {
-                thelobookPages.push({ strokes: [] }); // Start with one blank page
-            }
-            
-            areThelobookPagesLoaded = true;
-            console.log(`${thelobookPages.length} pages loaded.`);
-            updateThelobookPageControls();
-
-        } catch (error) {
-            console.error("Error loading Thelobook pages:", error);
-            // If loading fails, start with one fresh page
-            thelobookPages = [{ strokes: [] }];
-        }
-    }
     function saveCurrentThelobookPageDrawing() {
         if (!isThelobookActive || isPageSwitchingAnimation || !thelobookCtx || !thelobookCanvas || thelobookCanvas.width === 0 || thelobookCanvas.height === 0) {
             // Optional: Log why saving was skipped
@@ -2203,56 +2116,65 @@ body.lang-en {
         renderStageUI(currentStageIndex, true); // isResize = true indicates resume context
     }
 
-    async function openThelobook() {
-        if (isThelobookActive || isPageGridVisible) return;
-        if (currentStageData && currentStageData.optionsQuiz && currentStageData.optionsQuiz.choices && currentStageData.optionsQuiz.choices.length > 0) {
-            const TXT = getCurrentUIText(); addChatMessage('AI', formatAIMessage('thelobookDisabledMCQ')); return;
-        }
-
-        // --- NEW LOGIC: Load pages on first open ---
-        if (!areThelobookPagesLoaded) {
-            await loadThelobookPagesFromFirestore();
+    function openThelobook() {
+        if (isThelobookActive || isPageGridVisible) return;
+        if (currentStageData && currentStageData.optionsQuiz && currentStageData.optionsQuiz.choices && currentStageData.optionsQuiz.choices.length > 0) {
+            const TXT = getCurrentUIText(); addChatMessage('AI', formatAIMessage('thelobookDisabledMCQ')); return;
         }
+        isThelobookActive = true; isThelobookEraserActive = false;
+        const TXT = getCurrentUIText();
 
-        isThelobookActive = true; isThelobookEraserActive = false;
-        const TXT = getCurrentUIText();
+        captureMediaState();
 
-        captureMediaState();
-
-        thelobookCanvas.classList.remove('grid-underlay');
-        thelobookCanvas.classList.add('active');
-        thelobookControlsEl.classList.add('visible');
-        
-        currentThelobookPageIndex = 0; // Always start on page 0
-        redrawThelobookPage(currentThelobookPageIndex);
-
-        removeBoardDrawListeners(); addThelobookDrawListeners(); canvas.style.pointerEvents = 'none';
-        thelobookBtn.textContent = TXT.thelobookClose;
-        if(thelobookEraserBtn) { thelobookEraserBtn.textContent = '✏️'; thelobookEraserBtn.title = TXT.thelobookEraser; thelobookEraserBtn.classList.remove('active');}
-        if(clearBtn) clearBtn.disabled = true; if(prevBtn) prevBtn.disabled = true; if(nextCheckBtn) nextCheckBtn.disabled = true;
-        updateColorIndicator(); updateThelobookPageControls();
-    }
-    function closeThelobook(savePage = true) {
-        if (!isThelobookActive) return;
-        if (savePage) saveCurrentThelobookPageDrawing();
-        isThelobookActive = false; const TXT = getCurrentUIText();
-
-        thelobookCanvas.classList.remove('active');
         thelobookCanvas.classList.remove('grid-underlay');
-        thelobookControlsEl.classList.remove('visible');
-        removeThelobookDrawListeners(); addBoardDrawListeners();
-        thelobookBtn.textContent = TXT.thelobookOpen;
-        
-        resumeMediaState();
-        
-        if (currentStageData) {
-            // renderStageUI is called by resumeMediaState
-        } else {
-            updateColorIndicator();
-            canvas.style.pointerEvents = 'none';
-        }
-        wasMediaPlayingBeforeThelobook = false; 
+        thelobookCanvas.classList.add('active');
+        thelobookControlsEl.classList.add('visible');
+
+        if (thelobookPages.length === 0) { thelobookPages.push(null); currentThelobookPageIndex = 0; }
+        loadThelobookPageDrawing(currentThelobookPageIndex);
+
+        removeBoardDrawListeners(); addThelobookDrawListeners(); canvas.style.pointerEvents = 'none';
+        thelobookBtn.textContent = TXT.thelobookClose;
+        if(thelobookEraserBtn) { thelobookEraserBtn.textContent = '✏️'; thelobookEraserBtn.title = TXT.thelobookEraser; thelobookEraserBtn.classList.remove('active');}
+        if(clearBtn) clearBtn.disabled = true; if(prevBtn) prevBtn.disabled = true; if(nextCheckBtn) nextCheckBtn.disabled = true;
+        updateColorIndicator(); updateThelobookPageControls();
     }
+
+    // MODIFIED FUNCTION
+// 2. This function now triggers the master save to Firebase.
+function closeThelobook(savePage = true) {
+    if (!isThelobookActive) return;
+
+    if (savePage) {
+        // First, save the current view into the local JS array
+        saveCurrentThelobookPageDrawing();
+        // Then, trigger the function to upload the entire book to Firebase
+        saveThelobookToFirebase();
+    }
+    
+    isThelobookActive = false;
+    const TXT = getCurrentUIText();
+
+    thelobookCanvas.classList.remove('active');
+    thelobookCanvas.classList.remove('grid-underlay');
+    thelobookControlsEl.classList.remove('visible');
+    
+    removeThelobookDrawListeners();
+    addBoardDrawListeners();
+    
+    thelobookBtn.textContent = TXT.thelobookOpen;
+
+    // Resume the lesson state
+    resumeMediaState();
+
+    if (currentStageData) {
+        // renderStageUI is called by resumeMediaState
+    } else {
+        updateColorIndicator();
+        canvas.style.pointerEvents = 'none';
+    }
+    wasMediaPlayingBeforeThelobook = false;
+}
 
     function openPageGridView() {
         if (isPageGridVisible) return;
@@ -2479,6 +2401,159 @@ body.lang-en {
             lastFrameTimestampForManualAdvance = performance.now(); event.preventDefault();
         }
     }
+    /**
+ * =================================================================
+ * NEW: FIREBASE THELOBOOK PERSISTENCE
+ * =================================================================
+ */
+
+/**
+ * A helper function to convert an ImageData object to a WebP Data URL for uploading.
+ * @param {ImageData} imageData - The ImageData object from a canvas.
+ * @returns {string} A base64 encoded Data URL.
+ */
+function imageDataToDataUrl(imageData) {
+    // Create a temporary canvas to hold the ImageData
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imageData.width;
+    tempCanvas.height = imageData.height;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // Put the ImageData onto the temporary canvas
+    tempCtx.putImageData(imageData, 0, 0);
+
+    // Export the canvas as a WebP image for efficiency.
+    // The second parameter is quality (0.9 = 90%).
+    return tempCanvas.toDataURL('image/webp', 0.9);
+}
+
+/**
+ * Loads the user's thelobook pages from Firestore and Firebase Storage.
+ * This should be called after a user logs in and a lesson is loaded.
+ */
+async function loadThelobookFromFirebase() {
+    const user = auth.currentUser;
+    const urlParams = new URLSearchParams(window.location.search);
+    const lessonId = urlParams.get('lessonFile');
+
+    if (!user || !lessonId) {
+        console.log("Thelobook: User or lesson not available for loading. Starting with a blank page.");
+        thelobookPages = [null]; // Start with one blank page if not logged in or no lesson
+        updateThelobookPageControls();
+        return;
+    }
+
+    // Define the reference to the specific thelobook document for this user and lesson
+    const thelobookDocRef = db.collection('thelobooks').doc(`${user.uid}_${lessonId}`);
+
+    try {
+        const doc = await thelobookDocRef.get();
+        if (doc.exists) {
+            const data = doc.data();
+            const pagesFromDb = data.pages || [];
+
+            if (pagesFromDb.length === 0) {
+                thelobookPages = [null]; // If the saved book is empty, start with a blank page
+            } else {
+                // Create a correctly-sized array to hold the incoming ImageData
+                const loadedPages = new Array(pagesFromDb.length).fill(null);
+
+                // Create an array of promises to load all images concurrently
+                const imageLoadPromises = pagesFromDb.map(async (pageData) => {
+                    if (pageData && pageData.imageURL && typeof pageData.pageIndex === 'number') {
+                        try {
+                            const img = new Image();
+                            img.crossOrigin = "anonymous"; // This is crucial
+                            img.src = pageData.imageURL;
+                            await img.decode(); // Wait for the image to fully download
+
+                            // Draw the loaded image to a temp canvas to extract its ImageData
+                            const tempCanvas = document.createElement('canvas');
+                            tempCanvas.width = img.width; // Use the actual image dimensions
+                            tempCanvas.height = img.height;
+                            const tempCtx = tempCanvas.getContext('2d');
+                            tempCtx.drawImage(img, 0, 0);
+
+                            // Store the ImageData in the correct position
+                            loadedPages[pageData.pageIndex] = tempCtx.getImageData(0, 0, img.width, img.height);
+                        } catch (e) {
+                            console.error(`Error loading page ${pageData.pageIndex} from URL:`, e);
+                            loadedPages[pageData.pageIndex] = null; // Mark as null if loading fails
+                        }
+                    }
+                });
+
+                await Promise.all(imageLoadPromises);
+                thelobookPages = loadedPages;
+            }
+            console.log(`Thelobook for lesson '${lessonId}' loaded successfully with ${thelobookPages.length} page(s).`);
+        } else {
+            console.log(`No saved thelobook found for lesson '${lessonId}'. Starting fresh.`);
+            thelobookPages = [null]; // If no document exists, start with one blank page
+        }
+    } catch (error) {
+        console.error("Error loading thelobook from Firebase:", error);
+        thelobookPages = [null]; // Default to a blank page on any error
+    }
+
+    // Update the UI with the loaded (or new) book state
+    currentThelobookPageIndex = 0;
+    updateThelobookPageControls();
+}
+
+
+/**
+ * Saves the entire thelobook (all pages) to Firestore and Firebase Storage.
+ */
+async function saveThelobookToFirebase() {
+    const user = auth.currentUser;
+    const urlParams = new URLSearchParams(window.location.search);
+    const lessonId = urlParams.get('lessonFile');
+
+    if (!user || !lessonId) {
+        console.warn("Thelobook: Cannot save without a logged-in user and a lessonId.");
+        return;
+    }
+
+    console.log("Saving thelobook to Firebase...");
+
+    const pageMetadataForFirestore = [];
+    const uploadPromises = thelobookPages.map(async (imageData, index) => {
+        // Only process pages that have actual drawings (are not null)
+        if (imageData instanceof ImageData) {
+            const pagePath = `thelobooks/${user.uid}/${lessonId}/page_${index}.webp`;
+            const storageRef = storage.ref(pagePath);
+            const dataUrl = imageDataToDataUrl(imageData);
+
+            try {
+                const snapshot = await storageRef.putString(dataUrl, 'data_url');
+                const downloadURL = await snapshot.ref.getDownloadURL();
+                pageMetadataForFirestore.push({ pageIndex: index, imageURL: downloadURL });
+            } catch (error) {
+                console.error(`Failed to upload page ${index}:`, error);
+                // Decide if you want to stop the whole save or just skip this page
+            }
+        }
+    });
+
+    // Wait for all page uploads to complete
+    await Promise.all(uploadPromises);
+
+    // Now, save the collected metadata array to a single Firestore document
+    const thelobookDocRef = db.collection('thelobooks').doc(`${user.uid}_${lessonId}`);
+    try {
+        await thelobookDocRef.set({
+            userId: user.uid,
+            lessonId: lessonId,
+            // Sort by index to ensure the array is always in the correct order in Firestore
+            pages: pageMetadataForFirestore.sort((a, b) => a.pageIndex - b.pageIndex),
+            lastModified: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log("Thelobook metadata saved to Firestore successfully.");
+    } catch (error) {
+        console.error("Error saving thelobook metadata to Firestore:", error);
+    }
+}
 
     function initApp() {
         const audioIdsToLoad = [
@@ -2551,51 +2626,59 @@ body.lang-en {
         window.appInitialized = false;
     }
 
-    auth.onAuthStateChanged(user => {
-        if (user) {
-            console.log("User authenticated with UID:", user.uid);
-            
-            // ===== ADD THIS BLOCK TO FETCH INITIAL POINTS =====
-            const userDocRef = db.collection('thelo-students').doc(user.uid);
-            userDocRef.get().then(doc => {
-                if (doc.exists) {
-                    // Set the local points variable to the value from the database
-                    userPoints = doc.data().points || 0;
-                } else {
-                    // Document doesn't exist, start points at 0
-                    userPoints = 0;
-                    console.log("No points document found for user, starting at 0.");
-                }
-                // Update the UI with the correct points
-                updatePointsDisplay();
-            }).catch(error => {
-                console.error("Error fetching user points:", error);
-                userPoints = 0; // Default to 0 on error
-                updatePointsDisplay();
-            });
-            // ===== END OF ADDED BLOCK =====
+    // MODIFIED FUNCTION
+// 3. This now calls loadThelobookFromFirebase after authentication and initialization.
+auth.onAuthStateChanged(user => {
+    if (user) {
+        console.log("User authenticated with UID:", user.uid);
 
-        } else {
-            userPoints = 0; // Reset points if user logs out
+        // ===== ADD THIS BLOCK TO FETCH INITIAL POINTS =====
+        const userDocRef = db.collection('thelo-students').doc(user.uid);
+        userDocRef.get().then(doc => {
+            if (doc.exists) {
+                // Set the local points variable to the value from the database
+                userPoints = doc.data().points || 0;
+            } else {
+                // Document doesn't exist, start points at 0
+                userPoints = 0;
+                console.log("No points document found for user, starting at 0.");
+            }
+            // Update the UI with the correct points
             updatePointsDisplay();
-            console.log("User not authenticated.");
-        }
+        }).catch(error => {
+            console.error("Error fetching user points:", error);
+            userPoints = 0; // Default to 0 on error
+            updatePointsDisplay();
+        });
+        // ===== END OF ADDED BLOCK =====
 
-        if (!UI_TEXT[currentLang]) currentLang = 'hy';
-        updateAllUITexts();
+    } else {
+        userPoints = 0; // Reset points if user logs out
+        updatePointsDisplay();
+        console.log("User not authenticated.");
+    }
 
-        if (!user && !isThelobookActive && !isPageGridVisible) {
-            const TXT = getCurrentUIText();
-            if(TXT && TXT.userNotAuthHandwriting) addChatMessage('AI', formatAIMessage('userNotAuthHandwriting'));
-        }
+    if (!UI_TEXT[currentLang]) currentLang = 'hy';
+    updateAllUITexts();
 
-        if (!window.appInitialized) {
-            window.appInitialized = true;
-            initApp();
-        } else {
-            updateAllUITexts();
-        }
-    });
+    if (!user && !isThelobookActive && !isPageGridVisible) {
+        const TXT = getCurrentUIText();
+        if (TXT && TXT.userNotAuthHandwriting) addChatMessage('AI', formatAIMessage('userNotAuthHandwriting'));
+    }
+
+    if (!window.appInitialized) {
+        window.appInitialized = true;
+        initApp();
+    } else {
+        updateAllUITexts();
+    }
+
+    // --- NEW LOGIC TO LOAD SAVED NOTES ---
+    // After the main app is initialized and we know the user,
+    // we attempt to load their saved notes for the current lesson.
+    // A small delay ensures lesson parameters are available in the URL.
+    setTimeout(loadThelobookFromFirebase, 500);
+});
 </script>
 </body>
 </html>
