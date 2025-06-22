@@ -104,7 +104,7 @@ const TXT = {
     },
     hy: {
         home: "Գլխավոր", signInTitle: "Մուտք", signInBtn: "Մուտք",
-        welcomeMessage: "Ուրախ ենք Ձեզ տեսնել thelo-ում։", // "Urakh enq Dzez tesnel thelo-um." - "We are happy to see you in thelo."
+        welcomeMessage: "Ուրախ ենք Ձեզ տեսնել thelo-ում։", // "We are happy to see you in thelo."
         email: "Էլ-փոստ", password: "Գաղտնաբառ"
     }
 };
@@ -116,7 +116,7 @@ const langBtn = document.getElementById('langToggle');
 const homeLink = document.getElementById('homeLink');
 const form = document.getElementById('authForm');
 const formTitle = document.getElementById('formTitle');
-const welcomeMessage = document.getElementById('welcomeMessage'); // New DOM element
+const welcomeMessage = document.getElementById('welcomeMessage');
 const submitBtn = document.getElementById('submitBtn');
 const toast = document.getElementById('toast');
 const emailInput = document.getElementById('email');
@@ -127,33 +127,29 @@ const labelPassword = document.getElementById('labelPassword');
 
 /* Helper Functions */
 
-// Function to update UI text based on current language
 function applyLang() {
     const s = TXT[lang];
     document.documentElement.lang = lang;
     langBtn.textContent = lang === 'en' ? 'Հայ' : 'EN';
     homeLink.textContent = s.home;
     formTitle.textContent = s.signInTitle;
-    welcomeMessage.textContent = s.welcomeMessage; // Set welcome message text
+    welcomeMessage.textContent = s.welcomeMessage;
     submitBtn.textContent = s.signInBtn;
     labelEmail.textContent = s.email;
     labelPassword.textContent = s.password;
 }
 
-// Function to show toast messages (for errors or success)
 function showToast(message, isError = true) {
     toast.textContent = message;
     toast.classList.remove('hidden', 'text-red-600', 'text-green-600');
     toast.classList.add(isError ? 'text-red-600' : 'text-green-600');
 }
 
-// Function to hide toast messages
 function hideToast() {
     toast.classList.add('hidden');
     toast.textContent = '';
 }
 
-// Function to set loading state on the submit button
 function setLoading(isLoading) {
     if (isLoading) {
         submitBtn.disabled = true;
@@ -166,19 +162,16 @@ function setLoading(isLoading) {
 
 /* Event Listeners */
 
-// Language toggle
 langBtn.addEventListener('click', () => { lang = lang === 'en' ? 'hy' : 'en'; applyLang(); });
 
-// Main form submission handler
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    hideToast(); // Clear any previous toast messages
-    setLoading(true); // Show loading spinner
+    hideToast();
+    setLoading(true);
 
     const email = emailInput.value.trim();
     const password = passwordInput.value.trim();
 
-    // Client-side validation for Signin
     if (!email || !password) {
         showToast("Please enter your email and password.", true);
         setLoading(false);
@@ -186,14 +179,17 @@ form.addEventListener('submit', async (e) => {
     }
 
     try {
-        // Sign in user with Email and Password
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         console.log("User signed in:", user.uid);
 
+        // --- THIS IS THE FIX ---
+        // Set the flag in localStorage so other pages can see the user is logged in.
+        localStorage.setItem('theloUserLoggedIn', 'true');
+
         showToast("Signed in successfully! Redirecting...", false);
         setLoading(false);
-        // Optional: Redirect to a dashboard or home page after a short delay
+        
         setTimeout(() => {
             window.location.href = 'https://thelo.space/sdashboard';
         }, 1500);
@@ -207,7 +203,7 @@ form.addEventListener('submit', async (e) => {
             case 'auth/invalid-email':
             case 'auth/user-not-found':
             case 'auth/wrong-password':
-                errorMessage = "Invalid email or password. Please try again."; // Generic message for security
+                errorMessage = "Invalid email or password. Please try again.";
                 break;
             case 'auth/user-disabled':
                 errorMessage = "Your account has been disabled. Please contact support.";
