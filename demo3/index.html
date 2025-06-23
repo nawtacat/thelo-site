@@ -866,7 +866,9 @@ body.lang-en {
     let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
     let userDrawingOccurred = false; let isTransitioning = false;
     let devicePixelRatio = window.devicePixelRatio || 1; window.userInteracted = false;
-    let currentReplayAnimationId = null; let currentStageAudio = null; let userPoints = 0;
+    let currentReplayAnimationId = null; let currentStageAudio = null; 
+    let userPoints = 0;
+    let sessionPoints = 0; // ADDED LINE: To track points for the current lesson session.
     let currentStageDrawingData = null; let currentStageTotalDuration = 0;
     let isMediaScrubbingActive = false; let internalPlaybackTime = 0; let lastFrameTimestampForManualAdvance = 0;
     let isImageModeActive = false;
@@ -960,9 +962,10 @@ body.lang-en {
 
     /* ========== Core App Functions ========== */
     function updatePointsDisplay() {
-        const TXT = getCurrentUIText();
-        if (pointsDisplayElement) pointsDisplayElement.textContent = `${TXT.achievementsPrefix}${userPoints}`;
-    }
+        const TXT = getCurrentUIText();
+        // MODIFIED: This now uses sessionPoints for the on-screen display.
+        if (pointsDisplayElement) pointsDisplayElement.textContent = `${TXT.achievementsPrefix}${sessionPoints}`;
+    }
     async function loadLesson(lessonJsonPath) {
         if (isLessonLoading) return; isLessonLoading = true;
         let TXT = getCurrentUIText();
@@ -978,11 +981,14 @@ body.lang-en {
             lessonStagesRoot = await response.json();
             if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
             const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
-            setLanguage(lessonLang); TXT = getCurrentUIText();
-            lessonStages = lessonStagesRoot.stages;
-            document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
-            console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
+setLanguage(lessonLang); TXT = getCurrentUIText();
+lessonStages = lessonStagesRoot.stages;
 
+sessionPoints = 0; // ADDED: Reset session score for the new lesson.
+updatePointsDisplay(); // ADDED: Ensure the display shows '0' at the start.
+
+document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
+console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
             currentStageIndex = -1; currentStageData = null; isStudentInputAllowed = false;
             if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null;
             if(currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
@@ -1476,19 +1482,21 @@ body.lang-en {
     const isCorrectAnswer = parseInt(selectedButton.dataset.index) === mcqDetails.correctIndex;
 
     let feedbackMessageForChat; // This variable will hold the message sent to the chat
-
     if (isCorrectAnswer) {
-        selectedButton.classList.add('correct');
+        selectedButton.classList.add('correct');
 
-        playRandomFeedback('approve');
-        userPoints += 5; // Points are added here
-        updatePointsDisplay();
+        playRandomFeedback('approve');
+        userPoints += 5; // This updates the permanent score
+        sessionPoints += 5; // ADDED: This updates the score for this lesson
+        updatePointsDisplay();
 	updateUserPointsInFirestore(5);
-        // Construct the message to include points
-        const baseFeedback = mcqDetails.feedbackCorrect || TXT.correct;
-        feedbackMessageForChat = `${baseFeedback} ${formatAIMessage('pointsGained', { points: 5 })}`;
+        // Construct the message to include points
+        const baseFeedback = mcqDetails.feedbackCorrect || TXT.correct;
+        feedbackMessageForChat = `${baseFeedback} ${formatAIMessage('pointsGained', { points: 5 })}`;
 
-    } else {
+    }
+    
+	    else {
         selectedButton.classList.add('incorrect');
         const correctButton = optionButtons[mcqDetails.correctIndex];
         if (correctButton) correctButton.classList.add('correct-answer-shown');
@@ -1724,11 +1732,15 @@ body.lang-en {
         const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
         if (isMCQStage) return;
         if (nextCheckBtn.textContent === TXT.gotIt) {
-            stopCurrentStageAudio();
-            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-            userPoints += randomPoints; updateUserPointsInFirestore(randomPoints); updatePointsDisplay(); addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
-        }
+            stopCurrentStageAudio();
+            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
+            userPoints += randomPoints; // This updates the permanent score
+            sessionPoints += randomPoints; // ADDED: This updates the score for this lesson
+            updateUserPointsInFirestore(randomPoints);
+            updatePointsDisplay();
+            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
+        }
         switch (currentStageData.type) {
             case 'question_handwriting': checkHandwritingAnswer(); break;
             default: nextStage(); break;
@@ -1912,10 +1924,11 @@ body.lang-en {
             const pointsGained = 10; // Define points for correct answer
             const feedbackForTerminal = "🎉 Correct!"; // Short feedback for image terminal
             playRandomFeedback('approve');
-            userPoints += pointsGained; // Add points to user total
-            updatePointsDisplay();
-	    updateUserPointsInFirestore(pointsGained);
-            nextCheckBtn.classList.add('correct');
+userPoints += pointsGained; // This updates the permanent score
+sessionPoints += pointsGained; // ADDED: This updates the score for this lesson
+updatePointsDisplay();
+	    updateUserPointsInFirestore(pointsGained);
+nextCheckBtn.classList.add('correct');
 
             // Construct the full chat message including points
             const chatMessageWithPoints = `${formatAIMessage('correctAI', { detectedAnswer })} ${formatAIMessage('pointsGained', { points: pointsGained })}`;
