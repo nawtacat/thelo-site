@@ -12,6 +12,10 @@
 	<link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
+	<link rel="manifest" href="/manifest.json" />
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
 
 <style>
   /* ===== NEW: Updated Design System ===== */
@@ -285,18 +289,26 @@ body.lang-en {
   }
 
   /* MCQ Buttons */
-  #mcqOptionsContainer {
+  /* ===== UPDATED: MCQ Buttons ===== */
+#mcqOptionsContainer {
     position: absolute;
-    top: 50%;
+    /* This positions the container below the headline. You can adjust the '120px' value as needed. */
+    top: 120px;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%); /* This keeps it centered horizontally */
     z-index: 30;
     display: none;
-    flex-direction: column;
+    /* These styles make the options appear horizontally like in your image. */
+    /* The existing 'short-options' class in your JS will also enforce this. */
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 1rem;
-    width: clamp(300px, 50%, 500px);
-  }
-  .mcq-option-btn {
+    width: 90%;
+    max-width: 800px; /* Added a max-width to prevent it from getting too wide on large screens */
+}
+  /* Note the new transform property here */
+.mcq-option-btn {
     font-family: inherit;
     padding: 0.8rem 1.5rem;
     font-size: 1.1rem;
@@ -308,13 +320,18 @@ body.lang-en {
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: var(--shadow-md);
-  }
-  .mcq-option-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
+    transform: translateY(2px);
+    /* ADD THIS: This is the key to prevent the button from shrinking */
+    flex-shrink: 0;
+}
+/* The NEW, corrected hover rule: */
+.mcq-option-btn:hover:not(:disabled) {
+    /* CHANGE THIS VALUE to 0 */
+    transform: translateY(0);
     box-shadow: var(--shadow-lg);
     border-color: var(--thelo-blue);
-  }
-  .mcq-option-btn.correct {
+}
+.mcq-option-btn.correct {
     background-color: var(--success-green);
     color: white;
     border-color: var(--success-green);
@@ -423,13 +440,9 @@ body.lang-en {
   }
   #mcqOptionsContainer.short-options {
     flex-direction: row;
-    flex-wrap: nowrap; /* This is the fix: prevents wrapping */
     justify-content: center;
-    width: auto;
-    max-width: 90%;
-    overflow-x: auto; /* Adds horizontal scroll if options overflow on very small screens */
-    padding-bottom: 10px; /* Ensures scrollbar doesn't hide the buttons */
-  }
+    /* By removing flex-wrap and overflow-x, it will default to wrapping, which is what we want. */
+}
   #mcqOptionsContainer.short-options .mcq-option-btn {
     padding: 1.2rem;
     font-size: 1rem;
@@ -853,7 +866,9 @@ body.lang-en {
     let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
     let userDrawingOccurred = false; let isTransitioning = false;
     let devicePixelRatio = window.devicePixelRatio || 1; window.userInteracted = false;
-    let currentReplayAnimationId = null; let currentStageAudio = null; let userPoints = 0;
+    let currentReplayAnimationId = null; let currentStageAudio = null; 
+    let userPoints = 0;
+    let sessionPoints = 0; // ADDED LINE: To track points for the current lesson session.
     let currentStageDrawingData = null; let currentStageTotalDuration = 0;
     let isMediaScrubbingActive = false; let internalPlaybackTime = 0; let lastFrameTimestampForManualAdvance = 0;
     let isImageModeActive = false;
@@ -947,9 +962,10 @@ body.lang-en {
 
     /* ========== Core App Functions ========== */
     function updatePointsDisplay() {
-        const TXT = getCurrentUIText();
-        if (pointsDisplayElement) pointsDisplayElement.textContent = `${TXT.achievementsPrefix}${userPoints}`;
-    }
+        const TXT = getCurrentUIText();
+        // MODIFIED: This now uses sessionPoints for the on-screen display.
+        if (pointsDisplayElement) pointsDisplayElement.textContent = `${TXT.achievementsPrefix}${sessionPoints}`;
+    }
     async function loadLesson(lessonJsonPath) {
         if (isLessonLoading) return; isLessonLoading = true;
         let TXT = getCurrentUIText();
@@ -965,11 +981,14 @@ body.lang-en {
             lessonStagesRoot = await response.json();
             if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
             const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
-            setLanguage(lessonLang); TXT = getCurrentUIText();
-            lessonStages = lessonStagesRoot.stages;
-            document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
-            console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
+setLanguage(lessonLang); TXT = getCurrentUIText();
+lessonStages = lessonStagesRoot.stages;
 
+sessionPoints = 0; // ADDED: Reset session score for the new lesson.
+updatePointsDisplay(); // ADDED: Ensure the display shows '0' at the start.
+
+document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
+console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
             currentStageIndex = -1; currentStageData = null; isStudentInputAllowed = false;
             if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null;
             if(currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
@@ -1463,19 +1482,21 @@ body.lang-en {
     const isCorrectAnswer = parseInt(selectedButton.dataset.index) === mcqDetails.correctIndex;
 
     let feedbackMessageForChat; // This variable will hold the message sent to the chat
-
     if (isCorrectAnswer) {
-        selectedButton.classList.add('correct');
+        selectedButton.classList.add('correct');
 
-        playRandomFeedback('approve');
-        userPoints += 5; // Points are added here
-        updatePointsDisplay();
+        playRandomFeedback('approve');
+        userPoints += 5; // This updates the permanent score
+        sessionPoints += 5; // ADDED: This updates the score for this lesson
+        updatePointsDisplay();
 	updateUserPointsInFirestore(5);
-        // Construct the message to include points
-        const baseFeedback = mcqDetails.feedbackCorrect || TXT.correct;
-        feedbackMessageForChat = `${baseFeedback} ${formatAIMessage('pointsGained', { points: 5 })}`;
+        // Construct the message to include points
+        const baseFeedback = mcqDetails.feedbackCorrect || TXT.correct;
+        feedbackMessageForChat = `${baseFeedback} ${formatAIMessage('pointsGained', { points: 5 })}`;
 
-    } else {
+    }
+    
+	    else {
         selectedButton.classList.add('incorrect');
         const correctButton = optionButtons[mcqDetails.correctIndex];
         if (correctButton) correctButton.classList.add('correct-answer-shown');
@@ -1711,11 +1732,15 @@ body.lang-en {
         const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
         if (isMCQStage) return;
         if (nextCheckBtn.textContent === TXT.gotIt) {
-            stopCurrentStageAudio();
-            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-            userPoints += randomPoints; updateUserPointsInFirestore(randomPoints); updatePointsDisplay(); addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
-        }
+            stopCurrentStageAudio();
+            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
+            userPoints += randomPoints; // This updates the permanent score
+            sessionPoints += randomPoints; // ADDED: This updates the score for this lesson
+            updateUserPointsInFirestore(randomPoints);
+            updatePointsDisplay();
+            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
+        }
         switch (currentStageData.type) {
             case 'question_handwriting': checkHandwritingAnswer(); break;
             default: nextStage(); break;
@@ -1899,10 +1924,11 @@ body.lang-en {
             const pointsGained = 10; // Define points for correct answer
             const feedbackForTerminal = "🎉 Correct!"; // Short feedback for image terminal
             playRandomFeedback('approve');
-            userPoints += pointsGained; // Add points to user total
-            updatePointsDisplay();
-	    updateUserPointsInFirestore(pointsGained);
-            nextCheckBtn.classList.add('correct');
+userPoints += pointsGained; // This updates the permanent score
+sessionPoints += pointsGained; // ADDED: This updates the score for this lesson
+updatePointsDisplay();
+	    updateUserPointsInFirestore(pointsGained);
+nextCheckBtn.classList.add('correct');
 
             // Construct the full chat message including points
             const chatMessageWithPoints = `${formatAIMessage('correctAI', { detectedAnswer })} ${formatAIMessage('pointsGained', { points: pointsGained })}`;
@@ -2152,15 +2178,24 @@ body.lang-en {
         
         resumeMediaState();
         
+        // ======================= FIX STARTS HERE =======================
+        if (currentStageIndex === -1) {
+            // This is the edge case: lesson hasn't started.
+            // Manually re-enable the 'Start' button.
+            if (nextCheckBtn) nextCheckBtn.disabled = false;
+        }
+        // ======================== FIX ENDS HERE ========================
+
+        // The original logic can remain or be cleaned up, but the fix above is key.
         if (currentStageData) {
             // renderStageUI is called by resumeMediaState
         } else {
             updateColorIndicator();
             canvas.style.pointerEvents = 'none';
         }
+       
         wasMediaPlayingBeforeThelobook = false; 
     }
-
     function openPageGridView() {
         if (isPageGridVisible) return;
         if (isThelobookActive) {
