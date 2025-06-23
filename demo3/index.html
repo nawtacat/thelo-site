@@ -412,6 +412,59 @@ body.lang-en {
     display: inline-flex !important;
     animation: pulse-glow 2s infinite ease-in-out;
 }
+	/* ADD THIS CSS: For the Streak Modal */
+#streakModal {
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+#streakModal:not(.modal-hidden) {
+    opacity: 1;
+    visibility: visible;
+}
+.streak-modal-content {
+    background-color: var(--thelo-bg);
+    color: var(--thelo-text);
+    padding: 2rem 3rem;
+    border-radius: 1rem;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+#streakModal:not(.modal-hidden) .streak-modal-content {
+    transform: scale(1);
+}
+.streak-modal-icon {
+    font-size: 4rem;
+    line-height: 1;
+    margin-bottom: 1rem;
+    animation: pulse-glow 2s infinite ease-in-out; /* We can reuse our cool glow! */
+}
+.streak-modal-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    font-size: 1.75rem;
+    font-weight: bold;
+    color: var(--thelo-text-light);
+    cursor: pointer;
+}
+#streakModalConfirmBtn {
+    margin-top: 1.5rem;
+    background-color: var(--accent-yellow);
+}
 
 @keyframes pulse-glow {
     0% {
@@ -840,6 +893,49 @@ body.lang-en {
     };
 
     let currentLang = 'en';
+    /* ========================================================================= */
+/* ===== ADD THIS BLOCK: For Weekly Streak Calculation ===================== */
+/* ========================================================================= */
+
+/**
+ * Calculates the ISO 8601 week number for a given date.
+ * A week starts on Monday. This is robust against timezone issues.
+ * @param {Date} date The date to calculate the week for.
+ * @returns {string} The week identifier in "YYYY-Www" format (e.g., "2025-W26").
+ */
+function getISOWeekIdentifier(date) {
+    // Create a new date object to avoid modifying the original
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    // Set to the nearest Thursday: current date + 4 - current day number
+    // Make Sunday's day number 7
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    // Get first day of year
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    // Calculate full weeks to nearest Thursday
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    // Pad week number with a leading zero if needed
+    const weekString = String(weekNo).padStart(2, '0');
+    
+    return `${d.getUTCFullYear()}-W${weekString}`;
+}
+
+/**
+ * Gets the week identifier for the week immediately preceding the given one.
+ * @param {string} weekId A week identifier like "2025-W26".
+ * @returns {string} The previous week's identifier, e.g., "2025-W25".
+ */
+function getPreviousWeekIdentifier(weekId) {
+    const [year, week] = weekId.split('-W').map(Number);
+    if (week > 1) {
+        const prevWeekString = String(week - 1).padStart(2, '0');
+        return `${year}-W${prevWeekString}`;
+    } else {
+        // This is tricky: the last week of the previous year can be 52 or 53.
+        // We'll calculate it based on the last day of the previous year.
+        const lastDayOfPrevYear = new Date(year - 1, 11, 31);
+        return getISOWeekIdentifier(lastDayOfPrevYear);
+    }
+}
 
     /* ========== DOM Elements ========== */
     const backgroundCanvas = document.getElementById('backgroundCanvas');
@@ -1759,6 +1855,7 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
 
             if(colorIndicator) colorIndicator.style.display = 'none';
             addChatMessage('AI', `🎉 ${TXT.lessonComplete}`);
+	    updateWeeklyStreak(); // ADD THIS LINE TO TRIGGER THE STREAK CHECK
             backgroundCanvas.classList.remove('fade-out'); if (replayCanvas) replayCanvas.classList.remove('fade-out');
             isTransitioning = false;
         }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
@@ -1884,7 +1981,83 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
             console.error("Error updating points in Firestore: ", error);
         });
     }
-	async function checkHandwritingAnswer(){
+	/* ===== ADD THIS FUNCTION: The Main Streak Logic ======================== */
+async function updateWeeklyStreak() {
+    const user = auth.currentUser;
+    if (!user) return; // Only run for logged-in users
+
+    const userDocRef = db.collection('thelo-students').doc(user.uid);
+    
+    try {
+        const doc = await userDocRef.get();
+        const streakData = doc.exists && doc.data().streakData ? doc.data().streakData : {
+            currentStreak: 0,
+            longestStreak: 0,
+            lastActivityWeek: null
+        };
+
+        const thisWeekId = getISOWeekIdentifier(new Date());
+
+        // Scenario A: Already completed a lesson this week
+        if (thisWeekId === streakData.lastActivityWeek) {
+            console.log("Weekly streak already secured for:", thisWeekId);
+            return;
+        }
+
+        const prevWeekId = getPreviousWeekIdentifier(thisWeekId);
+        let newStreakData = { ...streakData };
+        let showCelebration = false;
+
+        // Scenario B: Streak Extended!
+        if (prevWeekId === streakData.lastActivityWeek) {
+            newStreakData.currentStreak += 1;
+            console.log(`Weekly streak extended to ${newStreakData.currentStreak} weeks!`);
+            showCelebration = true;
+        } 
+        // Scenario C: Streak Broken, new one starts
+        else {
+            newStreakData.currentStreak = 1;
+            console.log("New weekly streak started!");
+            showCelebration = true;
+        }
+
+        // Always update the last activity and check for a new record
+        newStreakData.lastActivityWeek = thisWeekId;
+        if (newStreakData.currentStreak > newStreakData.longestStreak) {
+            newStreakData.longestStreak = newStreakData.currentStreak;
+        }
+
+        // Save to Firestore and show the modal
+        await userDocRef.set({ streakData: newStreakData }, { merge: true });
+        
+        if (showCelebration) {
+            showStreakCelebrationModal(newStreakData.currentStreak, newStreakData.currentStreak === newStreakData.longestStreak && newStreakData.currentStreak > 1);
+        }
+
+    } catch (error) {
+        console.error("Error updating weekly streak:", error);
+    }
+}
+
+function showStreakCelebrationModal(streakCount, isNewRecord) {
+    const modal = document.getElementById('streakModal');
+    const title = document.getElementById('streakModalTitle');
+    const body = document.getElementById('streakModalBody');
+    const closeBtn = document.getElementById('streakModalCloseBtn');
+    const confirmBtn = document.getElementById('streakModalConfirmBtn');
+
+    title.textContent = isNewRecord ? "New Record!" : "Weekly Streak Extended!";
+    body.textContent = `That's ${streakCount} week${streakCount > 1 ? 's' : ''} in a row. Amazing work!`;
+    
+    const hideModal = () => modal.classList.add('modal-hidden');
+    
+    closeBtn.onclick = hideModal;
+    confirmBtn.onclick = hideModal;
+
+    modal.classList.remove('modal-hidden');
+}	
+		
+async function checkHandwritingAnswer(){
     if (isThelobookActive || isPageGridVisible) return;
     stopCurrentStageAudio();
     if (!currentStageData || currentStageData.type !== 'question_handwriting') return;
@@ -2593,5 +2766,14 @@ nextCheckBtn.classList.add('correct');
         }
     });
 </script>
+	<div id="streakModal" class="modal-hidden">
+    <div class="streak-modal-content">
+        <span id="streakModalCloseBtn" class="streak-modal-close">&times;</span>
+        <div class="streak-modal-icon">🔥</div>
+        <h2 id="streakModalTitle"></h2>
+        <p id="streakModalBody"></p>
+        <button id="streakModalConfirmBtn" class="control-btn">Awesome!</button>
+    </div>
+</div>
 </body>
 </html>
