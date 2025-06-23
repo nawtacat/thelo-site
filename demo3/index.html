@@ -399,6 +399,32 @@ body.lang-en {
     margin-right: 0.5rem;
   }
 
+  /* ===== ADD THIS: For the new Dashboard button ===== */
+#dashboardBtn {
+    background-color: var(--thelo-blue); /* Use the primary brand color */
+}
+
+#dashboardBtn:hover:not(:disabled) {
+    background-color: var(--thelo-blue-dark);
+}
+
+#dashboardBtn.visible {
+    display: inline-flex !important;
+    animation: pulse-glow 2s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+    0% {
+        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2), 0 0 7px rgba(37, 99, 235, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(37, 99, 235, 0.4), 0 0 25px rgba(37, 99, 235, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2), 0 0 7px rgba(37, 99, 235, 0.1);
+    }
+}
+
   /* ===== ADD THESE STYLES: For Image Terminal & Terminals ===== */
   #chat,
   #image-terminal {
@@ -693,11 +719,12 @@ body.lang-en {
                 <div id="colorIndicator"></div>
                 <div id="pointsDisplay"></div>
                 <div id="actionButtons">
-                    <button id="prevBtn" class="control-btn"></button>
-                    <button id="thelobookBtn" class="control-btn"></button>
-                    <button id="clearBtn" class="control-btn"></button>
-                    <button id="nextCheckBtn" class="control-btn"></button>
-                </div>
+    <button id="prevBtn" class="control-btn"></button>
+    <button id="thelobookBtn" class="control-btn"></button>
+    <button id="clearBtn" class="control-btn"></button>
+    <button id="nextCheckBtn" class="control-btn"></button>
+    <button id="dashboardBtn" class="control-btn" style="display: none;"></button>
+</div>
             </div>
         </div>
         <div id="chatCol">
@@ -771,6 +798,8 @@ body.lang-en {
             pageGridBatchIndicator: "Էջեր {startPage}-{endPage}",
             pageGridInstructions: "Սեղմեք 'C' հաջորդ խմբի համար, 'X' նախորդի։",
             addPage: "Ավելացնել էջ",
+	    viewDashboard: "🏆 Տեսնել առաջընթացը", // ADD THIS LINE
+		
         },
         en: {
             next: "Next", gotIt: "Got It!", check: "Check", checking: "Checking...",
@@ -806,6 +835,7 @@ body.lang-en {
             pageGridBatchIndicator: "Pages {startPage}-{endPage}",
             pageGridInstructions: "Press 'C' for Next Batch, 'X' for Previous Batch.",
             addPage: "Add Page",
+	    viewDashboard: "🏆 View Your Progress",
         }
     };
 
@@ -842,6 +872,7 @@ body.lang-en {
     const colorIndicator = document.getElementById('colorIndicator');
     if (colorIndicator){ colorIndicator.addEventListener('click', () => { toggleColor(); }); }
     const pointsDisplayElement = document.getElementById('pointsDisplay');
+const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     const thelobookControlsEl = document.getElementById('thelobookControls');
     const thelobookPagesBtn = document.getElementById('thelobookPagesBtn');
@@ -971,6 +1002,7 @@ body.lang-en {
         let TXT = getCurrentUIText();
         if(nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = TXT.loading; }
         if(prevBtn) prevBtn.disabled = true;
+	if (dashboardBtn) dashboardBtn.style.display = 'none'; // ADD THIS LINE
         if (isThelobookActive) closeThelobook(false);
         if (isPageGridVisible) closePageGridView();
 
@@ -1697,32 +1729,40 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     function nextStage() { transitionToStage(currentStageIndex + 1); }
     function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
     function displayLessonComplete() {
-        isTransitioning = true; const TXT = getCurrentUIText();
-        if (isThelobookActive) closeThelobook(false);
-        if (isPageGridVisible) closePageGridView();
-        backgroundCanvas.classList.add('fade-out'); if (replayCanvas) replayCanvas.classList.add('fade-out');
-        if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
-        if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-        if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; }
-        isMediaScrubbingActive = false; if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-        setTimeout(() => {
-            const cssWidth = backgroundCanvas.width / devicePixelRatio; const cssHeight = backgroundCanvas.height / devicePixelRatio;
-            bgCtx.clearRect(0, 0, cssWidth, cssHeight);
-            const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+        isTransitioning = true; const TXT = getCurrentUIText();
+        if (isThelobookActive) closeThelobook(false);
+        if (isPageGridVisible) closePageGridView();
+        backgroundCanvas.classList.add('fade-out'); if (replayCanvas) replayCanvas.classList.add('fade-out');
+        if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
+        if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+        if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; }
+        isMediaScrubbingActive = false; if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+        setTimeout(() => {
+            const cssWidth = backgroundCanvas.width / devicePixelRatio; const cssHeight = backgroundCanvas.height / devicePixelRatio;
+            bgCtx.clearRect(0, 0, cssWidth, cssHeight);
+            const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
             bgCtx.font = `bold 24px ${fontFamily}`;
-            bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--success-green').trim();
-            bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'middle';
-            bgCtx.fillText(TXT.lessonComplete, cssWidth / 2, cssHeight / 3);
-            clearUserCanvas(); if (replayCtx) replayCtx.clearRect(0,0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-            if(nextCheckBtn) { nextCheckBtn.textContent = TXT.start; nextCheckBtn.disabled = true;}
-            if(prevBtn) prevBtn.disabled = true; if(bottomBar) bottomBar.style.display = 'flex';
-            if(clearBtn) clearBtn.style.display = 'none'; if(colorIndicator) colorIndicator.style.display = 'none';
-            addChatMessage('AI', `🎉 ${TXT.lessonComplete}`);
-            backgroundCanvas.classList.remove('fade-out'); if (replayCanvas) replayCanvas.classList.remove('fade-out');
-            isTransitioning = false;
-        }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
-    }
+            bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--success-green').trim();
+            bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'middle';
+            bgCtx.fillText(TXT.lessonComplete, cssWidth / 2, cssHeight / 3);
+            clearUserCanvas(); if (replayCtx) replayCtx.clearRect(0,0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+            
+            // MODIFIED: Hide old buttons and show the new dashboard button
+            if(nextCheckBtn) nextCheckBtn.style.display = 'none';
+            if(prevBtn) prevBtn.style.display = 'none';
+            if(clearBtn) clearBtn.style.display = 'none';
+            if(thelobookBtn) thelobookBtn.style.display = 'none';
+            if(dashboardBtn) {
+                dashboardBtn.innerHTML = TXT.viewDashboard;
+                dashboardBtn.classList.add('visible');
+            }
 
+            if(colorIndicator) colorIndicator.style.display = 'none';
+            addChatMessage('AI', `🎉 ${TXT.lessonComplete}`);
+            backgroundCanvas.classList.remove('fade-out'); if (replayCanvas) replayCanvas.classList.remove('fade-out');
+            isTransitioning = false;
+        }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
+    }
     function handleNextCheckClick() {
         if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
         const TXT = getCurrentUIText();
@@ -2479,6 +2519,12 @@ nextCheckBtn.classList.add('correct');
         if (thelobookNextPageBtn) thelobookNextPageBtn.onclick = () => changeThelobookPageSimple(1);
         if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
         if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
+
+	if (dashboardBtn) {
+	    dashboardBtn.onclick = () => {
+	        window.location.href = 'https://thelo.space/sdashboard';
+	    };
+	}
         document.querySelectorAll('button').forEach(button => {
             button.addEventListener('click', () => {
                 button.blur();
