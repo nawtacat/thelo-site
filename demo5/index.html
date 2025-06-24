@@ -6,17 +6,14 @@
     <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png">
     <title>thelo</title>
     <script src="https://www.desmos.com/api/v1.7/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
-	<link rel="preconnect" href="https://fonts.googleapis.com">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
-	<link rel="manifest" href="/manifest.json" />
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
+    <link rel="manifest" href="/manifest.json" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
 <style>
   /* ===== NEW: Updated Design System ===== */
@@ -50,11 +47,8 @@
     /* Transitions */
     --fade-duration: 0.3s;
     --animation-duration: 0.3s;
-    --thelobook-page-transition-duration: 0.05s;
   }
 
-  /* ===== Font Definition (Unchanged as requested) ===== */
-  /* ===== Font Definition (Unchanged as requested) ===== */
 @font-face {
   font-family: 'Mardoto-Light';
   src: url('../../fonts/Mardoto-Light.ttf') format('truetype');
@@ -79,7 +73,6 @@ body {
   background-color: var(--thelo-bg);
   color: var(--thelo-text);
 }
-	/* ADD THIS RULE: Use Manrope font when the body has the 'lang-en' class */
 body.lang-en {
   font-family: 'Manrope', system-ui, -apple-system, sans-serif;
 }
@@ -92,22 +85,22 @@ body.lang-en {
     flex-grow: 1;
   }
   #lessonArea {
-   flex: 1;
-   display: flex;
-   flex-direction: column;
-   overflow: hidden;
-   position: relative; /* <-- ADD THIS LINE */
-}
-  /* Find this existing rule */
-#boardWrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative; /* MODIFIED: This is required for the overlay */
+  }
+  #boardWrap {
     position: relative;
+    flex-grow: 1; /* MODIFIED: No longer a flex item, this takes full space */
     overflow: visible; 
     background-color: var(--thelo-bg);
-    /* Your other background properties remain the same */
+    /* Grid background */
     background-image: linear-gradient(to right, var(--thelo-border) 1px, transparent 1px),
       linear-gradient(to bottom, var(--thelo-border) 1px, transparent 1px);
     background-size: 40px 40px;
-}
+  }
 
   /* ===== Canvases & Overlays ===== */
   #stageProgressBarContainer {
@@ -139,8 +132,7 @@ body.lang-en {
   #backgroundCanvas,
   #replayCanvas,
   #board,
-  #finalAnswerCanvas,
-  #thelobookCanvas {
+  #finalAnswerCanvas {
     position: absolute;
     top: 0;
     left: 0;
@@ -178,470 +170,9 @@ body.lang-en {
     pointer-events: none;
   }
 
-  #thelobookCanvas {
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    z-index: 15;
-    cursor: crosshair;
-    touch-action: none;
-    opacity: 0;
-    visibility: hidden;
-    transform: scale(0.95);
-    transition: opacity var(--animation-duration) ease, visibility 0s linear var(--animation-duration),
-      transform var(--animation-duration) ease;
-  }
-  #thelobookCanvas.active {
-    opacity: 1;
-    visibility: visible;
-    transform: scale(1);
-    transition-delay: 0s, 0s, 0s;
-  }
-  #thelobookCanvas.grid-underlay {
-    opacity: 0.9 !important;
-    transform: scale(1) !important;
-  }
-  #thelobookCanvas.eraser-active {
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="rgba(0,0,0,0.5)" d="M19.78,2.22a1,1,0,0,0-1.42,0L9.12,11.46a1,1,0,0,0,0,1.41L11.24,15A1,1,0,0,0,12.66,15L22.22,5.39A1,1,0,0,0,22.22,4L19.78,2.22ZM8.41,12.88,2,19.29V21a1,1,0,0,0,1,1H4.71l6.47-6.46-1.42-1.42A1,1,0,0,0,8.41,12.88Z"/></svg>')
-      12 12, auto;
-  }
+ /* ===== START: REVISED DESMOS OVERLAY STYLES ===== */
 
-  /* ===== UI Controls ===== */
-  #bottomBar {
-    position: absolute;
-    bottom: 1rem;
-    left: 1rem;
-    right: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    z-index: 20;
-    gap: 0.75rem;
-  }
-  .control-btn {
-    font-family: inherit;
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
-    font-weight: 500;
-    border: none;
-    border-radius: 0.5rem;
-    color: var(--bg-white);
-    cursor: pointer;
-    transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
-    box-shadow: var(--shadow-md);
-  }
-  .control-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
-  }
-  .control-btn:disabled {
-    background-color: #9ca3af !important;
-    cursor: not-allowed;
-    opacity: 0.7;
-  }
-
-  /* Button Colors */
-  #prevBtn {
-    background-color: var(--accent-yellow);
-  }
-  #thelobookBtn {
-    background-color: var(--success-green);
-  }
-  #clearBtn {
-    background-color: var(--error-red);
-  }
-  #nextCheckBtn {
-    background-color: var(--thelo-blue);
-  }
-  #nextCheckBtn:hover:not(:disabled) {
-    background-color: var(--thelo-blue-dark);
-  }
-  #nextCheckBtn.correct {
-    background-color: var(--success-green);
-  }
-  #nextCheckBtn.incorrect {
-    background-color: var(--error-red);
-    animation: shake 0.5s ease-in-out;
-  }
-  @keyframes shake {
-    0%,
-    100% {
-      transform: translateX(0);
-    }
-    25%,
-    75% {
-      transform: translateX(-5px);
-    }
-    50% {
-      transform: translateX(5px);
-    }
-  }
-
-  #colorIndicator,
-  #pointsDisplay {
-    background-color: var(--bg-white);
-    border: 1px solid var(--thelo-border);
-    color: var(--thelo-text);
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.85rem;
-    font-weight: 500;
-    box-shadow: var(--shadow-sm);
-    white-space: nowrap;
-  }
-
-  /* MCQ Buttons */
-  /* ===== UPDATED: MCQ Buttons ===== */
-#mcqOptionsContainer {
-    position: absolute;
-    /* This positions the container below the headline. You can adjust the '120px' value as needed. */
-    top: 120px;
-    left: 50%;
-    transform: translateX(-50%); /* This keeps it centered horizontally */
-    z-index: 30;
-    display: none;
-    /* These styles make the options appear horizontally like in your image. */
-    /* The existing 'short-options' class in your JS will also enforce this. */
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 1rem;
-    width: 90%;
-    max-width: 800px; /* Added a max-width to prevent it from getting too wide on large screens */
-}
-  /* Note the new transform property here */
-.mcq-option-btn {
-    font-family: inherit;
-    padding: 0.8rem 1.5rem;
-    font-size: 1.1rem;
-    font-weight: 500;
-    border: 1px solid var(--thelo-border);
-    background-color: var(--bg-white);
-    color: var(--thelo-text);
-    border-radius: 0.75rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: var(--shadow-md);
-    transform: translateY(2px);
-    /* ADD THIS: This is the key to prevent the button from shrinking */
-    flex-shrink: 0;
-}
-/* The NEW, corrected hover rule: */
-.mcq-option-btn:hover:not(:disabled) {
-    /* CHANGE THIS VALUE to 0 */
-    transform: translateY(0);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--thelo-blue);
-}
-.mcq-option-btn.correct {
-    background-color: var(--success-green);
-    color: white;
-    border-color: var(--success-green);
-  }
-  .mcq-option-btn.incorrect {
-    background-color: var(--error-red);
-    color: white;
-    border-color: var(--error-red);
-  }
-  .mcq-option-btn.correct-answer-shown {
-    border-color: var(--success-green);
-    border-width: 2px;
-  }
-
-  /* ===== Chat Column ===== */
-  #chatCol {
-    width: 320px;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-white);
-    border-left: 1px solid var(--thelo-border);
-    padding: 1rem;
-    height: 100%;
-    box-sizing: border-box;
-  }
-  #terminalLogo {
-    height: 60px; /* UPDATED: Larger logo */
-    width: auto;
-    display: block;
-    align-self: center;
-    margin: 0.5rem 0 1.5rem 0;
-  }
-  #chat {
-    flex: 1;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--thelo-border) transparent;
-  }
-  #chat::-webkit-scrollbar {
-    width: 5px;
-  }
-  #chat::-webkit-scrollbar-thumb {
-    background-color: var(--thelo-border);
-    border-radius: 10px;
-  }
-  .ai-message {
-    background-color: var(--bg-white); /* UPDATED to plain white */
-    border: 1px solid #f0f0f0; /* Subtle border for definition */
-    color: var(--thelo-text);
-    padding: 0.75rem 1rem;
-    border-radius: 0.75rem;
-    margin-bottom: 0.75rem;
-    max-width: 95%;
-    align-self: flex-start;
-    word-wrap: break-word;
-    box-shadow: var(--shadow-sm);
-    font-size: 0.9rem;
-    line-height: 1.6;
-  }
-  .ai-message strong {
-    color: var(--thelo-blue);
-    font-weight: inherit; /* This makes the weight consistent */
-  }
-  .ai-message .emoji {
-    margin-right: 0.5rem;
-  }
-
-  /* ===== ADD THIS: For the new Dashboard button ===== */
-#dashboardBtn {
-    background-color: var(--thelo-blue); /* Use the primary brand color */
-}
-
-#dashboardBtn:hover:not(:disabled) {
-    background-color: var(--thelo-blue-dark);
-}
-
-#dashboardBtn.visible {
-    display: inline-flex !important;
-    animation: pulse-glow 2s infinite ease-in-out;
-}
-	/* ADD THIS CSS: For the Streak Modal */
-#streakModal {
-    position: fixed;
-    z-index: 100;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s;
-}
-#streakModal:not(.modal-hidden) {
-    opacity: 1;
-    visibility: visible;
-}
-.streak-modal-content {
-    background-color: var(--thelo-bg);
-    color: var(--thelo-text);
-    padding: 2rem 3rem;
-    border-radius: 1rem;
-    text-align: center;
-    box-shadow: var(--shadow-lg);
-    position: relative;
-    transform: scale(0.9);
-    transition: transform 0.3s ease;
-}
-#streakModal:not(.modal-hidden) .streak-modal-content {
-    transform: scale(1);
-}
-.streak-modal-icon {
-    font-size: 4rem;
-    line-height: 1;
-    margin-bottom: 1rem;    
-}
-.streak-modal-close {
-    position: absolute;
-    top: 0.5rem;
-    right: 1rem;
-    font-size: 1.75rem;
-    font-weight: bold;
-    color: var(--thelo-text-light);
-    cursor: pointer;
-}
-#streakModalConfirmBtn {
-    margin-top: 1.5rem;
-    background-color: var(--accent-yellow);
-}
-
-@keyframes pulse-glow {
-    0% {
-        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2), 0 0 7px rgba(37, 99, 235, 0.1);
-    }
-    50% {
-        box-shadow: 0 0 15px rgba(37, 99, 235, 0.4), 0 0 25px rgba(37, 99, 235, 0.3);
-    }
-    100% {
-        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2), 0 0 7px rgba(37, 99, 235, 0.1);
-    }
-}
-
-  /* ===== ADD THESE STYLES: For Image Terminal & Terminals ===== */
-  #chat,
-  #image-terminal {
-    flex: 1;
-    transition: opacity 0.3s ease-in-out;
-    overflow: hidden;
-    overflow-y: auto; /* Allow scrolling for chat */
-  }
-  #image-terminal {
-    display: none; /* Start hidden */
-    flex-direction: column;
-    justify-content: flex-start;
-    padding-top: 1rem;
-    overflow: hidden; /* No scrollbar needed for image view */
-  }
-  #image-terminal-img-container img {
-    max-width: 100%;
-    border-radius: 0.75rem;
-    box-shadow: var(--shadow-md);
-  }
-  #image-terminal-feedback {
-    text-align: center;
-    padding: 1.5rem 1rem;
-    font-size: 1rem;
-    font-weight: 500;
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
-  }
-  .terminal-hidden {
-    opacity: 0 !important;
-    display: none !important;
-  }
-
-  /* ===== ADD THESE STYLES: For Smarter MCQ Layouts ===== */
-  #mcqOptionsContainer.long-options {
-    flex-direction: column;
-    align-items: stretch;
-    width: clamp(300px, 50%, 500px);
-  }
-  #mcqOptionsContainer.short-options {
-    flex-direction: row;
-    justify-content: center;
-    /* By removing flex-wrap and overflow-x, it will default to wrapping, which is what we want. */
-}
-  #mcqOptionsContainer.short-options .mcq-option-btn {
-    padding: 1.2rem;
-    font-size: 1rem;
-    min-width: 80px;
-    text-align: center;
-  }
-
-  /* ===== Thelobook & Grid View ===== */
-  #thelobookControls,
-  #thelobookPageGridHeader,
-  #closePageGridBtn {
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    background-color: rgba(255, 255, 255, 0.7);
-    border-radius: 9999px; /* pill shape */
-    box-shadow: var(--shadow-md);
-    border: 1px solid var(--thelo-border);
-  }
-  #thelobookControls {
-    position: absolute;
-    bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 25;
-    padding: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.2s, visibility 0.2s;
-  }
-  #thelobookControls.visible {
-    opacity: 1;
-    visibility: visible;
-  }
-  #thelobookControls button {
-    background: transparent;
-    border: none;
-    font-size: 1.25rem;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-  #thelobookControls button:hover:not(:disabled) {
-    background-color: rgba(0, 0, 0, 0.05);
-  }
-  #thelobookControls button.active {
-    background-color: var(--thelo-blue);
-    color: white;
-  }
-
-  #thelobookPageGridView {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 40;
-    display: flex;
-    flex-direction: column;
-    padding: 2rem 1rem 1rem; /* Increased top padding to push it down from the roof */
-    box-sizing: border-box;
-    opacity: 0;
-    visibility: hidden;
-    transform: scale(0.95);
-    transition: opacity var(--animation-duration) ease, visibility 0s linear var(--animation-duration),
-      transform var(--animation-duration) ease;
-  }
-  #thelobookPageGridView.visible {
-    opacity: 1;
-    visibility: visible;
-    transform: scale(1);
-    transition-delay: 0s;
-  }
-
-  #thelobookPageGridHeader {
-    display: flex;
-    justify-content: space-between; /* This correctly separates the text and button */
-    align-items: center;
-    margin-bottom: 1rem;
-    padding: 0.5rem 1.5rem; /* Increased horizontal padding to prevent overlap */
-    max-width: fit-content; /* Allow width to fit content and padding, not fixed 300px */
-    align-self: center; /* Centers the header pill horizontally */
-    gap: 1rem; /* Added gap between content and close button */
-  }
-
-  #pageGridBatchIndicator {
-    white-space: nowrap; /* Prevent the text from wrapping unnecessarily */
-  }
-
-  #thelobookPageGridContentContainer {
-    flex-grow: 1;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-content: flex-start;
-    gap: 1rem;
-    padding: 0.5rem;
-    overflow-y: auto;
-    max-height: calc(100vh - 150px);
-    /* Removed background, border, and shadow to create a "natural background" effect */
-  }
-	/* ===== START: DESMOS INTEGRATION STYLES ===== */
-
-#main-content-area {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-    position: relative;
-}
-
-/* ===== START: REVISED DESMOS OVERLAY STYLES ===== */
-
-#desmos-container {
+ #desmos-container {
     /* Core overlay properties */
     position: absolute;
     top: 0;
@@ -709,78 +240,333 @@ body.lang-en {
 }
 
 /* ===== END: REVISED DESMOS OVERLAY STYLES ===== */
-/* ===== END: DESMOS INTEGRATION STYLES ===== */
 
+
+  /* ===== UI Controls ===== */
+  #bottomBar {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 20; /* Keep this high to be above the Desmos panel */
+    gap: 0.75rem;
+  }
+  .control-btn {
+    font-family: inherit;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: none;
+    border-radius: 0.5rem;
+    color: var(--bg-white);
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
+    box-shadow: var(--shadow-md);
+  }
+  .control-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+  .control-btn:disabled {
+    background-color: #9ca3af !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  /* Button Colors */
+  #prevBtn {
+    background-color: var(--accent-yellow);
+  }
+  #clearBtn {
+    background-color: var(--error-red);
+  }
+  #nextCheckBtn {
+    background-color: var(--thelo-blue);
+  }
+  #nextCheckBtn:hover:not(:disabled) {
+    background-color: var(--thelo-blue-dark);
+  }
+  #nextCheckBtn.correct {
+    background-color: var(--success-green);
+  }
+  #nextCheckBtn.incorrect {
+    background-color: var(--error-red);
+    animation: shake 0.5s ease-in-out;
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25%,
+    75% {
+      transform: translateX(-5px);
+    }
+    50% {
+      transform: translateX(5px);
+    }
+  }
+
+  #colorIndicator,
+  #pointsDisplay {
+    background-color: var(--bg-white);
+    border: 1px solid var(--thelo-border);
+    color: var(--thelo-text);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    white-space: nowrap;
+  }
+
+  /* MCQ Buttons */
+#mcqOptionsContainer {
+    position: absolute;
+    top: 120px;
+    left: 50%;
+    transform: translateX(-50%); 
+    z-index: 30; /* Keep this high */
+    display: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    width: 90%;
+    max-width: 800px;
+}
+.mcq-option-btn {
+    font-family: inherit;
+    padding: 0.8rem 1.5rem;
+    font-size: 1.1rem;
+    font-weight: 500;
+    border: 1px solid var(--thelo-border);
+    background-color: var(--bg-white);
+    color: var(--thelo-text);
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-md);
+    transform: translateY(2px);
+    flex-shrink: 0;
+}
+.mcq-option-btn:hover:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--thelo-blue);
+}
+.mcq-option-btn.correct {
+    background-color: var(--success-green);
+    color: white;
+    border-color: var(--success-green);
+  }
+  .mcq-option-btn.incorrect {
+    background-color: var(--error-red);
+    color: white;
+    border-color: var(--error-red);
+  }
+  .mcq-option-btn.correct-answer-shown {
+    border-color: var(--success-green);
+    border-width: 2px;
+  }
+
+  /* ===== Chat Column ===== */
+  #chatCol {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-white);
+    border-left: 1px solid var(--thelo-border);
+    padding: 1rem;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  #terminalLogo {
+    height: 60px;
+    width: auto;
+    display: block;
+    align-self: center;
+    margin: 0.5rem 0 1.5rem 0;
+  }
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--thelo-border) transparent;
+  }
+  #chat::-webkit-scrollbar {
+    width: 5px;
+  }
+  #chat::-webkit-scrollbar-thumb {
+    background-color: var(--thelo-border);
+    border-radius: 10px;
+  }
+  .ai-message {
+    background-color: var(--bg-white);
+    border: 1px solid #f0f0f0; 
+    color: var(--thelo-text);
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    margin-bottom: 0.75rem;
+    max-width: 95%;
+    align-self: flex-start;
+    word-wrap: break-word;
+    box-shadow: var(--shadow-sm);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+  .ai-message strong {
+    color: var(--thelo-blue);
+    font-weight: inherit; 
+  }
+  .ai-message .emoji {
+    margin-right: 0.5rem;
+  }
+
+  #dashboardBtn {
+    background-color: var(--thelo-blue);
+  }
+  #dashboardBtn:hover:not(:disabled) {
+    background-color: var(--thelo-blue-dark);
+  }
+  #dashboardBtn.visible {
+    display: inline-flex !important;
+    animation: pulse-glow 2s infinite ease-in-out;
+  }
+    
+#streakModal {
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+#streakModal:not(.modal-hidden) {
+    opacity: 1;
+    visibility: visible;
+}
+.streak-modal-content {
+    background-color: var(--thelo-bg);
+    color: var(--thelo-text);
+    padding: 2rem 3rem;
+    border-radius: 1rem;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+#streakModal:not(.modal-hidden) .streak-modal-content {
+    transform: scale(1);
+}
+.streak-modal-icon {
+    font-size: 4rem;
+    line-height: 1;
+    margin-bottom: 1rem;
+    /* Animation removed from here as requested */
+}
+.streak-modal-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    font-size: 1.75rem;
+    font-weight: bold;
+    color: var(--thelo-text-light);
+    cursor: pointer;
+}
+#streakModalConfirmBtn {
+    margin-top: 1.5rem;
+    background-color: var(--accent-yellow);
+}
+
+@keyframes pulse-glow {
+    0% {
+        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2), 0 0 7px rgba(37, 99, 235, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(37, 99, 235, 0.4), 0 0 25px rgba(37, 99, 235, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2), 0 0 7px rgba(37, 99, 235, 0.1);
+    }
+}
+
+  /* ===== Image Terminal & Terminals ===== */
+  #chat,
+  #image-terminal {
+    flex: 1;
+    transition: opacity 0.3s ease-in-out;
+    overflow: hidden;
+    overflow-y: auto; 
+  }
+  #image-terminal {
+    display: none; 
+    flex-direction: column;
+    justify-content: flex-start;
+    padding-top: 1rem;
+    overflow: hidden; 
+  }
+  #image-terminal-img-container img {
+    max-width: 100%;
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-md);
+  }
+  #image-terminal-feedback {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+  }
+  .terminal-hidden {
+    opacity: 0 !important;
+    display: none !important;
+  }
+
+  /* ===== Smarter MCQ Layouts ===== */
+  #mcqOptionsContainer.long-options {
+    flex-direction: column;
+    align-items: stretch;
+    width: clamp(300px, 50%, 500px);
+  }
+  #mcqOptionsContainer.short-options {
+    flex-direction: row;
+    justify-content: center;
+  }
+  #mcqOptionsContainer.short-options .mcq-option-btn {
+    padding: 1.2rem;
+    font-size: 1rem;
+    min-width: 80px;
+    text-align: center;
+  }
+
+  /* ===== Chat Image Container (for lesson images) ===== */
   .chat-image-container {
-    padding: 0.5rem; /* Give a little space around the image */
+    padding: 0.5rem;
     background-color: transparent;
     border: none;
     box-shadow: none;
   }
-
   .chat-image {
     max-width: 100%;
-    border-radius: 0.75rem; /* Match the rounding of other elements */
-    display: block; /* Prevents extra space below the image */
-    box-shadow: var(--shadow-md); /* Add a subtle shadow to lift it */
-  }
-  .page-thumbnail {
-    border: 1px solid var(--thelo-border);
-    box-shadow: var(--shadow-sm);
-    border-radius: 0.5rem;
-  }
-  .page-thumbnail:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-  }
-  #closePageGridBtn {
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    font-size: 1.1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0; /* Ensure the close button doesn't shrink */
+    border-radius: 0.75rem; 
+    display: block; 
+    box-shadow: var(--shadow-md); 
   }
 
-  /* Animations for batch switching (removed, as no batches are allowed) */
-  .page-grid-batch {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 1rem;
-    width: 100%; /* Ensure it takes full width of content container */
-    transition: none; /* No transition for batch switching */
-  }
-
-  /* Removed specific batch animation classes as they are no longer needed */
-
-  @keyframes pageGridFadeIn {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
-  #thelobookPageGridView.visible {
-    animation: pageGridFadeIn var(--animation-duration) ease forwards;
-  }
-
-  /* Specific styling for the 'No Pages' scenario */
-  #thelobookPageGridContentContainer:empty::before {
-    content: 'No pages to display. Click "+" to add a new page.';
-    color: var(--thelo-text-light);
-    font-size: 1rem;
-    text-align: center;
-    margin-top: 2rem;
-  }
-
-  /* Responsive adjustments */
+  /* ===== Responsive adjustments ===== */
   @media (max-width: 768px) {
     #app {
       flex-direction: column-reverse;
@@ -818,47 +604,48 @@ body.lang-en {
 </head>
 <body>
     <div id="app">
-    <div id="lessonArea">
-        
-        <div id="boardWrap">
-            <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
-            <canvas id="backgroundCanvas"></canvas>
-            <canvas id="replayCanvas"></canvas>
-            <canvas id="board"></canvas>
-            <canvas id="finalAnswerCanvas"></canvas>
-            <div id="mcqOptionsContainer" style="display: none;"></div>
+        <div id="lessonArea">
+            
+            <div id="boardWrap">
+                <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
+                <canvas id="backgroundCanvas"></canvas>
+                <canvas id="replayCanvas"></canvas>
+                <canvas id="board"></canvas>
+                <canvas id="finalAnswerCanvas"></canvas>
+                <div id="mcqOptionsContainer" style="display: none;"></div>
+            </div>
+    
+            <div id="desmos-container" class="desmos-hidden">
+                <div id="calculator"></div>
+            </div>
+    
+            <button id="desmos-toggle-btn" title="Toggle Desmos Calculator">
+                <i class="fas fa-calculator"></i>
+            </button>
+    
+            <div id="bottomBar">
+                <div id="colorIndicator"></div>
+                <div id="pointsDisplay"></div>
+                <div id="actionButtons">
+                    <button id="prevBtn" class="control-btn"></button>
+                    <button id="clearBtn" class="control-btn"></button>
+                    <button id="nextCheckBtn" class="control-btn"></button>
+                    <button id="dashboardBtn" class="control-btn" style="display: none;"></button>
+                </div>
+            </div>
+    
         </div>
-
-        <div id="desmos-container" class="desmos-hidden"> <div id="calculator"></div>
-        </div>
-
-        <button id="desmos-toggle-btn" title="Toggle Desmos Calculator">
-            <i class="fas fa-calculator"></i>
-        </button>
-
-
-        <div id="bottomBar">
-            <div id="colorIndicator"></div>
-            <div id="pointsDisplay"></div>
-            <div id="actionButtons">
-                <button id="prevBtn" class="control-btn"></button>
-                <button id="clearBtn" class="control-btn"></button>
-                <button id="nextCheckBtn" class="control-btn"></button>
-                <button id="dashboardBtn" class="control-btn" style="display: none;"></button>
+    
+        <div id="chatCol">
+            <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo AI Logo" id="terminalLogo">
+            <div id="chat"></div>
+            <div id="image-terminal" class="terminal-hidden">
+                <div id="image-terminal-img-container"></div>
+                <div id="image-terminal-feedback"></div>
             </div>
         </div>
-
     </div>
-
-    <div id="chatCol">
-        <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo AI Logo" id="terminalLogo">
-        <div id="chat"></div>
-        <div id="image-terminal" class="terminal-hidden">
-            <div id="image-terminal-img-container"></div>
-            <div id="image-terminal-feedback"></div>
-        </div>
-    </div>
-</div>
+    
     <div id="audioContainer" style="display: none;">
         <audio id="audio_approve1_hy" src="https://pha.am/audios/approve1.ogg" preload="auto"></audio>
         <audio id="audio_approve2_hy" src="https://pha.am/audios/approve2.ogg" preload="auto"></audio>
@@ -871,7 +658,17 @@ body.lang-en {
         <audio id="stageAudioPlayer"></audio>
         <audio id="gotItSound" src="https://pha.am/audios/corr.mp3" preload="auto"></audio>
     </div>
-        <script>
+    
+    <div id="streakModal" class="modal-hidden">
+        <div class="streak-modal-content">
+            <span id="streakModalCloseBtn" class="streak-modal-close">&times;</span>
+            <div class="streak-modal-icon">🔥</div>
+            <h2 id="streakModalTitle"></h2>
+            <p id="streakModalBody"></p>
+            <button id="streakModalConfirmBtn" class="control-btn">Awesome!</button>
+        </div>
+    </div>
+	<script>
     const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
