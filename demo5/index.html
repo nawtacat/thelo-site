@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png">
     <title>thelo</title>
+    <script src="https://www.desmos.com/api/v1.7/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -97,16 +98,17 @@ body.lang-en {
     overflow: hidden;
     position: relative;
   }
-  #boardWrap {
+  /* Find this existing rule */
+#boardWrap {
     position: relative;
-    flex-grow: 1;
-    overflow: visible; /* Changed from hidden to visible */
+    flex-grow: 1; /* <-- ADD THIS LINE */
+    overflow: visible; 
     background-color: var(--thelo-bg);
-    /* Grid background */
+    /* Your other background properties remain the same */
     background-image: linear-gradient(to right, var(--thelo-border) 1px, transparent 1px),
       linear-gradient(to bottom, var(--thelo-border) 1px, transparent 1px);
     background-size: 40px 40px;
-  }
+}
 
   /* ===== Canvases & Overlays ===== */
   #stageProgressBarContainer {
@@ -629,6 +631,67 @@ body.lang-en {
     max-height: calc(100vh - 150px);
     /* Removed background, border, and shadow to create a "natural background" effect */
   }
+	/* ===== START: DESMOS INTEGRATION STYLES ===== */
+
+#main-content-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+}
+
+#desmos-container {
+    width: 400px;
+    height: 100%;
+    flex-shrink: 0;
+    border-right: 1px solid var(--thelo-border);
+    display: flex;
+    padding: 1rem;
+    box-sizing: border-box;
+    transition: margin-left 0.4s ease-in-out;
+}
+
+#calculator {
+    width: 100%;
+    flex-grow: 1;
+    border-radius: 8px;
+}
+
+#desmos-container.desmos-hidden {
+    margin-left: -400px; /* This moves it off-screen */
+}
+
+#desmos-toggle-btn {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    background-color: var(--thelo-blue);
+    color: white;
+    border: none;
+    width: 30px;
+    height: 70px;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    box-shadow: 2px 0px 5px rgba(0,0,0,0.1);
+    transition: left 0.4s ease-in-out, background-color 0.2s;
+}
+
+#desmos-toggle-btn.active {
+    left: 400px; /* Moves the button when the panel is open */
+}
+
+#desmos-toggle-btn:hover {
+    background-color: var(--thelo-blue-dark);
+}
+
+/* ===== END: DESMOS INTEGRATION STYLES ===== */
 
   .chat-image-container {
     padding: 0.5rem; /* Give a little space around the image */
@@ -737,57 +800,51 @@ body.lang-en {
 </head>
 <body>
     <div id="app">
-        <div id="lessonArea">
+    <div id="lessonArea">
+        
+        <div id="main-content-area">
+
+            <div id="desmos-container" class="desmos-hidden">
+                <div id="calculator"></div>
+            </div>
+
             <div id="boardWrap">
                 <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
                 <canvas id="backgroundCanvas"></canvas>
                 <canvas id="replayCanvas"></canvas>
                 <canvas id="board"></canvas>
                 <canvas id="finalAnswerCanvas"></canvas>
-                <canvas id="thelobookCanvas"></canvas>
-
-                <div id="thelobookControls">
-                    <button id="thelobookPagesBtn" title="View Pages">📖</button>
-                    <button id="thelobookPrevPageBtn" title="Previous Page">‹</button>
-                    <span id="thelobookPageIndicator">Page 1 / 1</span>
-                    <button id="thelobookNextPageBtn" title="Next Page">›</button>
-                    <button id="thelobookEraserBtn" title="Eraser">✏️</button>
-                    <button id="thelobookAddPageBtn" title="Add New Page">+</button>
-                </div>
-
-                <div id="thelobookPageGridView">
-                    <div id="thelobookPageGridHeader">
-                        <span id="pageGridBatchIndicator">Pages 1-32</span>
-                        <button id="closePageGridBtn" title="Close Grid">✕</button>
-                    </div>
-                    <div id="thelobookPageGridContentContainer">
-                    </div>
-                </div>
-
                 <div id="mcqOptionsContainer" style="display: none;"></div>
             </div>
 
-            <div id="bottomBar">
-                <div id="colorIndicator"></div>
-                <div id="pointsDisplay"></div>
-                <div id="actionButtons">
-    <button id="prevBtn" class="control-btn"></button>
-    <button id="thelobookBtn" class="control-btn"></button>
-    <button id="clearBtn" class="control-btn"></button>
-    <button id="nextCheckBtn" class="control-btn"></button>
-    <button id="dashboardBtn" class="control-btn" style="display: none;"></button>
-</div>
+        </div>
+        <button id="desmos-toggle-btn" title="Toggle Desmos Calculator">
+            <i class="fas fa-calculator"></i>
+        </button>
+
+
+        <div id="bottomBar">
+            <div id="colorIndicator"></div>
+            <div id="pointsDisplay"></div>
+            <div id="actionButtons">
+                <button id="prevBtn" class="control-btn"></button>
+                <button id="clearBtn" class="control-btn"></button>
+                <button id="nextCheckBtn" class="control-btn"></button>
+                <button id="dashboardBtn" class="control-btn" style="display: none;"></button>
             </div>
         </div>
-        <div id="chatCol">
-            <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo AI Logo" id="terminalLogo">
-            <div id="chat"></div>
-			<div id="image-terminal" class="terminal-hidden">
-				<div id="image-terminal-img-container"></div>
-				<div id="image-terminal-feedback"></div>
-			</div>
+
+    </div>
+
+    <div id="chatCol">
+        <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo AI Logo" id="terminalLogo">
+        <div id="chat"></div>
+        <div id="image-terminal" class="terminal-hidden">
+            <div id="image-terminal-img-container"></div>
+            <div id="image-terminal-feedback"></div>
         </div>
     </div>
+</div>
 
     <div id="audioContainer" style="display: none;">
         <audio id="audio_approve1_hy" src="https://pha.am/audios/approve1.ogg" preload="auto"></audio>
@@ -953,6 +1010,10 @@ function getPreviousWeekIdentifier(weekId) {
 	const imageTerminalImgContainer = document.getElementById('image-terminal-img-container');
 	const imageTerminalFeedback = document.getElementById('image-terminal-feedback');
 
+    const desmosContainer = document.getElementById('desmos-container');
+const desmosToggleBtn = document.getElementById('desmos-toggle-btn');
+const calculatorElement = document.getElementById('calculator');
+let desmosCalculator = null; // To hold the calculator instance
     const bgCtx = backgroundCanvas.getContext('2d');
     let replayCtx = null;
     const ctx = canvas.getContext('2d');
@@ -1667,6 +1728,20 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
 			if(stageProgressFill) stageProgressFill.style.width = '0%';
 		}
 		currentStageData = lessonStages[index];
+		if (currentStageData.showDesmos) {
+        desmosContainer.classList.remove('desmos-hidden');
+        desmosToggleBtn.classList.add('active');
+        // If the calculator is ready and the stage has a state, set it
+        if (desmosCalculator && currentStageData.desmosState) {
+            desmosCalculator.setExpression({ 
+                id: 'lesson_graph_' + currentStageData.stageId, // Unique ID per stage
+                latex: currentStageData.desmosState.latex
+            });
+        }
+    } else {
+        desmosContainer.classList.add('desmos-hidden');
+        desmosToggleBtn.classList.remove('active');
+    }
 		currentStageIndex = index;
 		
 		// --- Logic to switch terminals ---
@@ -2643,77 +2718,82 @@ nextCheckBtn.classList.add('correct');
     }
 
     function initApp() {
-        const audioIdsToLoad = [
-            'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
-            'audio_approve1_en', 'audio_approve2_en', 'audio_dis1_en', 'audio_dis2_en', 'gotItSound'
-        ];
-        audioIdsToLoad.forEach(id => {
-            const audio = document.getElementById(id);
-            if (audio) {
-                audioElements[id] = audio;
-                if (id.startsWith('audio_approve') && id.endsWith('_hy')) approveSounds_hy.push(audio);
-                if (id.startsWith('audio_dis') && id.endsWith('_hy')) disapproveSounds_hy.push(audio);
-                if (id.startsWith('audio_approve') && id.endsWith('_en')) approveSounds_en.push(audio);
-                if (id.startsWith('audio_dis') && id.endsWith('_en')) disapproveSounds_en.push(audio);
-            }
-        });
-        resizeCanvases();
-        addBoardDrawListeners();
-        window.addEventListener('mouseup', handleDrawingEnd);
-        window.addEventListener('mouseleave', handleDrawingEnd);
-        window.addEventListener('touchend', handleDrawingEnd);
-        window.addEventListener('touchcancel', handleDrawingEnd);
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const lessonFileName = urlParams.get('lessonFile');
-        if (lessonFileName) {
-            const LESSONS_BASE_PATH = 'https://thelo.space/lessons/';
-            const cleanLFN = lessonFileName.startsWith('/') ? lessonFileName.substring(1) : lessonFileName;
-            loadLesson(LESSONS_BASE_PATH + cleanLFN.replace(/\.\.+/g, ''));
-        } else {
-            const TXT = getCurrentUIText();
-            addChatMessage('AI', formatAIMessage('lessonFileMissing'));
-            if(nextCheckBtn){nextCheckBtn.textContent = TXT.error; nextCheckBtn.disabled = true;}
-            if(prevBtn)prevBtn.disabled = true;
-            if(bgCtx && backgroundCanvas && backgroundCanvas.width > 0){
-                const cw = backgroundCanvas.width/(window.devicePixelRatio||1); const ch = backgroundCanvas.height/(window.devicePixelRatio||1);
-                bgCtx.clearRect(0,0,cw,ch); bgCtx.font = `20px 'Mardoto-Light', system-ui, sans-serif`;
-                bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-                bgCtx.textAlign='center';bgCtx.textBaseline='middle';
-                wrapText(bgCtx, TXT.lessonLoadErrorGeneric, cw/2, ch/2, cw*0.8, 30);
-            }
+    const audioIdsToLoad = [
+        'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
+        'audio_approve1_en', 'audio_approve2_en', 'audio_dis1_en', 'audio_dis2_en', 'gotItSound'
+    ];
+    audioIdsToLoad.forEach(id => {
+        const audio = document.getElementById(id);
+        if (audio) {
+            audioElements[id] = audio;
+            if (id.startsWith('audio_approve') && id.endsWith('_hy')) approveSounds_hy.push(audio);
+            if (id.startsWith('audio_dis') && id.endsWith('_hy')) disapproveSounds_hy.push(audio);
+            if (id.startsWith('audio_approve') && id.endsWith('_en')) approveSounds_en.push(audio);
+            if (id.startsWith('audio_dis') && id.endsWith('_en')) disapproveSounds_en.push(audio);
         }
-        const interactionListener = () => { if (window.userInteracted) return; window.userInteracted = true; Object.values(audioElements).forEach(a => { if(a.readyState < 1) a.load(); }); if(stageAudioPlayer && stageAudioPlayer.readyState < 1) stageAudioPlayer.load(); try { const tempAC = new (window.AudioContext || window.webkitAudioContext)(); if (tempAC.state === 'suspended') tempAC.resume().then(()=>tempAC.close()); else tempAC.close(); } catch(e){} document.body.removeEventListener('click', interactionListener); document.body.removeEventListener('keydown', interactionListener); document.body.removeEventListener('touchstart', interactionListener); };
-        document.body.addEventListener('click', interactionListener, { once: true });
-        document.body.addEventListener('keydown', interactionListener, { once: true });
-        document.body.addEventListener('touchstart', interactionListener, { once: true });
-        window.addEventListener('resize', resizeCanvases);
-        if (prevBtn) prevBtn.onclick = previousStage;
-        if (nextCheckBtn) nextCheckBtn.onclick = handleNextCheckClick;
-        if (clearBtn) clearBtn.onclick = clearUserCanvas;
-        if (thelobookBtn) thelobookBtn.onclick = () => { isThelobookActive ? closeThelobook(true) : openThelobook(); };
+    });
+    resizeCanvases();
+    addBoardDrawListeners();
+    window.addEventListener('mouseup', handleDrawingEnd);
+    window.addEventListener('mouseleave', handleDrawingEnd);
+    window.addEventListener('touchend', handleDrawingEnd);
+    window.addEventListener('touchcancel', handleDrawingEnd);
 
-        if (thelobookPagesBtn) thelobookPagesBtn.onclick = () => { isPageGridVisible ? closePageGridView() : openPageGridView(); };
-        if (closePageGridBtnEl) closePageGridBtnEl.onclick = closePageGridView;
-        if (thelobookPrevPageBtn) thelobookPrevPageBtn.onclick = () => changeThelobookPageSimple(-1);
-        if (thelobookNextPageBtn) thelobookNextPageBtn.onclick = () => changeThelobookPageSimple(1);
-        if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
-        if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
-
-	if (dashboardBtn) {
-	    dashboardBtn.onclick = () => {
-	        window.location.href = 'https://thelo.space/sdashboard';
-	    };
-	}
-        document.querySelectorAll('button').forEach(button => {
-            button.addEventListener('click', () => {
-                button.blur();
-            });
-        });
-
-
-        document.addEventListener('keydown', handleKeyDown);
+    const urlParams = new URLSearchParams(window.location.search);
+    const lessonFileName = urlParams.get('lessonFile');
+    if (lessonFileName) {
+        const LESSONS_BASE_PATH = 'https://thelo.space/lessons/';
+        const cleanLFN = lessonFileName.startsWith('/') ? lessonFileName.substring(1) : lessonFileName;
+        loadLesson(LESSONS_BASE_PATH + cleanLFN.replace(/\.\.+/g, ''));
+    } else {
+        const TXT = getCurrentUIText();
+        addChatMessage('AI', formatAIMessage('lessonFileMissing'));
+        if(nextCheckBtn){nextCheckBtn.textContent = TXT.error; nextCheckBtn.disabled = true;}
+        if(prevBtn)prevBtn.disabled = true;
+        if(bgCtx && backgroundCanvas && backgroundCanvas.width > 0){
+            const cw = backgroundCanvas.width/(window.devicePixelRatio||1); const ch = backgroundCanvas.height/(window.devicePixelRatio||1);
+            bgCtx.clearRect(0,0,cw,ch); bgCtx.font = `20px 'Mardoto-Light', system-ui, sans-serif`;
+            bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+            bgCtx.textAlign='center';bgCtx.textBaseline='middle';
+            wrapText(bgCtx, TXT.lessonLoadErrorGeneric, cw/2, ch/2, cw*0.8, 30);
+        }
     }
+    const interactionListener = () => { if (window.userInteracted) return; window.userInteracted = true; Object.values(audioElements).forEach(a => { if(a.readyState < 1) a.load(); }); if(stageAudioPlayer && stageAudioPlayer.readyState < 1) stageAudioPlayer.load(); try { const tempAC = new (window.AudioContext || window.webkitAudioContext)(); if (tempAC.state === 'suspended') tempAC.resume().then(()=>tempAC.close()); else tempAC.close(); } catch(e){} document.body.removeEventListener('click', interactionListener); document.body.removeEventListener('keydown', interactionListener); document.body.removeEventListener('touchstart', interactionListener); };
+    document.body.addEventListener('click', interactionListener, { once: true });
+    document.body.addEventListener('keydown', interactionListener, { once: true });
+    document.body.addEventListener('touchstart', interactionListener, { once: true });
+    window.addEventListener('resize', resizeCanvases);
+    if (prevBtn) prevBtn.onclick = previousStage;
+    if (nextCheckBtn) nextCheckBtn.onclick = handleNextCheckClick;
+    if (clearBtn) clearBtn.onclick = clearUserCanvas;
+    // The thelobookBtn listener has been removed
+
+    if (dashboardBtn) {
+        dashboardBtn.onclick = () => {
+            window.location.href = 'https://thelo.space/sdashboard';
+        };
+    }
+    document.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => {
+            button.blur();
+        });
+    });
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    // ==========================================================
+    // ===== START: ADD THE DESMOS CODE AFTER EVERYTHING ELSE =====
+    // ==========================================================
+    initializeDesmos(); 
+
+    desmosToggleBtn.addEventListener('click', () => {
+        desmosContainer.classList.toggle('desmos-hidden');
+        desmosToggleBtn.classList.toggle('active');
+    });
+    // ===================================
+    // ===== END: ADD THE DESMOS CODE =====
+    // ===================================
+}
 
     if (typeof window.appInitialized === 'undefined') {
         window.appInitialized = false;
@@ -2764,6 +2844,20 @@ nextCheckBtn.classList.add('correct');
             updateAllUITexts();
         }
     });
+		function initializeDesmos() {
+    if (calculatorElement && !desmosCalculator) { // Only initialize once
+        try {
+            desmosCalculator = Desmos.GraphingCalculator(calculatorElement, {
+                keypad: true,
+                expressions: false,
+                settingsMenu: false,
+            });
+            console.log("Desmos Calculator Initialized.");
+        } catch (e) {
+            console.error("Could not initialize Desmos:", e);
+        }
+    }
+}
 </script>
 	<div id="streakModal" class="modal-hidden">
     <div class="streak-modal-content">
