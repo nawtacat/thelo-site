@@ -1164,6 +1164,38 @@ const DOUBLE_TAP_MAX_DISTANCE = 40;   // Maximum distance in pixels for a valid 
     const PAGES_PER_GRID_BATCH = 32;
     let tempFullPageCanvasForThumbnails = null;
     let pageGridInstructionsShown = false;
+    /* =================================================================
+   NEW: iPad-Specific Input Handling
+   ================================================================= */
+
+// Helper 1: A robust function to specifically identify an iPad.
+const isIPad = (() => {
+  // Classic user agent check for older iPads
+  if (/iPad/.test(navigator.userAgent)) return true;
+  // Modern check for iPads on iPadOS 13+ that report as 'MacIntel'
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+  return false;
+})();
+
+// State variable for the double-tap gesture
+let lastFingerTap = 0;
+
+// Helper 2: A clean function to handle the double-tap logic
+function handleFingerToggle(e) {
+  if (!isIPad) return;                    // Ignore if not on an iPad
+  if (e.pointerType !== 'touch') return;  // Ignore if it's a Pencil or mouse
+  
+  const now = Date.now();
+
+  // If two taps happen within 300ms, toggle the color
+  if (now - lastFingerTap < 300) {
+    e.preventDefault();                   // Prevent the browser from zooming
+    toggleColor();                        // Call your existing color switch function
+  }
+  
+  // Record the time of this tap for the next one
+  lastFingerTap = now;
+}
 
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
@@ -1526,72 +1558,59 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-    if (e.pointerType === 'pen') {
-        isPenCurrentlyActive = true;
-        clearTimeout(penUpCooldownTimer);
-    } else if (e.pointerType === 'touch') {
-        if (isPenCurrentlyActive) {
-            // A finger touched while the pen is active. This is a palm.
-            // We must stop this event dead in its tracks.
-            e.preventDefault();   // Prevents default actions like scrolling.
-            e.stopPropagation();  // PREVENTS THIS EVENT FROM AFFECTING ANY OTHER ELEMENT.
-            return;               // Ignore the event.
-        }
+  /* ── 1. Check for the finger double-tap gesture on iPad ── */
+  handleFingerToggle(e);
 
-        const currentTime = Date.now();
-        const currentPosition = getPos(e, e.currentTarget);
-        if (!currentPosition) return;
-        const timeSinceLastTap = currentTime - lastTapTime;
-        const distance = Math.hypot(
-            currentPosition.x - lastTapPosition.x,
-            currentPosition.y - lastTapPosition.y
-        );
+  /* ── 2. The main gatekeeper for iPad input ── */
+  // If we are on an iPad AND the input is NOT a pen...
+  if (isIPad && e.pointerType !== 'pen') {
+      // ...then it must be a finger or mouse. We block drawing and allow
+      // the browser's default behavior (scrolling/pinching).
+      return;
+  }
+  /* ───────────────────────────────────────────────────────── */
 
-        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD && distance < DOUBLE_TAP_MAX_DISTANCE) {
-            toggleColor();
-            lastTapTime = 0;
-            e.preventDefault();
-            return;
-        }
-        
-        lastTapTime = currentTime;
-        lastTapPosition = currentPosition;
-        
-        if (isTabletMode) {
-            e.preventDefault();
-            return;
-        }
-    }
+  // If the code reaches here, it's either:
+  // a) A pen on an iPad.
+  // b) Any input on a non-iPad device (phone, desktop).
+  // In these cases, we want to draw, so we prevent default scroll.
+  e.preventDefault();
 
-    e.preventDefault();
+  /* ========== ORIGINAL DRAW-SETUP (This part is unchanged) ========== */
+  const currentTargetCanvas = e.currentTarget;
+  const activeCtx           = isThelobookActive ? thelobookCtx : ctx;
+  if (!activeCtx) return;
 
-    /* --- The rest of the function is exactly the same --- */
-    const currentTargetCanvas = e.currentTarget;
-    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-    if (!activeCtx) return;
-    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
-    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
-    if (!isStudentInputAllowed && !isThelobookActive) return;
-    const pos = getPos(e, currentTargetCanvas);
-    if (!pos) return;
-    drawing = true;
-    if (!isThelobookActive) userDrawingOccurred = true;
-    lastPos = pos;
-    if (isThelobookActive) {
-        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
-        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
-        if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
-    } else {
-        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
-        activeCtx.globalCompositeOperation = 'source-over';
-    }
-    activeCtx.beginPath();
-    activeCtx.moveTo(pos.x, pos.y);
-    if (!isThelobookActive && currentColor === 'blue') {
-        finalCtx.strokeStyle = INK_COLORS.blue;
-        finalCtx.beginPath();
-        finalCtx.moveTo(pos.x, pos.y);
-    }
+  if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+  if (!isThelobookActive && currentTargetCanvas !== canvas)           return;
+  if (!isStudentInputAllowed && !isThelobookActive) return;
+
+  const pos = getPos(e, currentTargetCanvas);
+  if (!pos) return;
+
+  drawing = true;
+  if (!isThelobookActive) userDrawingOccurred = true;
+  lastPos = pos;
+
+  /* stroke style / eraser handling */
+  if (isThelobookActive) {
+      activeCtx.lineWidth                = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+      activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+      if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
+  } else {
+      activeCtx.lineWidth                = THELOBOOK_PEN_LINEWIDTH;
+      activeCtx.globalCompositeOperation = 'source-over';
+  }
+
+  activeCtx.beginPath();
+  activeCtx.moveTo(pos.x, pos.y);
+
+  /* mirror blue-ink answers */
+  if (!isThelobookActive && currentColor === 'blue') {
+      finalCtx.strokeStyle = INK_COLORS.blue;
+      finalCtx.beginPath();
+      finalCtx.moveTo(pos.x, pos.y);
+  }
 }
     function handleDrawingMove(e) {
     if (!drawing) return;
