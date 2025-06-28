@@ -1317,11 +1317,17 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         }, 150);
     }
     function setupContexts() {
-        if (!backgroundCanvas || !replayCanvas || !canvas || !finalAnswerCanvas || !thelobookCanvas) return;
-        replayCtx = replayCanvas.getContext('2d'); thelobookCtx = thelobookCanvas.getContext('2d');
-        [bgCtx, replayCtx, ctx, finalCtx, thelobookCtx].forEach(context => {
-            if (context) { context.resetTransform(); context.scale(devicePixelRatio, devicePixelRatio); }
-        });
+        if (!backgroundCanvas || !replayCanvas || !canvas || !finalAnswerCanvas || !thelobookCanvas) return;
+
+        // Get the context with the low-latency hint
+        const contextOptions = { desynchronized: true };
+        replayCtx = replayCanvas.getContext('2d', contextOptions);
+        thelobookCtx = thelobookCanvas.getContext('2d', contextOptions);
+        ctx.getContextAttributes().desynchronized = true; // Also apply to the main context
+
+        [bgCtx, replayCtx, ctx, finalCtx, thelobookCtx].forEach(context => {
+            if (context) { context.resetTransform(); context.scale(devicePixelRatio, devicePixelRatio); }
+        });
         bgCtx.lineWidth = 2; bgCtx.strokeStyle = '#333'; bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
         const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
         bgCtx.font = `20px ${fontFamily}`; bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'top';
@@ -1588,22 +1594,47 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 }
     function handleDrawingMove(e) {
-        if (!drawing) return;
-        const currentTargetCanvas = e.currentTarget;
-        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-        if (!activeCtx) return;
-        if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
-        if (!isThelobookActive && currentTargetCanvas !== canvas) return;
-        if (!isStudentInputAllowed && !isThelobookActive) return;
-        const pos = getPos(e, currentTargetCanvas); if (!pos) return;
-        if (e.touches) e.preventDefault();
-        activeCtx.lineTo(pos.x, pos.y); activeCtx.stroke();
+    if (!drawing) return;
+
+    // --- High-Fidelity Stroke Reconstruction ---
+
+    // Define the active canvas and context once.
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+
+    // Run permission checks once.
+    if (!activeCtx) return;
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+    if (!isStudentInputAllowed && !isThelobookActive) return;
+
+    // Get the array of all points the hardware captured since the last event.
+    // This includes the "skipped" points.
+    const coalescedEvents = e.getCoalescedEvents();
+
+    // Loop through every single point, including the coalesced ones.
+    for (const event of coalescedEvents) {
+        const pos = getPos(event, currentTargetCanvas);
+        if (!pos) continue;
+
+        // Draw a small line segment from the previous point to the current point.
+        activeCtx.beginPath();
+        activeCtx.moveTo(lastPos.x, lastPos.y);
+        activeCtx.lineTo(pos.x, pos.y);
+        activeCtx.stroke();
+
+        // Do the same for the blue answer canvas if needed.
         if (!isThelobookActive && currentColor === 'blue') {
-            if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
-            finalCtx.lineTo(pos.x, pos.y); finalCtx.stroke();
+            finalCtx.beginPath();
+            finalCtx.moveTo(lastPos.x, lastPos.y);
+            finalCtx.lineTo(pos.x, pos.y);
+            finalCtx.stroke();
         }
+
+        // IMPORTANT: Update the last position to the current point for the next iteration.
         lastPos = pos;
     }
+}
     function handleDrawingEnd(e) {
     // When a pen stroke ends, we exit "Pen Mode" after a very short delay.
     // This delay prevents accidental gestures if you lift and tap quickly.
