@@ -1133,6 +1133,8 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const approveSounds_en = []; const disapproveSounds_en = [];
 
     /* ========== State Variables ========== */
+		let isPenCurrentlyActive = false; // Tracks if the pen is actively drawing
+let penUpCooldownTimer = null;    // Manages a small delay after lifting the pen
           let isTabletMode = false;
 	let lastTapTime = 0;
 let lastTapPosition = { x: 0, y: 0 }; // ADD THIS: To store tap coordinates
@@ -1518,69 +1520,69 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-    // === NEW: Robust Double-Tap and Palm Rejection Logic ===
+    // === NEW CONTEXT-AWARE LOGIC ===
 
-    if (e.pointerType === 'touch') {
+    if (e.pointerType === 'pen') {
+        // A pen has touched the screen. Enter "Pen Mode" immediately.
+        isPenCurrentlyActive = true;
+        // Cancel any pending cooldown timer, as the pen is back in use.
+        clearTimeout(penUpCooldownTimer); 
+    
+    } else if (e.pointerType === 'touch') {
+        // A finger has touched the screen. First, check our context.
+        // IF THE PEN IS ACTIVE, COMPLETELY IGNORE THIS FINGER TOUCH.
+        if (isPenCurrentlyActive) {
+            e.preventDefault();
+            return; // Exit immediately. Do nothing.
+        }
+
+        // If the pen is NOT active, we can safely check for the double-tap gesture.
         const currentTime = Date.now();
-        // We need the event's location on the canvas.
-        const currentPosition = getPos(e, e.currentTarget); 
-        if (!currentPosition) return; // Exit if we can't get a position
+        const currentPosition = getPos(e, e.currentTarget);
+        if (!currentPosition) return;
 
-        // Calculate time and distance from the last tap
         const timeSinceLastTap = currentTime - lastTapTime;
-        const distance = Math.hypot( // Calculates the direct distance between two points
+        const distance = Math.hypot(
             currentPosition.x - lastTapPosition.x,
             currentPosition.y - lastTapPosition.y
         );
 
-        // THE NEW, STRICTER CONDITION:
-        // Must be fast AND in the same area.
         if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD && distance < DOUBLE_TAP_MAX_DISTANCE) {
-            // This is a valid double-tap.
+            // Valid double-tap, and we know the pen is not in use.
             toggleColor();
-            
-            // Reset the timer and position to prevent a triple-tap from firing.
             lastTapTime = 0;
-            lastTapPosition = { x: 0, y: 0 };
-
             e.preventDefault();
-            return; // Exit after performing the action.
+            return;
         }
-
-        // This was not a valid double-tap. Record the time and position
-        // of this single tap for the *next* potential tap.
+        
         lastTapTime = currentTime;
         lastTapPosition = currentPosition;
-
-        // Finally, apply our original palm rejection rule for single taps on tablets.
+        
         if (isTabletMode) {
+            // This is a single finger tap on a tablet (palm). Ignore it.
             e.preventDefault();
             return;
         }
     }
-    // === END of New Logic ===
+
+    // === END OF NEW LOGIC ===
 
 
-    // Prevent accidental page scroll if someone drags with the Pencil or mouse.
+    // If we've reached here, it's a valid drawing action (pen, mouse, or finger on phone).
     e.preventDefault();
 
-    /* ========== The rest of your existing drawing logic is unchanged ========== */
+    /* --- The rest of the function remains the same --- */
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
-
     if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
     if (!isThelobookActive && currentTargetCanvas !== canvas) return;
-
     if (!isStudentInputAllowed && !isThelobookActive) return;
-
     const pos = getPos(e, currentTargetCanvas);
     if (!pos) return;
-
     drawing = true;
     if (!isThelobookActive) userDrawingOccurred = true;
     lastPos = pos;
-
     if (isThelobookActive) {
         activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
         activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
@@ -1589,10 +1591,8 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
         activeCtx.globalCompositeOperation = 'source-over';
     }
-
     activeCtx.beginPath();
     activeCtx.moveTo(pos.x, pos.y);
-
     if (!isThelobookActive && currentColor === 'blue') {
         finalCtx.strokeStyle = INK_COLORS.blue;
         finalCtx.beginPath();
@@ -1618,11 +1618,22 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         lastPos = pos;
     }
     function handleDrawingEnd(e) {
-        if (!drawing) return;
-        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-        if (!activeCtx) return;
-        drawing = false; activeCtx.beginPath();
+    // When a pen stroke ends, we exit "Pen Mode" after a very short delay.
+    // This delay prevents accidental gestures if you lift and tap quickly.
+    if (e.pointerType === 'pen') {
+        clearTimeout(penUpCooldownTimer); // Clear any previous timer
+        penUpCooldownTimer = setTimeout(() => {
+            isPenCurrentlyActive = false;
+        }, 200); // A 200ms cooldown is enough.
     }
+
+    // The rest of the function is unchanged.
+    if (!drawing) return;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+    drawing = false;
+    activeCtx.beginPath();
+}
 
     function addBoardDrawListeners() {
         // Use the modern 'pointer' events which unify mouse, touch, and pen
