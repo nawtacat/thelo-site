@@ -1520,27 +1520,21 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-    // === NEW CONTEXT-AWARE LOGIC ===
-
     if (e.pointerType === 'pen') {
-        // A pen has touched the screen. Enter "Pen Mode" immediately.
         isPenCurrentlyActive = true;
-        // Cancel any pending cooldown timer, as the pen is back in use.
-        clearTimeout(penUpCooldownTimer); 
-    
+        clearTimeout(penUpCooldownTimer);
     } else if (e.pointerType === 'touch') {
-        // A finger has touched the screen. First, check our context.
-        // IF THE PEN IS ACTIVE, COMPLETELY IGNORE THIS FINGER TOUCH.
         if (isPenCurrentlyActive) {
-            e.preventDefault();
-            return; // Exit immediately. Do nothing.
+            // A finger touched while the pen is active. This is a palm.
+            // We must stop this event dead in its tracks.
+            e.preventDefault();   // Prevents default actions like scrolling.
+            e.stopPropagation();  // PREVENTS THIS EVENT FROM AFFECTING ANY OTHER ELEMENT.
+            return;               // Ignore the event.
         }
 
-        // If the pen is NOT active, we can safely check for the double-tap gesture.
         const currentTime = Date.now();
         const currentPosition = getPos(e, e.currentTarget);
         if (!currentPosition) return;
-
         const timeSinceLastTap = currentTime - lastTapTime;
         const distance = Math.hypot(
             currentPosition.x - lastTapPosition.x,
@@ -1548,7 +1542,6 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         );
 
         if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD && distance < DOUBLE_TAP_MAX_DISTANCE) {
-            // Valid double-tap, and we know the pen is not in use.
             toggleColor();
             lastTapTime = 0;
             e.preventDefault();
@@ -1559,19 +1552,14 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         lastTapPosition = currentPosition;
         
         if (isTabletMode) {
-            // This is a single finger tap on a tablet (palm). Ignore it.
             e.preventDefault();
             return;
         }
     }
 
-    // === END OF NEW LOGIC ===
-
-
-    // If we've reached here, it's a valid drawing action (pen, mouse, or finger on phone).
     e.preventDefault();
 
-    /* --- The rest of the function remains the same --- */
+    /* --- The rest of the function is exactly the same --- */
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
@@ -1599,7 +1587,6 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         finalCtx.moveTo(pos.x, pos.y);
     }
 }
-
     function handleDrawingMove(e) {
         if (!drawing) return;
         const currentTargetCanvas = e.currentTarget;
