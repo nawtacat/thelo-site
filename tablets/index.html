@@ -1116,6 +1116,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     /* ========== State Variables ========== */
           let isTabletMode = false;
+		let colorSwitchTipShown = false;
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
     let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
@@ -1561,6 +1562,12 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         canvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
         canvas.addEventListener('touchend', handleDrawingEnd);
         canvas.addEventListener('touchcancel', handleDrawingEnd);
+	canvas.addEventListener('dblclick', (e) => {
+            if (isTabletMode && isStudentInputAllowed && !isThelobookActive) {
+                e.preventDefault(); // This is crucial to prevent page zoom
+                toggleColor();
+            }
+        });
     }
     function removeBoardDrawListeners() {
         canvas.removeEventListener('mousedown', handleDrawingStart);
@@ -1804,6 +1811,14 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
 		}
 		currentStageData = lessonStages[index];
 		currentStageIndex = index;
+		// NEW: One-time tip for tablet color switching
+        if (isTabletMode && !colorSwitchTipShown && isStudentInputAllowed) {
+            // Pick your message based on the implementation you chose
+            const tipMessage = "✨ Pro Tip: Tap with two fingers on the canvas to switch ink color.";
+            // const tipMessage = "✨ Pro Tip: Double-tap on the canvas to switch your ink color.";
+            showToast(tipMessage, 6000); // Show for 6 seconds
+            colorSwitchTipShown = true;
+        }
 		
 		// --- Logic to switch terminals ---
 		if (currentStageData.image && currentStageData.type === 'question_handwriting') {
