@@ -1134,6 +1134,8 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     /* ========== State Variables ========== */
           let isTabletMode = false;
+		let lastTapTime = 0;
+const DOUBLE_TAP_THRESHOLD = 300; // Time in milliseconds for a double-tap
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
     let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
@@ -1514,59 +1516,80 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-  /* ──────────────────────────────────────────────────────────────
-     Stylus-only gate for iPad
-     ──────────────────────────────────────────────────────────────
-     • Apple Pencil  → e.pointerType === 'pen'   →  draw ✅
-     • Finger/touch  → e.pointerType === 'touch' →  ignore 🚫
-     • Mouse/track-pad (laptop) → 'mouse'        →  draw ✅
-  */
-  if (e.pointerType === 'touch') {
-      // Let the finger keep its normal scrolling / zooming behaviour.
-      return;
-  }
+    // === NEW: Double-Tap and Palm Rejection Logic ===
 
-  // Prevent accidental page scroll if someone drags with the Pencil or mouse.
-  e.preventDefault();
+    if (e.pointerType === 'touch') {
+        const currentTime = Date.now();
+        const timeSinceLastTap = currentTime - lastTapTime;
 
-  /* ========== existing logic (unchanged) ========== */
-  const currentTargetCanvas = e.currentTarget;
-  const activeCtx           = isThelobookActive ? thelobookCtx : ctx;
-  if (!activeCtx) return;
+        // Check if this tap is fast enough to be a double-tap
+        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD) {
+            // IT IS A DOUBLE-TAP!
+            toggleColor(); // Perform the desired action.
 
-  // Respect which canvas is currently active
-  if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
-  if (!isThelobookActive && currentTargetCanvas !== canvas)           return;
+            // Reset the timer to prevent a third tap from also triggering.
+            lastTapTime = 0;
 
-  // Block drawing on stages that shouldn’t accept input
-  if (!isStudentInputAllowed && !isThelobookActive) return;
+            // Important: Stop this event from doing anything else.
+            e.preventDefault();
+            return;
+        }
 
-  const pos = getPos(e, currentTargetCanvas);
-  if (!pos) return;
+        // It was not a double-tap, just a single one.
+        // Record its time for the *next* potential tap.
+        lastTapTime = currentTime;
 
-  drawing = true;
-  if (!isThelobookActive) userDrawingOccurred = true;
-  lastPos = pos;
+        // Now, we re-apply our palm rejection rule for tablets.
+        // If it's a single tap on a tablet, ignore it.
+        if (isTabletMode) {
+            e.preventDefault();
+            return;
+        }
+    }
 
-  /* ===== Set up stroke style / eraser mode ===== */
-  if (isThelobookActive) {
-      activeCtx.lineWidth                = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
-      activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
-      if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
-  } else {
-      activeCtx.lineWidth                = THELOBOOK_PEN_LINEWIDTH;
-      activeCtx.globalCompositeOperation = 'source-over';
-  }
+    // === END of New Logic ===
 
-  activeCtx.beginPath();
-  activeCtx.moveTo(pos.x, pos.y);
 
-  /* Mirror blue-ink answers onto the hidden “final answer” canvas */
-  if (!isThelobookActive && currentColor === 'blue') {
-      finalCtx.strokeStyle = INK_COLORS.blue;
-      finalCtx.beginPath();
-      finalCtx.moveTo(pos.x, pos.y);
-  }
+    // Prevent accidental page scroll if someone drags with the Pencil or mouse.
+    e.preventDefault();
+
+
+    /* ========== existing logic (unchanged) ========== */
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+
+    if (!isStudentInputAllowed && !isThelobookActive) return;
+
+    const pos = getPos(e, currentTargetCanvas);
+    if (!pos) return;
+
+    drawing = true;
+    if (!isThelobookActive) userDrawingOccurred = true;
+    lastPos = pos;
+
+    /* ===== Set up stroke style / eraser mode ===== */
+    if (isThelobookActive) {
+        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+        if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
+    } else {
+        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = 'source-over';
+    }
+
+    activeCtx.beginPath();
+    activeCtx.moveTo(pos.x, pos.y);
+
+    /* Mirror blue-ink answers onto the hidden “final answer” canvas */
+    if (!isThelobookActive && currentColor === 'blue') {
+        finalCtx.strokeStyle = INK_COLORS.blue;
+        finalCtx.beginPath();
+        finalCtx.moveTo(pos.x, pos.y);
+    }
 }
 
     function handleDrawingMove(e) {
