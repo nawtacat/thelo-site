@@ -1134,8 +1134,10 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     /* ========== State Variables ========== */
           let isTabletMode = false;
-		let lastTapTime = 0;
-const DOUBLE_TAP_THRESHOLD = 300; // Time in milliseconds for a double-tap
+	let lastTapTime = 0;
+let lastTapPosition = { x: 0, y: 0 }; // ADD THIS: To store tap coordinates
+const DOUBLE_TAP_THRESHOLD = 300;     // Time in milliseconds for a double-tap
+const DOUBLE_TAP_MAX_DISTANCE = 40;   // Maximum distance in pixels for a valid double-tap
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
     let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
@@ -1516,45 +1518,53 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-    // === NEW: Double-Tap and Palm Rejection Logic ===
+    // === NEW: Robust Double-Tap and Palm Rejection Logic ===
 
     if (e.pointerType === 'touch') {
         const currentTime = Date.now();
+        // We need the event's location on the canvas.
+        const currentPosition = getPos(e, e.currentTarget); 
+        if (!currentPosition) return; // Exit if we can't get a position
+
+        // Calculate time and distance from the last tap
         const timeSinceLastTap = currentTime - lastTapTime;
+        const distance = Math.hypot( // Calculates the direct distance between two points
+            currentPosition.x - lastTapPosition.x,
+            currentPosition.y - lastTapPosition.y
+        );
 
-        // Check if this tap is fast enough to be a double-tap
-        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD) {
-            // IT IS A DOUBLE-TAP!
-            toggleColor(); // Perform the desired action.
-
-            // Reset the timer to prevent a third tap from also triggering.
+        // THE NEW, STRICTER CONDITION:
+        // Must be fast AND in the same area.
+        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD && distance < DOUBLE_TAP_MAX_DISTANCE) {
+            // This is a valid double-tap.
+            toggleColor();
+            
+            // Reset the timer and position to prevent a triple-tap from firing.
             lastTapTime = 0;
+            lastTapPosition = { x: 0, y: 0 };
 
-            // Important: Stop this event from doing anything else.
             e.preventDefault();
-            return;
+            return; // Exit after performing the action.
         }
 
-        // It was not a double-tap, just a single one.
-        // Record its time for the *next* potential tap.
+        // This was not a valid double-tap. Record the time and position
+        // of this single tap for the *next* potential tap.
         lastTapTime = currentTime;
+        lastTapPosition = currentPosition;
 
-        // Now, we re-apply our palm rejection rule for tablets.
-        // If it's a single tap on a tablet, ignore it.
+        // Finally, apply our original palm rejection rule for single taps on tablets.
         if (isTabletMode) {
             e.preventDefault();
             return;
         }
     }
-
     // === END of New Logic ===
 
 
     // Prevent accidental page scroll if someone drags with the Pencil or mouse.
     e.preventDefault();
 
-
-    /* ========== existing logic (unchanged) ========== */
+    /* ========== The rest of your existing drawing logic is unchanged ========== */
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
@@ -1571,7 +1581,6 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     if (!isThelobookActive) userDrawingOccurred = true;
     lastPos = pos;
 
-    /* ===== Set up stroke style / eraser mode ===== */
     if (isThelobookActive) {
         activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
         activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
@@ -1584,7 +1593,6 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     activeCtx.beginPath();
     activeCtx.moveTo(pos.x, pos.y);
 
-    /* Mirror blue-ink answers onto the hidden “final answer” canvas */
     if (!isThelobookActive && currentColor === 'blue') {
         finalCtx.strokeStyle = INK_COLORS.blue;
         finalCtx.beginPath();
