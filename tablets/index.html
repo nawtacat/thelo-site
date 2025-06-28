@@ -1116,8 +1116,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     /* ========== State Variables ========== */
           let isTabletMode = false;
-		let colorSwitchTipShown = false;
-		let lastTapTime = 0;
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
     let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
@@ -1497,20 +1495,12 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
-   function handleDrawingStart(e) {
-        // ROBUST Custom Double-Tap Logic
-        if (isTabletMode && isStudentInputAllowed && !isThelobookActive) {
-            const currentTime = new Date().getTime();
-            const timeSinceLastTap = currentTime - lastTapTime;
-
-            // Check if the tap is fast enough to be a double tap
-            if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
-                e.preventDefault(); // Crucial: stops drawing AND browser zoom
-                toggleColor();
-                lastTapTime = 0; // Reset timer to prevent triple-tap issues
-                return; // Exit the function
-            }
-            lastTapTime = currentTime;
+    function handleDrawingStart(e) {
+        // NEW: Two-finger tap gesture to switch color on tablets
+        if (isTabletMode && e.touches && e.touches.length === 2) {
+            e.preventDefault(); // Prevent zoom or other default actions
+            toggleColor();
+            return; // Stop the drawing process from starting
         }
 
         const currentTargetCanvas = e.currentTarget;
@@ -1540,6 +1530,23 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
             finalCtx.strokeStyle = INK_COLORS.blue; finalCtx.beginPath(); finalCtx.moveTo(pos.x, pos.y);
         }
     }
+    function handleDrawingMove(e) {
+        if (!drawing) return;
+        const currentTargetCanvas = e.currentTarget;
+        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+        if (!activeCtx) return;
+        if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+        if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+        if (!isStudentInputAllowed && !isThelobookActive) return;
+        const pos = getPos(e, currentTargetCanvas); if (!pos) return;
+        if (e.touches) e.preventDefault();
+        activeCtx.lineTo(pos.x, pos.y); activeCtx.stroke();
+        if (!isThelobookActive && currentColor === 'blue') {
+            if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
+            finalCtx.lineTo(pos.x, pos.y); finalCtx.stroke();
+        }
+        lastPos = pos;
+    }
     function handleDrawingEnd(e) {
         if (!drawing) return;
         const activeCtx = isThelobookActive ? thelobookCtx : ctx;
@@ -1554,7 +1561,6 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         canvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
         canvas.addEventListener('touchend', handleDrawingEnd);
         canvas.addEventListener('touchcancel', handleDrawingEnd);
-	
     }
     function removeBoardDrawListeners() {
         canvas.removeEventListener('mousedown', handleDrawingStart);
@@ -1798,13 +1804,6 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
 		}
 		currentStageData = lessonStages[index];
 		currentStageIndex = index;
-		// NEW: One-time tip for tablet color switching
-        if (isTabletMode && !colorSwitchTipShown && isStudentInputAllowed) {
-            // Pick your message based on the implementation you chose
-          const tipMessage = "✨ Pro Tip: Double-tap on the canvas to switch your ink color.";
-		showToast(tipMessage, 6000); // Show for 6 seconds
-            colorSwitchTipShown = true;
-        }
 		
 		// --- Logic to switch terminals ---
 		if (currentStageData.image && currentStageData.type === 'question_handwriting') {
