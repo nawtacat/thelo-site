@@ -144,6 +144,10 @@ body.lang-en {
     border-radius: 2px;
     transition: width 0.05s linear;
   }
+  /* Prevent page drag while the Pencil is down           */
+#board,
+#thelobookCanvas { touch-action: none; }
+
 
   #backgroundCanvas,
   #replayCanvas,
@@ -1496,64 +1500,61 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-    // ================== NEW CONDITIONAL STYLUS-ONLY LOGIC ==================
-    //
-    // This logic now checks TWO things:
-    // 1. Are we on a tablet? (isTabletMode)
-    // 2. Is the input a finger? (e.pointerType === 'touch')
-    //
-    if (isTabletMode && e.pointerType === 'touch') {
-        // IF BOTH ARE TRUE: This is a finger on a tablet.
-        // We block drawing to allow for palm rejection.
-        e.preventDefault(); // Stop the browser from scrolling.
-        return; // Exit the function immediately.
-    }
-    //
-    // IF THE ABOVE IS FALSE: It's either a pen/mouse on a tablet, a finger on a
-    // phone, or a mouse on a desktop. In all these cases, we ALLOW drawing.
-    // =======================================================================
+  /* ──────────────────────────────────────────────────────────────
+     Stylus-only gate for iPad
+     ──────────────────────────────────────────────────────────────
+     • Apple Pencil  → e.pointerType === 'pen'   →  draw ✅
+     • Finger/touch  → e.pointerType === 'touch' →  ignore 🚫
+     • Mouse/track-pad (laptop) → 'mouse'        →  draw ✅
+  */
+  if (e.pointerType === 'touch') {
+      // Let the finger keep its normal scrolling / zooming behaviour.
+      return;
+  }
 
+  // Prevent accidental page scroll if someone drags with the Pencil or mouse.
+  e.preventDefault();
 
-    // We still need to prevent the default browser action for touch on phones
-    // to stop the page from scrolling while a user is drawing with their finger.
-    if (e.pointerType === 'touch') {
-        e.preventDefault();
-    }
+  /* ========== existing logic (unchanged) ========== */
+  const currentTargetCanvas = e.currentTarget;
+  const activeCtx           = isThelobookActive ? thelobookCtx : ctx;
+  if (!activeCtx) return;
 
+  // Respect which canvas is currently active
+  if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+  if (!isThelobookActive && currentTargetCanvas !== canvas)           return;
 
-    const currentTargetCanvas = e.currentTarget;
-    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-    if (!activeCtx) return;
+  // Block drawing on stages that shouldn’t accept input
+  if (!isStudentInputAllowed && !isThelobookActive) return;
 
-    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
-    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
-    if (!isStudentInputAllowed && !isThelobookActive) return;
+  const pos = getPos(e, currentTargetCanvas);
+  if (!pos) return;
 
-    const pos = getPos(e, currentTargetCanvas);
-    if (!pos) return;
+  drawing = true;
+  if (!isThelobookActive) userDrawingOccurred = true;
+  lastPos = pos;
 
-    drawing = true;
-    if (!isThelobookActive) userDrawingOccurred = true;
-    lastPos = pos;
+  /* ===== Set up stroke style / eraser mode ===== */
+  if (isThelobookActive) {
+      activeCtx.lineWidth                = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+      activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+      if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
+  } else {
+      activeCtx.lineWidth                = THELOBOOK_PEN_LINEWIDTH;
+      activeCtx.globalCompositeOperation = 'source-over';
+  }
 
-    if (isThelobookActive) {
-        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
-        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
-        if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
-    } else {
-        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
-        activeCtx.globalCompositeOperation = 'source-over';
-    }
+  activeCtx.beginPath();
+  activeCtx.moveTo(pos.x, pos.y);
 
-    activeCtx.beginPath();
-    activeCtx.moveTo(pos.x, pos.y);
-
-    if (!isThelobookActive && currentColor === 'blue') {
-        finalCtx.strokeStyle = INK_COLORS.blue;
-        finalCtx.beginPath();
-        finalCtx.moveTo(pos.x, pos.y);
-    }
+  /* Mirror blue-ink answers onto the hidden “final answer” canvas */
+  if (!isThelobookActive && currentColor === 'blue') {
+      finalCtx.strokeStyle = INK_COLORS.blue;
+      finalCtx.beginPath();
+      finalCtx.moveTo(pos.x, pos.y);
+  }
 }
+
     function handleDrawingMove(e) {
         if (!drawing) return;
         const currentTargetCanvas = e.currentTarget;
