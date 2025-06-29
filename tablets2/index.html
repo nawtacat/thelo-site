@@ -1157,18 +1157,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const PAGES_PER_GRID_BATCH = 32;
     let tempFullPageCanvasForThumbnails = null;
     let pageGridInstructionsShown = false;
-    // ADD THIS BLOCK TO PREVENT ZOOMING
-    window.addEventListener('keydown', function(e) {
-      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
-        e.preventDefault();
-      }
-    });
-    window.addEventListener('wheel', function(e) {
-      if (e.ctrlKey) {
-        e.preventDefault();
-      }
-    }, { passive: false });
-
 
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
@@ -1822,178 +1810,160 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
 }
 
 	function renderStageUI(index, isResize = false) {
-    if (isLessonLoading || index < 0 || index >= lessonStages.length) {
-        if (index < 0) {
-            if(nextCheckBtn) { nextCheckBtn.disabled = false; nextCheckBtn.textContent = getCurrentUIText().start; }
-            if(prevBtn) prevBtn.disabled = true;
-            if(clearBtn && clearBtn.style) clearBtn.style.display = 'none';
-            if(colorIndicator && colorIndicator.style) colorIndicator.style.display = 'none';
-            if(mcqOptionsContainer && mcqOptionsContainer.style) mcqOptionsContainer.style.display = 'none';
-        }
-        return;
-    }
-    const TXT = getCurrentUIText();
+		if (isLessonLoading || index < 0 || index >= lessonStages.length) {
+			if (index < 0) {
+				if(nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = getCurrentUIText().start; }
+				if(prevBtn) prevBtn.disabled = true;
+				if(clearBtn && clearBtn.style) clearBtn.style.display = 'none';
+				if(colorIndicator && colorIndicator.style) colorIndicator.style.display = 'none';
+				if(mcqOptionsContainer && mcqOptionsContainer.style) mcqOptionsContainer.style.display = 'none';
+			}
+			return;
+		}
+		const TXT = getCurrentUIText();
+		if (!isResize && isThelobookActive) closeThelobook(true);
+		if (!isResize && isPageGridVisible) closePageGridView();
 
-    // Hide on-screen image from previous stage
-    if (!isResize) hideOnScreenImage();
+		if (!isResize) {
+			if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+			if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+			isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
+			if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+			if(stageProgressFill) stageProgressFill.style.width = '0%';
+		}
+		currentStageData = lessonStages[index];
+		currentStageIndex = index;
+		
+		// --- Logic to switch terminals ---
+		if (currentStageData.image && currentStageData.type === 'question_handwriting') {
+			isImageModeActive = true;
+			chatArea.classList.add('terminal-hidden');
+			imageTerminal.classList.remove('terminal-hidden');
+			imageTerminal.style.display = 'flex';
 
-    if (!isResize && isThelobookActive) closeThelobook(true);
-    if (!isResize && isPageGridVisible) closePageGridView();
+			imageTerminalImgContainer.innerHTML = '';
+			imageTerminalFeedback.innerHTML = '';
+			imageTerminalFeedback.style.opacity = 0;
 
-    if (!isResize) {
-        if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-        if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
-        isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
-        if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-        if(stageProgressFill) stageProgressFill.style.width = '0%';
-    }
-    currentStageData = lessonStages[index];
-    currentStageIndex = index;
-    
-    // --- UPDATED LOGIC TO SWITCH TERMINALS OR SHOW ON-SCREEN IMAGE ---
-    if (currentStageData.image) {
-        if (isTabletMode) {
-            // FOR TABLETS: Show image directly on the screen
-            showOnScreenImage(currentStageData.image);
-            isImageModeActive = false; // Ensure old image terminal logic is off
-            imageTerminal.classList.add('terminal-hidden');
-            chatArea.classList.remove('terminal-hidden');
-        } else {
-            // FOR DESKTOP: Use the existing terminal logic
-            if (currentStageData.type === 'question_handwriting') {
-                isImageModeActive = true;
-                chatArea.classList.add('terminal-hidden');
-                imageTerminal.classList.remove('terminal-hidden');
-                imageTerminal.style.display = 'flex';
-                imageTerminalFeedback.innerHTML = '';
-                imageTerminalFeedback.style.opacity = 0;
+			const img = document.createElement('img');
+			img.src = currentStageData.image;
+			imageTerminalImgContainer.appendChild(img);
+		} else {
+			if (isImageModeActive) { // Transitioning away from image mode
+				const lastSuccessMsg = currentStageData.headline || '';
+				if (lastSuccessMsg) addChatMessage('AI', lastSuccessMsg);
+			}
+			isImageModeActive = false;
+			imageTerminal.classList.add('terminal-hidden');
+			chatArea.classList.remove('terminal-hidden');
+			 // Also add non-question images to chat history
+			if(currentStageData.image && !isResize) {
+				addChatImage(currentStageData.image);
+			}
+		}
 
-                // Use loading logic for the image terminal
-                imageTerminalImgContainer.innerHTML = ''; 
-                const skeleton = document.createElement('div');
-                skeleton.className = 'image-placeholder skeleton-loader';
-                imageTerminalImgContainer.appendChild(skeleton);
-                const img = new Image();
-                img.onload = () => imageTerminalImgContainer.replaceChild(img, skeleton);
-                img.onerror = () => {
-                    const errorPlaceholder = document.createElement('div');
-                    errorPlaceholder.className = 'image-placeholder error-placeholder';
-                    errorPlaceholder.textContent = 'Could not load question image.';
-                    imageTerminalImgContainer.replaceChild(errorPlaceholder, skeleton);
-                };
-                img.src = currentStageData.image;
-            } else {
-                 if (!isResize) addChatImage(currentStageData.image);
-            }
-        }
-    } else {
-        // This logic runs if there is NO image in the current stage
-        isImageModeActive = false;
-        imageTerminal.classList.add('terminal-hidden');
-        chatArea.classList.remove('terminal-hidden');
-    }
+		if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
+		if (!isResize) {
+			clearUserCanvas();
+			if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+			if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+		} else {
+			 if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+		}
 
-    if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
-    if (!isResize) {
-        clearUserCanvas();
-        if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
-        if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-    } else {
-         if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
-    }
+		isStudentInputAllowed = currentStageData.studentInput === true;
+		const padding = 27; const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
+		const maxWidth = cssWidthForText * 0.8; const textX = cssWidthForText / 2;
+		let headlineCurrentY = padding * 2; const lineHeight = 30;
+		let headlineText = currentStageData.headline || '';
+		if (headlineText && bgCtx && (bgCtx.canvas.width > 0)) {
+			const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+			bgCtx.font = `20px ${fontFamily}`;
+			bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+			bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'top';
+			const plainHeadlineText = headlineText.replace(/<strong>(.*?)<\/strong>/gi, '$1');
+			wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
+		}
+		
+		const mcqDetails = currentStageData.optionsQuiz;
+		const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+		const isQuestionStage = currentStageData.type === 'question_handwriting' || isMCQDisplayStage;
 
-    isStudentInputAllowed = currentStageData.studentInput === true;
-    const padding = 27; const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
-    const maxWidth = cssWidthForText * 0.8; const textX = cssWidthForText / 2;
-    let headlineCurrentY = padding * 2; const lineHeight = 30;
-    let headlineText = currentStageData.headline || '';
-    if (headlineText && bgCtx && (bgCtx.canvas.width > 0)) {
-        const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-        bgCtx.font = `20px ${fontFamily}`;
-        bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-        bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'top';
-        const plainHeadlineText = headlineText.replace(/<strong>(.*?)<\/strong>/gi, '$1');
-        wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
-    }
-    
-    const mcqDetails = currentStageData.optionsQuiz;
-    const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-    const isQuestionStage = currentStageData.type === 'question_handwriting' || isMCQDisplayStage;
+		if (isQuestionStage) {
+			if (!isResize) isMediaScrubbingActive = false;
+			if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+			if (isMCQDisplayStage && mcqDetails) {
+				if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
+				if(clearBtn) clearBtn.style.display = 'none';
+				if(nextCheckBtn) nextCheckBtn.disabled = true;
+			} else if (currentStageData.type === 'question_handwriting') {
+				if (bottomBar) bottomBar.style.display = 'flex';
+				if(nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
+				if(clearBtn) clearBtn.style.display = 'inline-flex';
+			}
+			if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => {}, () => {}, isResize); }
+		} else { 
+			if (bottomBar) bottomBar.style.display = 'flex';
+			if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
+			const isDrawingInputStage = currentStageData.studentInput === true;
+			if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
 
-    if (isQuestionStage) {
-        if (!isResize) isMediaScrubbingActive = false;
-        if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-        if (isMCQDisplayStage && mcqDetails) {
-            if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
-            if(clearBtn) clearBtn.style.display = 'none';
-            if(nextCheckBtn) nextCheckBtn.disabled = true;
-        } else if (currentStageData.type === 'question_handwriting') {
-            if (bottomBar) bottomBar.style.display = 'flex';
-            if(nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
-            if(clearBtn) clearBtn.style.display = 'inline-flex';
-        }
-        if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => {}, () => {}, isResize); }
-    } else { 
-        if (bottomBar) bottomBar.style.display = 'flex';
-        if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
-        const isDrawingInputStage = currentStageData.studentInput === true;
-        if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
+			if (currentStageData.audioFile || currentStageData.drawingRecord) {
+				if (!isResize) { isMediaScrubbingActive = true; lastFrameTimestampForManualAdvance = 0; internalPlaybackTime = 0; }
+				updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
+				const audioMetaPromise = new Promise((resolve) => {
+					if(currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolve(duration || 0), () => {}, isResize); } 
+					else { resolve(0); }
+				});
+				let drawingDataPromise;
+				if (currentStageData.drawingRecord) {
+					if (!isResize || !currentStageDrawingData) {
+						drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
+					} else { drawingDataPromise = Promise.resolve(currentStageDrawingData); }
+				} else { currentStageDrawingData = null; drawingDataPromise = Promise.resolve(null); }
+				Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
+					if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
+					const oldTotalDuration = currentStageTotalDuration;
+					const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
+					currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
+					if(isResize && oldTotalDuration !== currentStageTotalDuration) { internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration); }
+					if (!isMediaScrubbingActive && internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0) {
+						if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx); }
+						updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
+						if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+					} else if (isMediaScrubbingActive && currentStageTotalDuration > 0) {
+						updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+						if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+						if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+						currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+					} else if (currentStageTotalDuration === 0 && currentStageDrawingData && replayCtx) {
+						renderDrawingAtTime(0, currentStageDrawingData, replayCtx);
+						if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+					} else {
+						isMediaScrubbingActive = false;
+						if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+					}
+				}).catch(e => { console.error("Error in media setup promise:", e); isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible'); });
+			} else {
+				isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+				currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
+				if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+			}
+			if(nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
+		}
 
-        if (currentStageData.audioFile || currentStageData.drawingRecord) {
-            if (!isResize) { isMediaScrubbingActive = true; lastFrameTimestampForManualAdvance = 0; internalPlaybackTime = 0; }
-            updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
-            const audioMetaPromise = new Promise((resolve) => {
-                if(currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolve(duration || 0), () => {}, isResize); } 
-                else { resolve(0); }
-            });
-            let drawingDataPromise;
-            if (currentStageData.drawingRecord) {
-                if (!isResize || !currentStageDrawingData) {
-                    drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
-                } else { drawingDataPromise = Promise.resolve(currentStageDrawingData); }
-            } else { currentStageDrawingData = null; drawingDataPromise = Promise.resolve(null); }
-            Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
-                if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
-                const oldTotalDuration = currentStageTotalDuration;
-                const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
-                currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
-                if(isResize && oldTotalDuration !== currentStageTotalDuration) { internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration); }
-                if (!isMediaScrubbingActive && internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0) {
-                    if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx); }
-                    updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
-                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
-                } else if (isMediaScrubbingActive && currentStageTotalDuration > 0) {
-                    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
-                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
-                    if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-                    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-                } else if (currentStageTotalDuration === 0 && currentStageDrawingData && replayCtx) {
-                    renderDrawingAtTime(0, currentStageDrawingData, replayCtx);
-                    if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                } else {
-                    isMediaScrubbingActive = false;
-                    if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                }
-            }).catch(e => { console.error("Error in media setup promise:", e); isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible'); });
-        } else {
-            isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-            currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
-            if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-        }
-        if(nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
-    }
+		updateColorIndicator();
+		canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible) ? 'auto' : 'none';
+		if(nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
+		if (!isResize) userDrawingOccurred = false;
+		if(prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible);
+		if(nextCheckBtn) {
+			const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
+			nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW);
+		}
+		if(clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible);
+	}
 
-    updateColorIndicator();
-    canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible) ? 'auto' : 'none';
-    if(nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
-    if (!isResize) userDrawingOccurred = false;
-    if(prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible);
-    if(nextCheckBtn) {
-        const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
-        nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW);
-    }
-    if(clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible);
-}
     function transitionToStage(newIndex) {
         if (isTransitioning || isLessonLoading || !lessonStages.length) return;
         if (isThelobookActive) closeThelobook(true);
@@ -2093,49 +2063,36 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         userDrawingOccurred = false;
     }
             // REPLACE your existing addChatImage function with this one
-    // REPLACE YOUR EXISTING addChatImage FUNCTION WITH THIS FULLY UPDATED VERSION
-function addChatImage(url) {
-    // 1. Create the wrapper and the skeleton loader
+    function addChatImage(url) {
     const wrapper = Object.assign(document.createElement('div'), {
         className: 'ai-message chat-image-container'
     });
-    const skeleton = Object.assign(document.createElement('div'), {
-        className: 'image-placeholder skeleton-loader'
+
+    const img = Object.assign(document.createElement('img'), {
+        className: 'chat-image',
+        src: url,
+        alt: 'Lesson Content Image',
+        style: 'opacity:0'
     });
 
-    // 2. Add the skeleton to the DOM immediately for user feedback
-    wrapper.appendChild(skeleton);
+    wrapper.appendChild(img);
     chatArea.appendChild(wrapper);
     
-    // 3. Smooth scroll to the placeholder
-    chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-
-    // 4. Create the image in memory
-    const img = new Image();
-    img.className = 'chat-image';
-    img.alt = 'Lesson Content Image';
-
-    // 5. Handle successful image load
+    // Calculate target scroll position
+    const targetScrollTop = wrapper.offsetTop - chatArea.offsetTop;
+    
     img.onload = () => {
-        // Replace skeleton with the loaded image
-        wrapper.replaceChild(img, skeleton);
-    };
-
-    // 6. Handle image loading error
-    img.onerror = () => {
-        const errorPlaceholder = Object.assign(document.createElement('div'), {
-            className: 'image-placeholder error-placeholder'
+        // Fade in the image
+        img.style.transition = 'opacity .4s';
+        img.style.opacity = '1';
+        
+        // Smooth scroll to position
+        chatArea.scrollTo({
+        top: targetScrollTop,
+        behavior: 'smooth'
         });
-        errorPlaceholder.textContent = 'Image failed to load.';
-        // Replace skeleton with the error message
-        wrapper.replaceChild(errorPlaceholder, skeleton);
-        console.error(`Failed to load image from URL: ${url}`);
     };
-
-    // 7. Set the src to start loading
-    img.src = url;
-}
-
+    }
     function addChatMessage(sender, rawMsg) {
         if (isTabletMode) {
             // In tablet mode, use the new toast system
@@ -2245,38 +2202,6 @@ function checkTabletMode() {
 
     isTabletMode = tabletQuery.matches || landscapeQuery.matches;
     console.log("Tablet Mode:", isTabletMode);
-}
-function showOnScreenImage(url) {
-    const container = document.getElementById('onScreenImageContainer');
-    if (!container) return;
-
-    // Clear previous content and show a skeleton loader
-    const skeleton = document.createElement('div');
-    skeleton.className = 'image-placeholder skeleton-loader';
-    container.innerHTML = ''; // Clear old content
-    container.appendChild(skeleton);
-
-    // Make the container visible
-    container.classList.add('visible');
-
-    // Load the image in memory
-    const img = new Image();
-
-    img.onload = () => {
-        // On success, replace the skeleton with the image
-        container.replaceChild(img, skeleton);
-    };
-
-    img.onerror = () => {
-        // On error, show an error message
-        const errorPlaceholder = document.createElement('div');
-        errorPlaceholder.className = 'image-placeholder error-placeholder';
-        errorPlaceholder.textContent = 'Image failed to load.';
-        container.replaceChild(errorPlaceholder, skeleton);
-    };
-
-    // Start loading
-    img.src = url;
 }
 	function updateUserPointsInFirestore(pointsToAdd) {
         const user = auth.currentUser;
@@ -3072,7 +2997,7 @@ window.addEventListener('wheel', function(e) {
             });
         });
 
-         document.addEventListener('contextmenu', event => event.preventDefault());
+
         document.addEventListener('keydown', handleKeyDown);
     }
 
