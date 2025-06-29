@@ -1,0 +1,3093 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
+    <title>thelo</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
+	<link rel="manifest" href="/manifest.json" />
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+
+<style>
+  /* ===== NEW: Updated Design System ===== */
+  :root {
+    /* Core Palette */
+    --thelo-blue: #2563eb;
+    --thelo-blue-dark: #1d4ed8;
+    --thelo-bg: #ffffff;
+    --thelo-text: #111827;
+    --thelo-text-light: #6b7280;
+    --thelo-border: #e5e7eb;
+
+    /* Status Colors */
+    --success-green: #22c55e;
+    --error-red: #ef4444;
+    --accent-yellow: #f59e0b;
+
+    /* UI Element Colors */
+    --bg-white: #ffffff;
+    --chat-ai-bg: #ffffff;
+
+    /* Ink Colors */
+    --ink-black: #000000;
+    --ink-blue: var(--thelo-blue);
+
+    /* Effects */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+    /* Transitions */
+    --fade-duration: 0.3s;
+    --animation-duration: 0.3s;
+    --thelobook-page-transition-duration: 0.05s;
+  }
+
+  /* ===== Font Definition (Unchanged as requested) ===== */
+  /* ===== Font Definition (Unchanged as requested) ===== */
+@font-face {
+  font-family: 'Mardoto-Light';
+  src: url('../../fonts/Mardoto-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ===== Base Styles ===== */
+html {
+  font-size: 16px;
+  background: var(--thelo-bg);
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  height: 100vh;
+  font-family: 'Mardoto-Light', system-ui, -apple-system, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--thelo-bg);
+  color: var(--thelo-text);
+   -webkit-user-select: none; /* Safari */
+  -moz-user-select: none;    /* Firefox */
+  -ms-user-select: none;     /* IE10+/Edge */
+  user-select: none;         /* Standard */
+  -webkit-touch-callout: none; /* iOS Safari */
+}
+	/* ADD THIS RULE: Use Manrope font when the body has the 'lang-en' class */
+body.lang-en {
+  font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+}
+	/* MCQ buttons blur when thelobook is active *//* ---------- AFTER ---------- */
+.blurred-mcq {
+    filter: blur(4px);
+    opacity: 0.55;
+    pointer-events: none;        /* clicks still ignored */
+    z-index: 5 !important;       /* sits below thelobookCanvas (z-15) */
+    transition: filter .2s, opacity .2s;
+}
+
+
+  /* ===== Layout & App Structure ===== */
+  #app {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    position: relative;
+    flex-grow: 1;
+  }
+  #lessonArea {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  #boardWrap {
+    position: relative;
+    flex-grow: 1;
+    overflow: visible; /* Changed from hidden to visible */
+    background-color: var(--thelo-bg);
+    /* Grid background */
+    background-image: linear-gradient(to right, var(--thelo-border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--thelo-border) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* ===== Canvases & Overlays ===== */
+  #stageProgressBarContainer {
+    position: absolute;
+    top: 30.1px;
+    left: 2%;
+    width: 96%;
+    height: 2px;
+    background-color: #cccccc;
+    border-radius: 2px;
+    z-index: 10;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--fade-duration) ease-in-out, visibility 0s linear var(--fade-duration);
+  }
+  #stageProgressBarContainer.visible {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--fade-duration) ease-in-out, visibility 0s linear 0s;
+  }
+  #stageProgressFill {
+    height: 100%;
+    background-color: #000000;
+    width: 0%;
+    border-radius: 2px;
+    transition: width 0.05s linear;
+  }
+
+  #backgroundCanvas,
+  #replayCanvas,
+  #board,
+  #finalAnswerCanvas,
+  #thelobookCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    background-color: transparent;
+  }
+  #backgroundCanvas {
+    z-index: 1;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity var(--fade-duration) ease-in-out;
+  }
+  #backgroundCanvas.fade-out {
+    opacity: 0;
+  }
+  #replayCanvas {
+    z-index: 2;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity var(--fade-duration) ease-in-out;
+  }
+  #replayCanvas.fade-out {
+    opacity: 0;
+  }
+  #board {
+    z-index: 3;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  #finalAnswerCanvas {
+    z-index: 4;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #thelobookCanvas {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 15;
+    cursor: crosshair;
+    touch-action: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(0.95);
+    transition: opacity var(--animation-duration) ease, visibility 0s linear var(--animation-duration),
+      transform var(--animation-duration) ease;
+  }
+  #thelobookCanvas.active {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1);
+    transition-delay: 0s, 0s, 0s;
+  }
+  #thelobookCanvas.grid-underlay {
+    opacity: 0.9 !important;
+    transform: scale(1) !important;
+  }
+  #thelobookCanvas.eraser-active {
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="rgba(0,0,0,0.5)" d="M19.78,2.22a1,1,0,0,0-1.42,0L9.12,11.46a1,1,0,0,0,0,1.41L11.24,15A1,1,0,0,0,12.66,15L22.22,5.39A1,1,0,0,0,22.22,4L19.78,2.22ZM8.41,12.88,2,19.29V21a1,1,0,0,0,1,1H4.71l6.47-6.46-1.42-1.42A1,1,0,0,0,8.41,12.88Z"/></svg>')
+      12 12, auto;
+  }
+
+  /* ===== UI Controls ===== */
+  #bottomBar {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 20;
+    gap: 0.75rem;
+  }
+  .control-btn {
+    font-family: inherit;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: none;
+    border-radius: 0.5rem;
+    color: var(--bg-white);
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
+    box-shadow: var(--shadow-md);
+  }
+  .control-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+  .control-btn:disabled {
+    background-color: #9ca3af !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  /* Button Colors */
+  #prevBtn {
+    background-color: var(--accent-yellow);
+  }
+  #thelobookBtn {
+    background-color: var(--success-green);
+  }
+  #clearBtn {
+    background-color: var(--error-red);
+  }
+  #nextCheckBtn {
+    background-color: var(--thelo-blue);
+  }
+  #nextCheckBtn:hover:not(:disabled) {
+    background-color: var(--thelo-blue-dark);
+  }
+  #nextCheckBtn.correct {
+    background-color: var(--success-green);
+  }
+  #nextCheckBtn.incorrect {
+    background-color: var(--error-red);
+    animation: shake 0.5s ease-in-out;
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25%,
+    75% {
+      transform: translateX(-5px);
+    }
+    50% {
+      transform: translateX(5px);
+    }
+  }
+
+  #colorIndicator,
+  #pointsDisplay {
+    background-color: var(--bg-white);
+    border: 1px solid var(--thelo-border);
+    color: var(--thelo-text);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    white-space: nowrap;
+  }
+
+  /* MCQ Buttons */
+  /* ===== UPDATED: MCQ Buttons ===== */
+/* ---------- AFTER ---------- */
+#mcqOptionsContainer {
+    position: absolute;
+    top: 50%;
+    left: 50%; /* <-- CHANGE: Center the container */
+    transform: translate(-50%, -50%); /* <-- CHANGE: Proper centering */
+    z-index: 30;
+    display: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center; /* Can be center or flex-start */
+    gap: 1rem;
+    width: 90%; /* <-- CHANGE: Use a percentage for width */
+    max-width: 1200px; /* <-- Optional: A sensible max-width for very large screens */
+}
+
+@media (max-width: 1024px) {
+    .mcq-option-btn {
+        font-size: 0.7rem;   /* or any size you prefer */
+    }
+}
+.mcq-option-btn {
+  font-family: inherit;
+  padding: 0.8rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 500;
+  border: 1px solid var(--thelo-border);
+  background-color: var(--bg-white);
+  color: var(--thelo-text);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-md);
+  transform: translateY(2px);
+  width: 100%;
+  flex: 1 0 100%;
+  white-space: nowrap;
+}
+
+/* The NEW, corrected hover rule: */
+.mcq-option-btn:hover:not(:disabled) {
+    /* CHANGE THIS VALUE to 0 */
+    transform: translateY(0);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--thelo-blue);
+}
+.mcq-option-btn.correct {
+    background-color: var(--success-green);
+    color: white;
+    border-color: var(--success-green);
+  }
+  .mcq-option-btn.incorrect {
+    background-color: var(--error-red);
+    color: white;
+    border-color: var(--error-red);
+  }
+  .mcq-option-btn.correct-answer-shown {
+    border-color: var(--success-green);
+    border-width: 2px;
+  }
+
+  /* ===== Chat Column ===== */
+  #chatCol {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-white);
+    border-left: 1px solid var(--thelo-border);
+    padding: 1rem;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  #terminalLogo {
+    height: 60px; /* UPDATED: Larger logo */
+    width: auto;
+    display: block;
+    align-self: center;
+    margin: 0.5rem 0 1.5rem 0;
+  }
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--thelo-border) transparent;
+  }
+  #chat::-webkit-scrollbar {
+    width: 5px;
+  }
+  #chat::-webkit-scrollbar-thumb {
+    background-color: var(--thelo-border);
+    border-radius: 10px;
+  }
+  .ai-message {
+    background-color: var(--bg-white); /* UPDATED to plain white */
+    border: 1px solid #f0f0f0; /* Subtle border for definition */
+    color: var(--thelo-text);
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    margin-bottom: 0.75rem;
+    max-width: 95%;
+    align-self: flex-start;
+    word-wrap: break-word;
+    box-shadow: var(--shadow-sm);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+  .ai-message strong {
+    color: var(--thelo-blue);
+    font-weight: inherit; /* This makes the weight consistent */
+  }
+  .ai-message .emoji {
+    margin-right: 0.5rem;
+  }
+
+  /* ===== ADD THIS: For the new Dashboard button ===== */
+#dashboardBtn {
+    background-color: var(--thelo-blue); /* Use the primary brand color */
+}
+
+#dashboardBtn:hover:not(:disabled) {
+    background-color: var(--thelo-blue-dark);
+}
+
+#dashboardBtn.visible {
+    display: inline-flex !important;
+    animation: pulse-glow 2s infinite ease-in-out;
+}
+	/* ADD THIS CSS: For the Streak Modal */
+#streakModal {
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+#streakModal:not(.modal-hidden) {
+    opacity: 1;
+    visibility: visible;
+}
+.streak-modal-content {
+    background-color: var(--thelo-bg);
+    color: var(--thelo-text);
+    padding: 2rem 3rem;
+    border-radius: 1rem;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+#streakModal:not(.modal-hidden) .streak-modal-content {
+    transform: scale(1);
+}
+.streak-modal-icon {
+    font-size: 4rem;
+    line-height: 1;
+    margin-bottom: 1rem;    
+}
+.streak-modal-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    font-size: 1.75rem;
+    font-weight: bold;
+    color: var(--thelo-text-light);
+    cursor: pointer;
+}
+#streakModalConfirmBtn {
+    margin-top: 1.5rem;
+    background-color: var(--accent-yellow);
+}
+
+@keyframes pulse-glow {
+    0% {
+        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2), 0 0 7px rgba(37, 99, 235, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(37, 99, 235, 0.4), 0 0 25px rgba(37, 99, 235, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2), 0 0 7px rgba(37, 99, 235, 0.1);
+    }
+}
+
+  /* ===== ADD THESE STYLES: For Image Terminal & Terminals ===== */
+  #chat,
+  #image-terminal {
+    flex: 1;
+    transition: opacity 0.3s ease-in-out;
+    overflow: hidden;
+    overflow-y: auto; /* Allow scrolling for chat */
+  }
+  #image-terminal {
+    display: none; /* Start hidden */
+    flex-direction: column;
+    justify-content: flex-start;
+    padding-top: 1rem;
+    overflow: hidden; /* No scrollbar needed for image view */
+  }
+  #image-terminal-img-container img {
+    max-width: 100%;
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-md);
+  }
+  #image-terminal-feedback {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+  }
+  .terminal-hidden {
+    opacity: 0 !important;
+    display: none !important;
+  }
+
+  /* ===== ADD THESE STYLES: For Smarter MCQ Layouts ===== */
+#mcqOptionsContainer.long-options {
+    flex-direction: column;
+    align-items: stretch;
+
+    /* --- NEW FIT-TO-CONTENT LOGIC --- */
+
+    /* This is the key change. It makes the container only as wide as its content needs to be. */
+    width: fit-content; 
+    
+    /* A good practice to prevent it from overflowing on very small screens. */
+    max-width: 92%; 
+
+    /* This keeps the perfectly-sized container centered on the screen. */
+    left: 50%;
+    transform: translate(-50%, -50%); 
+}
+  #mcqOptionsContainer.short-options {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+
+    /* 👇 Copy the fit-to-content layout logic from .long-options */
+    width: fit-content;
+    max-width: 92%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+
+  #mcqOptionsContainer.short-options .mcq-option-btn {
+    padding: 1.2rem;
+    font-size: 1rem;
+    min-width: 80px;
+    text-align: center;
+  }
+
+  /* ===== Thelobook & Grid View ===== */
+  #thelobookControls,
+  #thelobookPageGridHeader,
+  #closePageGridBtn {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    background-color: rgba(255, 255, 255, 0.7);
+    border-radius: 9999px; /* pill shape */
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--thelo-border);
+  }
+  #thelobookControls {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+  }
+  #thelobookControls.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+  #thelobookControls button {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  #thelobookControls button:hover:not(:disabled) {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  #thelobookControls button.active {
+    background-color: var(--thelo-blue);
+    color: white;
+  }
+
+  #thelobookPageGridView {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 1rem 1rem; /* Increased top padding to push it down from the roof */
+    box-sizing: border-box;
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(0.95);
+    transition: opacity var(--animation-duration) ease, visibility 0s linear var(--animation-duration),
+      transform var(--animation-duration) ease;
+  }
+  #thelobookPageGridView.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1);
+    transition-delay: 0s;
+  }
+
+  #thelobookPageGridHeader {
+    display: flex;
+    justify-content: space-between; /* This correctly separates the text and button */
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.5rem 1.5rem; /* Increased horizontal padding to prevent overlap */
+    max-width: fit-content; /* Allow width to fit content and padding, not fixed 300px */
+    align-self: center; /* Centers the header pill horizontally */
+    gap: 1rem; /* Added gap between content and close button */
+  }
+
+  #pageGridBatchIndicator {
+    white-space: nowrap; /* Prevent the text from wrapping unnecessarily */
+  }
+
+  #thelobookPageGridContentContainer {
+    flex-grow: 1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    gap: 1rem;
+    padding: 0.5rem;
+    overflow-y: auto;
+    max-height: calc(100vh - 150px);
+    /* Removed background, border, and shadow to create a "natural background" effect */
+  }
+
+  .chat-image-container {
+    padding: 0.5rem; /* Give a little space around the image */
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  .chat-image {
+    max-width: 100%;
+    border-radius: 0.75rem; /* Match the rounding of other elements */
+    display: block; /* Prevents extra space below the image */
+    box-shadow: var(--shadow-md); /* Add a subtle shadow to lift it */
+  }
+  .page-thumbnail {
+    border: 1px solid var(--thelo-border);
+    box-shadow: var(--shadow-sm);
+    border-radius: 0.5rem;
+  }
+  .page-thumbnail:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  #closePageGridBtn {
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0; /* Ensure the close button doesn't shrink */
+  }
+
+  /* Animations for batch switching (removed, as no batches are allowed) */
+  .page-grid-batch {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    width: 100%; /* Ensure it takes full width of content container */
+    transition: none; /* No transition for batch switching */
+  }
+
+  /* Removed specific batch animation classes as they are no longer needed */
+
+  @keyframes pageGridFadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  #thelobookPageGridView.visible {
+    animation: pageGridFadeIn var(--animation-duration) ease forwards;
+  }
+
+  /* Specific styling for the 'No Pages' scenario */
+  #thelobookPageGridContentContainer:empty::before {
+    content: 'No pages to display. Click "+" to add a new page.';
+    color: var(--thelo-text-light);
+    font-size: 1rem;
+    text-align: center;
+    margin-top: 2rem;
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    #app {
+      flex-direction: column-reverse;
+    }
+    #chatCol {
+      width: 100%;
+      height: 30vh;
+      border-left: none;
+      border-top: 1px solid var(--thelo-border);
+    }
+    #bottomBar {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    #actionButtons {
+      width: 100%;
+      justify-content: center;
+      order: 3;
+    }
+    #pointsDisplay,
+    #colorIndicator {
+      order: 1;
+      margin-bottom: 0.5rem;
+    }
+    .control-btn {
+      padding: 0.6rem 0.8rem;
+      font-size: 0.8rem;
+    }
+    #stageProgressBarContainer {
+      top: 0;
+      height: 2px;
+    }
+  }
+  /* ===== NEW: Tablet Immersive Mode ===== */
+@media (min-width: 769px) and (max-width: 1200px) and (pointer: coarse) {
+    /* (pointer: coarse) is key for detecting touch-first devices like tablets */
+	/* ===== ENHANCEMENT: Prevent Palm Selection on Canvas ===== */
+#boardWrap {
+    /* Prevents the user from being able to select the canvas */
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none;    /* Firefox */
+    -ms-user-select: none;     /* IE */
+    user-select: none;
+
+    /* Disables the menu (copy/paste) that appears on long-press in Safari */
+    -webkit-touch-callout: none;
+}
+
+    #app {
+        /* Keep the flex layout but hide the chat column */
+        flex-direction: row;
+    }
+
+    #chatCol {
+        /* Completely hide the terminal */
+        display: none !important;
+    }
+
+    #lessonArea {
+        /* Make the whiteboard take up the full screen width */
+        width: 100%;
+        flex-basis: 100%;
+        border-left: none; /* Remove border that separated it from the chat */
+    }
+  
+}
+  /* ===== NEW: Toast Notification System for Tablets ===== */
+#toast-container {
+    position: fixed;
+    bottom: 20px; /* CHANGED from top */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000; /* Ensure it's on top of everything */
+    display: flex;
+    flex-direction: column-reverse; /* ADDED: To stack messages upwards */
+    align-items: center;
+    gap: 10px;
+    width: clamp(300px, 80%, 600px); /* Responsive width */
+    pointer-events: none; /* Clicks pass through the container */
+}
+
+.toast-message {
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--thelo-text);
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 12px 20px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid rgba(0,0,0,0.05);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(20px); /* CHANGED from -20px to 20px */
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    pointer-events: all; /* Individual toasts are clickable */
+    cursor: pointer;
+}
+.toast-message.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast-message .emoji {
+    font-size: 1.5rem;
+}
+
+/* Color coding for different message types */
+.toast-message.toast-success {
+    background-color: rgba(34, 197, 94, 0.85); /* success-green */
+    color: white;
+}
+.toast-message.toast-error {
+    background-color: rgba(239, 68, 68, 0.85); /* error-red */
+    color: white;
+}
+.toast-message.toast-warning {
+    background-color: rgba(245, 158, 11, 0.85); /* accent-yellow */
+    color: white;
+}
+
+/* You might also want a rule for landscape tablets without the pointer check */
+@media (min-width: 769px) and (max-width: 1200px) and (min-height: 500px) {
+     #chatCol {
+        display: none !important;
+    }
+
+    #lessonArea {
+        width: 100%;
+        flex-basis: 100%;
+        border-left: none;
+    }
+}
+
+</style>
+</head>
+<body>
+    <div id="app">
+        <div id="lessonArea">
+            <div id="boardWrap">
+                <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
+                <canvas id="backgroundCanvas"></canvas>
+                <canvas id="replayCanvas"></canvas>
+                <canvas id="board"></canvas>
+                <canvas id="finalAnswerCanvas"></canvas>
+                <canvas id="thelobookCanvas"></canvas>
+
+                <div id="thelobookControls">
+                    <button id="thelobookPagesBtn" title="View Pages">📖</button>
+                    <button id="thelobookPrevPageBtn" title="Previous Page">‹</button>
+                    <span id="thelobookPageIndicator">Page 1 / 1</span>
+                    <button id="thelobookNextPageBtn" title="Next Page">›</button>
+                    <button id="thelobookEraserBtn" title="Eraser">✏️</button>
+                    <button id="thelobookAddPageBtn" title="Add New Page">+</button>
+                </div>
+
+                <div id="thelobookPageGridView">
+                    <div id="thelobookPageGridHeader">
+                        <span id="pageGridBatchIndicator">Pages 1-32</span>
+                        <button id="closePageGridBtn" title="Close Grid">✕</button>
+                    </div>
+                    <div id="thelobookPageGridContentContainer">
+                    </div>
+                </div>
+
+                <div id="mcqOptionsContainer" style="display: none;"></div>
+            </div>
+
+            <div id="bottomBar">
+                <div id="colorIndicator"></div>
+                <div id="pointsDisplay"></div>
+                <div id="actionButtons">
+    <button id="prevBtn" class="control-btn"></button>
+    <button id="thelobookBtn" class="control-btn"></button>
+    <button id="clearBtn" class="control-btn"></button>
+    <button id="nextCheckBtn" class="control-btn"></button>
+    <button id="dashboardBtn" class="control-btn" style="display: none;"></button>
+</div>
+            </div>
+        </div>
+        <div id="chatCol">
+            <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo AI Logo" id="terminalLogo">
+            <div id="chat"></div>
+			<div id="image-terminal" class="terminal-hidden">
+				<div id="image-terminal-img-container"></div>
+				<div id="image-terminal-feedback"></div>
+			</div>
+        </div>
+    </div>
+    <div id="toast-container"></div>
+    <div id="audioContainer" style="display: none;">
+        <audio id="audio_approve1_hy" src="https://pha.am/audios/approve1.ogg" preload="auto"></audio>
+        <audio id="audio_approve2_hy" src="https://pha.am/audios/approve2.ogg" preload="auto"></audio>
+        <audio id="audio_dis1_hy" src="https://pha.am/audios/dis1.ogg" preload="auto"></audio>
+        <audio id="audio_dis2_hy" src="https://pha.am/audios/dis2.ogg" preload="auto"></audio>
+        <audio id="audio_approve1_en" src="https://pha.am/audios/engcorr1.wav" preload="auto"></audio>
+        <audio id="audio_approve2_en" src="https://pha.am/audios/engcorr2.wav" preload="auto"></audio>
+        <audio id="audio_dis1_en" src="https://pha.am/audios/engwrong1.wav" preload="auto"></audio>
+        <audio id="audio_dis2_en" src="https://pha.am/audios/engwrong2.wav" preload="auto"></audio>
+        <audio id="stageAudioPlayer"></audio>
+        <audio id="gotItSound" src="https://pha.am/audios/corr.mp3" preload="auto"></audio>
+    </div>
+        <script>
+    const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    firebase.appCheck().activate(
+      '6LcdgkUrAAAAANakhruotKBunN_IvJzH7X7YhXKU',
+      true
+    );
+    const VISION_FUNCTION_URL = "https://us-central1-physmathacademy-722b3.cloudfunctions.net/analyzeHandwriting";
+    const INK_COLORS = { black: '#000000', blue: getComputedStyle(document.documentElement).getPropertyValue('--ink-blue').trim() || '#2563eb' };
+
+    const UI_TEXT = {
+        hy: {
+            next: "Հաջորդը", gotIt: "Հասկացա!", check: "Ստուգել", checking: "Ստուգվում է...",
+            correct: "Ճիշտ է։", incorrect: "Սխալ է", apiKeyInvalid: "API բանալին անվավեր է",
+            inkBlack: "Գույն՝ Սև", inkBlue: "Գույն՝ Կապույտ", loading: "Բեռնվում է...",
+            clear: "Մաքրել", start: "Սկսել", prev: "Նախորդ",
+            welcome: "Ողջու՛յն։ Սեղմիր Սկսել դասը սկսելու համար։ Սեղմիր <strong>'A'</strong> կապույտով միայն պատասխանը նշելու համար։",
+            checkingAI: `Ստուգում եմ քո <strong style="color:${INK_COLORS.blue};">կապույտով</strong> գրված պատասխանը...`,
+            blankBlueWarning: `⚠️ Կարծես թե պատասխանը <strong style="color:${INK_COLORS.blue};">կապույտով</strong> չես նշել։ Սեղմիր 'A' ստեղնը գույնը փոխելու համար։`,
+            noTextFound: `⚠️ <strong style="color:${INK_COLORS.blue};">Կապույտով</strong> գրվածից տեքստ չգտնվեց։ Փորձիր գրել ավելի պարզ։`,
+            noDigitsFound: `⚠️ Կարծես թե <strong style="color:${INK_COLORS.blue};">կապույտով</strong> թիv չեք գրել։ (Ճանաչված տեքստ՝ {detectedText})`,
+            correctAI: `🎉 Ճիշտ է Google Vision-ի կարծիքով։ (Դուք գրել էիք <strong>{detectedAnswer}</strong>)`,
+            incorrectAI: `🤔 Սխալ է։ Google Vision-ը <strong style="color:${INK_COLORS.blue};">կապույտ</strong> գրվածքից կարդաց <strong>{detectedAnswer}</strong>, բայց ճիշտ պատասխանն է <strong>{correctAnswer}</strong>։ Փորձիր կրկին։`,
+            parsingError: `⚠️ Չկարողացա <strong style="color:${INK_COLORS.blue};">կապույտ</strong> գրվածքից թիվը ճանաչել։ (Ճանաչված տեքստ՝ {detectedText})`,
+            imageDataError: `❌ Սխալ՝ չհաջողվեց ստանալ նկարը գրատախտակից։ ({errorMessage})`,
+            apiErrorGeneral: `❌ Սխալ տեղի ունեցավ ստուգման ժամանակ։ ({errorMessage})`,
+            apiKeyPermissionError: '❌ Սխալ՝ API բանալին անվավեր է կամ թույլտվություն չունի։ Ստուգեք բանալին և համոզվեք, որ Vision API-ն միացված է։',
+            apiBillingError: '❌ Սխալ՝ Հաշվարկման (billing) խնդիր։ Ստուգեք, որ այն միացված է ձեր Google Cloud նախագծի համար։',
+            apiKeyMissingWarning: '🛑 **ԿԱՐԵՎՈՐ:** Google Vision API բանալին սխալ է կամ բացակայում է։ Խնդրում ենք փոխարինել այն։ Առանց դրա, ձեռագրի ստուգումը չի աշխատի։',
+            lessonComplete: "Դասն ավարտված է։ Շատ լավ աշխատանք։",
+            drawActivityWarning: "⚠️ Խնդրում եմ, նախ փորձիր նկարել։",
+            achievementsPrefix: "📚 ",
+            blueInkErased: "Կապույտ գրվածքը (պատասխանը) մաքրված է։",
+            authErrorVision: "Ավտորիզացիայի սխալ։ Խնդրում ենք մուտք գործել՝ այս գործառույթն օգտագործելու համար։",
+            lessonFileMissing: 'Սխալ։ Դասի ֆայլը նշված չէ URL-ում։',
+            lessonLoadErrorGeneric: "Դասը բեռնելու սխալ։\nԽնդրում ենք վերադառնալ և նորից փորձել։",
+            userNotAuthHandwriting: '⚠️ Օգտատերը նույնականացված չէ: Խնդրում ենք մուտք գործել ձեռագրի վերլուծության գործառույթն օգտագործելու համար:',
+            pointsGained: "+{points} միավոր ձեռք բերվեց։", error: "Սխալ", titleDefaultHy: "Thelo AI Գրատախտակ",
+            thelobookOpen: "Թելոգիրք", thelobookClose: "Փակել", thelobookInk: "Գույն՝ Սև (Նշումներ)",
+            thelobookEraser: "Ջնջիչ", thelobookPen: "Գրիչ",
+            thelobookDisabledMCQ: "Թելոգիրքը հասանելի չէ հարցաշարի ժամանակ։",
+            thelobookPagesBtn: "Էջեր",
+            thelobookPageIndicator: "Էջ {currentPage} / {totalPages}",
+            pageGridBatchIndicator: "Էջեր {startPage}-{endPage}",
+            pageGridInstructions: "Սեղմեք 'C' հաջորդ խմբի համար, 'X' նախորդի։",
+            addPage: "Ավելացնել էջ",
+	    viewDashboard: "Տեսնել առաջընթացը", // ADD THIS LINE
+		
+        },
+        en: {
+            next: "Next", gotIt: "Got It!", check: "Check", checking: "Checking...",
+            correct: "Correct!", incorrect: "Wrong.", apiKeyInvalid: "API key is invalid.",
+            inkBlack: "Ink: Black", inkBlue: "Ink: Blue", loading: "Loading...",
+            clear: "Clear", start: "Start", prev: "Previous",
+            welcome: "Hello! Press Start to begin the lesson. Press <strong>'A'</strong> to use blue ink for the answer only.",
+            checkingAI: `Checking your answer written in <strong style="color:${INK_COLORS.blue};">blue</strong>...`,
+            blankBlueWarning: `⚠️ It seems you haven't marked your answer in <strong style="color:${INK_COLORS.blue};">blue</strong>. Press 'A' to change the ink color.`,
+            noTextFound: `⚠️ No text found from the <strong style="color:${INK_COLORS.blue};">blue</strong> writing. Try writing more clearly.`,
+            noDigitsFound: `⚠️ It seems you haven't written a number in <strong style="color:${INK_COLORS.blue};">blue</strong>. (Detected text: {detectedText})`,
+            correctAI: `🎉 Correct according to Google Vision! (You wrote <strong>{detectedAnswer}</strong>)`,
+            incorrectAI: `🤔 Incorrect. Google Vision read <strong>{detectedAnswer}</strong> from the <strong style="color:${INK_COLORS.blue};">blue</strong> writing, but the correct answer is <strong>{correctAnswer}</strong>. Try again.`,
+            parsingError: `⚠️ Couldn't recognize a number from the <strong style="color:${INK_COLORS.blue};">blue</strong> writing. (Detected text: {detectedText})`,
+            imageDataError: `❌ Error: Failed to get image from the board. ({errorMessage})`,
+            apiErrorGeneral: `❌ An error occurred during checking. ({errorMessage})`,
+            apiKeyPermissionError: '❌ Error: API key is invalid or lacks permission. Check the key and ensure Vision API is enabled.',
+            apiBillingError: '❌ Error: Billing issue. Check that billing is enabled for your Google Cloud project.',
+            apiKeyMissingWarning: '🛑 **IMPORTANT:** Google Vision API key is incorrect or missing. Please replace it. Handwriting check will not work without it.',
+            lessonComplete: "Lesson complete! Great job!",
+            drawActivityWarning: "⚠️ Please try drawing first.", achievementsPrefix: "🏆 ",
+            blueInkErased: "Blue ink (answer) has been erased.",
+            authErrorVision: "Authentication error. Please log in to use this feature.",
+            lessonFileMissing: 'Error: Lesson file is not specified in the URL.',
+            lessonLoadErrorGeneric: "Error loading lesson.\nPlease go back and try again.",
+            userNotAuthHandwriting: '⚠️ User not authenticated. Please log in to use the handwriting analysis feature.',
+            pointsGained: "+{points} points gained!", error: "Error", titleDefaultEn: "Thelo AI Whiteboard",
+            thelobookOpen: "thelobook", thelobookClose: "Close", thelobookInk: "Ink: Black (Notes)",
+            thelobookEraser: "Eraser", thelobookPen: "Pen",
+            thelobookDisabledMCQ: "Thelobook is not available during MCQs.",
+            thelobookPagesBtn: "Pages",
+            thelobookPageIndicator: "Page {currentPage} / {totalPages}",
+            pageGridBatchIndicator: "Pages {startPage}-{endPage}",
+            pageGridInstructions: "Press 'C' for Next Batch, 'X' for Previous Batch.",
+            addPage: "Add Page",
+	    viewDashboard: "View Your Progress",
+        }
+    };
+
+    let currentLang = 'en';
+    /* ========================================================================= */
+/* ===== ADD THIS BLOCK: For Weekly Streak Calculation ===================== */
+/* ========================================================================= */
+
+/**
+ * Calculates the ISO 8601 week number for a given date.
+ * A week starts on Monday. This is robust against timezone issues.
+ * @param {Date} date The date to calculate the week for.
+ * @returns {string} The week identifier in "YYYY-Www" format (e.g., "2025-W26").
+ */
+function getISOWeekIdentifier(date) {
+    // Create a new date object to avoid modifying the original
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    // Set to the nearest Thursday: current date + 4 - current day number
+    // Make Sunday's day number 7
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    // Get first day of year
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    // Calculate full weeks to nearest Thursday
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    // Pad week number with a leading zero if needed
+    const weekString = String(weekNo).padStart(2, '0');
+    
+    return `${d.getUTCFullYear()}-W${weekString}`;
+}
+
+/**
+ * Gets the week identifier for the week immediately preceding the given one.
+ * @param {string} weekId A week identifier like "2025-W26".
+ * @returns {string} The previous week's identifier, e.g., "2025-W25".
+ */
+function getPreviousWeekIdentifier(weekId) {
+    const [year, week] = weekId.split('-W').map(Number);
+    if (week > 1) {
+        const prevWeekString = String(week - 1).padStart(2, '0');
+        return `${year}-W${prevWeekString}`;
+    } else {
+        // This is tricky: the last week of the previous year can be 52 or 53.
+        // We'll calculate it based on the last day of the previous year.
+        const lastDayOfPrevYear = new Date(year - 1, 11, 31);
+        return getISOWeekIdentifier(lastDayOfPrevYear);
+    }
+}
+
+    /* ========== DOM Elements ========== */
+    const backgroundCanvas = document.getElementById('backgroundCanvas');
+    const replayCanvas = document.getElementById('replayCanvas');
+    const canvas = document.getElementById('board');
+    const finalAnswerCanvas = document.getElementById('finalAnswerCanvas');
+    const thelobookCanvas = document.getElementById('thelobookCanvas');
+    const boardWrapper = document.getElementById('boardWrap');
+    const stageAudioPlayer = document.getElementById('stageAudioPlayer');
+    const gotItSoundPlayer = document.getElementById('gotItSound');
+    const mcqOptionsContainer = document.getElementById('mcqOptionsContainer');
+    const bottomBar = document.getElementById('bottomBar');
+    const stageProgressBarContainer = document.getElementById('stageProgressBarContainer');
+    const stageProgressFill = document.getElementById('stageProgressFill');
+	const imageTerminal = document.getElementById('image-terminal');
+	const imageTerminalImgContainer = document.getElementById('image-terminal-img-container');
+	const imageTerminalFeedback = document.getElementById('image-terminal-feedback');
+
+    const bgCtx = backgroundCanvas.getContext('2d');
+    let replayCtx = null;
+    const ctx = canvas.getContext('2d');
+    const finalCtx = finalAnswerCanvas.getContext('2d');
+    let thelobookCtx = null;
+
+    const prevBtn = document.getElementById('prevBtn');
+    const nextCheckBtn = document.getElementById('nextCheckBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const thelobookBtn = document.getElementById('thelobookBtn');
+    const chatArea = document.getElementById('chat');
+    const colorIndicator = document.getElementById('colorIndicator');
+    if (colorIndicator){ colorIndicator.addEventListener('click', () => { toggleColor(); }); }
+    const pointsDisplayElement = document.getElementById('pointsDisplay');
+const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
+
+    const thelobookControlsEl = document.getElementById('thelobookControls');
+    const thelobookPagesBtn = document.getElementById('thelobookPagesBtn');
+    const thelobookPrevPageBtn = document.getElementById('thelobookPrevPageBtn');
+    const thelobookNextPageBtn = document.getElementById('thelobookNextPageBtn');
+    const thelobookPageIndicatorEl = document.getElementById('thelobookPageIndicator');
+    const thelobookEraserBtn = document.getElementById('thelobookEraserBtn');
+    const thelobookAddPageBtn = document.getElementById('thelobookAddPageBtn');
+
+    const thelobookPageGridViewEl = document.getElementById('thelobookPageGridView');
+    const pageGridBatchIndicatorEl = document.getElementById('pageGridBatchIndicator');
+    const closePageGridBtnEl = document.getElementById('closePageGridBtn');
+    const thelobookPageGridContentContainerEl = document.getElementById('thelobookPageGridContentContainer');
+
+    const audioElements = {};
+    const approveSounds_hy = []; const disapproveSounds_hy = [];
+    const approveSounds_en = []; const disapproveSounds_en = [];
+
+    /* ========== State Variables ========== */
+          let isTabletMode = false;
+    let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
+    let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
+    let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
+    let userDrawingOccurred = false; let isTransitioning = false;
+    let devicePixelRatio = window.devicePixelRatio || 1; window.userInteracted = false;
+    let currentReplayAnimationId = null; let currentStageAudio = null; 
+    let userPoints = 0;
+    let sessionPoints = 0; // ADDED LINE: To track points for the current lesson session.
+    let currentStageDrawingData = null; let currentStageTotalDuration = 0;
+    let isMediaScrubbingActive = false; let internalPlaybackTime = 0; let lastFrameTimestampForManualAdvance = 0;
+    let isThelobookActive = false; let wasMediaPlayingBeforeThelobook = false;
+    let mediaPlaybackTimeBeforeThelobook = 0; let audioTimeBeforeThelobook = 0;
+    let thelobookPages = []; let currentThelobookPageIndex = 0;
+    let thelobookDrawListenersAttached = false;
+    let isThelobookEraserActive = false;
+    const THELOBOOK_ERASER_LINEWIDTH = 20;
+    const THELOBOOK_PEN_LINEWIDTH = 3;
+    let isPageSwitchingAnimation = false;
+    let isPageGridVisible = false;
+    let currentPageGridBatch = 0;
+    const PAGES_PER_GRID_BATCH = 32;
+    let tempFullPageCanvasForThumbnails = null;
+    let pageGridInstructionsShown = false;
+
+    /* ========== Language Functions ========== */
+    function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
+    function updateAllUITexts() {
+        const TXT = getCurrentUIText();
+        document.documentElement.lang = currentLang;
+
+        if (prevBtn) prevBtn.textContent = TXT.prev;
+        if (clearBtn) clearBtn.textContent = TXT.clear;
+        if (thelobookBtn) thelobookBtn.textContent = isThelobookActive ? TXT.thelobookClose : TXT.thelobookOpen;
+
+        if (thelobookAddPageBtn) thelobookAddPageBtn.title = TXT.addPage;
+        if (thelobookEraserBtn) thelobookEraserBtn.title = isThelobookEraserActive ? TXT.thelobookPen : TXT.thelobookEraser;
+        if (thelobookPagesBtn) thelobookPagesBtn.title = TXT.thelobookPagesBtn;
+        if (thelobookPrevPageBtn) thelobookPrevPageBtn.title = TXT.prevPage;
+        if (thelobookNextPageBtn) thelobookNextPageBtn.title = TXT.nextPage;
+
+        updateColorIndicator();
+        updatePointsDisplay();
+        if(isThelobookActive && !isPageGridVisible) updateThelobookPageControls();
+
+
+        if (lessonStagesRoot && lessonStagesRoot.lessonTitle) {
+            document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
+        } else {
+            document.title = TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
+        }
+        
+        if (currentStageIndex === -1 && lessonStages.length > 0 && nextCheckBtn) { nextCheckBtn.textContent = TXT.start; }
+        else if (isLessonLoading && nextCheckBtn) { nextCheckBtn.textContent = TXT.loading; }
+        else if (currentStageData && nextCheckBtn) {
+                if (currentStageData.type === 'question_handwriting') {
+                    if (nextCheckBtn.classList.contains('correct')) { nextCheckBtn.textContent = TXT.correct; }
+                    else if (nextCheckBtn.classList.contains('incorrect')) { nextCheckBtn.textContent = TXT.check; }
+                    else if (nextCheckBtn.textContent === UI_TEXT.hy.checking || nextCheckBtn.textContent === UI_TEXT.en.checking ) { /* Keep "Checking..." */ }
+                    else { nextCheckBtn.textContent = TXT.check; }
+                } else {
+                    const mcqDetails = currentStageData.optionsQuiz;
+                    const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+                    if (!isMCQDisplayStage) {
+                        if (nextCheckBtn.classList.contains('correct')) { nextCheckBtn.textContent = TXT.correct; }
+                        else { nextCheckBtn.textContent = TXT.gotIt; }
+                    }
+                }
+        }
+
+        if (currentStageData) {
+            if (!isTransitioning && !isLessonLoading) renderStageUI(currentStageIndex, true);
+        } else if (chatArea && chatArea.children.length <= 1 ) {
+            const welcomeMsgKeyHy = UI_TEXT.hy.welcome;
+            const welcomeMsgKeyEn = UI_TEXT.en.welcome;
+            const currentChatText = chatArea.firstChild ? chatArea.firstChild.querySelector('span:last-child').innerHTML.trim() : "";
+            if (chatArea.children.length === 0 || currentChatText === welcomeMsgKeyHy || currentChatText === welcomeMsgKeyEn || currentChatText.includes("Welcome!") || currentChatText.includes("Ողջու՛յն")) {
+                if(chatArea.children.length > 0) chatArea.innerHTML = '';
+                addChatMessage('AI', formatAIMessage('welcome'));
+            }
+        }
+    }
+    function setLanguage(lang) {
+        if (UI_TEXT[lang]) {
+            if (currentLang !== lang) { currentLang = lang; console.log(`Language set to: ${currentLang} by lesson file.`); }
+            else { console.log(`Language already set to: ${currentLang}. Forcing UI text update.`); }
+        } else {
+            console.warn(`Language ${lang} from lesson file not supported. Defaulting to 'hy'.`);
+            currentLang = 'hy';
+        }
+		// Add or remove the language-specific class on the body
+		if (currentLang === 'en') {
+			document.body.classList.add('lang-en');
+		} else {
+			document.body.classList.remove('lang-en');
+		}
+		updateAllUITexts();
+    }
+
+    /* ========== Core App Functions ========== */
+    function updatePointsDisplay() {
+        const TXT = getCurrentUIText();
+        // MODIFIED: This now uses sessionPoints for the on-screen display.
+        if (pointsDisplayElement) pointsDisplayElement.textContent = `${TXT.achievementsPrefix}${sessionPoints}`;
+    }
+    async function loadLesson(lessonJsonPath) {
+        if (isLessonLoading) return; isLessonLoading = true;
+        let TXT = getCurrentUIText();
+        if(nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = TXT.loading; }
+        if(prevBtn) prevBtn.disabled = true;
+	if (dashboardBtn) dashboardBtn.style.display = 'none'; // ADD THIS LINE
+        if (isThelobookActive) closeThelobook(false);
+        if (isPageGridVisible) closePageGridView();
+
+
+        try {
+            const response = await fetch(lessonJsonPath);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status} fetching ${lessonJsonPath}`);
+            lessonStagesRoot = await response.json();
+            if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
+            const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
+setLanguage(lessonLang); TXT = getCurrentUIText();
+lessonStages = lessonStagesRoot.stages;
+
+sessionPoints = 0; // ADDED: Reset session score for the new lesson.
+updatePointsDisplay(); // ADDED: Ensure the display shows '0' at the start.
+
+document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
+console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
+            currentStageIndex = -1; currentStageData = null; isStudentInputAllowed = false;
+            if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null;
+            if(currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+            currentStageAudio = null; isMediaScrubbingActive = false;
+            if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+            if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+            if(replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width, replayCanvas.height);
+            if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if(finalCtx) { finalCtx.fillStyle="#FFFFFF"; finalCtx.fillRect(0, 0, finalAnswerCanvas.width, finalAnswerCanvas.height); }
+            thelobookPages = []; currentThelobookPageIndex = 0; updateThelobookPageControls();
+            if (chatArea.children.length > 0) chatArea.innerHTML = '';
+            addChatMessage('AI', formatAIMessage('welcome'));
+            if(nextCheckBtn) { nextCheckBtn.textContent = TXT.start; nextCheckBtn.disabled = false; }
+            if(prevBtn) prevBtn.disabled = true;
+        } catch (error) {
+            console.error("Error loading lesson:", error); TXT = getCurrentUIText();
+            addChatMessage('AI', `${formatAIMessage('error')}: ${error.message}`);
+            if(nextCheckBtn) { nextCheckBtn.textContent = TXT.error; nextCheckBtn.disabled = true; }
+        } finally {
+            isLessonLoading = false;
+            if (!UI_TEXT[currentLang]) currentLang = 'hy';
+            updateAllUITexts();
+        }
+    }
+
+    function resizeCanvases() {
+        clearTimeout(window.resizeTimeout);
+        window.resizeTimeout = setTimeout(() => {
+          checkTabletMode();
+            if (!boardWrapper) return;
+            const rect = boardWrapper.getBoundingClientRect();
+            const cssWidth = Math.max(1, Math.floor(rect.width)); const cssHeight = Math.max(1, Math.floor(rect.height));
+            devicePixelRatio = window.devicePixelRatio || 1;
+            const internalWidth = Math.floor(cssWidth * devicePixelRatio); const internalHeight = Math.floor(cssHeight * devicePixelRatio);
+            [backgroundCanvas, replayCanvas, canvas, finalAnswerCanvas, thelobookCanvas].forEach(c => {
+                if (c) { c.width = internalWidth; c.height = internalHeight; c.style.width = `${cssWidth}px`; c.style.height = `${cssHeight}px`; }
+            });
+            setupContexts();
+            if (currentStageIndex >= 0 && lessonStages.length > 0) renderStageUI(currentStageIndex, true);
+            if (isThelobookActive) {
+                setTimeout(() => {
+                    if (isThelobookActive) loadThelobookPageDrawing(currentThelobookPageIndex); // Removed 'false' argument
+                }, 50);
+            }
+            if(isPageGridVisible) renderPageGridBatch(currentPageGridBatch, false);
+        }, 150);
+    }
+    function setupContexts() {
+        if (!backgroundCanvas || !replayCanvas || !canvas || !finalAnswerCanvas || !thelobookCanvas) return;
+        replayCtx = replayCanvas.getContext('2d'); thelobookCtx = thelobookCanvas.getContext('2d');
+        [bgCtx, replayCtx, ctx, finalCtx, thelobookCtx].forEach(context => {
+            if (context) { context.resetTransform(); context.scale(devicePixelRatio, devicePixelRatio); }
+        });
+        bgCtx.lineWidth = 2; bgCtx.strokeStyle = '#333'; bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+        const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+        bgCtx.font = `20px ${fontFamily}`; bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'top';
+        if (replayCtx) { replayCtx.lineCap = 'round'; replayCtx.lineJoin = 'round'; }
+        ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = INK_COLORS[currentColor];
+        finalCtx.lineWidth = 6; finalCtx.lineCap = 'round'; finalCtx.lineJoin = 'round'; finalCtx.strokeStyle = INK_COLORS.black;
+        if (thelobookCtx) {
+            thelobookCtx.lineCap = 'round'; thelobookCtx.lineJoin = 'round';
+        }
+        updateColorIndicator();
+    }
+
+    function calculateDrawingDuration(drawingData){
+        if (!drawingData || !drawingData.strokes || drawingData.strokes.length === 0) return 0;
+        let maxTime = 0;
+        drawingData.strokes.forEach(stroke => {
+            let strokeEndTimeVal = 0;
+            if (stroke.endTime !== undefined) { strokeEndTimeVal = stroke.endTime; }
+            else if (stroke.points && stroke.points.length > 0) {
+                const lastPoint = stroke.points[stroke.points.length - 1];
+                strokeEndTimeVal = (stroke.startTime || 0) + (lastPoint.timeOffset || 0);
+            } else { strokeEndTimeVal = (stroke.startTime || 0); }
+            if (strokeEndTimeVal > maxTime) maxTime = strokeEndTimeVal;
+        });
+        return maxTime / 1000;
+    }
+    function renderDrawingAtTime(targetTimeInSeconds, drawingData, targetCtx){
+        if (!targetCtx) return;
+        const canvasWidth = targetCtx.canvas.width / devicePixelRatio;
+        const canvasHeight = targetCtx.canvas.height / devicePixelRatio;
+        targetCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+        if (!drawingData || !drawingData.strokes) return;
+
+        drawingData.strokes.forEach(stroke => {
+            const strokeStartTime = (stroke.startTime || 0) / 1000;
+            if (targetTimeInSeconds < strokeStartTime) return;
+
+            targetCtx.lineWidth = stroke.lineWidth || 2;
+            targetCtx.strokeStyle = stroke.color || 'black';
+            targetCtx.fillStyle = stroke.color || 'black';
+            targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round';
+
+            const points = stroke.points || [];
+            if (points.length === 0) return;
+            targetCtx.beginPath();
+            let movedToFirstPoint = false;
+
+            for (let i = 0; i < points.length; i++) {
+                const point = points[i];
+                const pointTimeAbsolute = strokeStartTime + ((point.timeOffset || 0) / 1000);
+                if (pointTimeAbsolute > targetTimeInSeconds) break;
+
+                if (!movedToFirstPoint) {
+                    targetCtx.moveTo(point.normX * canvasWidth, point.normY * canvasHeight);
+                    movedToFirstPoint = true;
+                } else {
+                    targetCtx.lineTo(point.normX * canvasWidth, point.normY * canvasHeight);
+                }
+                if (points.length === 1) {
+                    targetCtx.closePath(); targetCtx.beginPath();
+                    targetCtx.arc(point.normX * canvasWidth, point.normY * canvasHeight, (stroke.lineWidth || 2) / 2, 0, Math.PI * 2);
+                    targetCtx.fill();
+                    break;
+                }
+            }
+            if (movedToFirstPoint && points.length > 1) targetCtx.stroke();
+        });
+    }
+    function updateMediaProgressBar(effectiveTime, totalDuration){
+        if (!stageProgressBarContainer) return;
+        if (isMediaScrubbingActive && totalDuration > 0) {
+            if (!stageProgressBarContainer.classList.contains('visible')) {
+                stageProgressBarContainer.classList.add('visible');
+            }
+            const progress = (effectiveTime / totalDuration) * 100;
+            stageProgressFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+        } else {
+            // Keep progress bar visible if not scrubbing but playback is at the end (handled by new snippet in renderStageUI)
+        if (!(internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0)) {
+            stageProgressBarContainer.classList.remove('visible');
+            stageProgressFill.style.width = '0%';
+        }
+        }
+    }
+    function mediaPlaybackLoop(timestamp){
+        if (!isMediaScrubbingActive) {
+            if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+            currentReplayAnimationId = null;
+            return;
+        }
+
+        let effectiveTime;
+        const audioIsActuallyPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
+
+        if (audioIsActuallyPlaying) {
+            effectiveTime = currentStageAudio.currentTime;
+            internalPlaybackTime = effectiveTime;
+            lastFrameTimestampForManualAdvance = timestamp || performance.now();
+        } else {
+            if (lastFrameTimestampForManualAdvance === 0) lastFrameTimestampForManualAdvance = timestamp || performance.now();
+            const deltaTime = ((timestamp || performance.now()) - lastFrameTimestampForManualAdvance) / 1000.0;
+
+            if (internalPlaybackTime < currentStageTotalDuration) {
+                internalPlaybackTime += deltaTime;
+            }
+            internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration);
+            effectiveTime = internalPlaybackTime;
+            lastFrameTimestampForManualAdvance = timestamp || performance.now();
+        }
+        effectiveTime = Math.max(0, Math.min(effectiveTime, currentStageTotalDuration));
+
+        if (currentStageDrawingData && replayCtx) {
+            renderDrawingAtTime(effectiveTime, currentStageDrawingData, replayCtx);
+        } else if (replayCtx) {
+            replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+        }
+        updateMediaProgressBar(effectiveTime, currentStageTotalDuration);
+
+        if (effectiveTime >= currentStageTotalDuration - 0.02 && currentStageTotalDuration > 0) {
+            if (currentStageDrawingData && replayCtx) {
+                renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx);
+            }
+            updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
+            isMediaScrubbingActive = false;
+            if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+            currentReplayAnimationId = null;
+            return;
+        }
+        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+    }
+    function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
+        if (isMediaScrubbingActive) { if (typeof onFinished === 'function') onFinished(); return; }
+        if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+        if (!targetCtx || !strokeData || !strokeData.strokes || strokeData.strokes.length === 0) { if (typeof onFinished === 'function') onFinished(); return; }
+        const targetWidth = targetCtx.canvas.width / devicePixelRatio;
+        const targetHeight = targetCtx.canvas.height / devicePixelRatio;
+        targetCtx.clearRect(0, 0, targetWidth, targetHeight);
+        let currentStrokeIndex = 0, currentPointIndex = 0, animationStartTime = null, strokeSetupDone = false;
+        function animateStrokes(timestamp) {
+            if (!animationStartTime) animationStartTime = timestamp;
+            const elapsedOverallTime = timestamp - animationStartTime;
+            if (currentStrokeIndex >= strokeData.strokes.length) { if (typeof onFinished === 'function') onFinished(); currentReplayAnimationId = null; return; }
+            const stroke = strokeData.strokes[currentStrokeIndex]; const points = stroke.points || [];
+            const scheduledStrokeStartTime = stroke.startTime || 0; const scheduledStrokeEndTime = stroke.endTime === undefined ? Infinity : stroke.endTime;
+            if (elapsedOverallTime < scheduledStrokeStartTime) { currentReplayAnimationId = requestAnimationFrame(animateStrokes); return; }
+            if (elapsedOverallTime >= scheduledStrokeEndTime && currentPointIndex >= points.length) { currentStrokeIndex++; currentPointIndex = 0; strokeSetupDone = false; currentReplayAnimationId = requestAnimationFrame(animateStrokes); return; }
+            if (!strokeSetupDone) { targetCtx.lineWidth = stroke.lineWidth || 2; targetCtx.strokeStyle = stroke.color || 'black'; targetCtx.fillStyle = stroke.color || 'black'; targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round'; targetCtx.beginPath(); if (points.length > 0) { targetCtx.moveTo(points[0].normX * targetWidth, points[0].normY * targetHeight); } strokeSetupDone = true; }
+            const timeElapsedInStroke = elapsedOverallTime - scheduledStrokeStartTime; let processedPointInFrame = false;
+            while (currentPointIndex < points.length && timeElapsedInStroke >= points[currentPointIndex].timeOffset) {
+                const pt = points[currentPointIndex];
+                if (points.length === 1 && currentPointIndex === 0) { targetCtx.arc(pt.normX * targetWidth, pt.normY * targetHeight, (stroke.lineWidth || 2) / 2, 0, Math.PI * 2); targetCtx.fill(); }
+                else if (currentPointIndex > 0) { targetCtx.lineTo(pt.normX * targetWidth, pt.normY * targetHeight); processedPointInFrame = true; }
+                else if (currentPointIndex === 0 && points.length > 1) { targetCtx.moveTo(pt.normX * targetWidth, pt.normY * targetHeight); }
+                currentPointIndex++;
+            }
+            if (processedPointInFrame) { targetCtx.stroke(); }
+            currentReplayAnimationId = requestAnimationFrame(animateStrokes);
+        }
+        currentReplayAnimationId = requestAnimationFrame(animateStrokes);
+    }
+
+    function toggleColor() {
+        if (isThelobookActive || isPageGridVisible) return;
+        currentColor = (currentColor === 'black') ? 'blue' : 'black';
+        if(ctx) ctx.strokeStyle = INK_COLORS[currentColor];
+        updateColorIndicator();
+    }
+    function updateColorIndicator() {
+        const TXT = getCurrentUIText();
+        if(colorIndicator) {
+            let showIndicator = false;
+            if (isThelobookActive && !isPageGridVisible) {
+                colorIndicator.textContent = isThelobookEraserActive ? TXT.thelobookEraser : TXT.thelobookInk;
+                showIndicator = true;
+            } else if (currentStageData && !isPageGridVisible && !isThelobookActive) {
+                    const mcqDetails = currentStageData.optionsQuiz;
+                    const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+                if ((currentStageData.type === 'question_handwriting' || currentStageData.studentInput === true) && !isMCQDisplayStage) {
+                    colorIndicator.textContent = (currentColor === 'blue') ? TXT.inkBlue : TXT.inkBlack;
+                    showIndicator = true;
+                }
+            }
+            colorIndicator.style.display = showIndicator ? 'inline-flex' : 'none';
+        }
+        if(canvas) canvas.classList.toggle('blue-mode', currentColor === 'blue' && !isThelobookActive && !isPageGridVisible);
+    }
+    function getPos(e, targetCanvas) {
+        if (!targetCanvas) return null;
+        const rect = targetCanvas.getBoundingClientRect(); let clientX, clientY;
+        if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+        else if (e.changedTouches && e.changedTouches.length > 0) { clientX = e.changedTouches[0].clientX; clientY = e.changedTouches[0].clientY; }
+        else { clientX = e.clientX; clientY = e.clientY; }
+        if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function handleDrawingStart(e) {
+    // For tablets, we ONLY allow drawing to start if a stylus is the input.
+    if (isTabletMode && e.type.startsWith('touch')) {
+        // We check if at least one of the touch points is from a stylus.
+        const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
+
+        if (!isStylusPresent) {
+            // If no stylus is found, it's a finger or palm. We prevent all default
+            // actions (like scrolling/zooming) and stop the function immediately.
+            e.preventDefault();
+            return;
+        }
+        // If a stylus IS present, we fall through to the drawing logic below.
+    }
+
+    // This part of the code is now only reachable by a stylus on a tablet, or a mouse on desktop.
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+    if (!isStudentInputAllowed && !isThelobookActive) return;
+
+    const pos = getPos(e, currentTargetCanvas);
+    if (!pos) return;
+    if (e.touches) e.preventDefault();
+    drawing = true;
+    if (!isThelobookActive) userDrawingOccurred = true;
+    lastPos = pos;
+
+    if (isThelobookActive) {
+        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+        if (!isThelobookActive) activeCtx.strokeStyle = INK_COLORS.black;
+    } else {
+        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = 'source-over';
+    }
+
+    activeCtx.beginPath();
+    activeCtx.moveTo(pos.x, pos.y);
+    if (!isThelobookActive && currentColor === 'blue') {
+        finalCtx.strokeStyle = INK_COLORS.blue;
+        finalCtx.beginPath();
+        finalCtx.moveTo(pos.x, pos.y);
+    }
+}
+    function handleDrawingMove(e) {
+        if (!drawing) return;
+        const currentTargetCanvas = e.currentTarget;
+        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+        if (!activeCtx) return;
+        if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+        if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+        if (!isStudentInputAllowed && !isThelobookActive) return;
+        const pos = getPos(e, currentTargetCanvas); if (!pos) return;
+        if (e.touches) e.preventDefault();
+        activeCtx.lineTo(pos.x, pos.y); activeCtx.stroke();
+        if (!isThelobookActive && currentColor === 'blue') {
+            if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
+            finalCtx.lineTo(pos.x, pos.y); finalCtx.stroke();
+        }
+        lastPos = pos;
+    }
+    function handleDrawingEnd(e) {
+    if (!drawing) return;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+    drawing = false;
+    activeCtx.beginPath();
+}
+    function addBoardDrawListeners() {
+        canvas.addEventListener('mousedown', handleDrawingStart);
+        canvas.addEventListener('mousemove', handleDrawingMove);
+        canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
+        canvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
+        canvas.addEventListener('touchend', handleDrawingEnd);
+        canvas.addEventListener('touchcancel', handleDrawingEnd);
+    }
+    function removeBoardDrawListeners() {
+        canvas.removeEventListener('mousedown', handleDrawingStart);
+        canvas.removeEventListener('mousemove', handleDrawingMove);
+        canvas.removeEventListener('touchstart', handleDrawingStart);
+        canvas.removeEventListener('touchmove', handleDrawingMove);
+        canvas.removeEventListener('touchend', handleDrawingEnd);
+        canvas.removeEventListener('touchcancel', handleDrawingEnd);
+    }
+    function addThelobookDrawListeners() {
+        if (thelobookDrawListenersAttached) return;
+        thelobookCanvas.addEventListener('mousedown', handleDrawingStart);
+        thelobookCanvas.addEventListener('mousemove', handleDrawingMove);
+        thelobookCanvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
+        thelobookCanvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
+        thelobookCanvas.addEventListener('touchend', handleDrawingEnd);
+        thelobookCanvas.addEventListener('touchcancel', handleDrawingEnd);
+        thelobookDrawListenersAttached = true;
+    }
+    function removeThelobookDrawListeners() {
+        if (!thelobookDrawListenersAttached) return;
+        thelobookCanvas.removeEventListener('mousedown', handleDrawingStart);
+        thelobookCanvas.removeEventListener('mousemove', handleDrawingMove);
+        thelobookCanvas.removeEventListener('touchstart', handleDrawingStart);
+        thelobookCanvas.removeEventListener('touchmove', handleDrawingMove);
+        thelobookCanvas.removeEventListener('touchend', handleDrawingEnd);
+        thelobookCanvas.removeEventListener('touchcancel', handleDrawingEnd);
+        thelobookDrawListenersAttached = false;
+    }
+
+    function wrapText(context, text, x, y, maxWidth, lineHeight){
+        const words = text.split(' '); let line = ''; let currentY = y; let lines = [];
+        for(let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' '; const metrics = context.measureText(testLine);
+            const testWidth = metrics.width; const wordWidth = context.measureText(words[n]).width;
+            if (wordWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = ''; currentY += lineHeight; }
+            if (wordWidth > maxWidth) { context.fillText(words[n], x, currentY); lines.push(words[n]); line = ' '; currentY += lineHeight; }
+            else if (testWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = words[n] + ' '; currentY += lineHeight; }
+            else { line = testLine; }
+        }
+        if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
+    }
+    function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
+
+    function playStageAudio(
+    audioSrc,
+    onLoadedMetadataCallback,
+    onEndedCallback,
+    isResuming = false
+    ) {
+    /* ───── early-out if a modal overlay is open ───── */
+    if (isThelobookActive || isPageGridVisible) {
+    if (onLoadedMetadataCallback) onLoadedMetadataCallback(0);
+    if (onEndedCallback) onEndedCallback();
+    return;
+    }
+
+    currentStageAudio = stageAudioPlayer; // make sure we’re pointing at the right element
+
+    /* ───── RESUME PATH ─────
+        Only run this branch if we’re *resuming* and the element
+        already has the same source.  We now compare the canonical
+        absolute URLs instead of using `.includes()`. */
+    if (
+    isResuming &&
+    currentStageAudio &&
+    currentStageAudio.src &&
+    new URL(currentStageAudio.src, document.baseURI).href ===
+        new URL(audioSrc, document.baseURI).href
+    ) {
+    const audioEffectivelyAtEnd =
+        currentStageAudio.duration > 0 &&
+        audioTimeBeforeThelobook >= currentStageAudio.duration - 0.05;
+
+    if (wasMediaPlayingBeforeThelobook && !audioEffectivelyAtEnd) {
+        if (window.userInteracted && currentStageAudio.paused) {
+        currentStageAudio
+            .play()
+            .catch((e) => console.warn("Resume audio play failed:", e));
+        }
+    }
+
+    // wire callbacks (or call immediately if metadata already available)
+    if (onLoadedMetadataCallback) {
+        if (
+        currentStageAudio.readyState >= HTMLMediaElement.HAVE_METADATA
+        ) {
+        onLoadedMetadataCallback(currentStageAudio.duration);
+        } else {
+        const tempMetaListener = () => {
+            onLoadedMetadataCallback(currentStageAudio.duration);
+            currentStageAudio.removeEventListener(
+            "loadedmetadata",
+            tempMetaListener
+            );
+        };
+        currentStageAudio.addEventListener(
+            "loadedmetadata",
+            tempMetaListener
+        );
+        }
+    }
+    if (onEndedCallback) currentStageAudio.onended = onEndedCallback;
+    return; // ← nothing else to do
+    }
+
+    /* ───── FULL (re-)INITIALISATION PATH ───── */
+    if (currentStageAudio && !currentStageAudio.paused) {
+    currentStageAudio.pause();
+    }
+    if (currentStageAudio) {
+    currentStageAudio.onloadedmetadata = null;
+    currentStageAudio.onended = null;
+    }
+
+    if (!audioSrc) {
+    if (onLoadedMetadataCallback) onLoadedMetadataCallback(0);
+    if (onEndedCallback) onEndedCallback();
+    return;
+    }
+
+    currentStageAudio.src = audioSrc;
+    currentStageAudio.preload = "auto";
+
+    let loadedMetaCalled = false;
+    currentStageAudio.onloadedmetadata = () => {
+    if (!loadedMetaCalled && onLoadedMetadataCallback) {
+        loadedMetaCalled = true;
+        onLoadedMetadataCallback(currentStageAudio.duration);
+    }
+    };
+    if (onEndedCallback) currentStageAudio.onended = onEndedCallback;
+
+    currentStageAudio.load();
+    if (window.userInteracted) {
+    const playPromise = currentStageAudio.play();
+    if (playPromise) {
+        playPromise.catch((error) => {
+        console.warn("Audio play failed (full init):", error);
+        if (onEndedCallback) onEndedCallback();
+        });
+    }
+    } else {
+    console.warn("Audio interaction needed for autoplay.");
+    }
+    }
+
+	function displayMcq(mcqDetails){
+		const choices = mcqDetails.choices;
+		if (!mcqOptionsContainer || !mcqDetails || !Array.isArray(choices) || choices.length === 0) return;
+		if (isPageGridVisible) closePageGridView();
+
+		mcqOptionsContainer.innerHTML = '';
+
+		// ===== NEW: Smart Layout Logic =====
+		const isShort = choices.every(choice => choice.length < 10);
+		mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
+		// ===================================
+
+		choices.forEach((optionText, index) => {
+			const optionButton = document.createElement('button');
+			optionButton.classList.add('mcq-option-btn');
+			optionButton.textContent = optionText;
+			optionButton.dataset.index = index;
+			optionButton.addEventListener('click', () => handleMcqOptionClick(index, mcqDetails));
+			mcqOptionsContainer.appendChild(optionButton);
+		});
+		mcqOptionsContainer.style.display = 'flex';
+		mcqOptionsContainer.style.opacity = '1';
+	}
+	
+    function handleMcqOptionClick(selectedIndex, mcqDetails){
+    stopCurrentStageAudio();
+    const TXT = getCurrentUIText();
+
+    if (!mcqOptionsContainer) return;
+
+    const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
+    optionButtons.forEach(btn => btn.disabled = true);
+
+    const selectedButton = optionButtons[selectedIndex];
+    const isCorrectAnswer = parseInt(selectedButton.dataset.index) === mcqDetails.correctIndex;
+
+    let feedbackMessageForChat; // This variable will hold the message sent to the chat
+    if (isCorrectAnswer) {
+        selectedButton.classList.add('correct');
+
+        playRandomFeedback('approve');
+        userPoints += 5; // This updates the permanent score
+        sessionPoints += 5; // ADDED: This updates the score for this lesson
+        updatePointsDisplay();
+	updateUserPointsInFirestore(5);
+        // Construct the message to include points
+        const baseFeedback = mcqDetails.feedbackCorrect || TXT.correct;
+        feedbackMessageForChat = `${baseFeedback} ${formatAIMessage('pointsGained', { points: 5 })}`;
+
+    }
+    
+	    else {
+        selectedButton.classList.add('incorrect');
+        const correctButton = optionButtons[mcqDetails.correctIndex];
+        if (correctButton) correctButton.classList.add('correct-answer-shown');
+
+        feedbackMessageForChat = mcqDetails.feedbackIncorrect || TXT.incorrect;
+
+        const correctTextOptions = mcqDetails.choices;
+        const correctButtonText = correctTextOptions[mcqDetails.correctIndex];
+        if (feedbackMessageForChat.includes('{correctText}')) {
+            const tempDiv = document.createElement('div');
+            tempDiv.textContent = correctButtonText;
+            feedbackMessageForChat = feedbackMessageForChat.replace('{correctText}', tempDiv.innerHTML);
+        }
+        playRandomFeedback('disapprove');
+    }
+
+    addChatMessage('AI', feedbackMessageForChat); // Use the new variable for the chat message
+    setTimeout(nextStage, 2500);
+}
+
+	function renderStageUI(index, isResize = false) {
+    if (isLessonLoading || index < 0 || index >= lessonStages.length) {
+        if (index < 0) {
+            if(nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = getCurrentUIText().start; }
+            if(prevBtn) prevBtn.disabled = true;
+            if(clearBtn && clearBtn.style) clearBtn.style.display = 'none';
+            if(colorIndicator && colorIndicator.style) colorIndicator.style.display = 'none';
+            if(mcqOptionsContainer && mcqOptionsContainer.style) mcqOptionsContainer.style.display = 'none';
+        }
+        return;
+    }
+    const TXT = getCurrentUIText();
+    if (!isResize && isThelobookActive) closeThelobook(true);
+    if (!isResize && isPageGridVisible) closePageGridView();
+
+    if (!isResize) {
+        if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+        if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+        isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
+        if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+        if(stageProgressFill) stageProgressFill.style.width = '0%';
+    }
+    currentStageData = lessonStages[index];
+    currentStageIndex = index;
+    isStudentInputAllowed = currentStageData.studentInput === true; // <<< THE CRUCIAL FIX IS HERE
+
+    if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
+    if (!isResize) {
+        clearUserCanvas();
+        if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+        if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+    } else {
+            if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+    }
+    
+    // Conditional logic based on tablet mode
+    if (!isTabletMode) {
+        // --- ORIGINAL DESKTOP LOGIC ---
+        if (currentStageData.image && currentStageData.type === 'question_handwriting') {
+            isImageModeActive = true;
+            chatArea.classList.add('terminal-hidden');
+            imageTerminal.classList.remove('terminal-hidden');
+            imageTerminal.style.display = 'flex';
+            imageTerminalImgContainer.innerHTML = '';
+            imageTerminalFeedback.innerHTML = '';
+            imageTerminalFeedback.style.opacity = 0;
+            const img = document.createElement('img');
+            img.src = currentStageData.image;
+            imageTerminalImgContainer.appendChild(img);
+        } else {
+            if (isImageModeActive) { 
+                const lastSuccessMsg = currentStageData.headline || '';
+                if (lastSuccessMsg) addChatMessage('AI', lastSuccessMsg);
+            }
+            isImageModeActive = false;
+            imageTerminal.classList.add('terminal-hidden');
+            chatArea.classList.remove('terminal-hidden');
+            if(currentStageData.image && !isResize) {
+                addChatImage(currentStageData.image);
+            }
+        }
+        drawHeadlineText(); 
+    } else {
+        // --- UPDATED TABLET LOGIC ---
+        isImageModeActive = false;
+        if (currentStageData.image && bgCtx) {
+            const img = new Image();
+            img.src = currentStageData.image;
+            img.onload = () => {
+                const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
+                const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
+                
+                const maxSizePercentage = 0.50; 
+                const maxContainerWidth = canvasWidth * maxSizePercentage;
+                const maxContainerHeight = canvasHeight * maxSizePercentage;
+
+                const scale = Math.min(maxContainerWidth / img.width, maxContainerHeight / img.height);
+
+                const scaledWidth = img.width * scale;
+                const scaledHeight = img.height * scale;
+
+                const x = (canvasWidth - scaledWidth) / 2;
+                const y = (canvasHeight - scaledHeight) / 2;
+                
+                bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
+                drawHeadlineText();
+            };
+            img.onerror = () => { drawHeadlineText(); };
+        } else {
+            drawHeadlineText();
+        }
+    }
+
+    function drawHeadlineText() {
+        const padding = 27; const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
+        const maxWidth = cssWidthForText * 0.8; const textX = cssWidthForText / 2;
+        let headlineCurrentY = padding * 2; const lineHeight = 30;
+        let headlineText = currentStageData.headline || '';
+
+        if (headlineText && bgCtx && (bgCtx.canvas.width > 0)) {
+            const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+            bgCtx.font = `20px ${fontFamily}`;
+            bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+            bgCtx.textAlign = 'center';
+            bgCtx.textBaseline = 'top';
+            const plainHeadlineText = headlineText.replace(/<strong>(.*?)<\/strong>/gi, '$1');
+            wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
+        }
+    }
+
+    const mcqDetails = currentStageData.optionsQuiz;
+    const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+    const isQuestionStage = currentStageData.type === 'question_handwriting' || isMCQDisplayStage;
+
+    if (isQuestionStage) {
+        if (!isResize) isMediaScrubbingActive = false;
+        if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+        if (isMCQDisplayStage && mcqDetails) {
+            if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
+            if(clearBtn) clearBtn.style.display = 'none';
+            if(nextCheckBtn) nextCheckBtn.disabled = true;
+        } else if (currentStageData.type === 'question_handwriting') {
+            if (bottomBar) bottomBar.style.display = 'flex';
+            if(nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
+            if(clearBtn) clearBtn.style.display = 'inline-flex';
+        }
+        if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => {}, () => {}, isResize); }
+    } else { 
+        if (bottomBar) bottomBar.style.display = 'flex';
+        if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
+        const isDrawingInputStage = currentStageData.studentInput === true;
+        if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
+
+        if (currentStageData.audioFile || currentStageData.drawingRecord) {
+            if (!isResize) { isMediaScrubbingActive = true; lastFrameTimestampForManualAdvance = 0; internalPlaybackTime = 0; }
+            updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
+            const audioMetaPromise = new Promise((resolve) => {
+                if(currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolve(duration || 0), () => {}, isResize); } 
+                else { resolve(0); }
+            });
+            let drawingDataPromise;
+            if (currentStageData.drawingRecord) {
+                if (!isResize || !currentStageDrawingData) {
+                    drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
+                } else { drawingDataPromise = Promise.resolve(currentStageDrawingData); }
+            } else { currentStageDrawingData = null; drawingDataPromise = Promise.resolve(null); }
+            Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
+                if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
+                const oldTotalDuration = currentStageTotalDuration;
+                const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
+                currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
+                if(isResize && oldTotalDuration !== currentStageTotalDuration) { internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration); }
+                if (!isMediaScrubbingActive && internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0) {
+                    if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx); }
+                    updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
+                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+                } else if (isMediaScrubbingActive && currentStageTotalDuration > 0) {
+                    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+                    if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+                    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+                } else if (currentStageTotalDuration === 0 && currentStageDrawingData && replayCtx) {
+                    renderDrawingAtTime(0, currentStageDrawingData, replayCtx);
+                    if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                } else {
+                    isMediaScrubbingActive = false;
+                    if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                }
+            }).catch(e => { console.error("Error in media setup promise:", e); isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible'); });
+        } else {
+            isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+            currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
+            if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+        }
+        if(nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
+    }
+
+    updateColorIndicator();
+    canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible) ? 'auto' : 'none';
+    if(nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
+    if (!isResize) userDrawingOccurred = false;
+    if(prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible);
+    if(nextCheckBtn) {
+        const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
+        nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW);
+    }
+    if(clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible);
+}
+    function transitionToStage(newIndex) {
+        if (isTransitioning || isLessonLoading || !lessonStages.length) return;
+        if (isThelobookActive) closeThelobook(true);
+        if (isPageGridVisible) closePageGridView();
+
+        if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+        if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+        isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
+        if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+        if (stageProgressFill) stageProgressFill.style.width = '0%';
+
+        if (newIndex < 0 || newIndex >= lessonStages.length) { if (newIndex >= lessonStages.length) { displayLessonComplete(); } return; }
+        isTransitioning = true;
+        backgroundCanvas.classList.add('fade-out'); if (replayCanvas) replayCanvas.classList.add('fade-out');
+        if (mcqOptionsContainer) mcqOptionsContainer.style.opacity = 0;
+        setTimeout(() => {
+            currentStageIndex = newIndex;
+            renderStageUI(currentStageIndex, false);
+            backgroundCanvas.classList.remove('fade-out'); if (replayCanvas) replayCanvas.classList.remove('fade-out');
+            isTransitioning = false;
+        }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
+    }
+    function nextStage() { transitionToStage(currentStageIndex + 1); }
+    function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
+    function displayLessonComplete() {
+        isTransitioning = true; const TXT = getCurrentUIText();
+        if (isThelobookActive) closeThelobook(false);
+        if (isPageGridVisible) closePageGridView();
+        backgroundCanvas.classList.add('fade-out'); if (replayCanvas) replayCanvas.classList.add('fade-out');
+        if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
+        if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+        if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; }
+        isMediaScrubbingActive = false; if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+        setTimeout(() => {
+            const cssWidth = backgroundCanvas.width / devicePixelRatio; const cssHeight = backgroundCanvas.height / devicePixelRatio;
+            bgCtx.clearRect(0, 0, cssWidth, cssHeight);
+            const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+            bgCtx.font = `bold 24px ${fontFamily}`;
+            bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--success-green').trim();
+            bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'middle';
+            bgCtx.fillText(TXT.lessonComplete, cssWidth / 2, cssHeight / 3);
+            clearUserCanvas(); if (replayCtx) replayCtx.clearRect(0,0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+            
+            // MODIFIED: Hide old buttons and show the new dashboard button
+            if(nextCheckBtn) nextCheckBtn.style.display = 'none';
+            if(prevBtn) prevBtn.style.display = 'none';
+            if(clearBtn) clearBtn.style.display = 'none';
+            if(thelobookBtn) thelobookBtn.style.display = 'none';
+            if(dashboardBtn) {
+                dashboardBtn.innerHTML = TXT.viewDashboard;
+                dashboardBtn.classList.add('visible');
+            }
+
+            if(colorIndicator) colorIndicator.style.display = 'none';
+            addChatMessage('AI', `🎉 ${TXT.lessonComplete}`);
+	    updateWeeklyStreak(); // ADD THIS LINE TO TRIGGER THE STREAK CHECK
+            backgroundCanvas.classList.remove('fade-out'); if (replayCanvas) replayCanvas.classList.remove('fade-out');
+            isTransitioning = false;
+        }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
+    }
+    function handleNextCheckClick() {
+        if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
+        const TXT = getCurrentUIText();
+        if (currentStageIndex === -1 && lessonStages.length > 0) { transitionToStage(0); return; }
+        if (!currentStageData) return;
+        const mcqDetails = currentStageData.optionsQuiz;
+        const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+        if (isMCQStage) return;
+        if (nextCheckBtn.textContent === TXT.gotIt) {
+            stopCurrentStageAudio();
+            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
+            userPoints += randomPoints; // This updates the permanent score
+            sessionPoints += randomPoints; // ADDED: This updates the score for this lesson
+            updateUserPointsInFirestore(randomPoints);
+            updatePointsDisplay();
+            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
+        }
+        switch (currentStageData.type) {
+            case 'question_handwriting': checkHandwritingAnswer(); break;
+            default: nextStage(); break;
+        }
+    }
+    function clearUserCanvas() {
+        if (isPageGridVisible) return;
+        if (isThelobookActive) {
+            if (thelobookCtx) {
+                thelobookCtx.clearRect(0,0, thelobookCanvas.width/devicePixelRatio, thelobookCanvas.height/devicePixelRatio);
+                if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
+                    thelobookPages[currentThelobookPageIndex] = null;
+                }
+            }
+            return;
+        }
+        if(ctx) ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+        if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); }
+        userDrawingOccurred = false;
+    }
+            // REPLACE your existing addChatImage function with this one
+    function addChatImage(url) {
+    const wrapper = Object.assign(document.createElement('div'), {
+        className: 'ai-message chat-image-container'
+    });
+
+    const img = Object.assign(document.createElement('img'), {
+        className: 'chat-image',
+        src: url,
+        alt: 'Lesson Content Image',
+        style: 'opacity:0'
+    });
+
+    wrapper.appendChild(img);
+    chatArea.appendChild(wrapper);
+    
+    // Calculate target scroll position
+    const targetScrollTop = wrapper.offsetTop - chatArea.offsetTop;
+    
+    img.onload = () => {
+        // Fade in the image
+        img.style.transition = 'opacity .4s';
+        img.style.opacity = '1';
+        
+        // Smooth scroll to position
+        chatArea.scrollTo({
+        top: targetScrollTop,
+        behavior: 'smooth'
+        });
+    };
+    }
+    function addChatMessage(sender, rawMsg) {
+        if (isTabletMode) {
+            // In tablet mode, use the new toast system
+            // We can add a longer duration for important messages
+            const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
+            showToast(rawMsg, isImportant ? 5000 : 3500);
+        } else {
+            // On desktop/mobile, use the original terminal chat
+            const chatArea = document.getElementById('chat');
+            if (!chatArea) return;
+
+            const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, ''); const TXT = getCurrentUIText(); let emoji = '🤖';
+            const isPoints  = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+            const isWrong   = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+            const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+            const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+            const isWelcome = TXT.welcome && msg.includes(TXT.welcome); const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+
+            if(isWrong) emoji = '🤔'; else if (isCorrect || isPoints) emoji = '🎉'; else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+            else if (isWelcome) emoji = '👋'; else if (isChecking) emoji = '⏳';
+
+            const bubble = document.createElement('div'); bubble.className = 'ai-message';
+            bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
+            chatArea.appendChild(bubble);
+            chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+        }
+    }
+    function playAudio(audioElement){ return new Promise((resolve, reject) => { if (!audioElement || !(audioElement instanceof HTMLAudioElement)) { return reject(new Error("Invalid audio element")); } if (!window.userInteracted) { return resolve(); } audioElement.currentTime = 0; const playPromise = audioElement.play(); if(playPromise !== undefined) { playPromise.then(resolve).catch(error => { reject(error); }); } else { resolve(); } }); }
+    function playRandomFeedback(soundType){
+        if (!window.userInteracted || isThelobookActive || isPageGridVisible) return;
+        let soundArray;
+        if (currentLang === 'en') soundArray = (soundType === 'approve') ? approveSounds_en : disapproveSounds_en;
+        else soundArray = (soundType === 'approve') ? approveSounds_hy : disapproveSounds_hy;
+        if (soundArray && soundArray.length > 0) {
+            const availableSounds = soundArray.filter(sound => sound instanceof HTMLAudioElement);
+            if (availableSounds.length > 0) {
+                const randomIndex = Math.floor(Math.random() * availableSounds.length);
+                playAudio(availableSounds[randomIndex]).catch(e => {});
+            }
+        }
+    }
+    function formatAIMessage(key, replacements = {}){
+        const TXT = getCurrentUIText(); let message = TXT[key] || `Missing text [${currentLang}]: ${key}`;
+        const escapeHTML = (str) => String(str).replace(/[&<>"']/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[match]));
+        for (const placeholder in replacements) {
+            const replacementValue = replacements[placeholder] !== undefined && replacements[placeholder] !== null ? String(replacements[placeholder]) : '';
+            message = message.replace(new RegExp(`{${placeholder}}`, 'g'), `<strong>${escapeHTML(replacementValue)}</strong>`);
+        }
+        return message;
+    }
+          /* ========== NEW: Toast Notification Logic ========== */
+function showToast(rawMsg, duration = 4000) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    // Reuse the classification logic from addChatMessage
+    const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+    const TXT = getCurrentUIText();
+    let emoji = '🤖';
+    let type = 'info'; // Default type
+
+    const isPoints  = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+    const isWrong   = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+    const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+    const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+    const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
+    const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+
+    if (isWrong) { emoji = '🤔'; type = 'error'; }
+    else if (isCorrect || isPoints) { emoji = '🎉'; type = 'success'; }
+    else if (isWarning || msg.includes('🛑')) { emoji = '⚠️'; type = 'warning'; }
+    else if (isWelcome) { emoji = '👋'; }
+    else if (isChecking) { emoji = '⏳'; }
+
+    const toast = document.createElement('div');
+    toast.className = `toast-message toast-${type}`;
+    toast.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
+
+    // Function to remove the toast
+    const removeToast = () => {
+        toast.classList.remove('show');
+        // Remove the element from DOM after the fade-out animation completes
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    };
+
+    // Auto-dismiss after duration
+    const timeoutId = setTimeout(removeToast, duration);
+
+    // Allow user to dismiss by clicking
+    toast.addEventListener('click', () => {
+        clearTimeout(timeoutId); // Cancel the auto-dismiss
+        removeToast();
+    }, { once: true });
+
+    container.appendChild(toast);
+
+    // Trigger the fade-in animation
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+}
+
+function checkTabletMode() {
+    // This media query should match the one in your CSS
+    const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
+    const landscapeQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (min-height: 500px)');
+
+    isTabletMode = tabletQuery.matches || landscapeQuery.matches;
+    console.log("Tablet Mode:", isTabletMode);
+}
+	function updateUserPointsInFirestore(pointsToAdd) {
+        const user = auth.currentUser;
+        if (!user) {
+            console.warn("Attempted to update points for a non-logged-in user.");
+            return;
+        }
+
+        const userDocRef = db.collection('thelo-students').doc(user.uid);
+
+        // Use FieldValue.increment for atomic updates to prevent race conditions
+        return userDocRef.update({
+            points: firebase.firestore.FieldValue.increment(pointsToAdd)
+        }).catch(error => {
+            console.error("Error updating points in Firestore: ", error);
+        });
+    }
+	/* ===== ADD THIS FUNCTION: The Main Streak Logic ======================== */
+async function updateWeeklyStreak() {
+    const user = auth.currentUser;
+    if (!user) return; // Only run for logged-in users
+
+    const userDocRef = db.collection('thelo-students').doc(user.uid);
+    
+    try {
+        const doc = await userDocRef.get();
+        const streakData = doc.exists && doc.data().streakData ? doc.data().streakData : {
+            currentStreak: 0,
+            longestStreak: 0,
+            lastActivityWeek: null
+        };
+
+        const thisWeekId = getISOWeekIdentifier(new Date());
+
+        // Scenario A: Already completed a lesson this week
+        if (thisWeekId === streakData.lastActivityWeek) {
+            console.log("Weekly streak already secured for:", thisWeekId);
+            return;
+        }
+
+        const prevWeekId = getPreviousWeekIdentifier(thisWeekId);
+        let newStreakData = { ...streakData };
+        let showCelebration = false;
+
+        // Scenario B: Streak Extended!
+        if (prevWeekId === streakData.lastActivityWeek) {
+            newStreakData.currentStreak += 1;
+            console.log(`Weekly streak extended to ${newStreakData.currentStreak} weeks!`);
+            showCelebration = true;
+        } 
+        // Scenario C: Streak Broken, new one starts
+        else {
+            newStreakData.currentStreak = 1;
+            console.log("New weekly streak started!");
+            showCelebration = true;
+        }
+
+        // Always update the last activity and check for a new record
+        newStreakData.lastActivityWeek = thisWeekId;
+        if (newStreakData.currentStreak > newStreakData.longestStreak) {
+            newStreakData.longestStreak = newStreakData.currentStreak;
+        }
+
+        // Save to Firestore and show the modal
+        await userDocRef.set({ streakData: newStreakData }, { merge: true });
+        
+        if (showCelebration) {
+            showStreakCelebrationModal(newStreakData.currentStreak, newStreakData.currentStreak === newStreakData.longestStreak && newStreakData.currentStreak > 1);
+        }
+
+    } catch (error) {
+        console.error("Error updating weekly streak:", error);
+    }
+}
+
+function showStreakCelebrationModal(streakCount, isNewRecord) {
+    const modal = document.getElementById('streakModal');
+    const title = document.getElementById('streakModalTitle');
+    const body = document.getElementById('streakModalBody');
+    const closeBtn = document.getElementById('streakModalCloseBtn');
+    const confirmBtn = document.getElementById('streakModalConfirmBtn');
+
+    title.textContent = isNewRecord ? "New Record!" : "Weekly Streak Extended!";
+    body.textContent = `That's ${streakCount} week${streakCount > 1 ? 's' : ''} in a row. Amazing work!`;
+    
+    const hideModal = () => modal.classList.add('modal-hidden');
+    
+    closeBtn.onclick = hideModal;
+    confirmBtn.onclick = hideModal;
+
+    modal.classList.remove('modal-hidden');
+}	
+		
+async function checkHandwritingAnswer(){
+    if (isThelobookActive || isPageGridVisible) return;
+    stopCurrentStageAudio();
+    if (!currentStageData || currentStageData.type !== 'question_handwriting') return;
+    if (nextCheckBtn.disabled || isTransitioning) return;
+    
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
+    nextCheckBtn.classList.remove('correct', 'incorrect');
+    
+    if(isImageModeActive) {
+        imageTerminalFeedback.innerHTML = `<span>${TXT.checking}</span>`;
+        imageTerminalFeedback.style.opacity = 1;
+    } else {
+        addChatMessage('AI', formatAIMessage('checkingAI'));
+    }
+
+    let base64ImageData;
+    try {
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = finalAnswerCanvas.width;
+        blankCanvas.height = finalAnswerCanvas.height;
+        const finalAnswerDataUrl = finalAnswerCanvas.toDataURL('image/png');
+        if (finalAnswerDataUrl === blankCanvas.toDataURL()) {
+            throw new Error("BLANK_ANSWER");
+        }
+        base64ImageData = finalAnswerDataUrl.split(',')[1];
+        if (!base64ImageData) throw new Error("Could not get image data.");
+    } catch (error) {
+        const msg = error.message === "BLANK_ANSWER" ? formatAIMessage('blankBlueWarning') : formatAIMessage('imageDataError', { errorMessage: error.message });
+        const shortMsg = "Please write your answer in blue ink.";
+        isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', msg);
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
+        return;
+    }
+    
+    try {
+        const response = await fetch(VISION_FUNCTION_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', },
+            body: JSON.stringify({ imageBase64: base64ImageData })
+        });
+        if (!response.ok) {
+            let errorBodyText = await response.text();
+            let errorBody = {};
+            try { errorBody = JSON.parse(errorBodyText); } catch (e) {}
+            const errorMessage = errorBody?.error || errorBodyText.substring(0,150) || `HTTP error ${response.status}`;
+            if (response.status === 401 || response.status === 403) {
+                throw new Error(TXT.apiKeyPermissionError + " (Or Cloud Function not public)");
+            }
+            if (errorMessage.toLowerCase().includes('api key') || errorMessage.toLowerCase().includes('permission denied')) {
+                throw new Error(TXT.apiKeyPermissionError);
+            } else if ((response.status === 400 || String(response.status).startsWith('5')) && errorMessage.toLowerCase().includes('billing')) {
+                throw new Error(TXT.apiBillingError);
+            }
+            throw new Error(errorMessage);
+        }
+        
+        const result = await response.json();
+        let detectedText = '';
+        if (result && typeof result.text === 'string') { detectedText = result.text; }
+        else if (result?.responses?.[0]?.fullTextAnnotation?.text) { detectedText = result.responses[0].fullTextAnnotation.text; }
+        else if (result?.error?.message) { throw new Error(`Cloud Function error: ${result.error.message}`); }
+
+        if (!detectedText.trim()) {
+            throw new Error("NO_TEXT_FOUND");
+        }
+        
+        let cleanedText = detectedText.replace(/\s+/g, '').replace(/[oO]/g, '0').replace(/[lLliI]/g, '1');
+        const detectedAnswer = (cleanedText.match(/\d+/g) || [''])[0];
+        const correctAnswer = String(currentStageData.correctAnswerOcr);
+        
+        if (detectedAnswer === correctAnswer) {
+            const pointsGained = 10;
+            const feedbackForTerminal = "🎉 Correct!";
+            playRandomFeedback('approve');
+            userPoints += pointsGained;
+            sessionPoints += pointsGained;
+            updatePointsDisplay();
+	        updateUserPointsInFirestore(pointsGained);
+            nextCheckBtn.classList.add('correct');
+
+            const chatMessageWithPoints = `${formatAIMessage('correctAI', { detectedAnswer })} ${formatAIMessage('pointsGained', { points: pointsGained })}`;
+
+            if (isImageModeActive) {
+                imageTerminalFeedback.innerHTML = `<span>${feedbackForTerminal}</span>`;
+                imageTerminalFeedback.style.opacity = 1;
+                lessonStages[currentStageIndex].headline = chatMessageWithPoints;
+                setTimeout(nextStage, 2000);
+            } else {
+                addChatMessage('AI', chatMessageWithPoints);
+                setTimeout(nextStage, 1500);
+            }
+        } else {
+            const feedbackForTerminal = "Not quite, try again!";
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+            if (isImageModeActive) {
+                imageTerminalFeedback.innerHTML = `<span>⚠️ ${feedbackForTerminal}</span>`;
+                imageTerminalFeedback.style.opacity = 1;
+                setTimeout(() => {
+                    imageTerminalFeedback.style.opacity = 0;
+                    nextCheckBtn.disabled = false;
+                    nextCheckBtn.textContent = TXT.check;
+                    nextCheckBtn.classList.remove('incorrect');
+                }, 2500);
+            } else {
+                addChatMessage('AI', formatAIMessage('incorrectAI', { detectedAnswer: detectedAnswer || 'none', correctAnswer }));
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                setTimeout(() => nextCheckBtn.classList.remove('incorrect'), 600);
+            }
+        }
+    } catch (error) {
+        let userErrorMessage;
+        const isKnownUITextError = Object.values(TXT).includes(error.message);
+        if (error.message === "NO_TEXT_FOUND") {
+             userErrorMessage = formatAIMessage('noTextFound');
+        } else if (isKnownUITextError) {
+             userErrorMessage = error.message;
+        } else {
+            userErrorMessage = formatAIMessage('apiErrorGeneral', { errorMessage: error.message });
+        }
+        
+        const shortMsg = error.message === "NO_TEXT_FOUND" ? "I couldn't read that. Try writing clearly." : "An error occurred. Please try again.";
+        isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', userErrorMessage);
+        
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
+    }
+}	    function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
+
+    /* ========== THELOBOOK FUNCTIONALITY ========== */
+        function updateThelobookPageControls() {
+        const TXT = getCurrentUIText();
+        const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
+
+        if (thelobookPageIndicatorEl && TXT && TXT.thelobookPageIndicator) {
+            thelobookPageIndicatorEl.textContent = TXT.thelobookPageIndicator
+                .replace('{currentPage}', currentThelobookPageIndex + 1)
+                .replace('{totalPages}', totalPages);
+        }
+
+        // Disable previous/next page buttons if at bounds or animating
+        if (thelobookPrevPageBtn) thelobookPrevPageBtn.disabled = (currentThelobookPageIndex === 0 || isPageSwitchingAnimation);
+        if (thelobookNextPageBtn) thelobookNextPageBtn.disabled = (currentThelobookPageIndex >= totalPages - 1 || isPageSwitchingAnimation);
+
+        // Disable Add Page button if limit is reached (32 pages) or animating
+        if (thelobookAddPageBtn) {
+            thelobookAddPageBtn.disabled = (thelobookPages.length >= PAGES_PER_GRID_BATCH || isPageSwitchingAnimation);
+        }
+
+        // Disable eraser/pages button if animating
+        if (thelobookEraserBtn) thelobookEraserBtn.disabled = isPageSwitchingAnimation;
+        if (thelobookPagesBtn) thelobookPagesBtn.disabled = isPageSwitchingAnimation;
+    }
+    function saveCurrentThelobookPageDrawing() {
+        if (!isThelobookActive || isPageSwitchingAnimation || !thelobookCtx || !thelobookCanvas || thelobookCanvas.width === 0 || thelobookCanvas.height === 0) {
+            // Optional: Log why saving was skipped
+            // console.warn("Save Thelobook: Conditions not met or canvas zero size", {isThelobookActive, isPageSwitchingAnimation, hasCtx: !!thelobookCtx, hasCanvas: !!thelobookCanvas, cW: thelobookCanvas?.width, cH: thelobookCanvas?.height });
+            return;
+        }
+        try {
+            if (currentThelobookPageIndex < 0) currentThelobookPageIndex = 0;
+            while (thelobookPages.length <= currentThelobookPageIndex) {
+                thelobookPages.push(null);
+            }
+            // THE FIX IS HERE: Remove division by devicePixelRatio
+            thelobookPages[currentThelobookPageIndex] = thelobookCtx.getImageData(0, 0, thelobookCanvas.width, thelobookCanvas.height);
+            // console.log("Saved Thelobook page", currentThelobookPageIndex, "with bitmap dimensions:", thelobookCanvas.width, "x", thelobookCanvas.height);
+        } catch (e) {
+            console.error("Error saving Thelobook page:", e);
+            // Add more details if error occurs
+            // console.error("Canvas details at error: attr W/H", thelobookCanvas?.width, thelobookCanvas?.height, "style W/H", thelobookCanvas?.style.width, thelobookCanvas?.style.height, "DPR", devicePixelRatio);
+        }
+    }
+
+    function loadThelobookPageDrawing(pageIndex) {
+        if (thelobookCtx) {
+            thelobookCtx.clearRect(0, 0, thelobookCanvas.width / devicePixelRatio, thelobookCanvas.height / devicePixelRatio);
+            if (pageIndex >= 0 && pageIndex < thelobookPages.length && thelobookPages[pageIndex]) {
+                try { thelobookCtx.putImageData(thelobookPages[pageIndex], 0, 0); }
+                catch (e) { console.error("Error loading Thelobook page data:", e); }
+            }
+        }
+        currentThelobookPageIndex = pageIndex;
+        updateThelobookPageControls();
+    }
+
+    function addThelobookNewPage() {
+        // Check if page creation limit is reached (PAGES_PER_GRID_BATCH is 32)
+        if (thelobookPages.length >= PAGES_PER_GRID_BATCH) {
+            const TXT = getCurrentUIText();
+            addChatMessage('AI', `⚠️ ${TXT.error}: Maximum of ${PAGES_PER_GRID_BATCH} pages allowed.`); // Provide user feedback
+            return; // Stop function execution
+        }
+
+        if (isPageSwitchingAnimation) return; // Check if already switching
+        saveCurrentThelobookPageDrawing(); // Save current page first
+        thelobookPages.push(null); // Add a new blank page placeholder
+        currentThelobookPageIndex = thelobookPages.length - 1; // Move to the new page
+        loadThelobookPageDrawing(currentThelobookPageIndex); // Load the (blank) new page
+        updateThelobookPageControls(); // Ensure controls are updated after adding a page
+    }
+
+    function changeThelobookPageSimple(direction) {
+        if (isPageSwitchingAnimation) return; // Prevent re-entrant calls
+
+        const oldPageIndex = currentThelobookPageIndex;
+        let newPageIndex = currentThelobookPageIndex + direction;
+        const totalPages = Math.max(1, thelobookPages.length);
+
+        // Bounds checking for newPageIndex
+        if (newPageIndex < 0) newPageIndex = 0;
+        if (newPageIndex >= totalPages) newPageIndex = totalPages - 1;
+
+        if (oldPageIndex !== newPageIndex) {
+            saveCurrentThelobookPageDrawing(); // **** MOVED: Save current page BEFORE disabling controls/animating ****
+
+            isPageSwitchingAnimation = true;
+            updateThelobookPageControls(); // Update controls to reflect "switching" state (e.g., disable buttons)
+
+            currentThelobookPageIndex = newPageIndex;
+            loadThelobookPageDrawing(currentThelobookPageIndex); // Load the new page (this also calls updateThelobookPageControls)
+
+            // Reset animation flag after a short delay/next frame to allow UI to settle
+            requestAnimationFrame(() => {
+                isPageSwitchingAnimation = false;
+                updateThelobookPageControls(); // Ensure controls are updated for the new page state
+            });
+        }
+    }
+    function toggleThelobookEraser() {
+        if (isPageSwitchingAnimation) return;
+        isThelobookEraserActive = !isThelobookEraserActive;
+        const TXT = getCurrentUIText();
+        if (thelobookEraserBtn) {
+            thelobookEraserBtn.textContent = isThelobookEraserActive ? '🖋️' : '✏️';
+            thelobookEraserBtn.title = isThelobookEraserActive ? TXT.thelobookPen : TXT.thelobookEraser;
+            thelobookEraserBtn.classList.toggle('active', isThelobookEraserActive);
+        }
+        if (thelobookCanvas) thelobookCanvas.classList.toggle('eraser-active', isThelobookEraserActive);
+        updateColorIndicator();
+    }
+
+    /* ---------------- helper: snapshot & pause media ---------------- */
+    function captureMediaState() {
+        mediaPlaybackTimeBeforeThelobook = internalPlaybackTime;
+        audioTimeBeforeThelobook       = currentStageAudio ? currentStageAudio.currentTime : 0;
+        wasMediaPlayingBeforeThelobook  = false;
+
+        if (currentStageAudio && !currentStageAudio.paused) {
+        currentStageAudio.pause();
+        wasMediaPlayingBeforeThelobook = true;
+        }
+
+        if (isMediaScrubbingActive) {
+        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+        isMediaScrubbingActive  = false;
+        wasMediaPlayingBeforeThelobook = true;
+        }
+        stageProgressBarContainer?.classList.remove('visible');
+    }
+    /* ---------------- helper: resume or freeze ---------------------- */
+    function resumeMediaState() {
+        const atEnd =
+        currentStageTotalDuration > 0 &&
+        mediaPlaybackTimeBeforeThelobook >= currentStageTotalDuration - 0.05;
+
+        internalPlaybackTime = atEnd
+        ? currentStageTotalDuration
+        : mediaPlaybackTimeBeforeThelobook;
+
+        if (currentStageAudio) { // currentTime will be used by playStageAudio in resume mode
+        currentStageAudio.currentTime = audioTimeBeforeThelobook;
+        }
+
+        isMediaScrubbingActive = wasMediaPlayingBeforeThelobook && !atEnd;
+
+        if (atEnd && currentStageDrawingData && replayCtx && currentStageTotalDuration > 0) {
+        renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx);
+        updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
+        stageProgressBarContainer?.classList.add('visible');
+        }
+        renderStageUI(currentStageIndex, true); // isResize = true indicates resume context
+    }
+
+    function openThelobook() {
+    // — early exits —
+    if (isThelobookActive || isPageGridVisible) return;
+
+    /*  MCQ stages are now allowed — guard removed  */
+
+    isThelobookActive      = true;
+    isThelobookEraserActive = false;
+
+    const TXT = getCurrentUIText();
+
+    // pause audio / drawing playback and snapshot timing
+    captureMediaState();
+
+    // show notebook canvas & controls
+    thelobookCanvas.classList.remove('grid-underlay');
+    thelobookCanvas.classList.add('active');
+    thelobookControlsEl.classList.add('visible');
+
+    // ensure at least one page exists, then load current page
+    if (thelobookPages.length === 0) {
+        thelobookPages.push(null);
+        currentThelobookPageIndex = 0;
+    }
+    loadThelobookPageDrawing(currentThelobookPageIndex);
+
+    // switch input listeners
+    removeBoardDrawListeners();
+    addThelobookDrawListeners();
+    canvas.style.pointerEvents = 'none';
+
+    // update UI text / states
+    thelobookBtn.textContent = TXT.thelobookClose;
+    if (thelobookEraserBtn) {
+        thelobookEraserBtn.textContent = '✏️';
+        thelobookEraserBtn.title      = TXT.thelobookEraser;
+        thelobookEraserBtn.classList.remove('active');
+    }
+    if (clearBtn)  clearBtn.disabled  = true;
+    if (prevBtn)   prevBtn.disabled   = true;
+    if (nextCheckBtn) nextCheckBtn.disabled = true;
+
+    updateColorIndicator();
+    updateThelobookPageControls();
+
+    /* ── blur MCQ block if it’s visible ── */
+    if (mcqOptionsContainer &&
+        mcqOptionsContainer.style.display !== 'none') {
+        mcqOptionsContainer.classList.add('blurred-mcq');
+    }
+}
+
+
+function closeThelobook(savePage = true) {
+    if (!isThelobookActive) return;
+
+    /* ── restore MCQ clarity ── */
+    if (mcqOptionsContainer) {
+        mcqOptionsContainer.classList.remove('blurred-mcq');
+    }
+
+        if (savePage) saveCurrentThelobookPageDrawing();
+        isThelobookActive = false; const TXT = getCurrentUIText();
+
+        thelobookCanvas.classList.remove('active');
+        thelobookCanvas.classList.remove('grid-underlay');
+        thelobookControlsEl.classList.remove('visible');
+        removeThelobookDrawListeners(); addBoardDrawListeners();
+        thelobookBtn.textContent = TXT.thelobookOpen;
+        
+        resumeMediaState();
+        
+        // ======================= FIX STARTS HERE =======================
+        if (currentStageIndex === -1) {
+            // This is the edge case: lesson hasn't started.
+            // Manually re-enable the 'Start' button.
+            if (nextCheckBtn) nextCheckBtn.disabled = false;
+        }
+        // ======================== FIX ENDS HERE ========================
+
+        // The original logic can remain or be cleaned up, but the fix above is key.
+        if (currentStageData) {
+            // renderStageUI is called by resumeMediaState
+        } else {
+            updateColorIndicator();
+            canvas.style.pointerEvents = 'none';
+        }
+       
+        wasMediaPlayingBeforeThelobook = false; 
+    }
+    function openPageGridView() {
+        if (isPageGridVisible) return;
+        if (isThelobookActive) {
+            saveCurrentThelobookPageDrawing();
+            thelobookCanvas.classList.add('grid-underlay');
+            thelobookControlsEl.classList.remove('visible');
+        } else {
+            captureMediaState();
+            thelobookCanvas.classList.add('active', 'grid-underlay');
+        }
+
+        isPageGridVisible = true;
+        thelobookPageGridViewEl.classList.add('visible');
+        currentPageGridBatch = Math.floor(currentThelobookPageIndex / PAGES_PER_GRID_BATCH);
+        renderPageGridBatch(currentPageGridBatch, false);
+        if (!pageGridInstructionsShown) {
+            addChatMessage('AI', getCurrentUIText().pageGridInstructions);
+            pageGridInstructionsShown = true;
+        }
+        updateAllUITexts();
+    }
+
+    function closePageGridView() {
+        if (!isPageGridVisible) return;
+        isPageGridVisible = false;
+        thelobookPageGridViewEl.classList.remove('visible');
+        thelobookCanvas.classList.remove('grid-underlay');
+
+        if (isThelobookActive) {
+            thelobookCanvas.classList.add('active');
+            thelobookControlsEl.classList.add('visible');
+            loadThelobookPageDrawing(currentThelobookPageIndex);
+        } else {
+            thelobookCanvas.classList.remove('active');
+            resumeMediaState();
+        }
+        updateAllUITexts();
+    }
+
+    function renderPageGridBatch(batchIndex, animateDirection = null) {
+        currentPageGridBatch = batchIndex;
+        const TXT = getCurrentUIText();
+        const totalPages = Math.max(0, thelobookPages.length);
+        const startPageIndex = batchIndex * PAGES_PER_GRID_BATCH;
+        const endPageIndex = Math.min(startPageIndex + PAGES_PER_GRID_BATCH, totalPages);
+
+        if(pageGridBatchIndicatorEl && TXT.pageGridBatchIndicator) {
+            pageGridBatchIndicatorEl.textContent = (totalPages > 0) ?
+                TXT.pageGridBatchIndicator.replace("{startPage}", startPageIndex + 1).replace("{endPage}", endPageIndex) :
+                "No Pages";
+        }
+
+        const newBatchDiv = document.createElement('div');
+        newBatchDiv.classList.add('page-grid-batch');
+
+        if (!tempFullPageCanvasForThumbnails) {
+            tempFullPageCanvasForThumbnails = document.createElement('canvas');
+        }
+        const tempSharedCtx = tempFullPageCanvasForThumbnails.getContext('2d');
+        const THUMB_CSS_WIDTH = 120; const THUMB_CSS_HEIGHT = 90;
+
+
+        for (let i = startPageIndex; i < endPageIndex; i++) {
+            const pageNumDisplay = i + 1;
+            const thumbnailDiv = document.createElement('div');
+            thumbnailDiv.classList.add('page-thumbnail');
+            thumbnailDiv.dataset.pageIndex = i;
+            thumbnailDiv.title = `Page ${pageNumDisplay}`;
+
+            const thumbCanvasEl = document.createElement('canvas');
+            thumbCanvasEl.width = THUMB_CSS_WIDTH * devicePixelRatio;
+            thumbCanvasEl.height = THUMB_CSS_HEIGHT * devicePixelRatio;
+            thumbCanvasEl.style.width = `${THUMB_CSS_WIDTH}px`;
+            thumbCanvasEl.style.height = `${THUMB_CSS_HEIGHT}px`;
+            const thumbCtx = thumbCanvasEl.getContext('2d');
+            thumbCtx.imageSmoothingEnabled = true;
+            thumbCtx.imageSmoothingQuality = "high";
+
+
+            if (thelobookPages[i]) {
+                const pageImageData = thelobookPages[i];
+                tempFullPageCanvasForThumbnails.width = pageImageData.width;
+                tempFullPageCanvasForThumbnails.height = pageImageData.height;
+                tempSharedCtx.putImageData(pageImageData, 0, 0);
+                thumbCtx.drawImage(tempFullPageCanvasForThumbnails, 0, 0, tempFullPageCanvasForThumbnails.width, tempFullPageCanvasForThumbnails.height, 0, 0, THUMB_CSS_WIDTH * devicePixelRatio, THUMB_CSS_HEIGHT * devicePixelRatio);
+            } else {
+                thumbCtx.save();
+                thumbCtx.scale(devicePixelRatio, devicePixelRatio);
+                thumbCtx.fillStyle = '#f0f0f0';
+                thumbCtx.fillRect(0,0, THUMB_CSS_WIDTH, THUMB_CSS_HEIGHT);
+                thumbCtx.restore();
+            }
+            thumbnailDiv.appendChild(thumbCanvasEl);
+            const pageNumberSpan = document.createElement('span');
+            pageNumberSpan.classList.add('page-thumbnail-number');
+            pageNumberSpan.textContent = pageNumDisplay;
+            thumbnailDiv.appendChild(pageNumberSpan);
+
+
+            thumbnailDiv.addEventListener('click', () => {
+                const shouldOpenEditorIfNotAlready = !isThelobookActive;
+                currentThelobookPageIndex = i;
+                closePageGridView();
+
+                if (shouldOpenEditorIfNotAlready) {
+                    openThelobook();
+                } else {
+                    loadThelobookPageDrawing(currentThelobookPageIndex);
+                }
+            });
+            newBatchDiv.appendChild(thumbnailDiv);
+        }
+
+        const oldBatchDiv = thelobookPageGridContentContainerEl.querySelector('.page-grid-batch');
+
+        if (oldBatchDiv && animateDirection) {
+            if (animateDirection === 'next') {
+                oldBatchDiv.classList.add('exiting-left');
+                newBatchDiv.classList.add('entering-right');
+            } else {
+                oldBatchDiv.classList.add('exiting-right');
+                newBatchDiv.classList.add('entering-left');
+            }
+            oldBatchDiv.addEventListener('transitionend', () => oldBatchDiv.remove(), { once: true });
+            thelobookPageGridContentContainerEl.appendChild(newBatchDiv);
+            requestAnimationFrame(() => newBatchDiv.classList.remove('entering-left', 'entering-right'));
+        } else {
+            if(oldBatchDiv) oldBatchDiv.remove();
+            thelobookPageGridContentContainerEl.appendChild(newBatchDiv);
+        }
+    }
+
+    function changePageGridBatch(direction) {
+        if (!isPageGridVisible) return;
+        const maxBatch = Math.max(0, Math.ceil(thelobookPages.length / PAGES_PER_GRID_BATCH) - 1);
+        let newBatch = currentPageGridBatch + direction;
+
+        if (newBatch < 0) newBatch = maxBatch;
+        if (newBatch > maxBatch) newBatch = 0;
+        if (thelobookPages.length === 0) newBatch = 0;
+
+
+        if (newBatch !== currentPageGridBatch || thelobookPages.length === 0 || (newBatch === 0 && currentPageGridBatch ===0)) {
+                renderPageGridBatch(newBatch, direction > 0 ? 'next' : (direction < 0 ? 'prev' : null) );
+        }
+    }
+
+    function handleKeyDown(event){
+        if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
+
+        /* ===== ADDED: Activate 'View Progress' on SPACE key at end of lesson ===== */
+        if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
+            dashboardBtn.click(); // Trigger the button's click event
+            event.preventDefault(); // Prevent default spacebar action (e.g., scrolling)
+            return; // Stop further execution
+        }
+        /* ========================================================================= */
+
+        if (isPageGridVisible) {
+            switch(event.key.toLowerCase()) {
+                case 'c': changePageGridBatch(1); event.preventDefault(); return;
+                case 'x': changePageGridBatch(-1); event.preventDefault(); return;
+                case 'escape': closePageGridView(); event.preventDefault(); return;
+            }
+            return;
+        }
+
+        if (isThelobookActive) {
+            switch(event.key.toLowerCase()) {
+                case 'b': closeThelobook(true); event.preventDefault(); return;
+                case 'escape': closeThelobook(true); event.preventDefault(); return;
+                case 'e': toggleThelobookEraser(); event.preventDefault(); return;
+                case 'c': clearUserCanvas(); event.preventDefault(); return;
+            }
+            return;
+        }
+        /* ── QUICK-START LESSON WITH SPACE ──────────────────────────────── */
+        if (
+        event.key === ' ' &&             // space-bar hit
+        currentStageIndex === -1 &&       // lesson not started yet
+        !isLessonLoading && !isTransitioning &&
+        !isThelobookActive && !isPageGridVisible &&
+        nextCheckBtn && !nextCheckBtn.disabled
+        ) {
+        handleNextCheckClick();           // same action as the “Start” button
+        event.preventDefault();           // stop page scrolling, etc.
+        return;                           // nothing else to do for this keypress
+        }
+        /* ───────────────────────────────────────────────────────────────── */
+
+        if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
+        const mcqDetails = currentStageData.optionsQuiz;
+        const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
+
+        switch (event.key.toLowerCase()){
+            case ' ':
+                if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled){ handleNextCheckClick(); event.preventDefault(); }
+                break;
+            case 'a':
+                if (isStudentInputAllowed && !isMcqActive) { toggleColor(); event.preventDefault(); }
+                break;
+            case 'b':
+                if (currentStageIndex >=0 && currentStageData) { openThelobook(); event.preventDefault(); }
+                break;
+            case 'c':
+                if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled){
+                    clearUserCanvas(); event.preventDefault();
+                }
+                break;
+        }
+        const canScrub = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
+        if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && canScrub && !isThelobookActive && !isPageGridVisible) {
+            const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
+            let newTime = internalPlaybackTime + diff; newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
+            internalPlaybackTime = newTime;
+
+            if (currentStageAudio && currentStageData.audioFile){
+                currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+                if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01) && currentStageAudio.src.includes(currentStageData.audioFile)){
+                    currentStageAudio.play().catch(()=>{});
+                }
+            }
+            if (!isMediaScrubbingActive && currentStageTotalDuration > 0){
+                isMediaScrubbingActive = true;
+                if (!currentReplayAnimationId){ currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop); }
+            }
+            if (currentStageDrawingData && replayCtx && currentStageData.drawingRecord){
+                    renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+            }
+            updateMediaProgressBar(newTime, currentStageTotalDuration);
+            lastFrameTimestampForManualAdvance = performance.now(); event.preventDefault();
+        }
+    }
+    // Prevent zooming via keyboard and mouse wheel
+window.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
+    e.preventDefault();
+  }
+});
+
+window.addEventListener('wheel', function(e) {
+  if (e.ctrlKey) {
+    e.preventDefault();
+  }
+}, { passive: false });
+    function initApp() {
+      checkTabletMode();
+        const audioIdsToLoad = [
+            'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
+            'audio_approve1_en', 'audio_approve2_en', 'audio_dis1_en', 'audio_dis2_en', 'gotItSound'
+        ];
+        audioIdsToLoad.forEach(id => {
+            const audio = document.getElementById(id);
+            if (audio) {
+                audioElements[id] = audio;
+                if (id.startsWith('audio_approve') && id.endsWith('_hy')) approveSounds_hy.push(audio);
+                if (id.startsWith('audio_dis') && id.endsWith('_hy')) disapproveSounds_hy.push(audio);
+                if (id.startsWith('audio_approve') && id.endsWith('_en')) approveSounds_en.push(audio);
+                if (id.startsWith('audio_dis') && id.endsWith('_en')) disapproveSounds_en.push(audio);
+            }
+        });
+        resizeCanvases();
+        addBoardDrawListeners();
+        window.addEventListener('mouseup', handleDrawingEnd);
+        window.addEventListener('mouseleave', handleDrawingEnd);
+        window.addEventListener('touchend', handleDrawingEnd);
+        window.addEventListener('touchcancel', handleDrawingEnd);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const lessonFileName = urlParams.get('lessonFile');
+        if (lessonFileName) {
+            const LESSONS_BASE_PATH = 'https://thelo.space/lessons/';
+            const cleanLFN = lessonFileName.startsWith('/') ? lessonFileName.substring(1) : lessonFileName;
+            loadLesson(LESSONS_BASE_PATH + cleanLFN.replace(/\.\.+/g, ''));
+        } else {
+            const TXT = getCurrentUIText();
+            addChatMessage('AI', formatAIMessage('lessonFileMissing'));
+            if(nextCheckBtn){nextCheckBtn.textContent = TXT.error; nextCheckBtn.disabled = true;}
+            if(prevBtn)prevBtn.disabled = true;
+            if(bgCtx && backgroundCanvas && backgroundCanvas.width > 0){
+                const cw = backgroundCanvas.width/(window.devicePixelRatio||1); const ch = backgroundCanvas.height/(window.devicePixelRatio||1);
+                bgCtx.clearRect(0,0,cw,ch); bgCtx.font = `20px 'Mardoto-Light', system-ui, sans-serif`;
+                bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+                bgCtx.textAlign='center';bgCtx.textBaseline='middle';
+                wrapText(bgCtx, TXT.lessonLoadErrorGeneric, cw/2, ch/2, cw*0.8, 30);
+            }
+        }
+        const interactionListener = () => { if (window.userInteracted) return; window.userInteracted = true; Object.values(audioElements).forEach(a => { if(a.readyState < 1) a.load(); }); if(stageAudioPlayer && stageAudioPlayer.readyState < 1) stageAudioPlayer.load(); try { const tempAC = new (window.AudioContext || window.webkitAudioContext)(); if (tempAC.state === 'suspended') tempAC.resume().then(()=>tempAC.close()); else tempAC.close(); } catch(e){} document.body.removeEventListener('click', interactionListener); document.body.removeEventListener('keydown', interactionListener); document.body.removeEventListener('touchstart', interactionListener); };
+        document.body.addEventListener('click', interactionListener, { once: true });
+        document.body.addEventListener('keydown', interactionListener, { once: true });
+        document.body.addEventListener('touchstart', interactionListener, { once: true });
+        window.addEventListener('resize', resizeCanvases);
+        if (prevBtn) prevBtn.onclick = previousStage;
+        if (nextCheckBtn) nextCheckBtn.onclick = handleNextCheckClick;
+        if (clearBtn) clearBtn.onclick = clearUserCanvas;
+        if (thelobookBtn) thelobookBtn.onclick = () => { isThelobookActive ? closeThelobook(true) : openThelobook(); };
+
+        if (thelobookPagesBtn) thelobookPagesBtn.onclick = () => { isPageGridVisible ? closePageGridView() : openPageGridView(); };
+        if (closePageGridBtnEl) closePageGridBtnEl.onclick = closePageGridView;
+        if (thelobookPrevPageBtn) thelobookPrevPageBtn.onclick = () => changeThelobookPageSimple(-1);
+        if (thelobookNextPageBtn) thelobookNextPageBtn.onclick = () => changeThelobookPageSimple(1);
+        if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
+        if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
+
+	if (dashboardBtn) {
+	    dashboardBtn.onclick = () => {
+	        window.location.href = 'https://thelo.space/sdashboard';
+	    };
+	}
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('click', () => {
+                button.blur();
+            });
+        });
+
+
+        document.addEventListener('keydown', handleKeyDown);
+    }
+
+    if (typeof window.appInitialized === 'undefined') {
+        window.appInitialized = false;
+    }
+
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            console.log("User authenticated with UID:", user.uid);
+            
+            // ===== ADD THIS BLOCK TO FETCH INITIAL POINTS =====
+            const userDocRef = db.collection('thelo-students').doc(user.uid);
+            userDocRef.get().then(doc => {
+                if (doc.exists) {
+                    // Set the local points variable to the value from the database
+                    userPoints = doc.data().points || 0;
+                } else {
+                    // Document doesn't exist, start points at 0
+                    userPoints = 0;
+                    console.log("No points document found for user, starting at 0.");
+                }
+                // Update the UI with the correct points
+                updatePointsDisplay();
+            }).catch(error => {
+                console.error("Error fetching user points:", error);
+                userPoints = 0; // Default to 0 on error
+                updatePointsDisplay();
+            });
+            // ===== END OF ADDED BLOCK =====
+
+        } else {
+            userPoints = 0; // Reset points if user logs out
+            updatePointsDisplay();
+            console.log("User not authenticated.");
+        }
+
+        if (!UI_TEXT[currentLang]) currentLang = 'hy';
+        updateAllUITexts();
+
+        if (!user && !isThelobookActive && !isPageGridVisible) {
+            const TXT = getCurrentUIText();
+            if(TXT && TXT.userNotAuthHandwriting) addChatMessage('AI', formatAIMessage('userNotAuthHandwriting'));
+        }
+
+        if (!window.appInitialized) {
+            window.appInitialized = true;
+            initApp();
+        } else {
+            updateAllUITexts();
+        }
+    });
+</script>
+	<div id="streakModal" class="modal-hidden">
+    <div class="streak-modal-content">
+        <span id="streakModalCloseBtn" class="streak-modal-close">&times;</span>
+        <div class="streak-modal-icon">🔥</div>
+        <h2 id="streakModalTitle"></h2>
+        <p id="streakModalBody"></p>
+        <button id="streakModalConfirmBtn" class="control-btn">Awesome!</button>
+    </div>
+</div>
+</body>
+</html>
