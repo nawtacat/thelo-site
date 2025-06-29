@@ -2330,7 +2330,6 @@ async function checkHandwritingAnswer(){
     nextCheckBtn.textContent = TXT.checking;
     nextCheckBtn.classList.remove('correct', 'incorrect');
     
-    // This logic correctly handles feedback for both desktop (isImageModeActive) and tablet (else).
     if(isImageModeActive) {
         imageTerminalFeedback.innerHTML = `<span>${TXT.checking}</span>`;
         imageTerminalFeedback.style.opacity = 1;
@@ -2429,8 +2428,26 @@ async function checkHandwritingAnswer(){
                     nextCheckBtn.disabled = false;
                     nextCheckBtn.textContent = TXT.check;
                     nextCheckBtn.classList.remove('incorrect');
-              _message },
-            const shortMsg = error.message === "NO_TEXT_FOUND" ? "I couldn't read that. Try writing clearly." : "An error occurred. Please try again.";
+                }, 2500);
+            } else {
+                addChatMessage('AI', formatAIMessage('incorrectAI', { detectedAnswer: detectedAnswer || 'none', correctAnswer }));
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                setTimeout(() => nextCheckBtn.classList.remove('incorrect'), 600);
+            }
+        }
+    } catch (error) {
+        let userErrorMessage;
+        const isKnownUITextError = Object.values(TXT).includes(error.message);
+        if (error.message === "NO_TEXT_FOUND") {
+             userErrorMessage = formatAIMessage('noTextFound');
+        } else if (isKnownUITextError) {
+             userErrorMessage = error.message;
+        } else {
+            userErrorMessage = formatAIMessage('apiErrorGeneral', { errorMessage: error.message });
+        }
+        
+        const shortMsg = error.message === "NO_TEXT_FOUND" ? "I couldn't read that. Try writing clearly." : "An error occurred. Please try again.";
         isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', userErrorMessage);
         
         playRandomFeedback('disapprove');
@@ -2438,8 +2455,7 @@ async function checkHandwritingAnswer(){
         nextCheckBtn.textContent = TXT.check;
         if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
     }
-}
-	    function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
+}	    function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
 
     /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
