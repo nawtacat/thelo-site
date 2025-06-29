@@ -835,16 +835,44 @@ body.lang-en {
     border: 1px solid rgba(0,0,0,0.05);
     display: flex;
     align-items: center;
-    gap: 12px;
-    opacity: 0;
-    transform: translateY(20px); /* CHANGED from -20px to 20px */
-    transition: opacity 0.4s ease, transform 0.4s ease;
-    pointer-events: all; /* Individual toasts are clickable */
+    gap: 12px; /* This gap for internal items (icon and text) is fine */
+    pointer-events: all;
     cursor: pointer;
+    
+    /* --- Properties for the new smooth collapse animation --- */
+    overflow: hidden; /* Hides the text as the toast's height shrinks */
+    max-height: 100px; /* Starting height to animate from. Adjust if toasts are ever taller. */
+    margin-top: 10px; /* This replaces the container's 'gap' and can be animated */
+    opacity: 0; /* Toasts start invisible */
+    
+    /* Define the smooth transitions for exiting */
+    transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out, padding 0.3s ease-in-out;
 }
+
+/* This class will trigger the pop-in keyframe animation */
 .toast-message.show {
-    opacity: 1;
-    transform: translateY(0);
+    animation: toast-in 0.5s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+}
+
+/* This new class will trigger the smooth collapse transition */
+.toast-message.exiting {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+}
+
+/* This animation is for the entry of the toast */
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(25px) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .toast-message .emoji {
@@ -2195,11 +2223,11 @@ function showToast(rawMsg, duration = 4000) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
-    // Reuse the classification logic from addChatMessage
+    // This part classifies the message to show the right icon
     const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
     const TXT = getCurrentUIText();
     let emoji = '🤖';
-    let type = 'info'; // Default type
+    let type = 'info'; 
 
     const isPoints  = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
     const isWrong   = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
@@ -2214,29 +2242,39 @@ function showToast(rawMsg, duration = 4000) {
     else if (isWelcome) { emoji = '👋'; }
     else if (isChecking) { emoji = '⏳'; }
 
+    // This part creates the toast element
     const toast = document.createElement('div');
-    toast.className = `toast-message toast-${type}`;
+    toast.className = `toast-message`;
     toast.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
-
-    // Function to remove the toast
+    
+    // This is the inner function that handles removing the toast
     const removeToast = () => {
-        toast.classList.remove('show');
-        // Remove the element from DOM after the fade-out animation completes
-        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+        // First, we add the 'exiting' class to trigger the CSS transition
+        toast.classList.add('exiting');
+        
+        // ===================================================================
+        // THE ONLY CHANGE IS ON THIS LINE:
+        // We now listen for 'transitionend' instead of 'animationend'.
+        // This tells the code to wait for our new collapse transition to finish.
+        toast.addEventListener('transitionend', () => {
+            toast.remove();
+        }, { once: true });
+        // ===================================================================
     };
 
-    // Auto-dismiss after duration
+    // This sets the timer to automatically dismiss the toast
     const timeoutId = setTimeout(removeToast, duration);
 
-    // Allow user to dismiss by clicking
+    // This lets the user click the toast to dismiss it early
     toast.addEventListener('click', () => {
-        clearTimeout(timeoutId); // Cancel the auto-dismiss
+        clearTimeout(timeoutId);
         removeToast();
     }, { once: true });
 
+    // This adds the toast to the page
     container.appendChild(toast);
 
-    // Trigger the fade-in animation
+    // This triggers the entry animation
     requestAnimationFrame(() => {
         toast.classList.add('show');
     });
