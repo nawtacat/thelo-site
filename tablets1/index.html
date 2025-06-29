@@ -1496,40 +1496,59 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-        // NEW: Two-finger tap gesture to switch color on tablets
-        if (isTabletMode && e.touches && e.touches.length === 2) {
-            e.preventDefault(); // Prevent zoom or other default actions
-            toggleColor();
-            return; // Stop the drawing process from starting
+    // ===== ENHANCEMENT: Stylus-Only Drawing on iPad =====
+    // This logic checks the type of touch event on devices that support it.
+    if (isTabletMode && e.type.startsWith('touch') && e.touches && e.touches.length > 0) {
+        const firstTouch = e.touches[0];
+
+        // On iPadOS, the 'touchType' property can be 'stylus' or 'direct' (finger).
+        // We only want to block drawing for finger touches ('direct').
+        if (typeof firstTouch.touchType !== 'undefined' && firstTouch.touchType !== 'stylus') {
+            
+            // PRESERVE GESTURE: Even if we block finger drawing, still check for the two-finger tap to toggle color.
+            if (e.touches.length === 2) {
+                e.preventDefault(); 
+                toggleColor();
+            }
+            // Block the drawing action for any finger touch.
+            return; 
         }
+        // If the touchType is 'stylus', or if the browser doesn't support touchType, 
+        // we proceed with the normal drawing logic.
+    }
+    // =======================================================
 
-        const currentTargetCanvas = e.currentTarget;
-        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-        if (!activeCtx ) return;
-        if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
-        if (!isThelobookActive && currentTargetCanvas !== canvas) return;
-        if (!isStudentInputAllowed && !isThelobookActive) return;
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+    if (!isStudentInputAllowed && !isThelobookActive) return;
 
-        const pos = getPos(e, currentTargetCanvas); if (!pos) return;
-        if (e.touches) e.preventDefault();
-        drawing = true;
-        if (!isThelobookActive) userDrawingOccurred = true;
-        lastPos = pos;
+    const pos = getPos(e, currentTargetCanvas);
+    if (!pos) return;
+    if (e.touches) e.preventDefault();
+    drawing = true;
+    if (!isThelobookActive) userDrawingOccurred = true;
+    lastPos = pos;
 
-        if (isThelobookActive) {
-            activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
-            activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
-            if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
-        } else {
-            activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
-            activeCtx.globalCompositeOperation = 'source-over';
-        }
+    if (isThelobookActive) {
+        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+        if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
+    } else {
+        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = 'source-over';
+    }
 
-        activeCtx.beginPath(); activeCtx.moveTo(pos.x, pos.y);
-        if (!isThelobookActive && currentColor === 'blue') {
-            finalCtx.strokeStyle = INK_COLORS.blue; finalCtx.beginPath(); finalCtx.moveTo(pos.x, pos.y);
-        }
-    }
+    activeCtx.beginPath();
+    activeCtx.moveTo(pos.x, pos.y);
+    if (!isThelobookActive && currentColor === 'blue') {
+        finalCtx.strokeStyle = INK_COLORS.blue;
+        finalCtx.beginPath();
+        finalCtx.moveTo(pos.x, pos.y);
+    }
+}
     function handleDrawingMove(e) {
         if (!drawing) return;
         const currentTargetCanvas = e.currentTarget;
