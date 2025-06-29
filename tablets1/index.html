@@ -1126,6 +1126,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const approveSounds_en = []; const disapproveSounds_en = [];
 
     /* ========== State Variables ========== */
+		let twoFingerGesture = { startTime: 0, inProgress: false };
           let isTabletMode = false;
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
@@ -1507,37 +1508,36 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-    // ===== ENHANCEMENT: Robust Palm & Stylus Detection for iPad =====
-    if (isTabletMode && e.type.startsWith('touch') && e.touches) {
-        let isStylusInUse = false;
+    // On tablet, analyze all active touches to make a decision
+    if (isTabletMode && e.type.startsWith('touch')) {
+        // Use Array.from(e.touches) to safely check every touch point
+        const isStylusInUse = Array.from(e.touches).some(t => t.touchType === 'stylus');
 
-        // Check if any of the active touch points is a stylus.
-        for (let i = 0; i < e.touches.length; i++) {
-            if (e.touches[i].touchType === 'stylus') {
-                isStylusInUse = true;
-                break; // Found a stylus, no need to check further.
-            }
-        }
-
-        // If a stylus is touching the screen, we IGNORE all finger gestures
-        // and proceed directly to the drawing logic.
         if (isStylusInUse) {
-            // This 'if' block is intentionally empty. We just want to skip the 'else' part
-            // and continue to the drawing code at the end of the function.
+            // If a stylus is on the screen, it's ALWAYS for drawing.
+            // Immediately cancel any finger gesture that might have been in progress.
+            twoFingerGesture.inProgress = false;
         } else {
-            // If NO stylus is present, it means only fingers are on the screen.
-            // Now, it's safe to check for the two-finger tap gesture.
+            // If we are here, NO stylus is on the screen. It's a finger-only interaction.
             if (e.touches.length === 2) {
+                // Two fingers are down. If a gesture isn't already in progress, start one.
+                if (!twoFingerGesture.inProgress) {
+                    twoFingerGesture.inProgress = true;
+                    twoFingerGesture.startTime = Date.now();
+                }
+                // Prevent default browser actions like zooming.
                 e.preventDefault();
-                toggleColor();
+            } else {
+                // If it's 1 or 3+ fingers, it's not our gesture. Cancel any pending gesture.
+                twoFingerGesture.inProgress = false;
             }
-            // Since only fingers are on the screen and we don't want finger drawing,
-            // we stop the function here, preventing any drawing from starting.
+            
+            // CRITICAL: Block all finger-based drawing by returning.
             return;
         }
     }
-    // =====================================================================
 
+    // This part of the code is now only reachable by a stylus on a tablet, or a mouse on desktop.
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
@@ -1587,12 +1587,27 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         lastPos = pos;
     }
     function handleDrawingEnd(e) {
-        if (!drawing) return;
-        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-        if (!activeCtx) return;
-        drawing = false; activeCtx.beginPath();
+    // ENHANCEMENT: Complete the two-finger tap gesture only if it was quick
+    if (isTabletMode && twoFingerGesture.inProgress && e.type.startsWith('touch')) {
+        const gestureDuration = Date.now() - twoFingerGesture.startTime;
+
+        // A "tap" must be very quick (e.g., under 200 milliseconds).
+        // A resting palm will be a much longer "press".
+        if (gestureDuration < 200) {
+            toggleColor();
+        }
+
+        // Whether it was a tap or a long press, the gesture is now over.
+        twoFingerGesture.inProgress = false;
     }
 
+    // Original drawing end logic
+    if (!drawing) return;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+    drawing = false;
+    activeCtx.beginPath();
+}
     function addBoardDrawListeners() {
         canvas.addEventListener('mousedown', handleDrawingStart);
         canvas.addEventListener('mousemove', handleDrawingMove);
