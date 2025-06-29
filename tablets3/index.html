@@ -1230,53 +1230,76 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         if (pointsDisplayElement) pointsDisplayElement.textContent = `${TXT.achievementsPrefix}${sessionPoints}`;
     }
     async function loadLesson(lessonJsonPath) {
-        if (isLessonLoading) return; isLessonLoading = true;
+    if (isLessonLoading) return; isLessonLoading = true;
+    // We no longer change the button here at the start.
+    if(prevBtn) prevBtn.disabled = true;
+    if (dashboardBtn) dashboardBtn.style.display = 'none'; 
+    if (isThelobookActive) closeThelobook(false);
+    if (isPageGridVisible) closePageGridView();
+
+    try {
+        const response = await fetch(lessonJsonPath);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status} fetching ${lessonJsonPath}`);
+        lessonStagesRoot = await response.json();
+        if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
+        const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
+        setLanguage(lessonLang); 
         let TXT = getCurrentUIText();
-        if(nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = TXT.loading; }
-        if(prevBtn) prevBtn.disabled = true;
-	if (dashboardBtn) dashboardBtn.style.display = 'none'; // ADD THIS LINE
-        if (isThelobookActive) closeThelobook(false);
-        if (isPageGridVisible) closePageGridView();
+        lessonStages = lessonStagesRoot.stages;
 
+        // The single, correct welcome message call:
+        if (chatArea.children.length > 0) chatArea.innerHTML = '';
+        addChatMessage('AI', formatAIMessage('welcome'));
 
-        try {
-            const response = await fetch(lessonJsonPath);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status} fetching ${lessonJsonPath}`);
-            lessonStagesRoot = await response.json();
-            if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
-            const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
-setLanguage(lessonLang); TXT = getCurrentUIText();
-lessonStages = lessonStagesRoot.stages;
-if (chatArea.children.length > 0) chatArea.innerHTML = '';
-    addChatMessage('AI', formatAIMessage('welcome'));
-sessionPoints = 0; // ADDED: Reset session score for the new lesson.
-updatePointsDisplay(); // ADDED: Ensure the display shows '0' at the start.
+        sessionPoints = 0; 
+        updatePointsDisplay(); 
 
-document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
-console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
-            currentStageIndex = -1; currentStageData = null; isStudentInputAllowed = false;
-            if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null;
-            if(currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
-            currentStageAudio = null; isMediaScrubbingActive = false;
-            if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-            if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
-            if(replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width, replayCanvas.height);
-            if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if(finalCtx) { finalCtx.fillStyle="#FFFFFF"; finalCtx.fillRect(0, 0, finalAnswerCanvas.width, finalAnswerCanvas.height); }
-            thelobookPages = []; currentThelobookPageIndex = 0; updateThelobookPageControls();
-            if(nextCheckBtn) { nextCheckBtn.textContent = TXT.start; nextCheckBtn.disabled = false; }
-            if(prevBtn) prevBtn.disabled = true;
-        } catch (error) {
-            console.error("Error loading lesson:", error); TXT = getCurrentUIText();
-            addChatMessage('AI', `${formatAIMessage('error')}: ${error.message}`);
-            if(nextCheckBtn) { nextCheckBtn.textContent = TXT.error; nextCheckBtn.disabled = true; }
-        } finally {
-            isLessonLoading = false;
-            if (!UI_TEXT[currentLang]) currentLang = 'hy';
-            updateAllUITexts();
+        document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
+        console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
+        
+        // Reset stage-related variables
+        currentStageIndex = -1; currentStageData = null; isStudentInputAllowed = false;
+        if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null;
+        if(currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+        currentStageAudio = null; isMediaScrubbingActive = false;
+        if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+        if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+        if(replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width, replayCanvas.height);
+        if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if(finalCtx) { finalCtx.fillStyle="#FFFFFF"; finalCtx.fillRect(0, 0, finalAnswerCanvas.width, finalAnswerCanvas.height); }
+        thelobookPages = []; currentThelobookPageIndex = 0; updateThelobookPageControls();
+        
+        // We no longer change the button here in the try block.
+
+    } catch (error) {
+        console.error("Error loading lesson:", error); 
+        let TXT = getCurrentUIText();
+        addChatMessage('AI', `${formatAIMessage('error')}: ${error.message}`);
+        // We no longer change the button here in the catch block.
+    } finally {
+        isLessonLoading = false;
+        
+        // =======================================================
+        // NEW, ROBUST BUTTON LOGIC:
+        if (lessonStages && lessonStages.length > 0) {
+            // Success! Lesson loaded.
+            if(nextCheckBtn) { 
+                nextCheckBtn.disabled = false; 
+                nextCheckBtn.textContent = getCurrentUIText().start; 
+            }
+        } else {
+            // Failure! Lesson did not load.
+             if(nextCheckBtn) { 
+                nextCheckBtn.textContent = getCurrentUIText().error; 
+                nextCheckBtn.disabled = true; 
+            }
         }
-    }
+        // =======================================================
 
+        if (!UI_TEXT[currentLang]) currentLang = 'hy';
+        updateAllUITexts();
+    }
+}
     function resizeCanvases() {
         clearTimeout(window.resizeTimeout);
         window.resizeTimeout = setTimeout(() => {
