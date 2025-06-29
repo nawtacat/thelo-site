@@ -770,6 +770,17 @@ body.lang-en {
   /* ===== NEW: Tablet Immersive Mode ===== */
 @media (min-width: 769px) and (max-width: 1200px) and (pointer: coarse) {
     /* (pointer: coarse) is key for detecting touch-first devices like tablets */
+	/* ===== ENHANCEMENT: Prevent Palm Selection on Canvas ===== */
+#boardWrap {
+    /* Prevents the user from being able to select the canvas */
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none;    /* Firefox */
+    -ms-user-select: none;     /* IE */
+    user-select: none;
+
+    /* Disables the menu (copy/paste) that appears on long-press in Safari */
+    -webkit-touch-callout: none;
+}
 
     #app {
         /* Keep the flex layout but hide the chat column */
@@ -1496,27 +1507,36 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-    // ===== ENHANCEMENT: Stylus-Only Drawing on iPad =====
-    // This logic checks the type of touch event on devices that support it.
-    if (isTabletMode && e.type.startsWith('touch') && e.touches && e.touches.length > 0) {
-        const firstTouch = e.touches[0];
+    // ===== ENHANCEMENT: Robust Palm & Stylus Detection for iPad =====
+    if (isTabletMode && e.type.startsWith('touch') && e.touches) {
+        let isStylusInUse = false;
 
-        // On iPadOS, the 'touchType' property can be 'stylus' or 'direct' (finger).
-        // We only want to block drawing for finger touches ('direct').
-        if (typeof firstTouch.touchType !== 'undefined' && firstTouch.touchType !== 'stylus') {
-            
-            // PRESERVE GESTURE: Even if we block finger drawing, still check for the two-finger tap to toggle color.
+        // Check if any of the active touch points is a stylus.
+        for (let i = 0; i < e.touches.length; i++) {
+            if (e.touches[i].touchType === 'stylus') {
+                isStylusInUse = true;
+                break; // Found a stylus, no need to check further.
+            }
+        }
+
+        // If a stylus is touching the screen, we IGNORE all finger gestures
+        // and proceed directly to the drawing logic.
+        if (isStylusInUse) {
+            // This 'if' block is intentionally empty. We just want to skip the 'else' part
+            // and continue to the drawing code at the end of the function.
+        } else {
+            // If NO stylus is present, it means only fingers are on the screen.
+            // Now, it's safe to check for the two-finger tap gesture.
             if (e.touches.length === 2) {
-                e.preventDefault(); 
+                e.preventDefault();
                 toggleColor();
             }
-            // Block the drawing action for any finger touch.
-            return; 
+            // Since only fingers are on the screen and we don't want finger drawing,
+            // we stop the function here, preventing any drawing from starting.
+            return;
         }
-        // If the touchType is 'stylus', or if the browser doesn't support touchType, 
-        // we proceed with the normal drawing logic.
     }
-    // =======================================================
+    // =====================================================================
 
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
