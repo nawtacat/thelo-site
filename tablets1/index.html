@@ -144,10 +144,6 @@ body.lang-en {
     border-radius: 2px;
     transition: width 0.05s linear;
   }
-  /* Prevent page drag while the Pencil is down           */
-#board,
-#thelobookCanvas { touch-action: none; }
-
 
   #backgroundCanvas,
   #replayCanvas,
@@ -1500,61 +1496,40 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-  /* ──────────────────────────────────────────────────────────────
-     Stylus-only gate for iPad
-     ──────────────────────────────────────────────────────────────
-     • Apple Pencil  → e.pointerType === 'pen'   →  draw ✅
-     • Finger/touch  → e.pointerType === 'touch' →  ignore 🚫
-     • Mouse/track-pad (laptop) → 'mouse'        →  draw ✅
-  */
-  if (e.pointerType === 'touch') {
-      // Let the finger keep its normal scrolling / zooming behaviour.
-      return;
-  }
+        // NEW: Two-finger tap gesture to switch color on tablets
+        if (isTabletMode && e.touches && e.touches.length === 2) {
+            e.preventDefault(); // Prevent zoom or other default actions
+            toggleColor();
+            return; // Stop the drawing process from starting
+        }
 
-  // Prevent accidental page scroll if someone drags with the Pencil or mouse.
-  e.preventDefault();
+        const currentTargetCanvas = e.currentTarget;
+        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+        if (!activeCtx ) return;
+        if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+        if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+        if (!isStudentInputAllowed && !isThelobookActive) return;
 
-  /* ========== existing logic (unchanged) ========== */
-  const currentTargetCanvas = e.currentTarget;
-  const activeCtx           = isThelobookActive ? thelobookCtx : ctx;
-  if (!activeCtx) return;
+        const pos = getPos(e, currentTargetCanvas); if (!pos) return;
+        if (e.touches) e.preventDefault();
+        drawing = true;
+        if (!isThelobookActive) userDrawingOccurred = true;
+        lastPos = pos;
 
-  // Respect which canvas is currently active
-  if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
-  if (!isThelobookActive && currentTargetCanvas !== canvas)           return;
+        if (isThelobookActive) {
+            activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+            activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+            if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
+        } else {
+            activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+            activeCtx.globalCompositeOperation = 'source-over';
+        }
 
-  // Block drawing on stages that shouldn’t accept input
-  if (!isStudentInputAllowed && !isThelobookActive) return;
-
-  const pos = getPos(e, currentTargetCanvas);
-  if (!pos) return;
-
-  drawing = true;
-  if (!isThelobookActive) userDrawingOccurred = true;
-  lastPos = pos;
-
-  /* ===== Set up stroke style / eraser mode ===== */
-  if (isThelobookActive) {
-      activeCtx.lineWidth                = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
-      activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
-      if (!isThelobookEraserActive) activeCtx.strokeStyle = INK_COLORS.black;
-  } else {
-      activeCtx.lineWidth                = THELOBOOK_PEN_LINEWIDTH;
-      activeCtx.globalCompositeOperation = 'source-over';
-  }
-
-  activeCtx.beginPath();
-  activeCtx.moveTo(pos.x, pos.y);
-
-  /* Mirror blue-ink answers onto the hidden “final answer” canvas */
-  if (!isThelobookActive && currentColor === 'blue') {
-      finalCtx.strokeStyle = INK_COLORS.blue;
-      finalCtx.beginPath();
-      finalCtx.moveTo(pos.x, pos.y);
-  }
-}
-
+        activeCtx.beginPath(); activeCtx.moveTo(pos.x, pos.y);
+        if (!isThelobookActive && currentColor === 'blue') {
+            finalCtx.strokeStyle = INK_COLORS.blue; finalCtx.beginPath(); finalCtx.moveTo(pos.x, pos.y);
+        }
+    }
     function handleDrawingMove(e) {
         if (!drawing) return;
         const currentTargetCanvas = e.currentTarget;
@@ -1580,41 +1555,42 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function addBoardDrawListeners() {
-        // Use the modern 'pointer' events which unify mouse, touch, and pen
-        canvas.addEventListener('pointerdown', handleDrawingStart);
-        canvas.addEventListener('pointermove', handleDrawingMove);
-        canvas.addEventListener('pointerup', handleDrawingEnd);
-        canvas.addEventListener('pointercancel', handleDrawingEnd);
-        canvas.addEventListener('pointerleave', handleDrawingEnd);
-    }
-    function removeBoardDrawListeners() {
-        // Remove the corresponding 'pointer' events
-        canvas.removeEventListener('pointerdown', handleDrawingStart);
-        canvas.removeEventListener('pointermove', handleDrawingMove);
-        canvas.removeEventListener('pointerup', handleDrawingEnd);
-        canvas.removeEventListener('pointercancel', handleDrawingEnd);
-        canvas.removeEventListener('pointerleave', handleDrawingEnd);
-    }
+        canvas.addEventListener('mousedown', handleDrawingStart);
+        canvas.addEventListener('mousemove', handleDrawingMove);
+        canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
+        canvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
+        canvas.addEventListener('touchend', handleDrawingEnd);
+        canvas.addEventListener('touchcancel', handleDrawingEnd);
+    }
+    function removeBoardDrawListeners() {
+        canvas.removeEventListener('mousedown', handleDrawingStart);
+        canvas.removeEventListener('mousemove', handleDrawingMove);
+        canvas.removeEventListener('touchstart', handleDrawingStart);
+        canvas.removeEventListener('touchmove', handleDrawingMove);
+        canvas.removeEventListener('touchend', handleDrawingEnd);
+        canvas.removeEventListener('touchcancel', handleDrawingEnd);
+    }
     function addThelobookDrawListeners() {
-        if (thelobookDrawListenersAttached) return;
-        // Use 'pointer' events for the thelobook canvas as well
-        thelobookCanvas.addEventListener('pointerdown', handleDrawingStart);
-        thelobookCanvas.addEventListener('pointermove', handleDrawingMove);
-        thelobookCanvas.addEventListener('pointerup', handleDrawingEnd);
-        thelobookCanvas.addEventListener('pointercancel', handleDrawingEnd);
-        thelobookCanvas.addEventListener('pointerleave', handleDrawingEnd);
-        thelobookDrawListenersAttached = true;
-    }
-    function removeThelobookDrawListeners() {
-        if (!thelobookDrawListenersAttached) return;
-        // Remove the corresponding 'pointer' events
-        thelobookCanvas.removeEventListener('pointerdown', handleDrawingStart);
-        thelobookCanvas.removeEventListener('pointermove', handleDrawingMove);
-        thelobookCanvas.removeEventListener('pointerup', handleDrawingEnd);
-        thelobookCanvas.removeEventListener('pointercancel', handleDrawingEnd);
-        thelobookCanvas.removeEventListener('pointerleave', handleDrawingEnd);
-        thelobookDrawListenersAttached = false;
-    }
+        if (thelobookDrawListenersAttached) return;
+        thelobookCanvas.addEventListener('mousedown', handleDrawingStart);
+        thelobookCanvas.addEventListener('mousemove', handleDrawingMove);
+        thelobookCanvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
+        thelobookCanvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
+        thelobookCanvas.addEventListener('touchend', handleDrawingEnd);
+        thelobookCanvas.addEventListener('touchcancel', handleDrawingEnd);
+        thelobookDrawListenersAttached = true;
+    }
+    function removeThelobookDrawListeners() {
+        if (!thelobookDrawListenersAttached) return;
+        thelobookCanvas.removeEventListener('mousedown', handleDrawingStart);
+        thelobookCanvas.removeEventListener('mousemove', handleDrawingMove);
+        thelobookCanvas.removeEventListener('touchstart', handleDrawingStart);
+        thelobookCanvas.removeEventListener('touchmove', handleDrawingMove);
+        thelobookCanvas.removeEventListener('touchend', handleDrawingEnd);
+        thelobookCanvas.removeEventListener('touchcancel', handleDrawingEnd);
+        thelobookDrawListenersAttached = false;
+    }
+
     function wrapText(context, text, x, y, maxWidth, lineHeight){
         const words = text.split(' '); let line = ''; let currentY = y; let lines = [];
         for(let n = 0; n < words.length; n++) {
@@ -2191,16 +2167,12 @@ function showToast(rawMsg, duration = 4000) {
 }
 
 function checkTabletMode() {
-    // This is the new, more robust way to detect a tablet.
-    // It correctly defines a tablet as any device that:
-    // 1. Has a "coarse" primary pointer (i.e., a finger is the main input).
-    // 2. Has a screen width of at least 768px (a standard tablet breakpoint).
-    //
-    // CRUCIALLY, by removing the `max-width` restriction, this will now work
-    // correctly on larger iPads, iPad Pros, and other high-resolution tablets.
-    const tabletMediaQuery = window.matchMedia('(min-width: 768px) and (pointer: coarse)');
+    // This media query should match the one in your CSS
+    const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
+    const landscapeQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (min-height: 500px)');
 
-    isTabletMode = tabletMediaQuery.matches;
+    isTabletMode = tabletQuery.matches || landscapeQuery.matches;
+    console.log("Tablet Mode:", isTabletMode);
 }
 	function updateUserPointsInFirestore(pointsToAdd) {
         const user = auth.currentUser;
@@ -2933,7 +2905,11 @@ function closeThelobook(savePage = true) {
         });
         resizeCanvases();
         addBoardDrawListeners();
-        
+        window.addEventListener('mouseup', handleDrawingEnd);
+        window.addEventListener('mouseleave', handleDrawingEnd);
+        window.addEventListener('touchend', handleDrawingEnd);
+        window.addEventListener('touchcancel', handleDrawingEnd);
+
         const urlParams = new URLSearchParams(window.location.search);
         const lessonFileName = urlParams.get('lessonFile');
         if (lessonFileName) {
