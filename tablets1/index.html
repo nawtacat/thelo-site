@@ -190,20 +190,6 @@ body.lang-en {
     opacity: 0;
     pointer-events: none;
   }
-  /* 🚫 Disable long-press selection & callout on every canvas layer */
-#boardWrap,
-#boardWrap canvas,       /* board, replay, background, finalAnswer */
-#thelobookCanvas {
-    -webkit-user-select: none;   /* Safari / iOS */
-    user-select: none;           /* Standard */
-    -webkit-touch-callout: none; /* Hide “Copy / Paste / Look Up” bubble */
-}
-
-/* Optional: remove visual highlight if the OS still tries */
-#boardWrap ::selection {
-    background: transparent;
-}
-
 
   #thelobookCanvas {
     backdrop-filter: blur(12px);
@@ -1133,13 +1119,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const approveSounds_en = []; const disapproveSounds_en = [];
 
     /* ========== State Variables ========== */
-		let isPenCurrentlyActive = false; // Tracks if the pen is actively drawing
-let penUpCooldownTimer = null;    // Manages a small delay after lifting the pen
           let isTabletMode = false;
-	let lastTapTime = 0;
-let lastTapPosition = { x: 0, y: 0 }; // ADD THIS: To store tap coordinates
-const DOUBLE_TAP_THRESHOLD = 300;     // Time in milliseconds for a double-tap
-const DOUBLE_TAP_MAX_DISTANCE = 40;   // Maximum distance in pixels for a valid double-tap
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
     let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
@@ -1164,38 +1144,6 @@ const DOUBLE_TAP_MAX_DISTANCE = 40;   // Maximum distance in pixels for a valid 
     const PAGES_PER_GRID_BATCH = 32;
     let tempFullPageCanvasForThumbnails = null;
     let pageGridInstructionsShown = false;
-    /* =================================================================
-   NEW: iPad-Specific Input Handling
-   ================================================================= */
-
-// Helper 1: A robust function to specifically identify an iPad.
-const isIPad = (() => {
-  // Classic user agent check for older iPads
-  if (/iPad/.test(navigator.userAgent)) return true;
-  // Modern check for iPads on iPadOS 13+ that report as 'MacIntel'
-  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
-  return false;
-})();
-
-// State variable for the double-tap gesture
-let lastFingerTap = 0;
-
-// Helper 2: A clean function to handle the double-tap logic
-function handleFingerToggle(e) {
-  if (!isIPad) return;                    // Ignore if not on an iPad
-  if (e.pointerType !== 'touch') return;  // Ignore if it's a Pencil or mouse
-  
-  const now = Date.now();
-
-  // If two taps happen within 300ms, toggle the color
-  if (now - lastFingerTap < 300) {
-    e.preventDefault();                   // Prevent the browser from zooming
-    toggleColor();                        // Call your existing color switch function
-  }
-  
-  // Record the time of this tap for the next one
-  lastFingerTap = now;
-}
 
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
@@ -1349,17 +1297,11 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
         }, 150);
     }
     function setupContexts() {
-        if (!backgroundCanvas || !replayCanvas || !canvas || !finalAnswerCanvas || !thelobookCanvas) return;
-
-        // Get the context with the low-latency hint
-        const contextOptions = { desynchronized: true };
-        replayCtx = replayCanvas.getContext('2d', contextOptions);
-        thelobookCtx = thelobookCanvas.getContext('2d', contextOptions);
-        ctx.getContextAttributes().desynchronized = true; // Also apply to the main context
-
-        [bgCtx, replayCtx, ctx, finalCtx, thelobookCtx].forEach(context => {
-            if (context) { context.resetTransform(); context.scale(devicePixelRatio, devicePixelRatio); }
-        });
+        if (!backgroundCanvas || !replayCanvas || !canvas || !finalAnswerCanvas || !thelobookCanvas) return;
+        replayCtx = replayCanvas.getContext('2d'); thelobookCtx = thelobookCanvas.getContext('2d');
+        [bgCtx, replayCtx, ctx, finalCtx, thelobookCtx].forEach(context => {
+            if (context) { context.resetTransform(); context.scale(devicePixelRatio, devicePixelRatio); }
+        });
         bgCtx.lineWidth = 2; bgCtx.strokeStyle = '#333'; bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
         const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
         bgCtx.font = `20px ${fontFamily}`; bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'top';
@@ -1558,31 +1500,31 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
     }
 
     function handleDrawingStart(e) {
-  /* ── 1. Check for the finger double-tap gesture on iPad ── */
-  handleFingerToggle(e);
-
-  /* ── 2. The main gatekeeper for iPad input ── */
-  // If we are on an iPad AND the input is NOT a pen...
-  if (isIPad && e.pointerType !== 'pen') {
-      // ...then it must be a finger or mouse. We block drawing and allow
-      // the browser's default behavior (scrolling/pinching).
+  /* ──────────────────────────────────────────────────────────────
+     Stylus-only gate for iPad
+     ──────────────────────────────────────────────────────────────
+     • Apple Pencil  → e.pointerType === 'pen'   →  draw ✅
+     • Finger/touch  → e.pointerType === 'touch' →  ignore 🚫
+     • Mouse/track-pad (laptop) → 'mouse'        →  draw ✅
+  */
+  if (e.pointerType === 'touch') {
+      // Let the finger keep its normal scrolling / zooming behaviour.
       return;
   }
-  /* ───────────────────────────────────────────────────────── */
 
-  // If the code reaches here, it's either:
-  // a) A pen on an iPad.
-  // b) Any input on a non-iPad device (phone, desktop).
-  // In these cases, we want to draw, so we prevent default scroll.
+  // Prevent accidental page scroll if someone drags with the Pencil or mouse.
   e.preventDefault();
 
-  /* ========== ORIGINAL DRAW-SETUP (This part is unchanged) ========== */
+  /* ========== existing logic (unchanged) ========== */
   const currentTargetCanvas = e.currentTarget;
   const activeCtx           = isThelobookActive ? thelobookCtx : ctx;
   if (!activeCtx) return;
 
+  // Respect which canvas is currently active
   if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
   if (!isThelobookActive && currentTargetCanvas !== canvas)           return;
+
+  // Block drawing on stages that shouldn’t accept input
   if (!isStudentInputAllowed && !isThelobookActive) return;
 
   const pos = getPos(e, currentTargetCanvas);
@@ -1592,7 +1534,7 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
   if (!isThelobookActive) userDrawingOccurred = true;
   lastPos = pos;
 
-  /* stroke style / eraser handling */
+  /* ===== Set up stroke style / eraser mode ===== */
   if (isThelobookActive) {
       activeCtx.lineWidth                = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
       activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
@@ -1605,72 +1547,37 @@ console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLa
   activeCtx.beginPath();
   activeCtx.moveTo(pos.x, pos.y);
 
-  /* mirror blue-ink answers */
+  /* Mirror blue-ink answers onto the hidden “final answer” canvas */
   if (!isThelobookActive && currentColor === 'blue') {
       finalCtx.strokeStyle = INK_COLORS.blue;
       finalCtx.beginPath();
       finalCtx.moveTo(pos.x, pos.y);
   }
 }
+
     function handleDrawingMove(e) {
-    if (!drawing) return;
-
-    // --- High-Fidelity Stroke Reconstruction ---
-
-    // Define the active canvas and context once.
-    const currentTargetCanvas = e.currentTarget;
-    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-
-    // Run permission checks once.
-    if (!activeCtx) return;
-    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
-    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
-    if (!isStudentInputAllowed && !isThelobookActive) return;
-
-    // Get the array of all points the hardware captured since the last event.
-    // This includes the "skipped" points.
-    const coalescedEvents = e.getCoalescedEvents();
-
-    // Loop through every single point, including the coalesced ones.
-    for (const event of coalescedEvents) {
-        const pos = getPos(event, currentTargetCanvas);
-        if (!pos) continue;
-
-        // Draw a small line segment from the previous point to the current point.
-        activeCtx.beginPath();
-        activeCtx.moveTo(lastPos.x, lastPos.y);
-        activeCtx.lineTo(pos.x, pos.y);
-        activeCtx.stroke();
-
-        // Do the same for the blue answer canvas if needed.
+        if (!drawing) return;
+        const currentTargetCanvas = e.currentTarget;
+        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+        if (!activeCtx) return;
+        if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+        if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+        if (!isStudentInputAllowed && !isThelobookActive) return;
+        const pos = getPos(e, currentTargetCanvas); if (!pos) return;
+        if (e.touches) e.preventDefault();
+        activeCtx.lineTo(pos.x, pos.y); activeCtx.stroke();
         if (!isThelobookActive && currentColor === 'blue') {
-            finalCtx.beginPath();
-            finalCtx.moveTo(lastPos.x, lastPos.y);
-            finalCtx.lineTo(pos.x, pos.y);
-            finalCtx.stroke();
+            if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
+            finalCtx.lineTo(pos.x, pos.y); finalCtx.stroke();
         }
-
-        // IMPORTANT: Update the last position to the current point for the next iteration.
         lastPos = pos;
     }
-}
     function handleDrawingEnd(e) {
-    // When a pen stroke ends, we exit "Pen Mode" after a very short delay.
-    // This delay prevents accidental gestures if you lift and tap quickly.
-    if (e.pointerType === 'pen') {
-        clearTimeout(penUpCooldownTimer); // Clear any previous timer
-        penUpCooldownTimer = setTimeout(() => {
-            isPenCurrentlyActive = false;
-        }, 200); // A 200ms cooldown is enough.
+        if (!drawing) return;
+        const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+        if (!activeCtx) return;
+        drawing = false; activeCtx.beginPath();
     }
-
-    // The rest of the function is unchanged.
-    if (!drawing) return;
-    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-    if (!activeCtx) return;
-    drawing = false;
-    activeCtx.beginPath();
-}
 
     function addBoardDrawListeners() {
         // Use the modern 'pointer' events which unify mouse, touch, and pen
@@ -3026,9 +2933,7 @@ function closeThelobook(savePage = true) {
         });
         resizeCanvases();
         addBoardDrawListeners();
-        /* Prevent iPadOS from showing the system context-menu on long press */
-boardWrapper.addEventListener('contextmenu', e => e.preventDefault());
-
+        
         const urlParams = new URLSearchParams(window.location.search);
         const lessonFileName = urlParams.get('lessonFile');
         if (lessonFileName) {
