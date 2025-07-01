@@ -433,6 +433,26 @@ body.lang-en {
     display: inline-flex !important;
     animation: pulse-glow 2s infinite ease-in-out;
 }
+/* ===== UI Controls ===== */
+#bottomBar {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 20;
+    gap: 0.75rem;
+    /* ADD THIS LINE for smooth animation */
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* ADD THIS NEW RULE to define the hidden state */
+#bottomBar.bar-hidden-by-stylus {
+    transform: translateY(150%);
+    pointer-events: none;
+}
 	/* ADD THIS CSS: For the Streak Modal */
 #streakModal {
     position: fixed;
@@ -1185,6 +1205,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const PAGES_PER_GRID_BATCH = 32;
     let tempFullPageCanvasForThumbnails = null;
     let pageGridInstructionsShown = false;
+    let buttonVanishTimer = null;
 
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
@@ -1557,16 +1578,19 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     function handleDrawingStart(e) {
     // For tablets, we ONLY allow drawing to start if a stylus is the input.
     if (isTabletMode && e.type.startsWith('touch')) {
-        // We check if at least one of the touch points is from a stylus.
         const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
 
         if (!isStylusPresent) {
-            // If no stylus is found, it's a finger or palm. We prevent all default
-            // actions (like scrolling/zooming) and stop the function immediately.
             e.preventDefault();
             return;
         }
-        // If a stylus IS present, we fall through to the drawing logic below.
+
+        // If a stylus is drawing, cancel any pending timer to show the bar.
+        if (buttonVanishTimer) {
+            clearTimeout(buttonVanishTimer);
+        }
+        // Immediately hide the bottom bar.
+        if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
     }
 
     // This part of the code is now only reachable by a stylus on a tablet, or a mouse on desktop.
@@ -1619,6 +1643,16 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         lastPos = pos;
     }
     function handleDrawingEnd(e) {
+    // When the stylus is lifted, set a timer to bring the bar back.
+    if (isTabletMode) {
+        if (buttonVanishTimer) {
+            clearTimeout(buttonVanishTimer);
+        }
+        buttonVanishTimer = setTimeout(() => {
+            if (bottomBar) bottomBar.classList.remove('bar-hidden-by-stylus');
+        }, 500); // 500 milliseconds = 0.5 seconds
+    }
+
     if (!drawing) return;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
