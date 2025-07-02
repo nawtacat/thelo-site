@@ -1199,6 +1199,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const PAGES_PER_GRID_BATCH = 32;
     let tempFullPageCanvasForThumbnails = null;
     let buttonVanishTimer = null;
+    let stagesWithPointsAwarded = new Set();
 
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
@@ -1273,10 +1274,10 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         if (pointsDisplayElement) pointsDisplayElement.textContent = `${TXT.achievementsPrefix}${sessionPoints}`;
     }
     async function loadLesson(lessonJsonPath) {
-    if (isLessonLoading) return; isLessonLoading = true;
-    // We no longer change the button here at the start.
-    if(prevBtn) prevBtn.disabled = true;
-    if (dashboardBtn) dashboardBtn.style.display = 'none'; 
+    if (isLessonLoading) return;
+    isLessonLoading = true;
+    if (prevBtn) prevBtn.disabled = true;
+    if (dashboardBtn) dashboardBtn.style.display = 'none';
     if (isThelobookActive) closeThelobook(false);
     if (isPageGridVisible) closePageGridView();
 
@@ -1286,7 +1287,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         lessonStagesRoot = await response.json();
         if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
         const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
-        setLanguage(lessonLang); 
+        setLanguage(lessonLang);
         let TXT = getCurrentUIText();
         lessonStages = lessonStagesRoot.stages;
 
@@ -1294,50 +1295,61 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         if (chatArea.children.length > 0) chatArea.innerHTML = '';
         addChatMessage('AI', formatAIMessage('welcome'));
 
-        sessionPoints = 0; 
-        updatePointsDisplay(); 
+        sessionPoints = 0;
+        updatePointsDisplay();
+        
+        // Reset the tracking for which stages have awarded points
+        stagesWithPointsAwarded = new Set();
 
         document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
         console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
-        
+
         // Reset stage-related variables
-        currentStageIndex = -1; currentStageData = null; isStudentInputAllowed = false;
-        if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null;
-        if(currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
-        currentStageAudio = null; isMediaScrubbingActive = false;
-        if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-        if(bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
-        if(replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width, replayCanvas.height);
-        if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if(finalCtx) { finalCtx.fillStyle="#FFFFFF"; finalCtx.fillRect(0, 0, finalAnswerCanvas.width, finalAnswerCanvas.height); }
-        thelobookPages = []; currentThelobookPageIndex = 0; updateThelobookPageControls();
-        
-        // We no longer change the button here in the try block.
+        currentStageIndex = -1;
+        currentStageData = null;
+        isStudentInputAllowed = false;
+        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+        if (currentStageAudio && !currentStageAudio.paused) {
+            currentStageAudio.pause();
+            currentStageAudio.onloadedmetadata = null;
+            currentStageAudio.onended = null;
+        }
+        currentStageAudio = null;
+        isMediaScrubbingActive = false;
+        if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+        if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+        if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width, replayCanvas.height);
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (finalCtx) {
+            finalCtx.fillStyle = "#FFFFFF";
+            finalCtx.fillRect(0, 0, finalAnswerCanvas.width, finalAnswerCanvas.height);
+        }
+        thelobookPages = [];
+        currentThelobookPageIndex = 0;
+        updateThelobookPageControls();
 
     } catch (error) {
-        console.error("Error loading lesson:", error); 
+        console.error("Error loading lesson:", error);
         let TXT = getCurrentUIText();
         addChatMessage('AI', `${formatAIMessage('error')}: ${error.message}`);
-        // We no longer change the button here in the catch block.
     } finally {
         isLessonLoading = false;
-        
-        // =======================================================
+
         // NEW, ROBUST BUTTON LOGIC:
         if (lessonStages && lessonStages.length > 0) {
             // Success! Lesson loaded.
-            if(nextCheckBtn) { 
-                nextCheckBtn.disabled = false; 
-                nextCheckBtn.textContent = getCurrentUIText().start; 
+            if (nextCheckBtn) {
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = getCurrentUIText().start;
             }
         } else {
             // Failure! Lesson did not load.
-             if(nextCheckBtn) { 
-                nextCheckBtn.textContent = getCurrentUIText().error; 
-                nextCheckBtn.disabled = true; 
+            if (nextCheckBtn) {
+                nextCheckBtn.textContent = getCurrentUIText().error;
+                nextCheckBtn.disabled = true;
             }
         }
-        // =======================================================
 
         if (!UI_TEXT[currentLang]) currentLang = 'hy';
         updateAllUITexts();
@@ -2137,15 +2149,22 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
         if (isMCQStage) return;
         if (nextCheckBtn.textContent === TXT.gotIt) {
-            stopCurrentStageAudio();
-            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-            userPoints += randomPoints; // This updates the permanent score
-            sessionPoints += randomPoints; // ADDED: This updates the score for this lesson
-            updateUserPointsInFirestore(randomPoints);
-            updatePointsDisplay();
-            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
-        }
+    // Check if points have NOT been awarded for the current slide yet
+    if (!stagesWithPointsAwarded.has(currentStageIndex)) {
+        // Add the current slide index to our list to prevent future points
+        stagesWithPointsAwarded.add(currentStageIndex);
+
+        // Award the points (this block now only runs once per slide)
+        stopCurrentStageAudio();
+        const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
+        userPoints += randomPoints;
+        sessionPoints += randomPoints;
+        updateUserPointsInFirestore(randomPoints);
+        updatePointsDisplay();
+        addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+        if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
+    }
+}
         switch (currentStageData.type) {
             case 'question_handwriting': checkHandwritingAnswer(); break;
             default: nextStage(); break;
