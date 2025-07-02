@@ -925,6 +925,8 @@ body.lang-en {
         border-left: none;
     }
 }
+	#thelobookPagesBtn,
+  #thelobookPageGridView { display:none!important; }
 
 </style>
 </head>
@@ -1170,10 +1172,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const thelobookEraserBtn = document.getElementById('thelobookEraserBtn');
     const thelobookAddPageBtn = document.getElementById('thelobookAddPageBtn');
 
-    const thelobookPageGridViewEl = document.getElementById('thelobookPageGridView');
-    const pageGridBatchIndicatorEl = document.getElementById('pageGridBatchIndicator');
-    const closePageGridBtnEl = document.getElementById('closePageGridBtn');
-    const thelobookPageGridContentContainerEl = document.getElementById('thelobookPageGridContentContainer');
 
     const audioElements = {};
     const approveSounds_hy = []; const disapproveSounds_hy = [];
@@ -1200,11 +1198,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const THELOBOOK_ERASER_LINEWIDTH = 20;
     const THELOBOOK_PEN_LINEWIDTH = 3;
     let isPageSwitchingAnimation = false;
-    let isPageGridVisible = false;
-    let currentPageGridBatch = 0;
-    const PAGES_PER_GRID_BATCH = 32;
     let tempFullPageCanvasForThumbnails = null;
-    let pageGridInstructionsShown = false;
     let buttonVanishTimer = null;
 
     /* ========== Language Functions ========== */
@@ -2800,153 +2794,7 @@ function closeThelobook(savePage = true) {
        
         wasMediaPlayingBeforeThelobook = false; 
     }
-    function openPageGridView() {
-        if (isPageGridVisible) return;
-        if (isThelobookActive) {
-            saveCurrentThelobookPageDrawing();
-            thelobookCanvas.classList.add('grid-underlay');
-            thelobookControlsEl.classList.remove('visible');
-        } else {
-            captureMediaState();
-            thelobookCanvas.classList.add('active', 'grid-underlay');
-        }
-
-        isPageGridVisible = true;
-        thelobookPageGridViewEl.classList.add('visible');
-        currentPageGridBatch = Math.floor(currentThelobookPageIndex / PAGES_PER_GRID_BATCH);
-        renderPageGridBatch(currentPageGridBatch, false);
-        if (!pageGridInstructionsShown) {
-            addChatMessage('AI', getCurrentUIText().pageGridInstructions);
-            pageGridInstructionsShown = true;
-        }
-        updateAllUITexts();
-    }
-
-    function closePageGridView() {
-        if (!isPageGridVisible) return;
-        isPageGridVisible = false;
-        thelobookPageGridViewEl.classList.remove('visible');
-        thelobookCanvas.classList.remove('grid-underlay');
-
-        if (isThelobookActive) {
-            thelobookCanvas.classList.add('active');
-            thelobookControlsEl.classList.add('visible');
-            loadThelobookPageDrawing(currentThelobookPageIndex);
-        } else {
-            thelobookCanvas.classList.remove('active');
-            resumeMediaState();
-        }
-        updateAllUITexts();
-    }
-
-    function renderPageGridBatch(batchIndex, animateDirection = null) {
-        currentPageGridBatch = batchIndex;
-        const TXT = getCurrentUIText();
-        const totalPages = Math.max(0, thelobookPages.length);
-        const startPageIndex = batchIndex * PAGES_PER_GRID_BATCH;
-        const endPageIndex = Math.min(startPageIndex + PAGES_PER_GRID_BATCH, totalPages);
-
-        if(pageGridBatchIndicatorEl && TXT.pageGridBatchIndicator) {
-            pageGridBatchIndicatorEl.textContent = (totalPages > 0) ?
-                TXT.pageGridBatchIndicator.replace("{startPage}", startPageIndex + 1).replace("{endPage}", endPageIndex) :
-                "No Pages";
-        }
-
-        const newBatchDiv = document.createElement('div');
-        newBatchDiv.classList.add('page-grid-batch');
-
-        if (!tempFullPageCanvasForThumbnails) {
-            tempFullPageCanvasForThumbnails = document.createElement('canvas');
-        }
-        const tempSharedCtx = tempFullPageCanvasForThumbnails.getContext('2d');
-        const THUMB_CSS_WIDTH = 120; const THUMB_CSS_HEIGHT = 90;
-
-
-        for (let i = startPageIndex; i < endPageIndex; i++) {
-            const pageNumDisplay = i + 1;
-            const thumbnailDiv = document.createElement('div');
-            thumbnailDiv.classList.add('page-thumbnail');
-            thumbnailDiv.dataset.pageIndex = i;
-            thumbnailDiv.title = `Page ${pageNumDisplay}`;
-
-            const thumbCanvasEl = document.createElement('canvas');
-            thumbCanvasEl.width = THUMB_CSS_WIDTH * devicePixelRatio;
-            thumbCanvasEl.height = THUMB_CSS_HEIGHT * devicePixelRatio;
-            thumbCanvasEl.style.width = `${THUMB_CSS_WIDTH}px`;
-            thumbCanvasEl.style.height = `${THUMB_CSS_HEIGHT}px`;
-            const thumbCtx = thumbCanvasEl.getContext('2d');
-            thumbCtx.imageSmoothingEnabled = true;
-            thumbCtx.imageSmoothingQuality = "high";
-
-
-            if (thelobookPages[i]) {
-                const pageImageData = thelobookPages[i];
-                tempFullPageCanvasForThumbnails.width = pageImageData.width;
-                tempFullPageCanvasForThumbnails.height = pageImageData.height;
-                tempSharedCtx.putImageData(pageImageData, 0, 0);
-                thumbCtx.drawImage(tempFullPageCanvasForThumbnails, 0, 0, tempFullPageCanvasForThumbnails.width, tempFullPageCanvasForThumbnails.height, 0, 0, THUMB_CSS_WIDTH * devicePixelRatio, THUMB_CSS_HEIGHT * devicePixelRatio);
-            } else {
-                thumbCtx.save();
-                thumbCtx.scale(devicePixelRatio, devicePixelRatio);
-                thumbCtx.fillStyle = '#f0f0f0';
-                thumbCtx.fillRect(0,0, THUMB_CSS_WIDTH, THUMB_CSS_HEIGHT);
-                thumbCtx.restore();
-            }
-            thumbnailDiv.appendChild(thumbCanvasEl);
-            const pageNumberSpan = document.createElement('span');
-            pageNumberSpan.classList.add('page-thumbnail-number');
-            pageNumberSpan.textContent = pageNumDisplay;
-            thumbnailDiv.appendChild(pageNumberSpan);
-
-
-            thumbnailDiv.addEventListener('click', () => {
-                const shouldOpenEditorIfNotAlready = !isThelobookActive;
-                currentThelobookPageIndex = i;
-                closePageGridView();
-
-                if (shouldOpenEditorIfNotAlready) {
-                    openThelobook();
-                } else {
-                    loadThelobookPageDrawing(currentThelobookPageIndex);
-                }
-            });
-            newBatchDiv.appendChild(thumbnailDiv);
-        }
-
-        const oldBatchDiv = thelobookPageGridContentContainerEl.querySelector('.page-grid-batch');
-
-        if (oldBatchDiv && animateDirection) {
-            if (animateDirection === 'next') {
-                oldBatchDiv.classList.add('exiting-left');
-                newBatchDiv.classList.add('entering-right');
-            } else {
-                oldBatchDiv.classList.add('exiting-right');
-                newBatchDiv.classList.add('entering-left');
-            }
-            oldBatchDiv.addEventListener('transitionend', () => oldBatchDiv.remove(), { once: true });
-            thelobookPageGridContentContainerEl.appendChild(newBatchDiv);
-            requestAnimationFrame(() => newBatchDiv.classList.remove('entering-left', 'entering-right'));
-        } else {
-            if(oldBatchDiv) oldBatchDiv.remove();
-            thelobookPageGridContentContainerEl.appendChild(newBatchDiv);
-        }
-    }
-
-    function changePageGridBatch(direction) {
-        if (!isPageGridVisible) return;
-        const maxBatch = Math.max(0, Math.ceil(thelobookPages.length / PAGES_PER_GRID_BATCH) - 1);
-        let newBatch = currentPageGridBatch + direction;
-
-        if (newBatch < 0) newBatch = maxBatch;
-        if (newBatch > maxBatch) newBatch = 0;
-        if (thelobookPages.length === 0) newBatch = 0;
-
-
-        if (newBatch !== currentPageGridBatch || thelobookPages.length === 0 || (newBatch === 0 && currentPageGridBatch ===0)) {
-                renderPageGridBatch(newBatch, direction > 0 ? 'next' : (direction < 0 ? 'prev' : null) );
-        }
-    }
-
+    
     function handleKeyDown(event){
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
@@ -3097,8 +2945,6 @@ window.addEventListener('wheel', function(e) {
         if (clearBtn) clearBtn.onclick = clearUserCanvas;
         if (thelobookBtn) thelobookBtn.onclick = () => { isThelobookActive ? closeThelobook(true) : openThelobook(); };
 
-        if (thelobookPagesBtn) thelobookPagesBtn.onclick = () => { isPageGridVisible ? closePageGridView() : openPageGridView(); };
-        if (closePageGridBtnEl) closePageGridBtnEl.onclick = closePageGridView;
         if (thelobookPrevPageBtn) thelobookPrevPageBtn.onclick = () => changeThelobookPageSimple(-1);
         if (thelobookNextPageBtn) thelobookNextPageBtn.onclick = () => changeThelobookPageSimple(1);
         if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
