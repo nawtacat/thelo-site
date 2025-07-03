@@ -10,6 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -1003,7 +1004,6 @@ body.lang-en {
       '6LcdgkUrAAAAANakhruotKBunN_IvJzH7X7YhXKU',
       true
     );
-    const VISION_FUNCTION_URL = "https://us-central1-physmathacademy-722b3.cloudfunctions.net/analyzeHandwriting";
     const INK_COLORS = { black: '#000000', blue: getComputedStyle(document.documentElement).getPropertyValue('--ink-blue').trim() || '#2563eb' };
 
     const UI_TEXT = {
@@ -1043,6 +1043,8 @@ body.lang-en {
             pageGridInstructions: "Սեղմեք 'C' հաջորդ խմբի համար, 'X' նախորդի։",
             addPage: "Ավելացնել էջ",
 	    viewDashboard: "Տեսնել առաջընթացը", // ADD THIS LINE
+	    limitReached: "Դուք գերազանցել եք ձեր ամսական վերլուծությունների սահմանաչափը։ Խնդրում ենք փորձել կրկին հաջորդ ամիս։"
+},
 		
         },
         en: {
@@ -1080,6 +1082,7 @@ body.lang-en {
             pageGridInstructions: "Press 'C' for Next Batch, 'X' for Previous Batch.",
             addPage: "Add Page",
 	    viewDashboard: "View Your Progress",
+	    limitReached: "You have reached your monthly analysis limit. Please try again next month."
         }
     };
 
@@ -2427,144 +2430,129 @@ function showStreakCelebrationModal(streakCount, isNewRecord) {
 
     modal.classList.remove('modal-hidden');
 }	
-		
-async function checkHandwritingAnswer(){
-    if (isThelobookActive || isPageGridVisible) return;
-    stopCurrentStageAudio();
-    if (!currentStageData || currentStageData.type !== 'question_handwriting') return;
-    if (nextCheckBtn.disabled || isTransitioning) return;
-    
-    const TXT = getCurrentUIText();
-    nextCheckBtn.disabled = true;
-    nextCheckBtn.textContent = TXT.checking;
-    nextCheckBtn.classList.remove('correct', 'incorrect');
-    
-    if(isImageModeActive) {
-        imageTerminalFeedback.innerHTML = `<span>${TXT.checking}</span>`;
-        imageTerminalFeedback.style.opacity = 1;
-    } else {
-        addChatMessage('AI', formatAIMessage('checkingAI'));
-    }
+	// REPLACE your entire old function with this new one
+async function checkHandwritingAnswer() {
+    if (isThelobookActive || isPageGridVisible) return;
+    stopCurrentStageAudio();
+    if (!currentStageData || currentStageData.type !== 'question_handwriting') return;
+    if (nextCheckBtn.disabled || isTransitioning) return;
 
-    let base64ImageData;
-    try {
-        const blankCanvas = document.createElement('canvas');
-        blankCanvas.width = finalAnswerCanvas.width;
-        blankCanvas.height = finalAnswerCanvas.height;
-        const finalAnswerDataUrl = finalAnswerCanvas.toDataURL('image/png');
-        if (finalAnswerDataUrl === blankCanvas.toDataURL()) {
-            throw new Error("BLANK_ANSWER");
-        }
-        base64ImageData = finalAnswerDataUrl.split(',')[1];
-        if (!base64ImageData) throw new Error("Could not get image data.");
-    } catch (error) {
-        const msg = error.message === "BLANK_ANSWER" ? formatAIMessage('blankBlueWarning') : formatAIMessage('imageDataError', { errorMessage: error.message });
-        const shortMsg = "Please write your answer in blue ink.";
-        isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', msg);
-        playRandomFeedback('disapprove');
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
-        return;
-    }
-    
-    try {
-        const response = await fetch(VISION_FUNCTION_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', },
-            body: JSON.stringify({ imageBase64: base64ImageData })
-        });
-        if (!response.ok) {
-            let errorBodyText = await response.text();
-            let errorBody = {};
-            try { errorBody = JSON.parse(errorBodyText); } catch (e) {}
-            const errorMessage = errorBody?.error || errorBodyText.substring(0,150) || `HTTP error ${response.status}`;
-            if (response.status === 401 || response.status === 403) {
-                throw new Error(TXT.apiKeyPermissionError + " (Or Cloud Function not public)");
-            }
-            if (errorMessage.toLowerCase().includes('api key') || errorMessage.toLowerCase().includes('permission denied')) {
-                throw new Error(TXT.apiKeyPermissionError);
-            } else if ((response.status === 400 || String(response.status).startsWith('5')) && errorMessage.toLowerCase().includes('billing')) {
-                throw new Error(TXT.apiBillingError);
-            }
-            throw new Error(errorMessage);
-        }
-        
-        const result = await response.json();
-        let detectedText = '';
-        if (result && typeof result.text === 'string') { detectedText = result.text; }
-        else if (result?.responses?.[0]?.fullTextAnnotation?.text) { detectedText = result.responses[0].fullTextAnnotation.text; }
-        else if (result?.error?.message) { throw new Error(`Cloud Function error: ${result.error.message}`); }
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
+    nextCheckBtn.classList.remove('correct', 'incorrect');
 
-        if (!detectedText.trim()) {
-            throw new Error("NO_TEXT_FOUND");
-        }
-        
-        let cleanedText = detectedText.replace(/\s+/g, '').replace(/[oO]/g, '0').replace(/[lLliI]/g, '1');
-        const detectedAnswer = (cleanedText.match(/\d+/g) || [''])[0];
-        const correctAnswer = String(currentStageData.correctAnswerOcr);
-        
-        if (detectedAnswer === correctAnswer) {
-            const pointsGained = 10;
-            const feedbackForTerminal = "🎉 Correct!";
-            playRandomFeedback('approve');
+    if (isImageModeActive) {
+        imageTerminalFeedback.innerHTML = `<span>${TXT.checking}</span>`;
+        imageTerminalFeedback.style.opacity = 1;
+    } else {
+        addChatMessage('AI', formatAIMessage('checkingAI'));
+    }
+
+    let base64ImageData;
+    try {
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = finalAnswerCanvas.width;
+        blankCanvas.height = finalAnswerCanvas.height;
+        const finalAnswerDataUrl = finalAnswerCanvas.toDataURL('image/png');
+        if (finalAnswerDataUrl === blankCanvas.toDataURL()) {
+            throw new Error("BLANK_ANSWER");
+        }
+        base64ImageData = finalAnswerDataUrl.split(',')[1];
+    } catch (error) {
+        const msg = error.message === "BLANK_ANSWER" ? formatAIMessage('blankBlueWarning') : formatAIMessage('imageDataError', { errorMessage: error.message });
+        const shortMsg = "Please write your answer in blue ink.";
+        isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', msg);
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
+        return;
+    }
+
+    try {
+        // Get a reference to the callable function by its name
+        const functions = firebase.functions();
+        const analyzeHandwriting = functions.httpsCallable('analyzeHandwritingV2');
+
+        // Call the function and await the result
+        const result = await analyzeHandwriting({ imageBase64: base64ImageData });
+        const detectedText = result.data.text || '';
+
+        if (!detectedText.trim()) {
+            throw new Error("NO_TEXT_FOUND");
+        }
+
+        let cleanedText = detectedText.replace(/\s+/g, '').replace(/[oO]/g, '0').replace(/[lLliI]/g, '1');
+        const detectedAnswer = (cleanedText.match(/\d+/g) || [''])[0];
+        const correctAnswer = String(currentStageData.correctAnswerOcr);
+
+        if (detectedAnswer === correctAnswer) {
+            const pointsGained = 10;
+            const feedbackForTerminal = "🎉 Correct!";
+            playRandomFeedback('approve');
             userPoints += pointsGained;
             sessionPoints += pointsGained;
             updatePointsDisplay();
-	        updateUserPointsInFirestore(pointsGained);
+            updateUserPointsInFirestore(pointsGained);
             nextCheckBtn.classList.add('correct');
+            const chatMessageWithPoints = `${formatAIMessage('correctAI', { detectedAnswer })} ${formatAIMessage('pointsGained', { points: pointsGained })}`;
+            if (isImageModeActive) {
+                imageTerminalFeedback.innerHTML = `<span>${feedbackForTerminal}</span>`;
+                imageTerminalFeedback.style.opacity = 1;
+                lessonStages[currentStageIndex].headline = chatMessageWithPoints;
+                setTimeout(nextStage, 2000);
+            } else {
+                addChatMessage('AI', chatMessageWithPoints);
+                setTimeout(nextStage, 1500);
+            }
+        } else {
+            const feedbackForTerminal = "Not quite, try again!";
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+            if (isImageModeActive) {
+                imageTerminalFeedback.innerHTML = `<span>⚠️ ${feedbackForTerminal}</span>`;
+                imageTerminalFeedback.style.opacity = 1;
+                setTimeout(() => {
+                    imageTerminalFeedback.style.opacity = 0;
+                    nextCheckBtn.disabled = false;
+                    nextCheckBtn.textContent = TXT.check;
+                    nextCheckBtn.classList.remove('incorrect');
+                }, 2500);
+            } else {
+                addChatMessage('AI', formatAIMessage('incorrectAI', { detectedAnswer: detectedAnswer || 'none', correctAnswer }));
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                setTimeout(() => nextCheckBtn.classList.remove('incorrect'), 600);
+            }
+        }
+    } catch (error) {
+        console.error("Function call failed:", error);
+        let userErrorMessage;
+        const isKnownUITextError = Object.values(TXT).includes(error.message);
 
-            const chatMessageWithPoints = `${formatAIMessage('correctAI', { detectedAnswer })} ${formatAIMessage('pointsGained', { points: pointsGained })}`;
+        // **NEW**: Catch the specific error for the usage limit
+        if (error.code === 'functions/resource-exhausted') {
+            userErrorMessage = TXT.limitReached;
+        } else if (error.message === "NO_TEXT_FOUND") {
+            userErrorMessage = formatAIMessage('noTextFound');
+        } else if (isKnownUITextError) {
+            userErrorMessage = error.message;
+        } else {
+            userErrorMessage = formatAIMessage('apiErrorGeneral', { errorMessage: error.message });
+        }
 
-            if (isImageModeActive) {
-                imageTerminalFeedback.innerHTML = `<span>${feedbackForTerminal}</span>`;
-                imageTerminalFeedback.style.opacity = 1;
-                lessonStages[currentStageIndex].headline = chatMessageWithPoints;
-                setTimeout(nextStage, 2000);
-            } else {
-                addChatMessage('AI', chatMessageWithPoints);
-                setTimeout(nextStage, 1500);
-            }
-        } else {
-            const feedbackForTerminal = "Not quite, try again!";
-            playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-            if (isImageModeActive) {
-                imageTerminalFeedback.innerHTML = `<span>⚠️ ${feedbackForTerminal}</span>`;
-                imageTerminalFeedback.style.opacity = 1;
-                setTimeout(() => {
-                    imageTerminalFeedback.style.opacity = 0;
-                    nextCheckBtn.disabled = false;
-                    nextCheckBtn.textContent = TXT.check;
-                    nextCheckBtn.classList.remove('incorrect');
-                }, 2500);
-            } else {
-                addChatMessage('AI', formatAIMessage('incorrectAI', { detectedAnswer: detectedAnswer || 'none', correctAnswer }));
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = TXT.check;
-                setTimeout(() => nextCheckBtn.classList.remove('incorrect'), 600);
-            }
-        }
-    } catch (error) {
-        let userErrorMessage;
-        const isKnownUITextError = Object.values(TXT).includes(error.message);
-        if (error.message === "NO_TEXT_FOUND") {
-             userErrorMessage = formatAIMessage('noTextFound');
-        } else if (isKnownUITextError) {
-             userErrorMessage = error.message;
-        } else {
-            userErrorMessage = formatAIMessage('apiErrorGeneral', { errorMessage: error.message });
-        }
-        
-        const shortMsg = error.message === "NO_TEXT_FOUND" ? "I couldn't read that. Try writing clearly." : "An error occurred. Please try again.";
-        isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', userErrorMessage);
-        
-        playRandomFeedback('disapprove');
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
-    }
-}	    function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
+        const shortMsg = error.code === 'functions/resource-exhausted' ? "Monthly limit reached." : "An error occurred.";
+        isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', userErrorMessage);
+
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
+    }
+}	
+
+	    function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
 
     /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
