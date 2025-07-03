@@ -3001,52 +3001,50 @@ window.addEventListener('wheel', function(e) {
         window.appInitialized = false;
     }
 
-    auth.onAuthStateChanged(user => {
-        if (user) {
-            console.log("User authenticated with UID:", user.uid);
-            
-            // ===== ADD THIS BLOCK TO FETCH INITIAL POINTS =====
-            const userDocRef = db.collection('thelo-students').doc(user.uid);
-            userDocRef.get().then(doc => {
-                if (doc.exists) {
-                    // Set the local points variable to the value from the database
-                    userPoints = doc.data().points || 0;
-                } else {
-                    // Document doesn't exist, start points at 0
-                    userPoints = 0;
-                    console.log("No points document found for user, starting at 0.");
-                }
-                // Update the UI with the correct points
-                updatePointsDisplay();
-            }).catch(error => {
-                console.error("Error fetching user points:", error);
-                userPoints = 0; // Default to 0 on error
-                updatePointsDisplay();
-            });
-            // ===== END OF ADDED BLOCK =====
+    // REPLACE your entire auth.onAuthStateChanged function with this one.
 
-        } else {
-            userPoints = 0; // Reset points if user logs out
+auth.onAuthStateChanged(user => {
+    // This inner function will run only after all async tasks are done.
+    const finishInitialization = () => {
+        if (!window.appInitialized) {
+            window.appInitialized = true;
+            initApp();
+        } else {
+            updateAllUITexts();
+        }
+        // Set the flag to true as the very last step.
+        isAuthReady = true;
+        console.log("Authentication is now ready.");
+    };
+
+    if (user) {
+        console.log("User authenticated with UID:", user.uid);
+        const userDocRef = db.collection('thelo-students').doc(user.uid);
+        
+        // This is an async call. We must wait for it to finish.
+        userDocRef.get().then(doc => {
+            if (doc.exists) {
+                userPoints = doc.data().points || 0;
+            } else {
+                userPoints = 0;
+                console.log("No points document found for user, starting at 0.");
+            }
             updatePointsDisplay();
-            console.log("User not authenticated.");
-        }
-	isAuthReady = true;
-
-        if (!UI_TEXT[currentLang]) currentLang = 'hy';
-        updateAllUITexts();
-
-        if (!user && !isThelobookActive && !isPageGridVisible) {
-            const TXT = getCurrentUIText();
-            if(TXT && TXT.userNotAuthHandwriting) addChatMessage('AI', formatAIMessage('userNotAuthHandwriting'));
-        }
-
-        if (!window.appInitialized) {
-            window.appInitialized = true;
-            initApp();
-        } else {
-            updateAllUITexts();
-        }
-    });
+            finishInitialization(); // Finish init AFTER getting points.
+        }).catch(error => {
+            console.error("Error fetching user points:", error);
+            userPoints = 0;
+            updatePointsDisplay();
+            finishInitialization(); // Also finish init if there's an error.
+        });
+    } else {
+        // If there is no user, there's no async task, so we can proceed.
+        userPoints = 0;
+        updatePointsDisplay();
+        console.log("User not authenticated.");
+        finishInitialization();
+    }
+});
 </script>
 	<div id="streakModal" class="modal-hidden">
     <div class="streak-modal-content">
