@@ -2431,6 +2431,22 @@ function showStreakCelebrationModal(streakCount, isNewRecord) {
 }	
 	// REPLACE your entire old function with this new one
 async function checkHandwritingAnswer() {
+    // =================== ADD THIS BLOCK HERE ===================
+    // This check runs first to make sure the user is logged in.
+    if (!auth.currentUser) {
+        const TXT = getCurrentUIText();
+        addChatMessage('AI', formatAIMessage('authErrorVision')); // Show "Please log in" message
+        console.error("User is not authenticated. Cannot call analyzeHandwriting.");
+        
+        // Re-enable the button so the user can try again after logging in.
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        return; // Stop the function from running any further
+    }
+    // ================= END OF ADDED BLOCK ==================
+
+
+    // The rest of your existing code remains exactly the same below
     if (isThelobookActive || isPageGridVisible) return;
     stopCurrentStageAudio();
     if (!currentStageData || currentStageData.type !== 'question_handwriting') return;
@@ -2530,9 +2546,10 @@ async function checkHandwritingAnswer() {
         let userErrorMessage;
         const isKnownUITextError = Object.values(TXT).includes(error.message);
 
-        // **NEW**: Catch the specific error for the usage limit
         if (error.code === 'functions/resource-exhausted') {
             userErrorMessage = TXT.limitReached;
+        } else if (error.code === 'unauthenticated' || error.message.includes('logged in')) {
+            userErrorMessage = TXT.authErrorVision;
         } else if (error.message === "NO_TEXT_FOUND") {
             userErrorMessage = formatAIMessage('noTextFound');
         } else if (isKnownUITextError) {
@@ -2549,8 +2566,7 @@ async function checkHandwritingAnswer() {
         nextCheckBtn.textContent = TXT.check;
         if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
     }
-}	
-
+}
 	    function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
 
     /* ========== THELOBOOK FUNCTIONALITY ========== */
