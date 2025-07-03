@@ -2430,26 +2430,42 @@ function showStreakCelebrationModal(streakCount, isNewRecord) {
 	// REPLACE your entire old function with this new one
 async function checkHandwritingAnswer() {
     console.log("Auth state at time of call:", isAuthReady);
-     if (!isAuthReady) {
+    if (!isAuthReady) {
         console.warn("Auth is not ready yet. Aborting check.");
-        return; 
+        return;
     }
-    // =================== ADD THIS BLOCK HERE ===================
-    // This check runs first to make sure the user is logged in.
+
     if (!auth.currentUser) {
         const TXT = getCurrentUIText();
-        addChatMessage('AI', formatAIMessage('authErrorVision')); // Show "Please log in" message
+        addChatMessage('AI', formatAIMessage('authErrorVision'));
         console.error("User is not authenticated. Cannot call analyzeHandwriting.");
         
-        // Re-enable the button so the user can try again after logging in.
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        return; // Stop the function from running any further
+        if (nextCheckBtn) {
+            nextCheckBtn.disabled = false;
+            nextCheckBtn.textContent = TXT.check;
+        }
+        return;
     }
-    // ================= END OF ADDED BLOCK ==================
 
+    // =================================================================
+    //  FIX: Force a refresh of the user's ID token.
+    // =================================================================
+    try {
+        await auth.currentUser.getIdToken(true);
+        console.log("Successfully refreshed auth token.");
+    } catch (error) {
+        console.error("Token refresh failed:", error);
+        addChatMessage('AI', "Authentication error. Please try again.");
+        // Re-enable the button so the user can try again
+        if(nextCheckBtn) {
+             const TXT = getCurrentUIText();
+             nextCheckBtn.disabled = false;
+             nextCheckBtn.textContent = TXT.check;
+        }
+        return;
+    }
+    // =================================================================
 
-    // The rest of your existing code remains exactly the same below
     if (isThelobookActive || isPageGridVisible) return;
     stopCurrentStageAudio();
     if (!currentStageData || currentStageData.type !== 'question_handwriting') return;
@@ -2489,13 +2505,7 @@ async function checkHandwritingAnswer() {
     }
 
     try {
-        // Get a reference to the callable function by its name
-	// Get the currently initialized Firebase app instance// Auth is guaranteed to be ready here:
-const analyzeHandwriting =
-        firebase.functions().httpsCallable('analyzeHandwriting');
-
-
-        // Call the function and await the result
+        const analyzeHandwriting = firebase.functions().httpsCallable('analyzeHandwriting');
         const result = await analyzeHandwriting({ imageBase64: base64ImageData });
         const detectedText = result.data.text || '';
 
@@ -2571,8 +2581,7 @@ const analyzeHandwriting =
         nextCheckBtn.textContent = TXT.check;
         if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
     }
-}
-	    function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
+}	    function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
 
     /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
