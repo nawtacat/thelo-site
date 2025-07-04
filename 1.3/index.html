@@ -1594,28 +1594,50 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         return isThelobookActive ? thelobookCtx : ctx;
     }
 
-    function drawSmoothedCurve(activeCtx, points) {
-        if (!activeCtx || points.length < 3) return;
-
-        activeCtx.beginPath();
-        activeCtx.moveTo(points[0].x, points[0].y);
-
-        for (let i = 1; i < points.length - 2; i++) {
-            const controlPointX = (points[i].x + points[i + 1].x) / 2;
-            const controlPointY = (points[i].y + points[i + 1].y) / 2;
-            activeCtx.quadraticCurveTo(points[i].x, points[i].y, controlPointX, controlPointY);
-        }
-
-        activeCtx.quadraticCurveTo(
-            points[points.length - 2].x,
-            points[points.length - 2].y,
-            points[points.length - 1].x,
-            points[points.length - 1].y
-        );
-        
-        activeCtx.stroke();
+    function drawStroke(activeCtx, stroke) {
+    if (!activeCtx || !stroke || !stroke.points || stroke.points.length === 0) {
+        return;
     }
 
+    const points = stroke.points;
+    activeCtx.strokeStyle = stroke.color;
+    activeCtx.fillStyle = stroke.color; // For filling the dot
+    activeCtx.lineWidth = stroke.lineWidth;
+
+    activeCtx.beginPath();
+
+    // Case 1: Draw a dot for a single point
+    if (points.length === 1) {
+        const p = points[0];
+        const radius = stroke.lineWidth / 2;
+        activeCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        activeCtx.fill();
+        return; // We're done
+    }
+
+    // Case 2: Draw a straight line for two points
+    if (points.length === 2) {
+        activeCtx.moveTo(points[0].x, points[0].y);
+        activeCtx.lineTo(points[1].x, points[1].y);
+        activeCtx.stroke();
+        return; // We're done
+    }
+
+    // Case 3 (Original Logic): Draw a smoothed curve for 3+ points
+    activeCtx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length - 2; i++) {
+        const controlPointX = (points[i].x + points[i + 1].x) / 2;
+        const controlPointY = (points[i].y + points[i + 1].y) / 2;
+        activeCtx.quadraticCurveTo(points[i].x, points[i].y, controlPointX, controlPointY);
+    }
+    activeCtx.quadraticCurveTo(
+        points[points.length - 2].x,
+        points[points.length - 2].y,
+        points[points.length - 1].x,
+        points[points.length - 1].y
+    );
+    activeCtx.stroke();
+}
    function handleDrawingStart(e) {
     if (isTabletMode && e.type.startsWith('touch')) {
         const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
@@ -1666,24 +1688,36 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const canvasToClear = isThelobookActive ? thelobookCanvas : canvas;
     activeCtx.clearRect(0, 0, canvasToClear.width / devicePixelRatio, canvasToClear.height / devicePixelRatio);
     
-    // 1. Redraw all the old, completed strokes
+    // --- START OF CHANGES ---
+
+    // 1. Redraw all old strokes using the new function
     allStrokes.forEach(stroke => {
-        activeCtx.strokeStyle = stroke.color;
-        activeCtx.lineWidth = stroke.lineWidth;
-        drawSmoothedCurve(activeCtx, stroke.points);
+        drawStroke(activeCtx, stroke); // Use the new, more robust function
     });
 
-    // 2. Draw the current, active stroke
-    activeCtx.strokeStyle = isThelobookActive ? INK_COLORS.black : INK_COLORS[currentColor];
-    activeCtx.lineWidth = isThelobookActive ? (isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH) : THELOBOOK_PEN_LINEWIDTH;
-    drawSmoothedCurve(activeCtx, pointBuffer);
+    // 2. Create a temporary "stroke object" for the line currently being drawn
+    const currentStroke = {
+        points: pointBuffer,
+        color: isThelobookActive ? INK_COLORS.black : INK_COLORS[currentColor],
+        lineWidth: isThelobookActive ? (isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH) : THELOBOOK_PEN_LINEWIDTH
+    };
+
+    // 3. Draw the current, active stroke using the new function
+    drawStroke(activeCtx, currentStroke);
     
     // Also handle the final answer canvas
     if (!isThelobookActive && currentColor === 'blue') {
         finalCtx.clearRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio);
-        // Only draw the current blue line here
-        drawSmoothedCurve(finalCtx, pointBuffer);
+        
+        // The new function needs a stroke object here as well
+        const blueAnswerStroke = {
+            points: pointBuffer,
+            color: INK_COLORS.blue,
+            lineWidth: THELOBOOK_PEN_LINEWIDTH 
+        };
+        drawStroke(finalCtx, blueAnswerStroke); // Use the new function
     }
+    // --- END OF CHANGES ---
 }
 /* ========== REPLACE THE ENTIRE handleDrawingEnd FUNCTION WITH THIS ========== */
 function handleDrawingEnd(e) {
@@ -1697,7 +1731,7 @@ function handleDrawingEnd(e) {
     if (!drawing) return;
     
     // Save the completed stroke to our main array
-    if (pointBuffer.length > 1) {
+    if (pointBuffer.length > 0) {
         allStrokes.push({
             points: [...pointBuffer], // Save a copy of the points
             color: isThelobookActive ? INK_COLORS.black : INK_COLORS[currentColor],
