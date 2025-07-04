@@ -1710,82 +1710,66 @@ function handleDrawingMove(e) {
     if (!pos) return;
     if (e.touches) e.preventDefault();
 
-    // ==========================================================
-    // ===== NEW DESKTOP SMOOTHING & IPAD DIRECT DRAW LOGIC =====
-    // ==========================================================
     const isMouseEvent = e.type.startsWith('mouse');
 
     if (!isTabletMode && isMouseEvent) {
-        // --- DESKTOP MOUSE SMOOTHING LOGIC ---
+        // --- NEW & CORRECTED DESKTOP SMOOTHING LOGIC ---
+        
+        // Add the new point to our buffer
         mousePoints.push(pos);
-
+        
+        // Not enough points for a curve yet, so just connect with a line
         if (mousePoints.length < 3) {
-            // Not enough points for a curve yet, draw a simple line
             activeCtx.lineTo(pos.x, pos.y);
-            activeCtx.stroke();
+            activeCtx.stroke(); // Stroke the segment
+            activeCtx.beginPath(); // Begin a new path
+            activeCtx.moveTo(pos.x, pos.y); // Move to the new position
+            
             if (!isThelobookActive && currentColor === 'blue') {
                 finalCtx.lineTo(pos.x, pos.y);
                 finalCtx.stroke();
+                finalCtx.beginPath();
+                finalCtx.moveTo(pos.x, pos.y);
             }
             return;
         }
 
-        // Clear the path and redraw the smoothed curve segment
-        activeCtx.clearRect(0, 0, activeCtx.canvas.width, activeCtx.canvas.height);
-        activeCtx.beginPath();
-        activeCtx.moveTo(mousePoints[0].x, mousePoints[0].y);
+        // Calculate the start and end points for the curve segment
+        const p1 = mousePoints[mousePoints.length - 2];
+        const p2 = mousePoints[mousePoints.length - 1];
+        const midPoint = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
 
-        if (!isThelobookActive && currentColor === 'blue') {
-            finalCtx.clearRect(0, 0, finalCtx.canvas.width, finalCtx.canvas.height);
-            finalCtx.beginPath();
-            finalCtx.moveTo(mousePoints[0].x, mousePoints[0].y);
-        }
-
-        for (let i = 1; i < mousePoints.length - 2; i++) {
-            const c = (mousePoints[i].x + mousePoints[i + 1].x) / 2;
-            const d = (mousePoints[i].y + mousePoints[i + 1].y) / 2;
-            activeCtx.quadraticCurveTo(mousePoints[i].x, mousePoints[i].y, c, d);
-             if (!isThelobookActive && currentColor === 'blue') {
-                finalCtx.quadraticCurveTo(mousePoints[i].x, mousePoints[i].y, c, d);
-            }
-        }
-
-        // For the last 2 points
-        activeCtx.quadraticCurveTo(
-            mousePoints[mousePoints.length - 2].x,
-            mousePoints[mousePoints.length - 2].y,
-            mousePoints[mousePoints.length - 1].x,
-            mousePoints[mousePoints.length - 1].y
-        );
-         if (!isThelobookActive && currentColor === 'blue') {
-            finalCtx.quadraticCurveTo(
-                mousePoints[mousePoints.length - 2].x,
-                mousePoints[mousePoints.length - 2].y,
-                mousePoints[mousePoints.length - 1].x,
-                mousePoints[mousePoints.length - 1].y
-            );
-        }
-
+        // Draw a quadratic curve from the last midpoint to the new midpoint
+        // The actual mouse point (p1) becomes the control point, "pulling" the curve.
+        activeCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
         activeCtx.stroke();
+        activeCtx.beginPath();
+        activeCtx.moveTo(midPoint.x, midPoint.y);
+
         if (!isThelobookActive && currentColor === 'blue') {
+            finalCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
             finalCtx.stroke();
+            finalCtx.beginPath();
+            finalCtx.moveTo(midPoint.x, midPoint.y);
         }
 
     } else {
-        // --- ORIGINAL IPAD/TOUCH/STYLUS LOGIC ---
+        // --- ORIGINAL IPAD/TOUCH/STYLUS LOGIC (UNCHANGED) ---
         activeCtx.lineTo(pos.x, pos.y);
         activeCtx.stroke();
+        activeCtx.beginPath();
+        activeCtx.moveTo(pos.x, pos.y);
+
         if (!isThelobookActive && currentColor === 'blue') {
-            if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
-            finalCtx.lineTo(pos.x, pos.y);
-            finalCtx.stroke();
+             if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
+             finalCtx.lineTo(pos.x, pos.y);
+             finalCtx.stroke();
+             finalCtx.beginPath();
+             finalCtx.moveTo(pos.x, pos.y);
         }
     }
-    // ==========================================================
-    // ====================== END OF CHANGE =====================
-    // ==========================================================
 
-    lastPos = pos;
+    lastPos = pos; // Update last known position
 }
 
 function handleDrawingEnd(e) {
@@ -1796,19 +1780,29 @@ function handleDrawingEnd(e) {
         }, 500);
     }
     
-    // For mouse, we clear the buffer.
+    if (!drawing) return;
+
     const isMouseEvent = e.type.startsWith('mouse');
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+
+    // --- Draw the final line segment to the mouse's last position ---
+    activeCtx.lineTo(lastPos.x, lastPos.y);
+    activeCtx.stroke();
+
+    if (!isThelobookActive && currentColor === 'blue') {
+        finalCtx.lineTo(lastPos.x, lastPos.y);
+        finalCtx.stroke();
+    }
+
+    drawing = false;
+    activeCtx.beginPath(); // Reset for the next stroke
+
+     // Clear the points buffer
      if (!isTabletMode && isMouseEvent) {
         mousePoints = [];
     }
-
-    if (!drawing) return;
-    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-    if (!activeCtx) return;
-    drawing = false;
-    activeCtx.beginPath(); // Reset the context's path
-}
-    function addBoardDrawListeners() {
+}    function addBoardDrawListeners() {
         canvas.addEventListener('mousedown', handleDrawingStart);
         canvas.addEventListener('mousemove', handleDrawingMove);
         canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
