@@ -450,11 +450,9 @@ body.lang-en {
 
 /* ADD THIS NEW RULE to define the hidden state */
 #bottomBar.bar-hidden-by-stylus {
-    /* slide exactly one full bar-height (+ a small gap) off-screen */
-    transform: translateY(calc(100% + 1rem));
+    transform: translateY(150%);
     pointer-events: none;
 }
-
 	/* ADD THIS CSS: For the Streak Modal */
 #streakModal {
     position: fixed;
@@ -1211,9 +1209,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     let tempFullPageCanvasForThumbnails = null;
     let buttonVanishTimer = null;
     let stagesWithPointsAwarded = new Set();
-    let pointBuffer = [];
-    let allStrokes = [];
-
+    let mousePoints = []; // <<< ADD THIS LINE
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
     function updateAllUITexts() {
@@ -1583,10 +1579,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         }
         if(canvas) canvas.classList.toggle('blue-mode', currentColor === 'blue' && !isThelobookActive && !isPageGridVisible);
     }
-    function eventContainsStylusTouch(ev) {
-    if (!ev.touches) return false;
-    return Array.from(ev.touches).some(t => t.touchType === 'stylus');
-}
     function getPos(e, targetCanvas) {
         if (!targetCanvas) return null;
         const rect = targetCanvas.getBoundingClientRect(); let clientX, clientY;
@@ -1596,79 +1588,28 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
-    function getActiveContext() {
-        return isThelobookActive ? thelobookCtx : ctx;
-    }
 
-    function drawStroke(activeCtx, stroke) {
-    if (!activeCtx || !stroke || !stroke.points || stroke.points.length === 0) {
-        return;
-    }
-
-    const points = stroke.points;
-    activeCtx.strokeStyle = stroke.color;
-    activeCtx.fillStyle = stroke.color; // For filling the dot
-    activeCtx.lineWidth = stroke.lineWidth;
-
-    activeCtx.beginPath();
-
-    // Case 1: Draw a dot for a single point
-    if (points.length === 1) {
-        const p = points[0];
-        const radius = stroke.lineWidth / 2;
-        activeCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-        activeCtx.fill();
-        return; // We're done
-    }
-
-    // Case 2: Draw a straight line for two points
-    if (points.length === 2) {
-        activeCtx.moveTo(points[0].x, points[0].y);
-        activeCtx.lineTo(points[1].x, points[1].y);
-        activeCtx.stroke();
-        return; // We're done
-    }
-
-    // Case 3 (Original Logic): Draw a smoothed curve for 3+ points
-    activeCtx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length - 2; i++) {
-        const controlPointX = (points[i].x + points[i + 1].x) / 2;
-        const controlPointY = (points[i].y + points[i + 1].y) / 2;
-        activeCtx.quadraticCurveTo(points[i].x, points[i].y, controlPointX, controlPointY);
-    }
-    activeCtx.quadraticCurveTo(
-        points[points.length - 2].x,
-        points[points.length - 2].y,
-        points[points.length - 1].x,
-        points[points.length - 1].y
-    );
-    activeCtx.stroke();
-}
-   function handleDrawingStart(e) {
-    /* ------------------------------------------------------------------ *
-     *  Tablet-only logic: hide bottom bar when a stylus touches canvas   *
-     * ------------------------------------------------------------------ */
+    function handleDrawingStart(e) {
+    // For tablets, we ONLY allow drawing to start if a stylus is the input.
     if (isTabletMode && e.type.startsWith('touch')) {
-        // Check whether this touch point is from a stylus (Apple Pencil etc.)
-        const isStylus = Array.from(e.touches).some(t => t.touchType === 'stylus');
+        const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
 
-        if (isStylus) {
-            /* ❯ Stylus ➜ hide the bar immediately, cancel any pending “show” timer */
-            if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-            if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
-        } else {
-            /* ❯ Finger tap ➜ show the bar (acts as a manual toggle)               */
-            if (bottomBar) bottomBar.classList.remove('bar-hidden-by-stylus');
-            // Treat a finger-tap purely as a “show UI” gesture—don’t start drawing
+        if (!isStylusPresent) {
+            e.preventDefault();
             return;
         }
+
+        // If a stylus is drawing, cancel any pending timer to show the bar.
+        if (buttonVanishTimer) {
+            clearTimeout(buttonVanishTimer);
+        }
+        // Immediately hide the bottom bar.
+        if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
     }
 
-    /* ------------------------------------------------------------------ *
-     *  Original drawing logic (unchanged)                                *
-     * ------------------------------------------------------------------ */
+    // This part of the code is now only reachable by a stylus on a tablet, or a mouse on desktop.
     const currentTargetCanvas = e.currentTarget;
-    const activeCtx = getActiveContext();
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
     if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
     if (!isThelobookActive && currentTargetCanvas !== canvas) return;
@@ -1676,121 +1617,192 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     const pos = getPos(e, currentTargetCanvas);
     if (!pos) return;
-
     if (e.touches) e.preventDefault();
     drawing = true;
     if (!isThelobookActive) userDrawingOccurred = true;
+    lastPos = pos;
 
-    activeCtx.lineWidth = isThelobookActive
-        ? (isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH)
-        : THELOBOOK_PEN_LINEWIDTH;
-
-    activeCtx.globalCompositeOperation =
-        isThelobookActive && isThelobookEraserActive ? 'destination-out' : 'source-over';
-
-    activeCtx.strokeStyle = isThelobookActive ? INK_COLORS.black : INK_COLORS[currentColor];
-    if (!isThelobookActive) {
-        finalCtx.strokeStyle = INK_COLORS.blue;
+    if (isThelobookActive) {
+        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+        if (!isThelobookActive) activeCtx.strokeStyle = INK_COLORS.black;
+    } else {
+        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = 'source-over';
     }
 
-    pointBuffer = [pos];
+    activeCtx.beginPath();
+    activeCtx.moveTo(pos.x, pos.y);
+    if (!isThelobookActive && currentColor === 'blue') {
+        finalCtx.strokeStyle = INK_COLORS.blue;
+        finalCtx.beginPath();
+        finalCtx.moveTo(pos.x, pos.y);
+    }
 }
+   function handleDrawingStart(e) {
+    // This logic now ONLY applies the smoothing for mouse events on non-tablets.
+    // The 'touch' events for the iPad will bypass this completely.
+    if (!isTabletMode && e.type.startsWith('mouse')) {
+        mousePoints = []; // Reset the points buffer for a new line
+    }
 
- function handleDrawingMove(e) {
-    if (!drawing) return;
-
-    /* ✋  Palm-/finger-ignore while a stylus stroke is in progress */
-    if (isTabletMode && e.type.startsWith('touch') && !eventContainsStylusTouch(e)) {
-        return;   // ignore finger/palm moves
+    // For tablets, we ONLY allow drawing to start if a stylus is the input.
+    if (isTabletMode && e.type.startsWith('touch')) {
+        const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
+        if (!isStylusPresent) {
+            e.preventDefault();
+            return;
+        }
+        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+        if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
     }
 
     const currentTargetCanvas = e.currentTarget;
-    const activeCtx = getActiveContext();
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+    if (!isStudentInputAllowed && !isThelobookActive) return;
 
     const pos = getPos(e, currentTargetCanvas);
     if (!pos) return;
     if (e.touches) e.preventDefault();
 
-    pointBuffer.push(pos);
+    drawing = true;
+    if (!isThelobookActive) userDrawingOccurred = true;
+    lastPos = pos;
 
-    /* redraw ----------------------------------------------------- */
-    const canvasToClear = isThelobookActive ? thelobookCanvas : canvas;
-    activeCtx.clearRect(
-        0, 0,
-        canvasToClear.width / devicePixelRatio,
-        canvasToClear.height / devicePixelRatio
-    );
+    // Add the first point to our mouse buffer if using a mouse
+    if (!isTabletMode && e.type.startsWith('mouse')) {
+        mousePoints.push(pos);
+    }
+    
+    if (isThelobookActive) {
+        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+    } else {
+        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = 'source-over';
+    }
 
-    // 1) old strokes
-    allStrokes.forEach(stroke => drawStroke(activeCtx, stroke));
-
-    // 2) current live stroke
-    const currentStroke = {
-        points: pointBuffer,
-        color: isThelobookActive ? INK_COLORS.black : INK_COLORS[currentColor],
-        lineWidth: isThelobookActive
-            ? (isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH)
-            : THELOBOOK_PEN_LINEWIDTH
-    };
-    drawStroke(activeCtx, currentStroke);
-
-    // 3) blue-ink answer overlay
+    // The rest of your original logic for starting a path can be simplified
+    // as the new handleDrawingMove will take care of drawing.
+    activeCtx.beginPath();
+    activeCtx.moveTo(pos.x, pos.y);
     if (!isThelobookActive && currentColor === 'blue') {
-        finalCtx.clearRect(
-            0, 0,
-            finalAnswerCanvas.width / devicePixelRatio,
-            finalAnswerCanvas.height / devicePixelRatio
-        );
-        drawStroke(finalCtx, {
-            ...currentStroke,
-            color: INK_COLORS.blue
-        });
+        finalCtx.strokeStyle = INK_COLORS.blue;
+        finalCtx.beginPath();
+        finalCtx.moveTo(pos.x, pos.y);
     }
 }
-function handleDrawingEnd(e) {
-    /* Ignore finger lifts; only act on stylus lift-off */
-    if (isTabletMode && e.type.startsWith('touch') && !eventContainsStylusTouch(e)) {
-        return;
-    }
 
-    /* schedule toolbar slide-up */
-    if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-    buttonVanishTimer = setTimeout(() => {
-        if (bottomBar) bottomBar.classList.remove('bar-hidden-by-stylus');
-    }, 500);
-
+function handleDrawingMove(e) {
     if (!drawing) return;
 
-    /* commit stroke to history */
-    if (pointBuffer.length > 0) {
-        allStrokes.push({
-            points: [...pointBuffer],
-            color: isThelobookActive ? INK_COLORS.black : INK_COLORS[currentColor],
-            lineWidth: isThelobookActive
-                ? (isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH)
-                : THELOBOOK_PEN_LINEWIDTH
-        });
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+    if (!isStudentInputAllowed && !isThelobookActive) return;
+
+    const pos = getPos(e, currentTargetCanvas);
+    if (!pos) return;
+    if (e.touches) e.preventDefault();
+
+    const isMouseEvent = e.type.startsWith('mouse');
+
+    if (!isTabletMode && isMouseEvent) {
+        // --- NEW & CORRECTED DESKTOP SMOOTHING LOGIC ---
+        
+        // Add the new point to our buffer
+        mousePoints.push(pos);
+        
+        // Not enough points for a curve yet, so just connect with a line
+        if (mousePoints.length < 3) {
+            activeCtx.lineTo(pos.x, pos.y);
+            activeCtx.stroke(); // Stroke the segment
+            activeCtx.beginPath(); // Begin a new path
+            activeCtx.moveTo(pos.x, pos.y); // Move to the new position
+            
+            if (!isThelobookActive && currentColor === 'blue') {
+                finalCtx.lineTo(pos.x, pos.y);
+                finalCtx.stroke();
+                finalCtx.beginPath();
+                finalCtx.moveTo(pos.x, pos.y);
+            }
+            return;
+        }
+
+        // Calculate the start and end points for the curve segment
+        const p1 = mousePoints[mousePoints.length - 2];
+        const p2 = mousePoints[mousePoints.length - 1];
+        const midPoint = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+        // Draw a quadratic curve from the last midpoint to the new midpoint
+        // The actual mouse point (p1) becomes the control point, "pulling" the curve.
+        activeCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
+        activeCtx.stroke();
+        activeCtx.beginPath();
+        activeCtx.moveTo(midPoint.x, midPoint.y);
+
+        if (!isThelobookActive && currentColor === 'blue') {
+            finalCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
+            finalCtx.stroke();
+            finalCtx.beginPath();
+            finalCtx.moveTo(midPoint.x, midPoint.y);
+        }
+
+    } else {
+        // --- ORIGINAL IPAD/TOUCH/STYLUS LOGIC (UNCHANGED) ---
+        activeCtx.lineTo(pos.x, pos.y);
+        activeCtx.stroke();
+        activeCtx.beginPath();
+        activeCtx.moveTo(pos.x, pos.y);
+
+        if (!isThelobookActive && currentColor === 'blue') {
+             if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
+             finalCtx.lineTo(pos.x, pos.y);
+             finalCtx.stroke();
+             finalCtx.beginPath();
+             finalCtx.moveTo(pos.x, pos.y);
+        }
     }
 
-    /* final answer canvas (blue ink) */
+    lastPos = pos; // Update last known position
+}
+
+function handleDrawingEnd(e) {
+    if (isTabletMode) {
+        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+        buttonVanishTimer = setTimeout(() => {
+            if (bottomBar) bottomBar.classList.remove('bar-hidden-by-stylus');
+        }, 500);
+    }
+    
+    if (!drawing) return;
+
+    const isMouseEvent = e.type.startsWith('mouse');
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+
+    // --- Draw the final line segment to the mouse's last position ---
+    activeCtx.lineTo(lastPos.x, lastPos.y);
+    activeCtx.stroke();
+
     if (!isThelobookActive && currentColor === 'blue') {
-        finalCtx.clearRect(
-            0, 0,
-            finalAnswerCanvas.width / devicePixelRatio,
-            finalAnswerCanvas.height / devicePixelRatio
-        );
-        drawStroke(finalCtx, {
-            points: pointBuffer,
-            color: INK_COLORS.blue,
-            lineWidth: THELOBOOK_PEN_LINEWIDTH
-        });
+        finalCtx.lineTo(lastPos.x, lastPos.y);
+        finalCtx.stroke();
     }
 
     drawing = false;
-    pointBuffer = [];   // reset buffer
-}
-		function addBoardDrawListeners() {
+    activeCtx.beginPath(); // Reset for the next stroke
+
+     // Clear the points buffer
+     if (!isTabletMode && isMouseEvent) {
+        mousePoints = [];
+    }
+}    function addBoardDrawListeners() {
         canvas.addEventListener('mousedown', handleDrawingStart);
         canvas.addEventListener('mousemove', handleDrawingMove);
         canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
@@ -2297,23 +2309,21 @@ function handleDrawingEnd(e) {
         }
     }
     function clearUserCanvas() {
-        if (isPageGridVisible) return;
-        if (isThelobookActive) {
-            if (thelobookCtx) {
-                thelobookCtx.clearRect(0,0, thelobookCanvas.width/devicePixelRatio, thelobookCanvas.height/devicePixelRatio);
-                if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
-                    thelobookPages[currentThelobookPageIndex] = null;
-                }
-            }
-            return;
-        }
-
-        // Clear the array of strokes and both canvases
-        allStrokes = [];
-        if(ctx) ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
-        if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); }
-        userDrawingOccurred = false;
-    }        // REPLACE your existing addChatImage function with this one
+        if (isPageGridVisible) return;
+        if (isThelobookActive) {
+            if (thelobookCtx) {
+                thelobookCtx.clearRect(0,0, thelobookCanvas.width/devicePixelRatio, thelobookCanvas.height/devicePixelRatio);
+                if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
+                    thelobookPages[currentThelobookPageIndex] = null;
+                }
+            }
+            return;
+        }
+        if(ctx) ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+        if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); }
+        userDrawingOccurred = false;
+    }
+            // REPLACE your existing addChatImage function with this one
     function addChatImage(url) {
     const wrapper = Object.assign(document.createElement('div'), {
         className: 'ai-message chat-image-container'
