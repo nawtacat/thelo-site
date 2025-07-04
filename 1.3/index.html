@@ -1733,16 +1733,12 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 /* ========== REPLACE THE ENTIRE handleDrawingEnd FUNCTION WITH THIS ========== */
 function handleDrawingEnd(e) {
     if (isTabletMode) {
-        // THE FIX: Only run the hide logic if a drawing was actually happening.
-        if (drawing) { 
-            if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-            buttonVanishTimer = setTimeout(() => {
-                if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
-            }, 500);
-        }
+        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+        buttonVanishTimer = setTimeout(() => {
+            if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
+        }, 500);
     }
 
-    // If no drawing was in progress, stop here.
     if (!drawing) return;
     
     // Save the completed stroke to our main array
@@ -1757,18 +1753,21 @@ function handleDrawingEnd(e) {
     // Also draw the final version to the blue-only canvas if needed
     if (!isThelobookActive && currentColor === 'blue') {
         finalCtx.clearRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio);
-        const blueAnswerStroke = {
-            points: pointBuffer,
-            color: INK_COLORS.blue,
-            lineWidth: THELOBOOK_PEN_LINEWIDTH
-        };
-        drawStroke(finalCtx, blueAnswerStroke);
+        drawSmoothedCurve(finalCtx, pointBuffer);
     }
     
     drawing = false;
     pointBuffer = []; // Clear the temporary buffer for the next line
 }
-		function removeBoardDrawListeners() {
+		function addBoardDrawListeners() {
+        canvas.addEventListener('mousedown', handleDrawingStart);
+        canvas.addEventListener('mousemove', handleDrawingMove);
+        canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
+        canvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
+        canvas.addEventListener('touchend', handleDrawingEnd);
+        canvas.addEventListener('touchcancel', handleDrawingEnd);
+    }
+    function removeBoardDrawListeners() {
         canvas.removeEventListener('mousedown', handleDrawingStart);
         canvas.removeEventListener('mousemove', handleDrawingMove);
         canvas.removeEventListener('touchstart', handleDrawingStart);
