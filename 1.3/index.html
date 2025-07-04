@@ -1640,11 +1640,23 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 }
    function handleDrawingStart(e) {
     if (isTabletMode && e.type.startsWith('touch')) {
-        const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
-        if (!isStylusPresent) return;
-        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-        if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
+        // Check if the touch event is from a stylus
+        const isStylus = Array.from(e.touches).some(t => t.touchType === 'stylus');
+        
+        if (isStylus) {
+            // STYLUS: It's a stylus, so HIDE the UI and prepare for drawing.
+            if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+            if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
+        } else {
+            // FINGER: It's a finger, so SHOW the UI.
+            if (bottomBar) bottomBar.classList.remove('bar-hidden-by-stylus');
+            // We stop the function here. This makes a finger tap a dedicated "Show UI" gesture
+            // without starting a new drawing line.
+            return; 
+        }
     }
+
+    // --- Original drawing logic continues below for stylus and mouse input ---
 
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = getActiveContext();
@@ -1663,7 +1675,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     activeCtx.lineWidth = isThelobookActive ? (isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH) : THELOBOOK_PEN_LINEWIDTH;
     activeCtx.globalCompositeOperation = isThelobookActive && isThelobookEraserActive ? 'destination-out' : 'source-over';
     
-    // Set the stroke style for both contexts
     activeCtx.strokeStyle = isThelobookActive ? INK_COLORS.black : INK_COLORS[currentColor];
     if (!isThelobookActive) {
         finalCtx.strokeStyle = INK_COLORS.blue;
