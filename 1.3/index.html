@@ -1732,18 +1732,21 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 }
 /* ========== REPLACE THE ENTIRE handleDrawingEnd FUNCTION WITH THIS ========== */
 function handleDrawingEnd(e) {
-    if (isTabletMode) {
-        // THE FIX: Only run the hide logic if a drawing was actually happening.
-        if (drawing) { 
-            if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-            buttonVanishTimer = setTimeout(() => {
-                if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
-            }, 500);
-        }
+    // THE FIX: If a drawing stroke was not in progress, exit immediately.
+    // This guard clause prevents the function from running on button clicks.
+    if (!drawing) {
+        return;
     }
 
-    // If no drawing was in progress, stop here.
-    if (!drawing) return;
+    // --- All code below this line will now ONLY run after a real drawing stroke ---
+
+    // Handle the tablet-specific UI hiding feature
+    if (isTabletMode) {
+        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+        buttonVanishTimer = setTimeout(() => {
+            if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
+        }, 500);
+    }
     
     // Save the completed stroke to our main array
     if (pointBuffer.length > 0) {
@@ -1765,18 +1768,10 @@ function handleDrawingEnd(e) {
         drawStroke(finalCtx, blueAnswerStroke);
     }
     
+    // Finally, reset the state for the next stroke.
     drawing = false;
-    pointBuffer = []; // Clear the temporary buffer for the next line
-}
-		function removeBoardDrawListeners() {
-        canvas.removeEventListener('mousedown', handleDrawingStart);
-        canvas.removeEventListener('mousemove', handleDrawingMove);
-        canvas.removeEventListener('touchstart', handleDrawingStart);
-        canvas.removeEventListener('touchmove', handleDrawingMove);
-        canvas.removeEventListener('touchend', handleDrawingEnd);
-        canvas.removeEventListener('touchcancel', handleDrawingEnd);
-    }
-    function addThelobookDrawListeners() {
+    pointBuffer = [];
+}    function addThelobookDrawListeners() {
         if (thelobookDrawListenersAttached) return;
         thelobookCanvas.addEventListener('mousedown', handleDrawingStart);
         thelobookCanvas.addEventListener('mousemove', handleDrawingMove);
