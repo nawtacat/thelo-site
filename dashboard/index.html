@@ -217,107 +217,95 @@
          * @param {string} userId - The ID of the current student.
          */
         async function renderFullCourse(courseId, userId) {
-            if (!learningPathContainer) return;
-            learningPathContainer.innerHTML = '<p>Loading Learning Path...</p>';
+    if (!learningPathContainer) return;
+    learningPathContainer.innerHTML = '<p>Loading Learning Path...</p>';
 
-            try {
-                // STEP 1: Fetch all necessary data concurrently
-                const progressQuery = query(collection(db, 'thelo-students', userId, 'progress'));
-                const unitsQuery = query(collection(db, 'courses', courseId, 'units'), orderBy('order'));
+    try {
+        // STEP 1: Fetch all necessary data
+        const progressQuery = query(collection(db, 'thelo-students', userId, 'progress'));
+        const unitsQuery = query(collection(db, 'courses', courseId, 'units'), orderBy('order'));
 
-                const [progressSnapshot, unitsSnapshot] = await Promise.all([
-                    getDocs(progressQuery),
-                    getDocs(unitsQuery)
-                ]);
+        const [progressSnapshot, unitsSnapshot] = await Promise.all([
+            getDocs(progressQuery),
+            getDocs(unitsQuery)
+        ]);
 
-                const progressMap = new Map(progressSnapshot.docs.map(doc => [doc.id, doc.data()]));
-                
-                let allTopics = [];
-                for (const unitDoc of unitsSnapshot.docs) {
-                    const unitData = { id: unitDoc.id, ...unitDoc.data() };
-                    const topicsQuery = query(collection(unitDoc.ref, 'topics'), orderBy('order'));
-                    const topicsSnapshot = await getDocs(topicsQuery);
-                    const topics = topicsSnapshot.docs.map(doc => ({ 
-                        id: doc.id, 
-                        unit: unitData,
-                        ...doc.data() 
-                    }));
-                    allTopics.push(...topics);
-                }
-
-                // STEP 2: Determine the "next-up" topic
-                const nextUpTopicId = allTopics.find(topic => progressMap.get(topic.id)?.status !== 'completed')?.id;
-
-                // STEP 3: Build the HTML
-                let fullCourseHTML = '';
-                let currentUnitId = null;
-
-                allTopics.forEach((topic) => {
-                    // Start a new unit header if the unit changes
-                    if (topic.unit.id !== currentUnitId) {
-                        if (currentUnitId !== null) { fullCourseHTML += `</div></div>`; } // Close previous unit
-                        currentUnitId = topic.unit.id;
-                        fullCourseHTML += `
-                            <div class="path-unit">
-                                <div class="path-unit-header">
-                                    <i class="fas ${topic.unit.icon || 'fa-book'} unit-icon"></i>
-                                    <div>
-                                        <h2 class="unit-title">${topic.unit.unitTitle}</h2>
-                                        <p class="unit-meta">${topic.unit.unitMeta}</p>
-                                    </div>
-                                </div>
-                                <div class="topics-container">
-                        `;
-                    }
-
-                    // Determine status for the current topic
-                    const progress = progressMap.get(topic.id);
-                    let status = "Not Started";
-                    let statusClass = "not-started";
-                    let statusIcon = "fa-play-circle";
-                    let actionText = "Start";
-
-                    if (progress) {
-                        if (progress.status === 'completed') {
-                            status = "Completed";
-                            statusClass = "completed";
-                            statusIcon = "fa-check-circle";
-                            actionText = "Review";
-                        } else if (progress.status === 'in-progress') {
-                            status = `${progress.progressPercentage || 0}% Complete`;
-                            statusClass = "in-progress";
-                            statusIcon = "fa-spinner fa-spin";
-                            actionText = "Continue";
-                        }
-                    }
-
-                    if (topic.id === nextUpTopicId) {
-                        statusClass += ' next-up';
-                    }
-
-                    // Add the topic card HTML
-                    fullCourseHTML += `
-                        <a href="https://thelo.space/1.5/?lessonFile=${topic.lessonFileUrl}" class="topic-card ${statusClass}">
-                            <div class="topic-info">
-                                <div class="topic-name">${topic.topicName}</div>
-                                <div class="topic-status ${statusClass}"><i class="fas ${statusIcon}"></i> ${status}</div>
-                            </div>
-                            <span class="topic-action-btn">${actionText}</span>
-                        </a>
-                    `;
-                });
-
-                if (unitsSnapshot.docs.length > 0) {
-                    fullCourseHTML += `</div></div>`; // Close the final unit's container
-                }
-                
-                learningPathContainer.innerHTML = fullCourseHTML;
-
-            } catch (error) {
-                console.error("Error rendering course:", error);
-                learningPathContainer.innerHTML = '<p>Could not load the learning path. Please try again later.</p>';
-            }
+        const progressMap = new Map(progressSnapshot.docs.map(doc => [doc.id, doc.data()]));
+        
+        let allTopics = [];
+        for (const unitDoc of unitsSnapshot.docs) {
+            const unitData = { id: unitDoc.id, ...unitDoc.data() };
+            const topicsQuery = query(collection(unitDoc.ref, 'topics'), orderBy('order'));
+            const topicsSnapshot = await getDocs(topicsQuery);
+            const topics = topicsSnapshot.docs.map(doc => ({ id: doc.id, unit: unitData, ...doc.data() }));
+            allTopics.push(...topics);
         }
+
+        // STEP 2: Determine the "next-up" topic (first one not completed)
+        const nextUpTopicId = allTopics.find(topic => !progressMap.has(topic.id))?.id;
+
+        // STEP 3: Build the HTML
+        let fullCourseHTML = '';
+        let currentUnitId = null;
+
+        allTopics.forEach((topic) => {
+            if (topic.unit.id !== currentUnitId) {
+                if (currentUnitId !== null) { fullCourseHTML += `</div></div>`; }
+                currentUnitId = topic.unit.id;
+                fullCourseHTML += `
+                    <div class="path-unit">
+                        <div class="path-unit-header">
+                            <i class="fas ${topic.unit.icon || 'fa-book'} unit-icon"></i>
+                            <div>
+                                <h2 class="unit-title">${topic.unit.unitTitle}</h2>
+                                <p class="unit-meta">${topic.unit.unitMeta}</p>
+                            </div>
+                        </div>
+                        <div class="topics-container">
+                `;
+            }
+
+            // --- SIMPLIFIED LOGIC ---
+            const progress = progressMap.get(topic.id);
+            let status = "Not Started";
+            let statusClass = "not-started";
+            let statusIcon = "fa-play-circle";
+            let actionText = "Start";
+
+            // Check only if the lesson is completed
+            if (progress && progress.status === 'completed') {
+                status = "Completed";
+                statusClass = "completed";
+                statusIcon = "fa-check-circle";
+                actionText = "Review";
+            }
+
+            if (topic.id === nextUpTopicId) {
+                statusClass += ' next-up';
+            }
+
+            fullCourseHTML += `
+                <a href="https://thelo.space/1.1/?lessonFile=${topic.lessonFileUrl}" class="topic-card ${statusClass}">
+                    <div class="topic-info">
+                        <div class="topic-name">${topic.topicName}</div>
+                        <div class="topic-status ${statusClass}"><i class="fas ${statusIcon}"></i> ${status}</div>
+                    </div>
+                    <span class="topic-action-btn">${actionText}</span>
+                </a>
+            `;
+        });
+
+        if (unitsSnapshot.docs.length > 0) {
+            fullCourseHTML += `</div></div>`;
+        }
+        
+        learningPathContainer.innerHTML = fullCourseHTML;
+
+    } catch (error) {
+        console.error("Error rendering course:", error);
+        learningPathContainer.innerHTML = '<p>Could not load the learning path. Please try again later.</p>';
+    }
+}
         
         /**
          * Fetches the student's main data and updates the header stats.
