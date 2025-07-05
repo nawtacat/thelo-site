@@ -89,7 +89,6 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
 </div>
 
 <script type="module">
-// --- UPDATED IMPORTS ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -104,7 +103,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app); // Initialize Firestore
+const db = getFirestore(app);
 
 const TXT = {
     en: {
@@ -138,9 +137,8 @@ const TXT = {
 };
 
 let lang = 'en';
-let isSignUpMode = false; // State to track if we are in Sign Up mode
+let isSignUpMode = false;
 
-/* --- UPDATED DOM Elements --- */
 const langBtn = document.getElementById('langToggle');
 const homeLink = document.getElementById('homeLink');
 const form = document.getElementById('authForm');
@@ -156,8 +154,6 @@ const labelEmail = document.getElementById('labelEmail');
 const labelPassword = document.getElementById('labelPassword');
 const labelFullName = document.getElementById('labelFullName');
 const toggleAuthModeLink = document.getElementById('toggleAuthModeLink');
-
-/* --- UPDATED Helper Functions --- */
 
 function updateFormUI() {
     const s = TXT[lang];
@@ -186,7 +182,7 @@ function applyLang() {
     labelEmail.textContent = s.email;
     labelPassword.textContent = s.password;
     labelFullName.textContent = s.fullName;
-    updateFormUI(); // Update form text based on current mode and new language
+    updateFormUI();
 }
 
 function showToast(message, isError = true) {
@@ -211,7 +207,59 @@ function setLoading(isLoading) {
     }
 }
 
-/* --- UPDATED Event Listeners --- */
+/**
+ * Handles the new user sign-up process.
+ * @param {string} email
+ * @param {string} password
+ * @param {string} fullName
+ */
+async function handleNewUserSignUp(email, password, fullName) {
+    try {
+        // Step 1: Create user in Authentication
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        const nameParts = fullName.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // Step 2: Create user profile in Firestore
+        await setDoc(doc(db, "thelo-students", user.uid), {
+            name: firstName,
+            surname: lastName,
+            email: user.email,
+            language: "en",
+            profilePicture: "",
+            points: 0,
+            lessonsCompleted: 0,
+            createdAt: serverTimestamp(),
+            streakData: {
+                currentStreak: 0,
+                longestStreak: 0,
+                lastActivityWeek: null
+            },
+            visionUsage: {
+                count: 0,
+                month: new Date().toISOString().slice(0, 7)
+            }
+        });
+
+        console.log("Successfully created user and their full profile document!");
+        showToast("Account created! Redirecting...", false);
+        setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
+
+    } catch (error) {
+        console.error("Sign up error:", error);
+        let errorMessage = "An unknown error occurred during sign up.";
+        if (error.code === 'auth/email-already-in-use') {
+            errorMessage = "This email is already in use. Please sign in or use a different email.";
+        } else if (error.code === 'auth/weak-password') {
+            errorMessage = "Password is too weak. It should be at least 6 characters.";
+        }
+        showToast(errorMessage, true);
+        setLoading(false); // Make sure to re-enable button on error
+    }
+}
 
 langBtn.addEventListener('click', () => { lang = lang === 'en' ? 'hy' : 'en'; applyLang(); });
 
@@ -232,44 +280,13 @@ form.addEventListener('submit', async (e) => {
     const password = passwordInput.value.trim();
 
     if (isSignUpMode) {
-        // --- SIGN UP LOGIC ---
         const fullName = fullNameInput.value.trim();
         if (!fullName) {
             showToast("Please enter your full name.", true);
             setLoading(false);
             return;
         }
-
-        try {
-            // 1. Create user in Authentication
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-            console.log("User created:", user.uid);
-
-            // 2. Create user profile in Firestore
-            await setDoc(doc(db, "thelo-students", user.uid), {
-                name: fullName,
-                email: user.email,
-                points: 0,
-                lessonsCompleted: 0,
-                streakData: { currentStreak: 0, longestStreak: 0, lastActivityWeek: null },
-                createdAt: serverTimestamp()
-            });
-            console.log("Firestore profile created for user:", user.uid);
-
-            showToast("Account created! Redirecting...", false);
-            setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
-
-        } catch (error) {
-            console.error("Sign up error:", error);
-            let errorMessage = "An unknown error occurred during sign up.";
-            if (error.code === 'auth/email-already-in-use') {
-                errorMessage = "This email is already in use. Please sign in or use a different email.";
-            } else if (error.code === 'auth/weak-password') {
-                errorMessage = "Password is too weak. It should be at least 6 characters.";
-            }
-            showToast(errorMessage, true);
-        }
+        await handleNewUserSignUp(email, password, fullName);
 
     } else {
         // --- SIGN IN LOGIC ---
@@ -287,15 +304,12 @@ form.addEventListener('submit', async (e) => {
                 errorMessage = "Your account has been disabled.";
             }
             showToast(errorMessage, true);
+            setLoading(false);
         }
     }
-
-    setLoading(false);
 });
 
-/* Initial Setup */
-applyLang(); // Apply language on page load
-
+applyLang();
 </script>
 </body>
 </html>
