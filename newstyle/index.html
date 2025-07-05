@@ -323,32 +323,42 @@
          * Fetches the student's main data and updates the header stats.
          * @param {object} user - The authenticated Firebase user object.
          */
-        async function updateDashboardHeader(user) {
-            const studentDocRef = doc(db, 'thelo-students', user.uid);
-            try {
-                const docSnap = await getDoc(studentDocRef);
-                if (docSnap.exists()) {
-                    const studentData = docSnap.data();
+        // On your DASHBOARD page (sdashboard.html)
 
-                    if (profilePhotoNav && studentData.profilePicture) {
-                        profilePhotoNav.src = studentData.profilePicture;
-                    }
+async function updateDashboardHeader(user) {
+    const studentDocRef = doc(db, 'thelo-students', user.uid);
+    const profilePhotoNav = document.getElementById('profile-photo-nav');
+    const studentPointsSpan = document.getElementById('student-points');
+    const lessonsCompletedCountSpan = document.getElementById('lessons-completed-count');
+    const streakCountSpan = document.getElementById('streak-count');
 
-                    if (studentPointsSpan) studentPointsSpan.textContent = studentData.points || 0;
-                    if (streakCountSpan) streakCountSpan.textContent = studentData.streakData?.currentStreak || 0;
-                    if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = studentData.lessonsCompleted || 0;
-                
-                } else {
-                    console.warn("No student profile found for UID:", user.uid);
-                    if (studentPointsSpan) studentPointsSpan.textContent = 0;
-                    if (streakCountSpan) streakCountSpan.textContent = 0;
-                    if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = 0;
-                }
-            } catch (error) {
-                console.error("Error fetching student profile:", error);
+    try {
+        const docSnap = await getDoc(studentDocRef);
+        if (docSnap.exists()) {
+            const studentData = docSnap.data();
+
+            if (profilePhotoNav && studentData.profilePicture) {
+                profilePhotoNav.src = studentData.profilePicture;
             }
+            // This line reads the points
+            if (studentPointsSpan) studentPointsSpan.textContent = studentData.points || 0;
+            
+            // This line reads the streak
+            if (streakCountSpan) streakCountSpan.textContent = studentData.streakData?.currentStreak || 0;
+            
+            // THIS LINE IS THE KEY: It reads the lessonsCompleted counter
+            if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = studentData.lessonsCompleted || 0;
+        
+        } else {
+            console.warn("No student profile found for UID:", user.uid);
+            if (studentPointsSpan) studentPointsSpan.textContent = 0;
+            if (streakCountSpan) streakCountSpan.textContent = 0;
+            if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = 0;
         }
-
+    } catch (error) {
+        console.error("Error fetching student profile:", error);
+    }
+}
         // --- Main Execution ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
