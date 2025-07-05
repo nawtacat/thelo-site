@@ -2256,18 +2256,16 @@ async function displayLessonComplete() {
         const studentDocRef = db.collection('thelo-students').doc(user.uid);
 
         try {
-            // First, check if the lesson was already marked as completed
             const progressDoc = await progressDocRef.get();
-            const wasAlreadyCompleted = progressDoc.exists && progressDoc.data().status === 'completed';
+            const wasAlreadyCompleted = progressDoc.exists; // Simpler check is enough
 
-            // Always update the progress document with the latest score and timestamp
+            // Create the "completed" document in the progress subcollection
             await updateStudentProgress(user.uid, topicId, { 
                 status: 'completed', 
-                progressPercentage: 100,
                 score: sessionPoints 
             });
 
-            // IMPORTANT: Only increment the main counter if the lesson was NOT already completed
+            // If it wasn't already completed, increment the main counter
             if (!wasAlreadyCompleted) {
                 await studentDocRef.update({
                     lessonsCompleted: firebase.firestore.FieldValue.increment(1)
@@ -2333,23 +2331,6 @@ function handleNextCheckClick() {
     const TXT = getCurrentUIText();
     
     // THIS IS THE MODIFIED PART
-    if (currentStageIndex === -1 && lessonStages.length > 0) {
-        // --- THIS IS THE START OF THE LESSON ---
-        const user = auth.currentUser;
-        const urlParams = new URLSearchParams(window.location.search);
-        const lessonFileName = urlParams.get('lessonFile');
-        
-        if (user && lessonFileName) {
-            const topicId = lessonFileName.replace('.json', '');
-            updateStudentProgress(user.uid, topicId, { 
-                status: 'in-progress', 
-                progressPercentage: 0 
-            });
-        }
-        
-        transitionToStage(0); 
-        return; 
-    }
     
     if (!currentStageData) return;
     
