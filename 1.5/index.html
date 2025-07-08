@@ -398,21 +398,32 @@ body.lang-en {
     background-color: var(--thelo-border);
     border-radius: 10px;
   }
-  .ai-message {
-    background-color: var(--bg-white); /* UPDATED to plain white */
-    border: 1px solid #f0f0f0; /* Subtle border for definition */
-    color: var(--thelo-text);
-    padding: 0.75rem 1rem;
-    border-radius: 0.75rem;
-    margin-bottom: 0.75rem;
-    max-width: 95%;
-    align-self: flex-start;
-    word-wrap: break-word;
-    box-shadow: var(--shadow-sm);
-    font-size: 0.9rem;
-    line-height: 1.6;
-  }
-  .ai-message strong {
+.ai-message {
+  /* Your existing styles for ai-message */
+  background-color: var(--bg-white);
+  border: 1px solid #f0f0f0;
+  color: var(--thelo-text);
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 0.75rem;
+  max-width: 95%;
+  align-self: flex-start;
+  word-wrap: break-word;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.9rem;
+  line-height: 1.6;
+
+  /* --- NEW: Fade-in styles --- */
+  opacity: 0; /* Start invisible */
+  transform: translateY(10px); /* Slightly move from below */
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out; /* Smooth transition */
+}
+
+.ai-message.show {
+  opacity: 1; /* Fade in to fully visible */
+  transform: translateY(0); /* Move to its natural position */
+} 
+.ai-message strong {
     color: var(--thelo-blue);
     font-weight: inherit; /* This makes the weight consistent */
   }
@@ -2329,16 +2340,21 @@ async function displayLessonComplete() {
 function handleNextCheckClick() {
     if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
     const TXT = getCurrentUIText();
-    
-    // THIS IS THE MODIFIED PART
-    
-    if (!currentStageData) return;
-    
-    // ... (The rest of your original function logic for checking answers, etc.)
-    const mcqDetails = currentStageData.optionsQuiz;
+
+    // Handle the initial "Start" button click
+    if (currentStageIndex === -1 && lessonStages.length > 0) {
+        transitionToStage(0); // Move to the first stage
+        return; // Exit the function after starting the lesson
+    }
+
+    // The rest of your existing logic for handling 'Got It!' or 'Check'
+    // This part only runs AFTER the lesson has actually started (currentStageIndex >= 0)
+    const mcqDetails = currentStageData.optionsQuiz; // Now currentStageData will not be null here
     const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-    if (isMCQStage) return;
+    if (isMCQStage) return; // MCQ handling happens within displayMcq() or handleMcqOptionClick()
+
     if (nextCheckBtn.textContent === TXT.gotIt) {
+        // Logic for 'Got It!' scenarios (non-question stages)
         if (!stagesWithPointsAwarded.has(currentStageIndex)) {
             stagesWithPointsAwarded.add(currentStageIndex);
             stopCurrentStageAudio();
@@ -2350,13 +2366,19 @@ function handleNextCheckClick() {
             addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
             if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
         }
+        nextStage(); // Immediately go to the next stage after 'Got It!'
+        return;
     }
-    switch (currentStageData.type) {
-        case 'question_handwriting': checkHandwritingAnswer(); break;
-        default: nextStage(); break;
+
+    // Logic for 'Check' scenarios (handwriting question stages)
+    if (currentStageData.type === 'question_handwriting') {
+        checkHandwritingAnswer();
+    } else {
+        // Fallback for other types if they somehow reach here without hitting 'Got It' condition
+        // This case should ideally not be reached if 'Got It' is handled first for non-questions.
+        nextStage();
     }
-}
-    function clearUserCanvas() {
+}    function clearUserCanvas() {
         if (isPageGridVisible) return;
         if (isThelobookActive) {
             if (thelobookCtx) {
@@ -2402,33 +2424,49 @@ function handleNextCheckClick() {
         });
     };
     }
-    function addChatMessage(sender, rawMsg) {
-        if (isTabletMode) {
-            // In tablet mode, use the new toast system
-            // We can add a longer duration for important messages
-            const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
-            showToast(rawMsg, isImportant ? 5000 : 3500);
-        } else {
-            // On desktop/mobile, use the original terminal chat
-            const chatArea = document.getElementById('chat');
-            if (!chatArea) return;
+    // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
+function addChatMessage(sender, rawMsg) {
+    if (isTabletMode) {
+        // In tablet mode, use the new toast system
+        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
+        showToast(rawMsg, isImportant ? 5000 : 3500);
+    } else {
+        // On desktop/mobile, use the original terminal chat
+        const chatArea = document.getElementById('chat');
+        if (!chatArea) return;
 
-            const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, ''); const TXT = getCurrentUIText(); let emoji = '🤖';
-            const isPoints  = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
-            const isWrong   = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
-            const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-            const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
-            const isWelcome = TXT.welcome && msg.includes(TXT.welcome); const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+        const TXT = getCurrentUIText();
+        let emoji = '🤖';
 
-            if(isWrong) emoji = '🤔'; else if (isCorrect || isPoints) emoji = '🎉'; else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
-            else if (isWelcome) emoji = '👋'; else if (isChecking) emoji = '⏳';
+        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
 
-            const bubble = document.createElement('div'); bubble.className = 'ai-message';
-            bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
-            chatArea.appendChild(bubble);
-            chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-        }
-    }
+        if(isWrong) emoji = '🤔';
+        else if (isCorrect || isPoints) emoji = '🎉';
+        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+        else if (isWelcome) emoji = '👋';
+        else if (isChecking) emoji = '⏳';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'ai-message'; // Starts with opacity: 0
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
+        chatArea.appendChild(bubble);
+
+        // Trigger the fade-in effect after the element has been added to the DOM
+        // and the browser has painted its initial (hidden) state.
+        requestAnimationFrame(() => {
+            bubble.classList.add('show');
+            // Scroll into view *after* the animation has started, or slightly delayed.
+            // Using a slightly delayed scroll behavior could ensure the message is fully visible.
+            chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+        });
+    }
+}
     /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
@@ -2742,6 +2780,10 @@ async function checkHandwritingAnswer() {
             updateUserPointsInFirestore(pointsGained);
             nextCheckBtn.classList.add('correct');
             const chatMessageWithPoints = `${formatAIMessage('correctAI', { detectedAnswer })} ${formatAIMessage('pointsGained', { points: pointsGained })}`;
+
+            // --- ADD THIS LINE FOR LOGGING ON CORRECT ANSWER ---
+            logDigitForTraining(detectedAnswer, 'correct'); // Log the correctly recognized digit
+
             if (isImageModeActive) {
                 imageTerminalFeedback.innerHTML = `<span>${feedbackForTerminal}</span>`;
                 imageTerminalFeedback.style.opacity = 1;
@@ -2755,6 +2797,11 @@ async function checkHandwritingAnswer() {
             const feedbackForTerminal = "Not quite, try again!";
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
+
+            // --- ADD THIS LINE FOR LOGGING ON INCORRECT ANSWER (if you want to capture these too) ---
+            // You might log 'detectedAnswer' as the guessed value and 'correctAnswer' as the true value
+            logDigitForTraining(detectedAnswer, 'incorrect');
+
             if (isImageModeActive) {
                 imageTerminalFeedback.innerHTML = `<span>⚠️ ${feedbackForTerminal}</span>`;
                 imageTerminalFeedback.style.opacity = 1;
@@ -3263,6 +3310,61 @@ auth.onAuthStateChanged(user => {
         finishInitialization();
     }
 });
+
+// Add this function somewhere logical, e.g., near updateUserPointsInFirestore
+async function logDigitForTraining(recognizedValue, feedbackType) {
+    const user = auth.currentUser;
+    if (!user) {
+        console.warn("No user for digit logging. Skipping.");
+        return;
+    }
+
+    // Ensure finalAnswerCanvas has content (blue ink drawing)
+    if (!finalAnswerCanvas || finalAnswerCanvas.width === 0 || finalAnswerCanvas.height === 0) {
+        console.warn("finalAnswerCanvas is not ready or empty. Cannot log digit for training.");
+        return;
+    }
+
+    let base64ImageData;
+    try {
+        // Capture the content of the finalAnswerCanvas (which contains the blue ink)
+        // You might want to consider cropping this canvas to just the bounding box of the digit
+        // for optimal training data, but for a demo, the whole canvas is fine.
+        base64ImageData = finalAnswerCanvas.toDataURL('image/png'); // PNG is generally better for line art/digits
+    } catch (e) {
+        console.error("Failed to get image data from canvas for logging:", e);
+        return;
+    }
+
+    const metadata = {
+        digit: String(recognizedValue), // The correct digit from the lesson data
+        recognizedByVision: currentStageData.correctAnswerOcr, // What Google Vision identified
+        feedbackType: feedbackType, // 'correct' or 'incorrect' for feedback
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        userId: user.uid, // Anonymous user ID
+        lessonId: new URLSearchParams(window.location.search).get('lessonFile')?.replace('.json', '') || 'unknown',
+        stageIndex: currentStageIndex,
+        deviceType: isTabletMode ? 'tablet' : 'desktop', // Simple detection
+        userAgent: navigator.userAgent, // Detailed user agent
+        screenWidth: window.screen.width,
+        screenHeight: window.screen.height,
+        canvasWidth: finalAnswerCanvas.width,
+        canvasHeight: finalAnswerCanvas.height,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        // You could add inputMethod: e.pointerType (from drawing start event, but harder to pass here)
+    };
+
+    try {
+        // Send to a new collection specifically for training data
+        await db.collection('thelo-training-digits-demo').add({
+            imageData: base64ImageData, // Base64 encoded image
+            metadata: metadata
+        });
+        console.log("Handwritten digit logged for training demo:", recognizedValue);
+    } catch (error) {
+        console.error("Error logging digit for training demo:", error);
+    }
+}
 </script>
 	<div id="streakModal" class="modal-hidden">
     <div class="streak-modal-content">
