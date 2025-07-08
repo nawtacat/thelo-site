@@ -2329,16 +2329,21 @@ async function displayLessonComplete() {
 function handleNextCheckClick() {
     if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
     const TXT = getCurrentUIText();
-    
-    // THIS IS THE MODIFIED PART
-    
-    if (!currentStageData) return;
-    
-    // ... (The rest of your original function logic for checking answers, etc.)
-    const mcqDetails = currentStageData.optionsQuiz;
+
+    // Handle the initial "Start" button click
+    if (currentStageIndex === -1 && lessonStages.length > 0) {
+        transitionToStage(0); // Move to the first stage
+        return; // Exit the function after starting the lesson
+    }
+
+    // The rest of your existing logic for handling 'Got It!' or 'Check'
+    // This part only runs AFTER the lesson has actually started (currentStageIndex >= 0)
+    const mcqDetails = currentStageData.optionsQuiz; // Now currentStageData will not be null here
     const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-    if (isMCQStage) return;
+    if (isMCQStage) return; // MCQ handling happens within displayMcq() or handleMcqOptionClick()
+
     if (nextCheckBtn.textContent === TXT.gotIt) {
+        // Logic for 'Got It!' scenarios (non-question stages)
         if (!stagesWithPointsAwarded.has(currentStageIndex)) {
             stagesWithPointsAwarded.add(currentStageIndex);
             stopCurrentStageAudio();
@@ -2350,13 +2355,19 @@ function handleNextCheckClick() {
             addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
             if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
         }
+        nextStage(); // Immediately go to the next stage after 'Got It!'
+        return;
     }
-    switch (currentStageData.type) {
-        case 'question_handwriting': checkHandwritingAnswer(); break;
-        default: nextStage(); break;
+
+    // Logic for 'Check' scenarios (handwriting question stages)
+    if (currentStageData.type === 'question_handwriting') {
+        checkHandwritingAnswer();
+    } else {
+        // Fallback for other types if they somehow reach here without hitting 'Got It' condition
+        // This case should ideally not be reached if 'Got It' is handled first for non-questions.
+        nextStage();
     }
-}
-    function clearUserCanvas() {
+}    function clearUserCanvas() {
         if (isPageGridVisible) return;
         if (isThelobookActive) {
             if (thelobookCtx) {
