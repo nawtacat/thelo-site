@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>thelo – Sign In</title>
+<title>thelo – Sign In / Sign Up</title>
 <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png"/>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,20 +30,16 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
     background:#fff;border:1px solid var(--grid-color);border-radius:.75rem;
     padding:2.5rem;box-shadow:0 10px 15px -3px rgb(0 0 0/.1),0 4px 6px -4px rgb(0 0 0/.1);
     position:relative;
-    max-width:480px; /* Adjusted to be wider */
+    max-width:480px;
     width:100%}
-/* No media query for wider desktop size as it's now consistently 480px max-width */
 .window-container::before{
     content:"";position:absolute;top:1rem;left:1rem;width:52px;height:12px;
-    background-image:url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E")}
+    background-image:url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E")}
 .form-input{width:100%;border-radius:.5rem;border:1px solid #D1D5DB;background:#fff;
     padding:.75rem 1rem;box-shadow:0 1px 2px rgba(0,0,0,.05);
     transition:border-color .2s,box-shadow .2s}
 .form-input:focus{border-color:var(--thelo-blue);outline:none;box-shadow:0 0 0 3px rgba(37,99,235,.2)}
-
-/* make the submit button always span the full row */
 #submitBtn{grid-column:1/-1}
-
 .loading-spinner{border:4px solid #f3f3f3;border-top:4px solid var(--thelo-blue);
     border-radius:50%;width:24px;height:24px;animation:spin 1s linear infinite;display:inline-block;margin-left:.5rem}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -51,6 +47,24 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
 @media(max-width:640px){
     .fixed.top-4.left-4,.fixed.top-4.right-4{top:.5rem;font-size:.75rem;padding:.25rem .5rem}
     .fixed.top-4.left-4{left:.5rem}.fixed.top-4.right-4{right:.5rem}}
+
+/* ===== NEW STYLES for Character Selection ===== */
+.char-option {
+    cursor: pointer;
+    border-radius: 9999px; /* pill shape */
+    border: 3px solid transparent;
+    transition: transform 0.2s ease-in-out, border-color 0.2s ease-in-out;
+    background-color: #f0f0f0; /* A light background for the images */
+}
+.char-option:hover {
+    transform: scale(1.08);
+}
+.char-option.selected {
+    border-color: var(--thelo-blue);
+    transform: scale(1.08);
+    box-shadow: 0 0 10px rgba(37, 99, 235, 0.3);
+}
+
 </style>
 </head>
 
@@ -61,30 +75,48 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
 
 <div id="authWindowContainer" class="window-container">
     <h2 id="formTitle" class="text-2xl font-extrabold mb-3 text-center">Sign In</h2>
-    <p id="welcomeMessage" class="text-center text-sm text-slate-600 mb-6"></p> <form id="authForm" class="grid grid-cols-1 gap-y-4">
+    <p id="welcomeMessage" class="text-center text-sm text-slate-600 mb-6"></p>
+
+    <form id="authForm" class="grid grid-cols-1 gap-y-4">
+
+        <div id="fullNameDiv" class="hidden">
+            <label id="labelFullName" class="block text-sm font-bold mb-1" for="fullName">Full Name</label>
+            <input id="fullName" type="text" class="form-input">
+        </div>
+
+        <div id="avatarDiv" class="hidden">
+            <label id="labelAvatar" class="block text-sm font-bold mb-2">Choose Your Character</label>
+            <div id="avatarGrid" class="grid grid-cols-3 sm:grid-cols-6 gap-3 justify-items-center">
+                </div>
+        </div>
+
         <div id="emailDiv">
             <label id="labelEmail" class="block text-sm font-bold mb-1" for="email">Email</label>
             <input id="email" type="email" class="form-input" required>
         </div>
+
         <div id="passwordDiv">
             <label id="labelPassword" class="block text-sm font-bold mb-1" for="password">Password</label>
             <input id="password" type="password" class="form-input" required>
         </div>
 
-        <button id="submitBtn" type="submit"
-                class="mt-2 rounded-lg bg-[var(--thelo-blue)] px-8 py-3 font-bold text-white shadow hover:scale-105 transition-transform">
+        <button id="submitBtn" type="submit" class="mt-2 rounded-lg bg-[var(--thelo-blue)] px-8 py-3 font-bold text-white shadow hover:scale-105 transition-transform">
             Sign In
         </button>
     </form>
+
+    <div class="text-center text-sm mt-6">
+        <a href="#" id="toggleAuthModeLink" class="font-semibold text-[var(--thelo-blue)] hover:underline"></a>
+    </div>
 
     <p id="toast" class="mt-6 text-center text-sm text-red-600 hidden"></p>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// Your Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
     authDomain: "physmathacademy-722b3.firebaseapp.com",
@@ -95,23 +127,45 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 const TXT = {
     en: {
-        home: "Home", signInTitle: "Sign In", signInBtn: "Sign In",
-        welcomeMessage: "Contact Aram if you do not have the credentials",
-        email: "Email", password: "Password"
+        home: "Home",
+        signInTitle: "Sign In to thelo",
+        signUpTitle: "Create Your Account",
+        signInBtn: "Sign In",
+        signUpBtn: "Create Account",
+        welcomeMessageSignIn: "Welcome back! Please enter your details.",
+        welcomeMessageSignUp: "Join thelo to start your learning journey.",
+        email: "Email",
+        password: "Password",
+        fullName: "Full Name",
+        avatar: "Choose Your Character",
+        toggleToSignUp: "Don't have an account? Sign Up",
+        toggleToSignIn: "Already have an account? Sign In",
     },
     hy: {
-        home: "Գլխավոր", signInTitle: "Մուտք", signInBtn: "Մուտք",
-        welcomeMessage: "Ուրախ ենք Ձեզ տեսնել thelo-ում։", // "We are happy to see you in thelo."
-        email: "Էլ-փոստ", password: "Գաղտնաբառ"
+        home: "Գլխավոր",
+        signInTitle: "Մուտք գործել thelo",
+        signUpTitle: "Ստեղծել Հաշիվ",
+        signInBtn: "Մուտք",
+        signUpBtn: "Ստեղծել Հաշիվ",
+        welcomeMessageSignIn: "Ուրախ ենք Ձեզ նորից տեսնել։",
+        welcomeMessageSignUp: "Միացեք thelo-ին՝ սկսելու ձեր ուսումնական ճամփորդությունը։",
+        email: "Էլ-փոստ",
+        password: "Գաղտնաբառ",
+        fullName: "Անուն Ազգանուն",
+        avatar: "Ընտրեք Ձեր Նկարը",
+        toggleToSignUp: "Չունե՞ք հաշիվ։ Գրանցվել",
+        toggleToSignIn: "Արդեն ունե՞ք հաշիվ։ Մուտք",
     }
 };
 
-let lang = 'en'; // Default language
+let lang = 'en';
+let isSignUpMode = false;
+let selectedAvatarUrl = ''; // <-- ADDED: To store the chosen avatar URL
 
-/* DOM Elements */
 const langBtn = document.getElementById('langToggle');
 const homeLink = document.getElementById('homeLink');
 const form = document.getElementById('authForm');
@@ -121,22 +175,48 @@ const submitBtn = document.getElementById('submitBtn');
 const toast = document.getElementById('toast');
 const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
+const fullNameInput = document.getElementById('fullName');
+const fullNameDiv = document.getElementById('fullNameDiv');
 const labelEmail = document.getElementById('labelEmail');
 const labelPassword = document.getElementById('labelPassword');
+const labelFullName = document.getElementById('labelFullName');
+const toggleAuthModeLink = document.getElementById('toggleAuthModeLink');
+// --- ADDED: Get new elements ---
+const avatarDiv = document.getElementById('avatarDiv');
+const avatarGrid = document.getElementById('avatarGrid');
+const labelAvatar = document.getElementById('labelAvatar');
 
-
-/* Helper Functions */
+function updateFormUI() {
+    const s = TXT[lang];
+    if (isSignUpMode) {
+        formTitle.textContent = s.signUpTitle;
+        welcomeMessage.textContent = s.welcomeMessageSignUp;
+        submitBtn.textContent = s.signUpBtn;
+        toggleAuthModeLink.textContent = s.toggleToSignIn;
+        fullNameDiv.classList.remove('hidden');
+        avatarDiv.classList.remove('hidden'); // <-- ADDED: Show avatar picker
+        fullNameInput.required = true;
+    } else {
+        formTitle.textContent = s.signInTitle;
+        welcomeMessage.textContent = s.welcomeMessageSignIn;
+        submitBtn.textContent = s.signInBtn;
+        toggleAuthModeLink.textContent = s.toggleToSignUp;
+        fullNameDiv.classList.add('hidden');
+        avatarDiv.classList.add('hidden'); // <-- ADDED: Hide avatar picker
+        fullNameInput.required = false;
+    }
+}
 
 function applyLang() {
     const s = TXT[lang];
     document.documentElement.lang = lang;
     langBtn.textContent = lang === 'en' ? 'Հայ' : 'EN';
     homeLink.textContent = s.home;
-    formTitle.textContent = s.signInTitle;
-    welcomeMessage.textContent = s.welcomeMessage;
-    submitBtn.textContent = s.signInBtn;
     labelEmail.textContent = s.email;
     labelPassword.textContent = s.password;
+    labelFullName.textContent = s.fullName;
+    labelAvatar.textContent = s.avatar; // <-- ADDED: Translate avatar label
+    updateFormUI();
 }
 
 function showToast(message, isError = true) {
@@ -151,18 +231,114 @@ function hideToast() {
 }
 
 function setLoading(isLoading) {
+    const btnText = isSignUpMode ? TXT[lang].signUpBtn : TXT[lang].signInBtn;
     if (isLoading) {
         submitBtn.disabled = true;
-        submitBtn.innerHTML = `<span class="loading-spinner"></span> ${TXT[lang].signInBtn}...`;
+        submitBtn.innerHTML = `<span class="loading-spinner"></span> ${btnText}...`;
     } else {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = TXT[lang].signInBtn;
+        submitBtn.innerHTML = btnText;
     }
 }
 
-/* Event Listeners */
+/**
+ * Handles the avatar selection click event.
+ * @param {Event} e The click event.
+ */
+function handleAvatarSelection(e) {
+    // Remove 'selected' class from all other avatars
+    avatarGrid.querySelectorAll('.char-option').forEach(img => img.classList.remove('selected'));
+    // Add 'selected' class to the clicked avatar
+    const clickedImg = e.target;
+    clickedImg.classList.add('selected');
+    // Store the URL of the selected avatar
+    selectedAvatarUrl = clickedImg.dataset.url;
+}
+
+/**
+ * Creates and populates the avatar selection grid.
+ */
+function populateAvatars() {
+    for (let i = 1; i <= 6; i++) {
+        const imgUrl = `https://thelo.space/img/char${i}.png`;
+        const img = document.createElement('img');
+        img.src = imgUrl;
+        img.alt = `Character ${i}`;
+        img.dataset.url = imgUrl;
+        img.className = 'char-option w-16 h-16 sm:w-20 sm:h-20 object-cover';
+        img.addEventListener('click', handleAvatarSelection);
+        avatarGrid.appendChild(img);
+    }
+}
+
+
+/**
+ * Handles the new user sign-up process.
+ * @param {string} email
+ * @param {string} password
+ * @param {string} fullName
+ * @param {string} avatarUrl
+ */
+async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
+    try {
+        // Step 1: Create user in Authentication
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        const nameParts = fullName.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // Step 2: Create user profile in Firestore
+        await setDoc(doc(db, "thelo-students", user.uid), {
+            name: firstName,
+            surname: lastName,
+            email: user.email,
+            language: "en",
+            profilePicture: avatarUrl, // <-- MODIFIED: Store the chosen avatar URL
+            points: 0,
+            lessonsCompleted: 0,
+            createdAt: serverTimestamp(),
+            streakData: {
+                currentStreak: 0,
+                longestStreak: 0,
+                lastActivityWeek: null
+            },
+            visionUsage: {
+                count: 0,
+                month: new Date().toISOString().slice(0, 7)
+            }
+        });
+
+        console.log("Successfully created user and their full profile document!");
+        showToast("Account created! Redirecting...", false);
+        setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
+
+    } catch (error) {
+        console.error("Sign up error:", error);
+        let errorMessage = "An unknown error occurred during sign up.";
+        if (error.code === 'auth/email-already-in-use') {
+            errorMessage = "This email is already in use. Please sign in or use a different email.";
+        } else if (error.code === 'auth/weak-password') {
+            errorMessage = "Password is too weak. It should be at least 6 characters.";
+        }
+        showToast(errorMessage, true);
+        setLoading(false);
+    }
+}
 
 langBtn.addEventListener('click', () => { lang = lang === 'en' ? 'hy' : 'en'; applyLang(); });
+
+toggleAuthModeLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    isSignUpMode = !isSignUpMode;
+    form.reset();
+    hideToast();
+    // --- ADDED: Reset avatar selection on mode toggle ---
+    selectedAvatarUrl = '';
+    avatarGrid.querySelectorAll('.char-option').forEach(img => img.classList.remove('selected'));
+    updateFormUI();
+});
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -172,53 +348,46 @@ form.addEventListener('submit', async (e) => {
     const email = emailInput.value.trim();
     const password = passwordInput.value.trim();
 
-    if (!email || !password) {
-        showToast("Please enter your email and password.", true);
-        setLoading(false);
-        return;
-    }
-
-    try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-        console.log("User signed in:", user.uid);
-
-        // --- THIS IS THE FIX ---
-        // Set the flag in localStorage so other pages can see the user is logged in.
-        localStorage.setItem('theloUserLoggedIn', 'true');
-
-        showToast("Signed in successfully! Redirecting...", false);
-        setLoading(false);
-        
-        setTimeout(() => {
-            window.location.href = 'https://thelo.space/sdashboard';
-        }, 1500);
-
-    } catch (error) {
-        console.error("Signin error:", error);
-        const errorCode = error.code;
-        let errorMessage = "An unknown error occurred during signin.";
-
-        switch (errorCode) {
-            case 'auth/invalid-email':
-            case 'auth/user-not-found':
-            case 'auth/wrong-password':
-                errorMessage = "Invalid email or password. Please try again.";
-                break;
-            case 'auth/user-disabled':
-                errorMessage = "Your account has been disabled. Please contact support.";
-                break;
-            default:
-                errorMessage = `Signin failed: ${error.message}`;
-                break;
+    if (isSignUpMode) {
+        const fullName = fullNameInput.value.trim();
+        if (!fullName) {
+            showToast("Please enter your full name.", true);
+            setLoading(false);
+            return;
         }
-        showToast(errorMessage, true);
-        setLoading(false);
+        // --- ADDED: Validation for avatar selection ---
+        if (!selectedAvatarUrl) {
+            showToast("Please choose a character avatar.", true);
+            setLoading(false);
+            return;
+        }
+        await handleNewUserSignUp(email, password, fullName, selectedAvatarUrl);
+
+    } else {
+        // --- SIGN IN LOGIC ---
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            console.log("User signed in:", userCredential.user.uid);
+
+            showToast("Signed in successfully! Redirecting...", false);
+            setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
+
+        } catch (error) {
+            console.error("Sign in error:", error);
+            let errorMessage = "Invalid email or password. Please try again.";
+            if (error.code === 'auth/user-disabled') {
+                errorMessage = "Your account has been disabled.";
+            } else if (error.code === 'auth/invalid-credential') {
+                errorMessage = "Invalid email or password. Please try again.";
+            }
+            showToast(errorMessage, true);
+            setLoading(false);
+        }
     }
 });
 
-/* Initial Setup */
-applyLang(); // Apply language on page load
+populateAvatars(); // <-- ADDED: Call this function on page load
+applyLang();
 </script>
 </body>
 </html>
