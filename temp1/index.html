@@ -171,15 +171,32 @@
     </header>
 
     <main>
-        <div id="welcome-hero" class="mb-12 flex flex-col sm:flex-row items-center gap-6 p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-            <img id="welcome-avatar" src="https://via.placeholder.com/150/E5E7EB/FFFFFF?text=L" alt="User Avatar" class="w-24 h-24 rounded-full border-4 border-white shadow-md object-cover">
-            <div>
-                <h1 class="text-3xl font-extrabold text-gray-800">
-                    Welcome back, <span id="welcome-name" class="text-[var(--thelo-blue)]">...</span>!
-                </h1>
-                <p class="mt-1 text-base text-gray-500" data-i18n="welcomeSubtitle">Ready to continue your learning journey? Let's get started!</p>
+        <section id="welcome-container" class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center mb-12">
+            <div id="greeting-text">
+                <div class="flex items-center gap-4">
+                     <img id="welcome-avatar" src="https://via.placeholder.com/150/E5E7EB/FFFFFF?text=L" alt="User Avatar" class="w-20 h-20 rounded-full border-4 border-white shadow-md object-cover">
+                     <div>
+                        <h1 class="text-xl font-bold text-gray-500" id="time-of-day-greeting">...</h1>
+                        <p class="text-4xl font-extrabold text-gray-800 -mt-1">
+                           <span id="welcome-name">...</span>!
+                        </p>
+                     </div>
+                </div>
+                <p class="mt-4 text-lg text-gray-600">Your learning path is ready. Let's pick up where you left off and conquer the next challenge!</p>
             </div>
-        </div>
+            <a href="#" id="next-lesson-card" class="hidden group bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-lg hover:border-[var(--thelo-blue)] transition-all duration-300 flex items-center gap-6">
+                <div id="next-lesson-icon" class="text-3xl bg-[var(--thelo-blue-light)] text-[var(--thelo-blue)] w-16 h-16 rounded-lg flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                    <i class="fas fa-book"></i>
+                </div>
+                <div class="flex-grow">
+                    <p class="text-sm font-bold text-gray-400">NEXT UP</p>
+                    <h3 id="next-lesson-name" class="text-xl font-bold text-gray-800">Loading lesson...</h3>
+                </div>
+                <div class="text-3xl text-gray-300 transition-transform duration-300 group-hover:translate-x-2 group-hover:text-[var(--thelo-blue)]">
+                    <i class="fas fa-arrow-right"></i>
+                </div>
+            </a>
+        </section>
         <div class="learning-path" id="learning-path-container"></div>
 
         <footer class="page-footer">
@@ -221,9 +238,24 @@
         const lessonsCompletedCountSpan = document.getElementById('lessons-completed-count');
         const streakCountSpan = document.getElementById('streak-count');
         const learningPathContainer = document.getElementById('learning-path-container');
-        // --- ADDED: Get Welcome Hero elements ---
+        // --- ADDED: Get Welcome Section elements ---
         const welcomeAvatar = document.getElementById('welcome-avatar');
         const welcomeName = document.getElementById('welcome-name');
+        const timeOfDayGreeting = document.getElementById('time-of-day-greeting');
+        const nextLessonCard = document.getElementById('next-lesson-card');
+        const nextLessonIcon = document.getElementById('next-lesson-icon');
+        const nextLessonName = document.getElementById('next-lesson-name');
+
+        /**
+         * Returns a greeting based on the current time of day.
+         * @returns {string} The appropriate greeting.
+         */
+        function getGreeting() {
+            const hour = new Date().getHours();
+            if (hour < 12) return "Good morning";
+            if (hour < 18) return "Good afternoon";
+            return "Good evening";
+        }
 
 
         /**
@@ -256,10 +288,23 @@
                     allTopics.push(...topics);
                 }
 
-                // STEP 2: Determine the "next-up" topic (first one not completed)
-                const nextUpTopicId = allTopics.find(topic => !progressMap.has(topic.id))?.id;
+                // STEP 2: Find the "next-up" topic and populate the welcome card
+                const nextUpTopic = allTopics.find(topic => !progressMap.has(topic.id));
 
-                // STEP 3: Build the HTML
+                if (nextUpTopic) {
+                    nextLessonCard.href = `https://thelo.space/1.5/?lessonFile=${nextUpTopic.lessonFileUrl}`;
+                    nextLessonName.textContent = nextUpTopic.topicName;
+                    nextLessonIcon.innerHTML = `<i class="fas ${nextUpTopic.unit.icon || 'fa-book'}"></i>`;
+                    nextLessonCard.classList.remove('hidden');
+                } else {
+                    // Optionally handle the case where all lessons are complete
+                    nextLessonName.textContent = "All lessons completed!";
+                    nextLessonIcon.innerHTML = `<i class="fas fa-trophy"></i>`;
+                    nextLessonCard.classList.remove('hidden');
+                }
+
+
+                // STEP 3: Build the HTML for the main learning path
                 let fullCourseHTML = '';
                 let currentUnitId = null;
 
@@ -293,7 +338,7 @@
                         actionText = "Review";
                     }
 
-                    if (topic.id === nextUpTopicId) {
+                    if (nextUpTopic && topic.id === nextUpTopic.id) {
                         statusClass += ' next-up';
                     }
 
@@ -328,10 +373,14 @@
             const studentDocRef = doc(db, 'thelo-students', user.uid);
             try {
                 const docSnap = await getDoc(studentDocRef);
+
+                // Set dynamic greeting regardless of profile
+                timeOfDayGreeting.textContent = getGreeting();
+
                 if (docSnap.exists()) {
                     const studentData = docSnap.data();
 
-                    // --- Populate Welcome Hero ---
+                    // --- Populate Welcome Section ---
                     if (welcomeAvatar && studentData.profilePicture) {
                         welcomeAvatar.src = studentData.profilePicture;
                     }
@@ -356,7 +405,8 @@
                     if (streakCountSpan) streakCountSpan.textContent = 0;
                     if (lessonsCompletedCountSpan) lessonsCompletedCountSpan.textContent = 0;
                 }
-            } catch (error) {
+            } catch (error)
+            {
                 console.error("Error fetching student profile:", error);
                 if (welcomeName) welcomeName.textContent = 'Student';
             }
@@ -375,9 +425,7 @@
 
             } else {
                 console.log("No user authenticated. Redirecting to login.");
-                // In a real app, you would redirect to the login page
-                // window.location.href = 'index.html';
-                learningPathContainer.innerHTML = '<p>Please log in to see your learning path.</p>';
+                 window.location.href = 'https://thelo.space/auth';
             }
         });
     </script>
