@@ -398,21 +398,32 @@ body.lang-en {
     background-color: var(--thelo-border);
     border-radius: 10px;
   }
-  .ai-message {
-    background-color: var(--bg-white); /* UPDATED to plain white */
-    border: 1px solid #f0f0f0; /* Subtle border for definition */
-    color: var(--thelo-text);
-    padding: 0.75rem 1rem;
-    border-radius: 0.75rem;
-    margin-bottom: 0.75rem;
-    max-width: 95%;
-    align-self: flex-start;
-    word-wrap: break-word;
-    box-shadow: var(--shadow-sm);
-    font-size: 0.9rem;
-    line-height: 1.6;
-  }
-  .ai-message strong {
+.ai-message {
+  /* Your existing styles for ai-message */
+  background-color: var(--bg-white);
+  border: 1px solid #f0f0f0;
+  color: var(--thelo-text);
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 0.75rem;
+  max-width: 95%;
+  align-self: flex-start;
+  word-wrap: break-word;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.9rem;
+  line-height: 1.6;
+
+  /* --- NEW: Fade-in styles --- */
+  opacity: 0; /* Start invisible */
+  transform: translateY(10px); /* Slightly move from below */
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out; /* Smooth transition */
+}
+
+.ai-message.show {
+  opacity: 1; /* Fade in to fully visible */
+  transform: translateY(0); /* Move to its natural position */
+} 
+.ai-message strong {
     color: var(--thelo-blue);
     font-weight: inherit; /* This makes the weight consistent */
   }
@@ -2413,33 +2424,49 @@ function handleNextCheckClick() {
         });
     };
     }
-    function addChatMessage(sender, rawMsg) {
-        if (isTabletMode) {
-            // In tablet mode, use the new toast system
-            // We can add a longer duration for important messages
-            const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
-            showToast(rawMsg, isImportant ? 5000 : 3500);
-        } else {
-            // On desktop/mobile, use the original terminal chat
-            const chatArea = document.getElementById('chat');
-            if (!chatArea) return;
+    // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
+function addChatMessage(sender, rawMsg) {
+    if (isTabletMode) {
+        // In tablet mode, use the new toast system
+        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
+        showToast(rawMsg, isImportant ? 5000 : 3500);
+    } else {
+        // On desktop/mobile, use the original terminal chat
+        const chatArea = document.getElementById('chat');
+        if (!chatArea) return;
 
-            const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, ''); const TXT = getCurrentUIText(); let emoji = '🤖';
-            const isPoints  = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
-            const isWrong   = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
-            const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-            const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
-            const isWelcome = TXT.welcome && msg.includes(TXT.welcome); const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+        const TXT = getCurrentUIText();
+        let emoji = '🤖';
 
-            if(isWrong) emoji = '🤔'; else if (isCorrect || isPoints) emoji = '🎉'; else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
-            else if (isWelcome) emoji = '👋'; else if (isChecking) emoji = '⏳';
+        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
 
-            const bubble = document.createElement('div'); bubble.className = 'ai-message';
-            bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
-            chatArea.appendChild(bubble);
-            chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-        }
-    }
+        if(isWrong) emoji = '🤔';
+        else if (isCorrect || isPoints) emoji = '🎉';
+        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+        else if (isWelcome) emoji = '👋';
+        else if (isChecking) emoji = '⏳';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'ai-message'; // Starts with opacity: 0
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
+        chatArea.appendChild(bubble);
+
+        // Trigger the fade-in effect after the element has been added to the DOM
+        // and the browser has painted its initial (hidden) state.
+        requestAnimationFrame(() => {
+            bubble.classList.add('show');
+            // Scroll into view *after* the animation has started, or slightly delayed.
+            // Using a slightly delayed scroll behavior could ensure the message is fully visible.
+            chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+        });
+    }
+}
     /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
