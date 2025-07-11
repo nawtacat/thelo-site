@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Group: SAT Warriors - thelo</title>
+    <title>Study Group - thelo</title>
     <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
 
@@ -92,14 +92,14 @@
               <span class="font-bold text-blue-600"><i class="fas fa-users mr-2"></i>Study Group</span>
         </div>
         <a href="#" aria-label="Go to settings">
-            <img id="user-avatar-nav" src="https://thelo.space/img/char1.png" alt="Profile" class="h-10 w-10 rounded-full cursor-pointer border-2 border-transparent hover:border-blue-500 object-cover">
+            <img id="user-avatar-nav" src="https://via.placeholder.com/150" alt="Profile" class="h-10 w-10 rounded-full cursor-pointer border-2 border-transparent hover:border-blue-500 object-cover">
         </a>
     </header>
 
     <main id="main-content">
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
             <aside class="lg:col-span-1">
-                  <h1 id="group-name" class="text-3xl font-extrabold text-gray-800 mb-1">SAT Warriors</h1>
+                  <h1 id="group-name" class="text-3xl font-extrabold text-gray-800 mb-1">Loading...</h1>
                   <p class="text-base text-gray-500 mb-6">A cozy corner for learning together.</p>
 
                   <div class="p-4 bg-white border border-gray-200 rounded-lg">
@@ -118,51 +118,8 @@
             </aside>
 
             <div class="lg:col-span-3">
-                <div class="bulletin-board">
-                    <div class="note-card kudos-card">
-                        <div>
-                            <div class="flex items-start gap-3">
-                                 <img src="https://thelo.space/img/char3.png" class="h-10 w-10 rounded-full object-cover" alt="">
-                                 <div>
-                                     <p class="font-bold">Kudos to David!</p>
-                                     <p class="text-sm">For reaching a <strong class="text-red-500">10-week streak!</strong> 🔥</p>
-                                 </div>
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-400 text-right mt-2">1 hour ago</p>
-                    </div>
-                    
-                    <div class="note-card">
-                        <div>
-                            <div class="flex items-start gap-3">
-                                 <img src="https://thelo.space/img/char2.png" class="h-10 w-10 rounded-full object-cover" alt="">
-                                 <div>
-                                     <p class="text-sm"><strong class="font-bold">Anna K.</strong> just finished <strong class="text-blue-600">Solving Linear Equations</strong>.</p>
-                                 </div>
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-400 text-right mt-2">5 minutes ago</p>
-                    </div>
-                    
-                    <div class="note-card welcome-card">
-                        <div>
-                            <h3 class="font-bold text-lg flex items-center gap-2"><i class="fas fa-hand-sparkles text-blue-500"></i> Welcome!</h3>
-                            <p class="text-sm text-gray-600 mt-1">Everyone say hi to <strong class="text-gray-800">Sarah J.</strong>, our newest member!</p>
-                        </div>
-                        <p class="text-xs text-gray-400 text-right mt-2">Yesterday</p>
-                   </div>
-
-                   <div class="note-card">
-                        <div>
-                            <div class="flex items-start gap-3">
-                                 <img src="https://thelo.space/img/char4.png" class="h-10 w-10 rounded-full object-cover" alt="">
-                                 <div>
-                                     <p class="text-sm"><strong class="font-bold">Leo R.</strong> just started the <strong class="text-blue-600">Geometry</strong> section. Wish him luck!</p>
-                                 </div>
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-400 text-right mt-2">4 hours ago</p>
-                   </div>
+                <div id="bulletin-board-container" class="bulletin-board">
+                    <p class="text-sm text-gray-500">Loading posts...</p>
                 </div>
             </div>
         </div>
@@ -171,7 +128,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, getDocs, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "YOUR_API_KEY", // ❗ Replace with your actual Firebase config
@@ -191,12 +148,12 @@
         const groupNameEl = document.getElementById('group-name');
         const membersContainer = document.getElementById('group-members-container');
         const leaderboardContainer = document.getElementById('leaderboard-container');
+        const bulletinBoardContainer = document.getElementById('bulletin-board-container');
 
         /**
          * Renders the group members and leaderboard sidebar.
          */
         function renderSidebar(members, currentUserId) {
-            // Render Members List
             membersContainer.innerHTML = members.map(member => `
                 <div class="text-center">
                     <img src="${member.profilePicture || 'https://via.placeholder.com/150'}" class="h-16 w-16 rounded-full object-cover ring-2 ${member.id === currentUserId ? 'ring-blue-500' : 'ring-gray-300'}" alt="${member.name}">
@@ -204,20 +161,77 @@
                 </div>
             `).join('');
 
-            // Render Leaderboard
             const sortedMembers = [...members].sort((a, b) => (b.points || 0) - (a.points || 0));
             const medals = ['🥇', '🥈', '🥉'];
             leaderboardContainer.innerHTML = sortedMembers.slice(0, 3).map((member, index) => `
                 <p>${medals[index] || '•'} <strong class="ml-2">${member.id === currentUserId ? 'You' : member.name}</strong> - ${member.points || 0} pts</p>
             `).join('');
         }
-        
+
+        /**
+         * Renders the bulletin board with various types of post cards.
+         */
+        function renderBulletinBoard(posts, membersMap) {
+            if (posts.length === 0) {
+                bulletinBoardContainer.innerHTML = '<p class="text-gray-500 col-span-full text-center">No group activity yet. Be the first!</p>';
+                return;
+            }
+
+            bulletinBoardContainer.innerHTML = posts.map(post => {
+                const author = membersMap.get(post.authorId);
+                if (!author) return ''; // Don't render post if author not in group
+
+                const timeAgo = new Date(post.timestamp.seconds * 1000).toLocaleDateString();
+                
+                switch(post.type) {
+                    case 'kudos':
+                        return `
+                            <div class="note-card kudos-card">
+                                <div>
+                                    <div class="flex items-start gap-3">
+                                        <img src="${author.profilePicture}" class="h-10 w-10 rounded-full object-cover" alt="">
+                                        <div>
+                                            <p class="font-bold">Kudos to ${author.name}!</p>
+                                            <p class="text-sm">For reaching a <strong class="text-red-500">${post.content.achievement}</strong> 🔥</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-gray-400 text-right mt-2">${timeAgo}</p>
+                            </div>`;
+                    case 'welcome':
+                        return `
+                            <div class="note-card welcome-card">
+                                <div>
+                                    <h3 class="font-bold text-lg flex items-center gap-2"><i class="fas fa-hand-sparkles text-blue-500"></i> Welcome!</h3>
+                                    <p class="text-sm text-gray-600 mt-1">Everyone say hi to <strong class="text-gray-800">${post.content.newMemberName}</strong>, our newest member!</p>
+                                </div>
+                                <p class="text-xs text-gray-400 text-right mt-2">${timeAgo}</p>
+                            </div>`;
+                    case 'activity':
+                        return `
+                            <div class="note-card">
+                                <div>
+                                    <div class="flex items-start gap-3">
+                                        <img src="${author.profilePicture}" class="h-10 w-10 rounded-full object-cover" alt="">
+                                        <div>
+                                            <p class="text-sm"><strong class="font-bold">${author.name}</strong> ${post.content.action} <strong class="text-blue-600">${post.content.topic}</strong>.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-gray-400 text-right mt-2">${timeAgo}</p>
+                            </div>`;
+                    default:
+                        return '';
+                }
+            }).join('');
+        }
+
         /**
          * Fetches all data for the group page and orchestrates rendering.
          */
         async function loadGroupPage(groupId, userId) {
             try {
-                // 1. Fetch the group document to get its name and member list
+                // 1. Fetch the group document
                 const groupRef = doc(db, 'groups', groupId);
                 const groupSnap = await getDoc(groupRef);
                 if (!groupSnap.exists()) throw new Error("Group not found.");
@@ -226,17 +240,24 @@
 
                 // 2. Fetch all member profiles
                 const memberIds = groupData.memberIds || [];
-                if (memberIds.length === 0) {
-                    membersContainer.innerHTML = '<p class="text-sm text-gray-500">This group has no members yet.</p>';
-                    leaderboardContainer.innerHTML = '<p class="text-sm text-gray-500">No points recorded.</p>';
-                    return;
-                }
                 const memberPromises = memberIds.map(id => getDoc(doc(db, 'thelo-students', id)));
                 const memberDocs = await Promise.all(memberPromises);
-                const members = memberDocs.map(d => ({ id: d.id, ...d.data() }));
+                const members = memberDocs.filter(d => d.exists()).map(d => ({ id: d.id, ...d.data() }));
+                const membersMap = new Map(members.map(m => [m.id, m]));
                 
-                // 3. Render all sidebar components
+                // 3. Fetch bulletin board posts
+                const postsQuery = query(
+                    collection(db, "bulletin-posts"), 
+                    where("groupId", "==", groupId),
+                    orderBy("timestamp", "desc"),
+                    limit(20)
+                );
+                const postsSnapshot = await getDocs(postsQuery);
+                const posts = postsSnapshot.docs.map(d => d.data());
+
+                // 4. Render all components
                 renderSidebar(members, userId);
+                renderBulletinBoard(posts, membersMap);
                 
             } catch (error) {
                 console.error("Error loading group page:", error);
