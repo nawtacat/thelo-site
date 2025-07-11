@@ -200,7 +200,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where, arrayUnion, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         // Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
@@ -378,7 +378,7 @@ statsSummary.innerHTML = summaryMessage; // Set the message here
                  welcomeSection.classList.remove('opacity-0', '-translate-y-3');
             }
         }
-        /**
+      /**
  * Handles the logic for a student to join a group using a code.
  * @param {string} userId - The ID of the currently logged-in student.
  */
@@ -406,7 +406,7 @@ async function handleJoinGroup(userId) {
         }
 
         // Step 2: Get the group's data
-        const groupDoc = querySnapshot.docs[0]; // There should only be one
+        const groupDoc = querySnapshot.docs[0];
         const groupId = groupDoc.id;
         const studentRef = doc(db, 'thelo-students', userId);
 
@@ -417,12 +417,30 @@ async function handleJoinGroup(userId) {
 
         // Step 4: Add the student's ID to the group's member list
         await updateDoc(doc(db, 'groups', groupId), {
-            memberIds: arrayUnion(userId) // Atomically adds the user's ID
+            memberIds: arrayUnion(userId)
         });
-        
+
+        // --- NEW: Create the "Welcome" post on the bulletin board ---
+
+        // First, get the student's name
+        const studentSnap = await getDoc(studentRef);
+        const studentName = studentSnap.data()?.name || 'A new member';
+
+        // Then, create the post document
+        await addDoc(collection(db, "bulletin-posts"), {
+            groupId: groupId,
+            authorId: userId,
+            type: "welcome",
+            timestamp: serverTimestamp(),
+            content: {
+                newMemberName: studentName
+            }
+        });
+
+        // --- END OF NEW CODE ---
+
         alert(`Successfully joined the group: "${groupDoc.data().groupName}"!`);
-        // Optionally, hide the join section or redirect
-        document.getElementById('join-class-card').style.display = 'none'; 
+        document.getElementById('join-class-card').style.display = 'none';
 
     } catch (error) {
         console.error("Error joining group:", error);
@@ -432,7 +450,6 @@ async function handleJoinGroup(userId) {
         joinBtn.textContent = 'Join Class';
     }
 }
-
         // --- Main Execution ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
