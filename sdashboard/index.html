@@ -200,8 +200,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
+        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         // Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
@@ -379,12 +378,69 @@ statsSummary.innerHTML = summaryMessage; // Set the message here
                  welcomeSection.classList.remove('opacity-0', '-translate-y-3');
             }
         }
+        /**
+ * Handles the logic for a student to join a group using a code.
+ * @param {string} userId - The ID of the currently logged-in student.
+ */
+async function handleJoinGroup(userId) {
+    const codeInput = document.getElementById('class-code-input');
+    const joinBtn = document.getElementById('join-class-btn');
+    const joinCode = codeInput.value.trim().toUpperCase();
+
+    if (!joinCode) {
+        alert("Please enter a group code.");
+        return;
+    }
+
+    joinBtn.disabled = true;
+    joinBtn.textContent = 'Joining...';
+
+    try {
+        // Step 1: Find the group with the matching join code
+        const groupsRef = collection(db, 'groups');
+        const q = query(groupsRef, where("joinCode", "==", joinCode));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            throw new Error("Invalid group code. Please check and try again.");
+        }
+
+        // Step 2: Get the group's data
+        const groupDoc = querySnapshot.docs[0]; // There should only be one
+        const groupId = groupDoc.id;
+        const studentRef = doc(db, 'thelo-students', userId);
+
+        // Step 3: Update the student's document with the groupId
+        await updateDoc(studentRef, {
+            groupId: groupId
+        });
+
+        // Step 4: Add the student's ID to the group's member list
+        await updateDoc(doc(db, 'groups', groupId), {
+            memberIds: arrayUnion(userId) // Atomically adds the user's ID
+        });
+        
+        alert(`Successfully joined the group: "${groupDoc.data().groupName}"!`);
+        // Optionally, hide the join section or redirect
+        document.getElementById('join-class-card').style.display = 'none'; 
+
+    } catch (error) {
+        console.error("Error joining group:", error);
+        alert(error.message);
+    } finally {
+        joinBtn.disabled = false;
+        joinBtn.textContent = 'Join Class';
+    }
+}
 
         // --- Main Execution ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 console.log("User authenticated:", user.uid);
-
+                const joinBtn = document.getElementById('join-class-btn');
+                if(joinBtn) {
+                    joinBtn.addEventListener('click', () => handleJoinGroup(user.uid));
+                }
                 // Update the dashboard UI and render the course in parallel for faster loading
                 await Promise.all([
                     updateDashboardData(user),
