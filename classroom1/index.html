@@ -103,36 +103,22 @@
                   <p class="text-base text-gray-500 mb-6">A cozy corner for learning together.</p>
 
                   <div class="p-4 bg-white border border-gray-200 rounded-lg">
-                      <h2 class="font-bold mb-3">Who's Online Now</h2>
-                      <div class="flex flex-wrap gap-3">
-                          <div class="text-center">
-                              <img src="https://thelo.space/img/char1.png" class="h-16 w-16 rounded-full object-cover ring-2 ring-green-400" alt="You">
-                              <p class="text-xs mt-1 font-bold">You</p>
-                          </div>
-                          <div class="text-center">
-                              <img src="https://thelo.space/img/char2.png" class="h-16 w-16 rounded-full object-cover ring-2 ring-green-400" alt="Anna">
-                               <p class="text-xs mt-1 font-bold">Anna</p>
-                          </div>
-                          <div class="text-center">
-                              <img src="https://thelo.space/img/char3.png" class="h-16 w-16 rounded-full object-cover ring-2 ring-gray-300" alt="David">
-                               <p class="text-xs mt-1 text-gray-500">David</p>
-                          </div>
+                      <h2 class="font-bold mb-3">Group Members</h2>
+                      <div id="group-members-container" class="flex flex-wrap gap-3">
+                          <p class="text-sm text-gray-500">Loading members...</p>
                       </div>
                   </div>
                   
                   <div class="p-4 bg-white border border-gray-200 rounded-lg mt-6">
                       <h2 class="font-bold mb-3">Top Weekly Points</h2>
-                      <div class="space-y-2 text-sm">
-                          <p>🥇 <strong class="ml-2">Anna K.</strong> - 1,450 pts</p>
-                          <p>🥈 <strong class="ml-2">You</strong> - 1,240 pts</p>
-                          <p>🥉 <strong class="ml-2">David S.</strong> - 980 pts</p>
+                      <div id="leaderboard-container" class="space-y-2 text-sm">
+                          <p class="text-sm text-gray-500">Loading leaderboard...</p>
                       </div>
                   </div>
             </aside>
 
             <div class="lg:col-span-3">
                 <div class="bulletin-board">
-
                     <div class="note-card kudos-card">
                         <div>
                             <div class="flex items-start gap-3">
@@ -185,7 +171,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "YOUR_API_KEY", // ❗ Replace with your actual Firebase config
@@ -200,62 +186,88 @@
         const db = getFirestore(app);
 
         // --- DOM Elements ---
-        const groupNameEl = document.getElementById('group-name');
         const mainContent = document.getElementById('main-content');
         const userAvatarNav = document.getElementById('user-avatar-nav');
+        const groupNameEl = document.getElementById('group-name');
+        const membersContainer = document.getElementById('group-members-container');
+        const leaderboardContainer = document.getElementById('leaderboard-container');
+
+        /**
+         * Renders the group members and leaderboard sidebar.
+         */
+        function renderSidebar(members, currentUserId) {
+            // Render Members List
+            membersContainer.innerHTML = members.map(member => `
+                <div class="text-center">
+                    <img src="${member.profilePicture || 'https://via.placeholder.com/150'}" class="h-16 w-16 rounded-full object-cover ring-2 ${member.id === currentUserId ? 'ring-blue-500' : 'ring-gray-300'}" alt="${member.name}">
+                    <p class="text-xs mt-1 font-bold">${member.id === currentUserId ? 'You' : member.name}</p>
+                </div>
+            `).join('');
+
+            // Render Leaderboard
+            const sortedMembers = [...members].sort((a, b) => (b.points || 0) - (a.points || 0));
+            const medals = ['🥇', '🥈', '🥉'];
+            leaderboardContainer.innerHTML = sortedMembers.slice(0, 3).map((member, index) => `
+                <p>${medals[index] || '•'} <strong class="ml-2">${member.id === currentUserId ? 'You' : member.name}</strong> - ${member.points || 0} pts</p>
+            `).join('');
+        }
+        
+        /**
+         * Fetches all data for the group page and orchestrates rendering.
+         */
+        async function loadGroupPage(groupId, userId) {
+            try {
+                // 1. Fetch the group document to get its name and member list
+                const groupRef = doc(db, 'groups', groupId);
+                const groupSnap = await getDoc(groupRef);
+                if (!groupSnap.exists()) throw new Error("Group not found.");
+                const groupData = groupSnap.data();
+                groupNameEl.textContent = groupData.groupName;
+
+                // 2. Fetch all member profiles
+                const memberIds = groupData.memberIds || [];
+                if (memberIds.length === 0) {
+                    membersContainer.innerHTML = '<p class="text-sm text-gray-500">This group has no members yet.</p>';
+                    leaderboardContainer.innerHTML = '<p class="text-sm text-gray-500">No points recorded.</p>';
+                    return;
+                }
+                const memberPromises = memberIds.map(id => getDoc(doc(db, 'thelo-students', id)));
+                const memberDocs = await Promise.all(memberPromises);
+                const members = memberDocs.map(d => ({ id: d.id, ...d.data() }));
+                
+                // 3. Render all sidebar components
+                renderSidebar(members, userId);
+                
+            } catch (error) {
+                console.error("Error loading group page:", error);
+                mainContent.innerHTML = `<p class="text-center text-red-500">Could not load group data. Error: ${error.message}</p>`;
+            }
+        }
 
         // --- Main Execution ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                console.log("User is authenticated:", user.uid);
-                try {
-                    // Step 1: Get the current user's profile to find their groupId
-                    const userDocRef = doc(db, 'thelo-students', user.uid);
-                    const userDoc = await getDoc(userDocRef);
+                const userDocRef = doc(db, 'thelo-students', user.uid);
+                const userDoc = await getDoc(userDocRef);
 
-                    if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        console.log("User data:", userData);
-                        userAvatarNav.src = userData.profilePicture || 'https://thelo.space/img/char1.png';
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    userAvatarNav.src = userData.profilePicture || 'https://via.placeholder.com/150';
 
-                        // Step 2: Check if the user has a groupId
-                        if (userData.groupId) {
-                            console.log("User belongs to group:", userData.groupId);
-
-                            // Step 3: Fetch ONLY the group document
-                            const groupDocRef = doc(db, 'groups', userData.groupId);
-                            const groupDoc = await getDoc(groupDocRef);
-
-                            if (groupDoc.exists()) {
-                                const groupData = groupDoc.data();
-                                console.log("Group data:", groupData);
-
-                                // Step 4: Update the H1 tag with the group's name
-                                groupNameEl.textContent = groupData.groupName;
-                                console.log("SUCCESS: Group name updated on page.");
-                            } else {
-                                console.error("Error: Group document not found for ID:", userData.groupId);
-                                groupNameEl.textContent = "Group Not Found";
-                            }
-                        } else {
-                            console.error("Error: User document does not contain a 'groupId' field.");
-                            mainContent.innerHTML = `<p class="text-center text-lg">You are not part of a study group yet.</p>`;
-                        }
+                    if (userData.groupId) {
+                        loadGroupPage(userData.groupId, user.uid);
                     } else {
-                        console.error("Error: User profile not found in 'thelo-students' collection.");
-                        window.location.href = '#'; // Or your auth page
+                        mainContent.innerHTML = `<p class="text-center text-lg">You are not part of a study group yet.</p>`;
                     }
-                } catch (error) {
-                    console.error("Error loading page:", error);
-                    mainContent.innerHTML = `<p class="text-center text-red-500">Could not load group data. Error: ${error.message}</p>`;
+                } else {
+                    console.error("Error: User profile not found in 'thelo-students' collection.");
+                    window.location.href = '#'; // Or your auth page
                 }
-
             } else {
-                console.log("User is not authenticated. Redirecting...");
-                // Not logged in, redirect to auth page
                 window.location.href = '#'; // Or your auth page
             }
         });
     </script>
+
 </body>
 </html>
