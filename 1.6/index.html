@@ -2287,7 +2287,31 @@ async function displayLessonComplete() {
         } catch (error) {
             console.error("Error finalizing lesson completion:", error);
         }
+	// --- NEW: Create the "Activity" post on the bulletin board ---
+        try {
+            const studentDoc = await studentDocRef.get();
+            if (studentDoc.exists() && studentDoc.data().groupId) {
+                const studentData = studentDoc.data();
+                const lessonTitle = lessonStagesRoot?.lessonTitle || 'a lesson';
+                
+                await addDoc(collection(db, "bulletin-posts"), {
+                    groupId: studentData.groupId,
+                    authorId: user.uid,
+                    type: "activity",
+                    timestamp: serverTimestamp(),
+                    content: {
+                        action: "just finished",
+                        topic: lessonTitle
+                    }
+                });
+                console.log("Activity post created for lesson completion.");
+            }
+        } catch (error) {
+            console.error("Error creating activity post:", error);
+        }
+        // --- END OF NEW CODE ---
     }
+    
     
     // --- The rest of the function to update the UI remains the same ---
     const TXT = getCurrentUIText();
