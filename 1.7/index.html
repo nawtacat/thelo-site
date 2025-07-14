@@ -2450,49 +2450,54 @@ function handleNextCheckClick() {
     };
     }
     // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
+// REPLACE your entire addChatMessage function with this one
+
 function addChatMessage(sender, rawMsg) {
-    if (isTabletMode) {
-        // In tablet mode, use the new toast system
-        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
-        showToast(rawMsg, isImportant ? 5000 : 3500);
-    } else {
-        // On desktop/mobile, use the original terminal chat
-        const chatArea = document.getElementById('chat');
-        if (!chatArea) return;
+    if (isTabletMode) {
+        // Tablet toast logic remains the same
+        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
+        showToast(rawMsg, isImportant ? 5000 : 3500);
+    } else {
+        // Desktop/mobile terminal chat
+        const chatArea = document.getElementById('chat');
+        if (!chatArea) return;
 
-        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
-        const TXT = getCurrentUIText();
-        let emoji = '🤖';
+        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+        const TXT = getCurrentUIText();
+        let emoji = '🤖';
 
-        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
-        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
-        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
-        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
-        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
 
-        if(isWrong) emoji = '🤔';
-        else if (isCorrect || isPoints) emoji = '🎉';
-        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
-        else if (isWelcome) emoji = '👋';
-        else if (isChecking) emoji = '⏳';
+        if(isWrong) emoji = '🤔';
+        else if (isCorrect || isPoints) emoji = '🎉';
+        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+        else if (isWelcome) emoji = '👋';
+        else if (isChecking) emoji = '⏳';
 
-        const bubble = document.createElement('div');
-        bubble.className = 'ai-message'; // Starts with opacity: 0
-        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
-        chatArea.appendChild(bubble);
+        const bubble = document.createElement('div');
+        bubble.className = 'ai-message'; // Starts with opacity: 0
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
+        chatArea.appendChild(bubble);
 
-        // Trigger the fade-in effect after the element has been added to the DOM
-        // and the browser has painted its initial (hidden) state.
-        requestAnimationFrame(() => {
-            bubble.classList.add('show');
-            // Scroll into view *after* the animation has started, or slightly delayed.
-            // Using a slightly delayed scroll behavior could ensure the message is fully visible.
-            chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-        });
-    }
-}
-    /**
+        // ===================================================================
+        // ===== THE FIX: Forcing the browser to paint the initial state =====
+        // ===================================================================
+        requestAnimationFrame(() => {
+            // This nested timeout ensures the class addition happens in a separate
+            // task, after the browser has painted the invisible element.
+            setTimeout(() => {
+                bubble.classList.add('show');
+                // Scroll into view after the animation starts.
+                chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+            }, 10); // A tiny delay is all that's needed.
+        });
+    }
+}    /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
  * @param {string} topicId - The unique ID for the lesson (e.g., 'sat-linear-equations-one-var').
