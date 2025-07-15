@@ -114,10 +114,12 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+// ===== MODIFIED: Added sendEmailVerification =====
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
+    // IMPORTANT: SECURE YOUR API KEYS USING FIREBASE APP CHECK
     apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
     authDomain: "physmathacademy-722b3.firebaseapp.com",
     projectId: "physmathacademy-722b3",
@@ -164,7 +166,7 @@ const TXT = {
 
 let lang = 'en';
 let isSignUpMode = false;
-let selectedAvatarUrl = ''; // <-- ADDED: To store the chosen avatar URL
+let selectedAvatarUrl = '';
 
 const langBtn = document.getElementById('langToggle');
 const homeLink = document.getElementById('homeLink');
@@ -181,7 +183,6 @@ const labelEmail = document.getElementById('labelEmail');
 const labelPassword = document.getElementById('labelPassword');
 const labelFullName = document.getElementById('labelFullName');
 const toggleAuthModeLink = document.getElementById('toggleAuthModeLink');
-// --- ADDED: Get new elements ---
 const avatarDiv = document.getElementById('avatarDiv');
 const avatarGrid = document.getElementById('avatarGrid');
 const labelAvatar = document.getElementById('labelAvatar');
@@ -194,7 +195,7 @@ function updateFormUI() {
         submitBtn.textContent = s.signUpBtn;
         toggleAuthModeLink.textContent = s.toggleToSignIn;
         fullNameDiv.classList.remove('hidden');
-        avatarDiv.classList.remove('hidden'); // <-- ADDED: Show avatar picker
+        avatarDiv.classList.remove('hidden');
         fullNameInput.required = true;
     } else {
         formTitle.textContent = s.signInTitle;
@@ -202,7 +203,7 @@ function updateFormUI() {
         submitBtn.textContent = s.signInBtn;
         toggleAuthModeLink.textContent = s.toggleToSignUp;
         fullNameDiv.classList.add('hidden');
-        avatarDiv.classList.add('hidden'); // <-- ADDED: Hide avatar picker
+        avatarDiv.classList.add('hidden');
         fullNameInput.required = false;
     }
 }
@@ -215,7 +216,7 @@ function applyLang() {
     labelEmail.textContent = s.email;
     labelPassword.textContent = s.password;
     labelFullName.textContent = s.fullName;
-    labelAvatar.textContent = s.avatar; // <-- ADDED: Translate avatar label
+    labelAvatar.textContent = s.avatar;
     updateFormUI();
 }
 
@@ -241,23 +242,13 @@ function setLoading(isLoading) {
     }
 }
 
-/**
- * Handles the avatar selection click event.
- * @param {Event} e The click event.
- */
 function handleAvatarSelection(e) {
-    // Remove 'selected' class from all other avatars
     avatarGrid.querySelectorAll('.char-option').forEach(img => img.classList.remove('selected'));
-    // Add 'selected' class to the clicked avatar
     const clickedImg = e.target;
     clickedImg.classList.add('selected');
-    // Store the URL of the selected avatar
     selectedAvatarUrl = clickedImg.dataset.url;
 }
 
-/**
- * Creates and populates the avatar selection grid.
- */
 function populateAvatars() {
     for (let i = 1; i <= 6; i++) {
         const imgUrl = `https://thelo.space/img/char${i}.png`;
@@ -271,13 +262,9 @@ function populateAvatars() {
     }
 }
 
-
 /**
+ * ===== MODIFIED: Added email verification step =====
  * Handles the new user sign-up process.
- * @param {string} email
- * @param {string} password
- * @param {string} fullName
- * @param {string} avatarUrl
  */
 async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
     try {
@@ -285,36 +272,39 @@ async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
+        // ===== NEW: Send verification email immediately =====
+        await sendEmailVerification(user);
+
         const nameParts = fullName.split(' ');
         const firstName = nameParts[0] || '';
         const lastName = nameParts.slice(1).join(' ') || '';
 
         // Step 2: Create user profile in Firestore
-        // Step 2: Create user profile in Firestore
-        await setDoc(doc(db, "thelo-students", user.uid), {
-            name: firstName,
-            surname: lastName,
-            email: user.email,
-            language: "en",
-            profilePicture: avatarUrl,
-            points: 0,
-            lessonsCompleted: 0,
-            groupId: null, // <-- ADD THIS LINE
-            createdAt: serverTimestamp(),
-            streakData: {
-                currentStreak: 0,
-                longestStreak: 0,
-                lastActivityWeek: null
-            },
-            visionUsage: {
-                count: 0,
-                month: new Date().toISOString().slice(0, 7)
-            }
-        });
+        await setDoc(doc(db, "thelo-students", user.uid), {
+            name: firstName,
+            surname: lastName,
+            email: user.email,
+            language: "en",
+            profilePicture: avatarUrl,
+            points: 0,
+            lessonsCompleted: 0,
+            groupId: null,
+            createdAt: serverTimestamp(),
+            streakData: {
+                currentStreak: 0,
+                longestStreak: 0,
+                lastActivityWeek: null
+            },
+            visionUsage: {
+                count: 0,
+                month: new Date().toISOString().slice(0, 7)
+            }
+        });
 
-        console.log("Successfully created user and their full profile document!");
-        showToast("Account created! Redirecting...", false);
-        setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
+        console.log("Successfully created user and sent verification email.");
+        // ===== MODIFIED: Inform user to check their email =====
+        showToast("Account created! Please check your inbox to verify your email.", false);
+        setLoading(false); // Stop loading but don't redirect
 
     } catch (error) {
         console.error("Sign up error:", error);
@@ -336,7 +326,6 @@ toggleAuthModeLink.addEventListener('click', (e) => {
     isSignUpMode = !isSignUpMode;
     form.reset();
     hideToast();
-    // --- ADDED: Reset avatar selection on mode toggle ---
     selectedAvatarUrl = '';
     avatarGrid.querySelectorAll('.char-option').forEach(img => img.classList.remove('selected'));
     updateFormUI();
@@ -357,7 +346,6 @@ form.addEventListener('submit', async (e) => {
             setLoading(false);
             return;
         }
-        // --- ADDED: Validation for avatar selection ---
         if (!selectedAvatarUrl) {
             showToast("Please choose a character avatar.", true);
             setLoading(false);
@@ -366,11 +354,20 @@ form.addEventListener('submit', async (e) => {
         await handleNewUserSignUp(email, password, fullName, selectedAvatarUrl);
 
     } else {
-        // --- SIGN IN LOGIC ---
+        // --- SIGN IN LOGIC with VERIFICATION CHECK ---
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            console.log("User signed in:", userCredential.user.uid);
+            const user = userCredential.user;
 
+            // ===== NEW: Check if the user's email is verified =====
+            if (!user.emailVerified) {
+                showToast("Please verify your email before signing in. Another verification email has been sent.", true);
+                await sendEmailVerification(user); // Resend email for convenience
+                setLoading(false);
+                return; // Stop the sign-in process
+            }
+
+            console.log("User signed in:", user.uid);
             showToast("Signed in successfully! Redirecting...", false);
             setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
 
@@ -388,7 +385,7 @@ form.addEventListener('submit', async (e) => {
     }
 });
 
-populateAvatars(); // <-- ADDED: Call this function on page load
+populateAvatars();
 applyLang();
 </script>
 </body>
