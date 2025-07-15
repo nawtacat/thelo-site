@@ -99,20 +99,31 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        .table-sortable thead th {
+            cursor: pointer;
+            position: relative;
+        }
         .table-sortable thead th:hover {
             background-color: #f9fafb;
-            cursor: pointer;
         }
         .table-sortable thead th .sort-icon {
             opacity: 0.3;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s, transform 0.2s;
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
         }
         .table-sortable thead th:hover .sort-icon {
             opacity: 1;
         }
-        .table-sortable thead th.sorted-asc .sort-icon,
+        .table-sortable thead th.sorted-asc .sort-icon {
+            opacity: 1;
+            transform: translateY(-50%) rotate(180deg);
+        }
         .table-sortable thead th.sorted-desc .sort-icon {
             opacity: 1;
+            transform: translateY(-50%) rotate(0deg);
         }
         .user-avatar {
             width: 32px;
@@ -197,7 +208,7 @@
                     <div class="loading-spinner-overlay"><div class="spinner"></div></div>
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Lesson Performance Details</h3>
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left table-sortable">
+                        <table class="w-full text-left table-sortable" id="lesson-table">
                             <thead>
                                 <tr class="text-xs text-gray-500 border-b-2 border-gray-100">
                                     <th class="py-3 px-4 font-bold" data-sort="id">LESSON TITLE <i class="fas fa-sort sort-icon"></i></th>
@@ -208,7 +219,7 @@
                                     <th class="py-3 px-4 font-bold text-center" data-sort="accuracy">1ST TRY ACCURACY <i class="fas fa-sort sort-icon"></i></th>
                                 </tr>
                             </thead>
-                            <tbody id="lesson-performance-table" class="text-sm text-gray-700 loading-placeholder">
+                            <tbody id="lesson-performance-table-body" class="text-sm text-gray-700 loading-placeholder">
                                 <tr><td colspan="6" class="text-center p-8">Loading lesson data...</td></tr>
                             </tbody>
                         </table>
@@ -218,7 +229,7 @@
                     <div class="loading-spinner-overlay"><div class="spinner"></div></div>
                     <h3 class="text-lg font-bold text-gray-800 mb-4">User Leaderboard</h3>
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left table-sortable">
+                        <table class="w-full text-left table-sortable" id="user-table">
                             <thead>
                                 <tr class="text-xs text-gray-500 border-b-2 border-gray-100">
                                     <th class="py-3 px-4 font-bold" data-sort="name">USER <i class="fas fa-sort sort-icon"></i></th>
@@ -227,7 +238,7 @@
                                     <th class="py-3 px-4 font-bold text-center" data-sort="checkRequests">CHECK REQUESTS <i class="fas fa-sort sort-icon"></i></th>
                                 </tr>
                             </thead>
-                            <tbody id="user-leaderboard-table" class="text-sm text-gray-700 loading-placeholder">
+                            <tbody id="user-leaderboard-table-body" class="text-sm text-gray-700 loading-placeholder">
                                 <tr><td colspan="4" class="text-center p-8">Loading user data...</td></tr>
                             </tbody>
                         </table>
@@ -269,6 +280,8 @@
         let allEvents = [];
         let allStudents = [];
         let charts = {};
+        let processedLessonData = [];
+        let processedUserData = [];
 
         // --- DOM Elements ---
         const timeRangeFilter = document.getElementById('timeRangeFilter');
@@ -450,19 +463,19 @@
         }
 
         function updateTables(events, students) {
-            // --- Lesson Performance Table ---
-            const lessonData = {};
+            // --- Process Lesson Data ---
+            const lessonDataMap = {};
             events.forEach(event => {
                 if (!event.lessonId) return;
                 const lessonId = event.lessonId;
-                if (!lessonData[lessonId]) {
-                    lessonData[lessonId] = {
+                if (!lessonDataMap[lessonId]) {
+                    lessonDataMap[lessonId] = {
                         id: lessonId,
                         starts: 0, completions: 0, totalCompletionTime: 0,
                         attempts: 0, correctAttempts: 0,
                     };
                 }
-                const lesson = lessonData[lessonId];
+                const lesson = lessonDataMap[lessonId];
                 switch (event.type) {
                     case 'lesson_started': lesson.starts++; break;
                     case 'lesson_completed':
@@ -476,31 +489,22 @@
                 }
             });
 
-            const lessonTableData = Object.values(lessonData).map(lesson => ({
+            processedLessonData = Object.values(lessonDataMap).map(lesson => ({
                 ...lesson,
                 completionRate: lesson.starts > 0 ? (lesson.completions / lesson.starts) * 100 : 0,
                 avgTime: lesson.completions > 0 ? lesson.totalCompletionTime / lesson.completions : 0,
                 accuracy: lesson.attempts > 0 ? (lesson.correctAttempts / lesson.attempts) * 100 : 0,
             }));
             
-            renderTable('lesson-performance-table', lessonTableData, {
-                id: data => data.id,
-                starts: data => data.starts,
-                completions: data => data.completions,
-                completionRate: data => `${data.completionRate.toFixed(1)}%`,
-                avgTime: data => formatTime(data.avgTime),
-                accuracy: data => `${data.accuracy.toFixed(1)}%`
-            }, 'starts'); // Default sort by starts
-
-            // --- User Leaderboard Table ---
+            // --- Process User Data ---
             const checkRequestsPerUser = events
                 .filter(e => e.type === 'handwriting_check_attempt')
                 .reduce((acc, e) => {
-                    acc[e.userId] = (acc[e.userId] || 0) + 1;
+                    if(e.userId) acc[e.userId] = (acc[e.userId] || 0) + 1;
                     return acc;
                 }, {});
 
-            const userTableData = students.map(student => ({
+            processedUserData = students.map(student => ({
                 id: student.id,
                 name: `${student.name || ''} ${student.surname || ''}`.trim() || 'Unnamed User',
                 avatar: student.profilePicture || 'https://placehold.co/64x64/E5E7EB/6B7280?text=?',
@@ -509,54 +513,62 @@
                 checkRequests: checkRequestsPerUser[student.id] || 0
             }));
 
-            renderTable('user-leaderboard-table', userTableData, {
-                name: data => `<div class="flex items-center gap-3"><img src="${data.avatar}" alt="${data.name}" class="user-avatar"><span>${data.name}</span></div>`,
-                points: data => data.points.toLocaleString(),
-                lessonsCompleted: data => data.lessonsCompleted.toLocaleString(),
-                checkRequests: data => data.checkRequests.toLocaleString(),
-            }, 'points'); // Default sort by points
+            // --- Initial Render ---
+            renderTable('lesson-performance-table-body', processedLessonData, lessonFormatters, 'starts', false);
+            renderTable('user-leaderboard-table-body', processedUserData, userFormatters, 'points', false);
         }
         
-        function renderTable(tableId, data, formatters, defaultSortKey) {
-            const tableBody = document.getElementById(tableId);
+        const lessonFormatters = {
+            id: data => data.id,
+            starts: data => data.starts.toLocaleString(),
+            completions: data => data.completions.toLocaleString(),
+            completionRate: data => `${data.completionRate.toFixed(1)}%`,
+            avgTime: data => formatTime(data.avgTime),
+            accuracy: data => `${data.accuracy.toFixed(1)}%`
+        };
+
+        const userFormatters = {
+            name: data => `<div class="flex items-center gap-3"><img src="${data.avatar}" alt="${data.name}" class="user-avatar" onerror="this.onerror=null;this.src='https://placehold.co/64x64/E5E7EB/6B7280?text=?';"><span>${data.name}</span></div>`,
+            points: data => data.points.toLocaleString(),
+            lessonsCompleted: data => data.lessonsCompleted.toLocaleString(),
+            checkRequests: data => data.checkRequests.toLocaleString(),
+        };
+
+        function renderTable(tbodyId, data, formatters, sortKey, isAsc) {
+            const tableBody = document.getElementById(tbodyId);
             if (!tableBody) return;
-            
-            const sortTable = (key, isAscending) => {
-                data.sort((a, b) => {
-                    let aVal = a[key];
-                    let bVal = b[key];
-                    if (typeof aVal === 'string') {
-                       return isAscending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-                    }
-                    return isAscending ? aVal - bVal : bVal - aVal;
-                });
-                populateTable();
-            };
-            
-            const populateTable = () => {
-                tableBody.innerHTML = '';
-                if (data.length === 0) {
-                    const colCount = tableBody.parentElement.querySelector('thead th').length;
-                    tableBody.innerHTML = `<tr><td colspan="${colCount}" class="text-center p-8">No data available for this period.</td></tr>`;
-                    return;
+
+            // Sort the data
+            data.sort((a, b) => {
+                const aVal = a[sortKey];
+                const bVal = b[sortKey];
+                if (typeof aVal === 'string') {
+                    return isAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
                 }
-                data.forEach(item => {
-                    const row = document.createElement('tr');
-                    row.className = 'border-b border-gray-100 last:border-b-0 hover:bg-gray-50';
-                    let cells = '';
-                    for (const key in formatters) {
-                        const isNumeric = ['points', 'lessonsCompleted', 'checkRequests', 'starts', 'completions'].includes(key);
-                        const alignClass = isNumeric ? 'text-center' : 'text-left';
-                        const fontClass = key === 'name' || key === 'id' ? 'font-bold' : 'font-semibold';
-                        cells += `<td class="py-3 px-4 ${alignClass} ${fontClass}">${formatters[key](item)}</td>`;
-                    }
-                    row.innerHTML = cells;
-                    tableBody.appendChild(row);
-                });
-            };
-            
-            // Initial sort and render
-            sortTable(defaultSortKey, false); // false for descending
+                return isAsc ? aVal - bVal : bVal - aVal;
+            });
+
+            // Populate the table
+            tableBody.innerHTML = '';
+            if (data.length === 0) {
+                const colCount = tableBody.parentElement.querySelector('thead th').length;
+                tableBody.innerHTML = `<tr><td colspan="${colCount}" class="text-center p-8">No data available for this period.</td></tr>`;
+                return;
+            }
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-100 last:border-b-0 hover:bg-gray-50';
+                let cells = '';
+                for (const key in formatters) {
+                    const isNumeric = ['points', 'lessonsCompleted', 'checkRequests', 'starts', 'completions'].includes(key);
+                    const alignClass = isNumeric ? 'text-center' : 'text-left';
+                    const fontClass = (key === 'name' || key === 'id') ? 'font-bold' : 'font-semibold';
+                    cells += `<td class="py-3 px-4 ${alignClass} ${fontClass}">${formatters[key](item)}</td>`;
+                }
+                row.innerHTML = cells;
+                tableBody.appendChild(row);
+            });
         }
         
         // --- Event Listeners ---
@@ -564,28 +576,30 @@
         timeRangeFilter.addEventListener('change', processAndDisplayData);
         refreshDataBtn.addEventListener('click', fetchData);
 
-        // Table Sorting Logic
-        document.querySelectorAll('.table-sortable thead th').forEach(headerCell => {
-            headerCell.addEventListener('click', () => {
-                const tableElement = headerCell.closest('table');
-                const sortKey = headerCell.dataset.sort;
-                if (!sortKey) return;
+        function setupTableSorting() {
+            document.querySelectorAll('.table-sortable thead th').forEach(headerCell => {
+                headerCell.addEventListener('click', () => {
+                    const tableElement = headerCell.closest('table');
+                    const tbodyId = tableElement.querySelector('tbody').id;
+                    const sortKey = headerCell.dataset.sort;
+                    if (!sortKey) return;
 
-                const isAsc = headerCell.classList.contains('sorted-asc');
-                
-                tableElement.querySelectorAll('th').forEach(th => th.classList.remove('sorted-asc', 'sorted-desc'));
-                headerCell.classList.toggle('sorted-desc', isAsc);
-                headerCell.classList.toggle('sorted-asc', !isAsc);
+                    const isCurrentlyAsc = headerCell.classList.contains('sorted-asc');
+                    const isAsc = !isCurrentlyAsc; // Toggle direction
 
-                // Re-trigger data processing which will handle re-rendering the sorted table
-                // This is a simplified approach. For larger datasets, sorting client-side is faster.
-                // We will sort client-side for better performance.
-                const tableId = tableElement.querySelector('tbody').id;
-                const data = tableId === 'lesson-performance-table' ? allEvents : allStudents; // This needs refinement
-                // The sorting logic is now inside renderTable, let's call that instead
-                processAndDisplayData(); // This will re-calculate and re-render everything, including tables with their new sort order
+                    tableElement.querySelectorAll('th').forEach(th => th.classList.remove('sorted-asc', 'sorted-desc'));
+                    headerCell.classList.toggle('sorted-asc', isAsc);
+                    headerCell.classList.toggle('sorted-desc', !isAsc);
+                    
+                    if (tbodyId === 'lesson-performance-table-body') {
+                        renderTable(tbodyId, processedLessonData, lessonFormatters, sortKey, isAsc);
+                    } else if (tbodyId === 'user-leaderboard-table-body') {
+                        renderTable(tbodyId, processedUserData, userFormatters, sortKey, isAsc);
+                    }
+                });
             });
-        });
+        }
+        setupTableSorting();
 
     </script>
 </body>
