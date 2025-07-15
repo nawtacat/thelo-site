@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thelo - Live Analytics Dashboard</title>
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+
+    <!-- Google Fonts: Manrope -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+    <style>
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-green: #10B981;
+            --thelo-amber: #F59E0B;
+            --thelo-red: #EF4444;
+            --thelo-purple: #8B5CF6;
+            --thelo-bg: #F3F4F6; /* Slightly darker gray for more depth */
+            --thelo-text: #111827;
+            --thelo-text-light: #6B7280;
+            --grid-color: #E5E7EB;
+        }
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            /* A more subtle grid background */
+            background-image:
+                linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px),
+                linear-gradient(to right, rgba(0,0,0,0.02) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+        .sidebar {
+            transition: width 0.3s ease-in-out;
+        }
+        .sidebar-link-active {
+            background-color: var(--thelo-blue);
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .kpi-card, .chart-card, .table-card {
+            background-color: #fff;
+            border: 1px solid var(--grid-color);
+            border-radius: 0.75rem; /* 12px */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+            padding: 1.5rem; /* 24px */
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .kpi-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .loading-placeholder {
+            filter: blur(5px);
+            pointer-events: none;
+            user-select: none;
+        }
+        .loading-spinner-overlay {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(255,255,255,0.8);
+            backdrop-filter: blur(2px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            border-radius: 0.75rem;
+            opacity: 1;
+            transition: opacity 0.3s ease, visibility 0.3s;
+            visibility: visible;
+        }
+        .loading-spinner-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--thelo-blue);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .table-sortable thead th:hover {
+            background-color: #f9fafb;
+            cursor: pointer;
+        }
+        .table-sortable thead th .sort-icon {
+            opacity: 0.3;
+            transition: opacity 0.2s;
+        }
+        .table-sortable thead th:hover .sort-icon {
+            opacity: 1;
+        }
+        .table-sortable thead th.sorted-asc .sort-icon,
+        .table-sortable thead th.sorted-desc .sort-icon {
+            opacity: 1;
+        }
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="flex h-screen bg-gray-100/0">
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 flex-shrink-0 bg-white border-r border-gray-200 p-4 hidden md:flex flex-col sidebar">
+            <div class="flex items-center gap-3 mb-8 px-2">
+                <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo logo" class="h-8 w-auto" />
+                <h1 class="text-2xl font-bold text-gray-800">Admin</h1>
+            </div>
+            <nav class="flex-grow">
+                <ul>
+                    <li class="mb-2">
+                        <a href="#" class="flex items-center p-3 rounded-lg font-bold sidebar-link-active">
+                            <i class="fas fa-chart-pie w-6 text-center mr-3"></i>
+                            Dashboard
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            <div class="text-xs text-center text-gray-400 mt-auto">
+                <p>&copy; 2024 Thelo</p>
+                <p>All Rights Reserved</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+            <header class="mb-8 flex justify-between items-center flex-wrap gap-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold text-gray-800">Live Analytics Dashboard</h1>
+                    <p id="lastUpdated" class="text-gray-500 mt-1">Fetching latest data...</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="relative">
+                        <i class="fas fa-calendar-alt absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <select id="timeRangeFilter" class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="7">Last 7 Days</option>
+                            <option value="30" selected>Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                            <option value="all">All Time</option>
+                        </select>
+                    </div>
+                    <button id="refreshDataBtn" class="p-2.5 bg-white border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-all duration-200" title="Refresh Data">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- KPI Cards -->
+            <section id="kpi-section" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <!-- KPI cards will be dynamically inserted here -->
+            </section>
+
+            <!-- Main Charts Area -->
+            <section class="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-8">
+                <div class="lg:col-span-3 chart-card">
+                    <div class="loading-spinner-overlay"><div class="spinner"></div></div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">Daily Active Users (DAU)</h3>
+                    <div class="h-80"><canvas id="dailyActiveUsersChart"></canvas></div>
+                </div>
+                <div class="lg:col-span-2 chart-card">
+                    <div class="loading-spinner-overlay"><div class="spinner"></div></div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">Sign-up Language</h3>
+                    <div class="h-80 flex items-center justify-center"><canvas id="signupLanguageChart"></canvas></div>
+                </div>
+            </section>
+            
+            <!-- Data Tables -->
+            <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div class="table-card">
+                    <div class="loading-spinner-overlay"><div class="spinner"></div></div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">Lesson Performance Details</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left table-sortable">
+                            <thead>
+                                <tr class="text-xs text-gray-500 border-b-2 border-gray-100">
+                                    <th class="py-3 px-4 font-bold" data-sort="id">LESSON TITLE <i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="py-3 px-4 font-bold text-center" data-sort="starts">STARTS <i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="py-3 px-4 font-bold text-center" data-sort="completions">COMPLETIONS <i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="py-3 px-4 font-bold text-center" data-sort="completionRate">COMPL. RATE <i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="py-3 px-4 font-bold text-center" data-sort="avgTime">AVG. TIME <i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="py-3 px-4 font-bold text-center" data-sort="accuracy">1ST TRY ACCURACY <i class="fas fa-sort sort-icon"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="lesson-performance-table" class="text-sm text-gray-700 loading-placeholder">
+                                <tr><td colspan="6" class="text-center p-8">Loading lesson data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="table-card">
+                    <div class="loading-spinner-overlay"><div class="spinner"></div></div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">User Leaderboard</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left table-sortable">
+                            <thead>
+                                <tr class="text-xs text-gray-500 border-b-2 border-gray-100">
+                                    <th class="py-3 px-4 font-bold" data-sort="name">USER <i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="py-3 px-4 font-bold text-center" data-sort="points">POINTS <i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="py-3 px-4 font-bold text-center" data-sort="lessonsCompleted">LESSONS DONE <i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="py-3 px-4 font-bold text-center" data-sort="checkRequests">CHECK REQUESTS <i class="fas fa-sort sort-icon"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="user-leaderboard-table" class="text-sm text-gray-700 loading-placeholder">
+                                <tr><td colspan="4" class="text-center p-8">Loading user data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain: "physmathacademy-722b3.firebaseapp.com",
+            projectId: "physmathacademy-722b3",
+        };
+
+        // --- Initialize Firebase ---
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // --- Chart.js Global Configuration ---
+        Chart.defaults.font.family = 'Manrope, sans-serif';
+        Chart.defaults.plugins.legend.position = 'bottom';
+        const CHART_COLORS = {
+            blue: 'rgba(37, 99, 235, 0.7)',
+            green: 'rgba(16, 185, 129, 0.7)',
+            amber: 'rgba(245, 158, 11, 0.7)',
+            red: 'rgba(239, 68, 68, 0.7)',
+            purple: 'rgba(139, 92, 246, 0.7)',
+            grid: '#E5E7EB',
+            tooltip: '#111827'
+        };
+
+        // --- Global State ---
+        let allEvents = [];
+        let allStudents = [];
+        let charts = {};
+
+        // --- DOM Elements ---
+        const timeRangeFilter = document.getElementById('timeRangeFilter');
+        const refreshDataBtn = document.getElementById('refreshDataBtn');
+
+        // --- Helper Functions ---
+        const formatTime = (seconds) => {
+            if (isNaN(seconds) || seconds < 0) return 'N/A';
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}m ${s}s`;
+        };
+        
+        const formatMinutes = (seconds) => {
+            if (isNaN(seconds) || seconds < 0) return '0';
+            return Math.floor(seconds / 60).toLocaleString();
+        }
+
+        const showLoading = (isLoading) => {
+            document.querySelectorAll('.loading-spinner-overlay').forEach(el => {
+                isLoading ? el.classList.remove('hidden') : el.classList.add('hidden');
+            });
+            document.querySelectorAll('.loading-placeholder').forEach(el => {
+                isLoading ? el.classList.add('loading-placeholder') : el.classList.remove('loading-placeholder');
+            });
+            if (!isLoading) {
+                document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+            }
+        };
+
+        // --- Main Data Processing Function ---
+        async function fetchData() {
+            showLoading(true);
+            try {
+                const eventsQuery = query(collection(db, "analytics_events"));
+                const studentsQuery = query(collection(db, "thelo-students"));
+
+                const [eventsSnapshot, studentsSnapshot] = await Promise.all([
+                    getDocs(eventsQuery),
+                    getDocs(studentsQuery)
+                ]);
+
+                allEvents = eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                allStudents = studentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                // Convert Firestore Timestamps to JS Dates
+                allEvents.forEach(event => {
+                    if (event.timestamp instanceof Timestamp) {
+                        event.timestamp = event.timestamp.toDate();
+                    }
+                });
+                
+                processAndDisplayData();
+
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                document.getElementById('lastUpdated').textContent = "Error loading data. Check console.";
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function processAndDisplayData() {
+            const days = parseInt(timeRangeFilter.value) || 9999;
+            const now = new Date();
+            const timeCutoff = new Date(new Date().setDate(now.getDate() - days));
+
+            const filteredEvents = timeRangeFilter.value === 'all' ? allEvents : allEvents.filter(e => e.timestamp && e.timestamp > timeCutoff);
+            
+            updateKPIs(filteredEvents, allStudents);
+            updateCharts(filteredEvents);
+            updateTables(filteredEvents, allStudents);
+        }
+
+        function updateKPIs(events, students) {
+            const kpiSection = document.getElementById('kpi-section');
+            kpiSection.innerHTML = '';
+
+            // 1. Active Users (DAU/WAU)
+            const uniqueUserIdsToday = new Set(events.filter(e => e.timestamp >= new Date(new Date().setDate(new Date().getDate() - 1))).map(e => e.userId));
+            const uniqueUserIdsWeek = new Set(events.filter(e => e.timestamp >= new Date(new Date().setDate(new Date().getDate() - 7))).map(e => e.userId));
+            
+            // 2. New Users
+            const newUsers = events.filter(e => e.type === 'user_signed_up').length;
+
+            // 3. Total Minutes Spent
+            const totalTimeInSeconds = events
+                .filter(e => e.type === 'lesson_completed' && e.timeToCompleteSeconds)
+                .reduce((sum, e) => sum + e.timeToCompleteSeconds, 0);
+
+            // 4. Total Check Requests
+            const totalCheckRequests = events.filter(e => e.type === 'handwriting_check_attempt').length;
+
+            // 5. Total Lessons Completed
+            const totalLessonsCompleted = events.filter(e => e.type === 'lesson_completed').length;
+
+
+            const kpiData = [
+                { label: 'Daily Active Users', value: uniqueUserIdsToday.size.toLocaleString(), icon: 'fa-users', color: 'var(--thelo-blue)' },
+                { label: 'Weekly Active Users', value: uniqueUserIdsWeek.size.toLocaleString(), icon: 'fa-users-line', color: 'var(--thelo-purple)' },
+                { label: 'New Users (period)', value: newUsers.toLocaleString(), icon: 'fa-user-plus', color: 'var(--thelo-green)' },
+                { label: 'Total Minutes Spent', value: formatMinutes(totalTimeInSeconds), icon: 'fa-hourglass-half', color: 'var(--thelo-amber)'},
+                { label: 'Total "Check" Requests', value: totalCheckRequests.toLocaleString(), icon: 'fa-magnifying-glass-chart', color: 'var(--thelo-red)'},
+                { label: 'Total Lessons Completed', value: totalLessonsCompleted.toLocaleString(), icon: 'fa-graduation-cap', color: 'var(--thelo-blue)'}
+            ];
+
+            kpiData.forEach(kpi => {
+                const card = document.createElement('div');
+                card.className = 'kpi-card';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm font-medium text-gray-500">${kpi.label}</p>
+                        <i class="fas ${kpi.icon} text-2xl" style="color: ${kpi.color}; opacity: 0.3;"></i>
+                    </div>
+                    <p class="text-3xl font-extrabold text-gray-800 mt-2">${kpi.value}</p>
+                `;
+                kpiSection.appendChild(card);
+            });
+        }
+        
+        function updateCharts(events) {
+            // Daily Active Users Chart
+            const dauData = {};
+            events.forEach(e => {
+                if(e.timestamp) {
+                    const date = e.timestamp.toISOString().split('T')[0];
+                    if (!dauData[date]) dauData[date] = new Set();
+                    dauData[date].add(e.userId);
+                }
+            });
+            const dauLabels = Object.keys(dauData).sort();
+            const dauCounts = dauLabels.map(label => dauData[label].size);
+            
+            renderChart('dailyActiveUsersChart', 'line', {
+                labels: dauLabels,
+                datasets: [{
+                    label: 'Daily Active Users',
+                    data: dauCounts,
+                    borderColor: CHART_COLORS.blue,
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: CHART_COLORS.blue,
+                }]
+            }, {
+                scales: { 
+                    y: { beginAtZero: true, grid: { color: CHART_COLORS.grid } }, 
+                    x: { type: 'time', time: { unit: 'day' }, grid: { display: false } } 
+                },
+                plugins: { legend: { display: false } }
+            });
+
+            // Signup Language Chart
+            const langData = events.filter(e => e.type === 'user_signed_up').reduce((acc, e) => {
+                const lang = e.signupLanguage || 'unknown';
+                acc[lang] = (acc[lang] || 0) + 1;
+                return acc;
+            }, {});
+            
+            renderChart('signupLanguageChart', 'doughnut', {
+                labels: Object.keys(langData),
+                datasets: [{
+                    label: 'Sign-up Language',
+                    data: Object.values(langData),
+                    backgroundColor: [CHART_COLORS.blue, CHART_COLORS.green, CHART_COLORS.amber, CHART_COLORS.purple],
+                    borderColor: '#fff',
+                    borderWidth: 4,
+                }]
+            }, {
+                plugins: { legend: { position: 'right' } },
+                cutout: '60%'
+            });
+        }
+
+        function renderChart(canvasId, type, data, options) {
+            if (charts[canvasId]) charts[canvasId].destroy();
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            charts[canvasId] = new Chart(ctx, { type, data, options });
+        }
+
+        function updateTables(events, students) {
+            // --- Lesson Performance Table ---
+            const lessonData = {};
+            events.forEach(event => {
+                if (!event.lessonId) return;
+                const lessonId = event.lessonId;
+                if (!lessonData[lessonId]) {
+                    lessonData[lessonId] = {
+                        id: lessonId,
+                        starts: 0, completions: 0, totalCompletionTime: 0,
+                        attempts: 0, correctAttempts: 0,
+                    };
+                }
+                const lesson = lessonData[lessonId];
+                switch (event.type) {
+                    case 'lesson_started': lesson.starts++; break;
+                    case 'lesson_completed':
+                        lesson.completions++;
+                        lesson.totalCompletionTime += event.timeToCompleteSeconds || 0;
+                        break;
+                    case 'handwriting_check_attempt':
+                        lesson.attempts++;
+                        if (event.result === 'correct') lesson.correctAttempts++;
+                        break;
+                }
+            });
+
+            const lessonTableData = Object.values(lessonData).map(lesson => ({
+                ...lesson,
+                completionRate: lesson.starts > 0 ? (lesson.completions / lesson.starts) * 100 : 0,
+                avgTime: lesson.completions > 0 ? lesson.totalCompletionTime / lesson.completions : 0,
+                accuracy: lesson.attempts > 0 ? (lesson.correctAttempts / lesson.attempts) * 100 : 0,
+            }));
+            
+            renderTable('lesson-performance-table', lessonTableData, {
+                id: data => data.id,
+                starts: data => data.starts,
+                completions: data => data.completions,
+                completionRate: data => `${data.completionRate.toFixed(1)}%`,
+                avgTime: data => formatTime(data.avgTime),
+                accuracy: data => `${data.accuracy.toFixed(1)}%`
+            }, 'starts'); // Default sort by starts
+
+            // --- User Leaderboard Table ---
+            const checkRequestsPerUser = events
+                .filter(e => e.type === 'handwriting_check_attempt')
+                .reduce((acc, e) => {
+                    acc[e.userId] = (acc[e.userId] || 0) + 1;
+                    return acc;
+                }, {});
+
+            const userTableData = students.map(student => ({
+                id: student.id,
+                name: `${student.name || ''} ${student.surname || ''}`.trim() || 'Unnamed User',
+                avatar: student.profilePicture || 'https://placehold.co/64x64/E5E7EB/6B7280?text=?',
+                points: student.points || 0,
+                lessonsCompleted: student.lessonsCompleted || 0,
+                checkRequests: checkRequestsPerUser[student.id] || 0
+            }));
+
+            renderTable('user-leaderboard-table', userTableData, {
+                name: data => `<div class="flex items-center gap-3"><img src="${data.avatar}" alt="${data.name}" class="user-avatar"><span>${data.name}</span></div>`,
+                points: data => data.points.toLocaleString(),
+                lessonsCompleted: data => data.lessonsCompleted.toLocaleString(),
+                checkRequests: data => data.checkRequests.toLocaleString(),
+            }, 'points'); // Default sort by points
+        }
+        
+        function renderTable(tableId, data, formatters, defaultSortKey) {
+            const tableBody = document.getElementById(tableId);
+            if (!tableBody) return;
+            
+            const sortTable = (key, isAscending) => {
+                data.sort((a, b) => {
+                    let aVal = a[key];
+                    let bVal = b[key];
+                    if (typeof aVal === 'string') {
+                       return isAscending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                    }
+                    return isAscending ? aVal - bVal : bVal - aVal;
+                });
+                populateTable();
+            };
+            
+            const populateTable = () => {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    const colCount = tableBody.parentElement.querySelector('thead th').length;
+                    tableBody.innerHTML = `<tr><td colspan="${colCount}" class="text-center p-8">No data available for this period.</td></tr>`;
+                    return;
+                }
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-gray-100 last:border-b-0 hover:bg-gray-50';
+                    let cells = '';
+                    for (const key in formatters) {
+                        const isNumeric = ['points', 'lessonsCompleted', 'checkRequests', 'starts', 'completions'].includes(key);
+                        const alignClass = isNumeric ? 'text-center' : 'text-left';
+                        const fontClass = key === 'name' || key === 'id' ? 'font-bold' : 'font-semibold';
+                        cells += `<td class="py-3 px-4 ${alignClass} ${fontClass}">${formatters[key](item)}</td>`;
+                    }
+                    row.innerHTML = cells;
+                    tableBody.appendChild(row);
+                });
+            };
+            
+            // Initial sort and render
+            sortTable(defaultSortKey, false); // false for descending
+        }
+        
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', fetchData);
+        timeRangeFilter.addEventListener('change', processAndDisplayData);
+        refreshDataBtn.addEventListener('click', fetchData);
+
+        // Table Sorting Logic
+        document.querySelectorAll('.table-sortable thead th').forEach(headerCell => {
+            headerCell.addEventListener('click', () => {
+                const tableElement = headerCell.closest('table');
+                const sortKey = headerCell.dataset.sort;
+                if (!sortKey) return;
+
+                const isAsc = headerCell.classList.contains('sorted-asc');
+                
+                tableElement.querySelectorAll('th').forEach(th => th.classList.remove('sorted-asc', 'sorted-desc'));
+                headerCell.classList.toggle('sorted-desc', isAsc);
+                headerCell.classList.toggle('sorted-asc', !isAsc);
+
+                // Re-trigger data processing which will handle re-rendering the sorted table
+                // This is a simplified approach. For larger datasets, sorting client-side is faster.
+                // We will sort client-side for better performance.
+                const tableId = tableElement.querySelector('tbody').id;
+                const data = tableId === 'lesson-performance-table' ? allEvents : allStudents; // This needs refinement
+                // The sorting logic is now inside renderTable, let's call that instead
+                processAndDisplayData(); // This will re-calculate and re-render everything, including tables with their new sort order
+            });
+        });
+
+    </script>
+</body>
+</html>
