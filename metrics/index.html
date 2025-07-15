@@ -6,18 +6,14 @@
     <title>Thelo Admin Dashboard</title>
     <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
 
-    <!-- Google Fonts: Manrope -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- Font Awesome for Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
@@ -51,20 +47,23 @@
             border-radius: 0.75rem;
             box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             padding: 1.5rem;
+            transition: all 0.3s ease;
         }
         .loading-placeholder {
             filter: blur(4px);
-            transition: filter 0.3s;
+            pointer-events: none;
         }
         .loading-spinner-overlay {
             position: absolute;
             inset: 0;
-            background-color: rgba(255,255,255,0.5);
+            background-color: rgba(255,255,255,0.7);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 10;
             border-radius: 0.75rem;
+            opacity: 1;
+            transition: opacity 0.3s ease;
         }
         .spinner {
             border: 4px solid #f3f3f3;
@@ -82,7 +81,6 @@
 <body class="antialiased">
 
     <div class="flex h-screen bg-gray-100/0">
-        <!-- Sidebar Navigation -->
         <aside class="w-64 flex-shrink-0 bg-white border-r border-gray-200 p-4 hidden md:flex flex-col">
             <div class="flex items-center gap-3 mb-8 px-2">
                 <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo logo" class="h-8 w-auto" />
@@ -100,14 +98,12 @@
             </nav>
         </aside>
 
-        <!-- Main Content -->
         <main class="flex-1 p-4 md:p-8 overflow-y-auto">
             <header class="mb-8">
                 <h1 class="text-3xl font-extrabold text-gray-800">Analytics Dashboard</h1>
                 <p id="lastUpdated" class="text-gray-500 mt-1">Fetching latest data...</p>
             </header>
 
-            <!-- KPI Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <div class="kpi-card relative">
                     <div class="flex items-center justify-between">
@@ -139,7 +135,6 @@
                 </div>
             </div>
 
-            <!-- Main Charts Area -->
             <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-8">
                 <div class="lg:col-span-3 chart-card relative">
                     <div class="loading-spinner-overlay"><div class="spinner"></div></div>
@@ -153,7 +148,6 @@
                 </div>
             </div>
             
-            <!-- Data Tables -->
             <div class="grid grid-cols-1">
                 <div class="chart-card relative">
                      <div class="loading-spinner-overlay"><div class="spinner"></div></div>
@@ -170,7 +164,6 @@
                                 </tr>
                             </thead>
                             <tbody id="lesson-performance-table" class="text-sm text-gray-700 loading-placeholder">
-                                <!-- Dynamic rows will be inserted here -->
                                 <tr><td colspan="5" class="text-center p-8">Loading lesson data...</td></tr>
                             </tbody>
                         </table>
@@ -186,11 +179,9 @@
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
-            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
-            authDomain: "physmathacademy-722b3.firebaseapp.com",
-            projectId: "physmathacademy-722b3",
-            storageBucket: "physmathacademy-722b3.appspot.com",
-            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
         };
 
         // --- Initialize Firebase ---
@@ -215,15 +206,18 @@
 
         function removeLoadingState() {
             document.querySelectorAll('.loading-placeholder').forEach(el => el.classList.remove('loading-placeholder'));
-            document.querySelectorAll('.loading-spinner-overlay').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.loading-spinner-overlay').forEach(el => el.style.opacity = 0);
             document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleString()}`;
         }
 
         // --- Main Data Processing Function ---
         async function analyzeAndDisplayData() {
             try {
-                // 1. Fetch all raw events
-                const eventsSnapshot = await getDocs(collection(db, "analytics_events"));
+                // 1. Fetch all raw data in parallel
+                const [eventsSnapshot, studentsSnapshot] = await Promise.all([
+                    getDocs(collection(db, "analytics_events")),
+                    getDocs(collection(db, "thelo-students"))
+                ]);
                 const events = eventsSnapshot.docs.map(doc => doc.data());
 
                 // 2. Process data by lesson
@@ -231,16 +225,12 @@
 
                 events.forEach(event => {
                     if (!event.lessonId) return;
-
-                    // Initialize lesson object if it doesn't exist
                     if (!lessonData[event.lessonId]) {
                         lessonData[event.lessonId] = {
-                            starts: 0,
-                            completions: 0,
-                            quits: 0,
+                            id: event.lessonId,
+                            starts: 0, completions: 0, quits: 0,
                             totalCompletionTime: 0,
-                            handwritingAttempts: 0,
-                            handwritingCorrect: 0,
+                            handwritingAttempts: 0, handwritingCorrect: 0,
                         };
                     }
 
@@ -258,37 +248,32 @@
                             lesson.quits++;
                             break;
                         case 'handwriting_check_attempt':
-                            lesson.handwritingAttempts++;
                             if (event.result === 'correct') {
                                 lesson.handwritingCorrect++;
                             }
+                            lesson.handwritingAttempts++;
                             break;
                     }
                 });
-
+                
                 // 3. Calculate KPIs and update dashboard
-                updateKPIs(events, lessonData);
-                updateCharts(events, lessonData);
+                updateKPIs(studentsSnapshot.size, events, lessonData);
+                updateCharts(events);
                 updateTable(lessonData);
 
                 removeLoadingState();
 
             } catch (error) {
                 console.error("Error fetching or analyzing data:", error);
-                document.getElementById('lastUpdated').textContent = "Error loading data.";
+                document.getElementById('lastUpdated').textContent = "Error loading data. Check console and Firebase rules.";
             }
         }
 
-        // --- UI Update Functions ---
-        function updateKPIs(events, lessonData) {
-            const totalUsers = new Set(events.map(e => e.userId)).size;
+        function updateKPIs(totalUsers, events, lessonData) {
             document.getElementById('kpi-total-users').textContent = totalUsers;
 
-            let totalCompletionTime = 0;
-            let totalCompletions = 0;
-            let totalStarts = 0;
-            let totalAccuracy = 0;
-            let lessonsWithAccuracy = 0;
+            let totalCompletionTime = 0, totalCompletions = 0, totalStarts = 0;
+            let totalAccuracy = 0, lessonsWithAccuracy = 0;
 
             Object.values(lessonData).forEach(lesson => {
                 totalCompletionTime += lesson.totalCompletionTime;
@@ -310,7 +295,7 @@
             document.getElementById('kpi-accuracy').textContent = `${avgAccuracy.toFixed(1)}%`;
         }
 
-        function updateCharts(events, lessonData) {
+        function updateCharts(events) {
             // Daily Completions Chart
             const completionsByDate = {};
             events.filter(e => e.type === 'lesson_completed' && e.timestamp).forEach(e => {
@@ -344,9 +329,10 @@
             const started = events.filter(e => e.type === 'lesson_started').length;
             const completed = events.filter(e => e.type === 'lesson_completed').length;
             const abandoned = events.filter(e => e.type === 'lesson_abandoned');
-            let past25 = completed;
-            let past50 = completed;
+            
+            let past25 = completed, past50 = completed;
             abandoned.forEach(e => {
+                if (!e.totalStagesInLesson) return;
                 const progress = e.lastCompletedStageIndex / e.totalStagesInLesson;
                 if (progress > 0.25) past25++;
                 if (progress > 0.50) past50++;
@@ -382,28 +368,31 @@
             const tableBody = document.getElementById('lesson-performance-table');
             tableBody.innerHTML = '';
 
-            if (Object.keys(lessonData).length === 0) {
+            const lessons = Object.values(lessonData);
+            if (lessons.length === 0) {
                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-8">No lesson data available yet.</td></tr>';
                 return;
             }
 
-            for (const lessonId in lessonData) {
-                const data = lessonData[lessonId];
+            // Sort lessons by number of completions, descending
+            lessons.sort((a, b) => b.completions - a.completions);
+
+            lessons.forEach(data => {
                 const avgTime = data.completions > 0 ? data.totalCompletionTime / data.completions : 0;
                 const quitRate = data.starts > 0 ? (data.quits / data.starts) * 100 : 0;
                 const accuracy = data.handwritingAttempts > 0 ? (data.handwritingCorrect / data.handwritingAttempts) * 100 : 0;
 
                 const row = document.createElement('tr');
-                row.className = 'border-b border-gray-100';
+                row.className = 'border-b border-gray-100 last:border-b-0';
                 row.innerHTML = `
-                    <td class="py-4 px-4 font-bold">${lessonId}</td>
+                    <td class="py-4 px-4 font-bold">${data.id}</td>
                     <td class="py-4 px-4 text-center font-semibold">${data.completions}</td>
                     <td class="py-4 px-4 text-center font-semibold">${formatTime(avgTime)}</td>
                     <td class="py-4 px-4 text-center font-semibold ${quitRate > 25 ? 'text-red-600' : 'text-green-600'}">${quitRate.toFixed(1)}%</td>
                     <td class="py-4 px-4 text-center font-semibold ${accuracy < 75 ? 'text-amber-600' : 'text-green-600'}">${accuracy.toFixed(1)}%</td>
                 `;
                 tableBody.appendChild(row);
-            }
+            });
         }
 
         // --- Initial Load ---
