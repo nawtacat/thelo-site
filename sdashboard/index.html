@@ -451,24 +451,30 @@ async function handleJoinGroup(userId) {
     }
 }
         // --- Main Execution ---
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                console.log("User authenticated:", user.uid);
-                const joinBtn = document.getElementById('join-class-btn');
-                if(joinBtn) {
-                    joinBtn.addEventListener('click', () => handleJoinGroup(user.uid));
-                }
-                // Update the dashboard UI and render the course in parallel for faster loading
-                await Promise.all([
-                    updateDashboardData(user),
-                    renderFullCourse('sat-math-prep', user.uid)
-                ]);
+        // --- Main Execution ---
+        onAuthStateChanged(auth, async (user) => {
+            // ✅ Check if user exists AND if their email is verified
+            if (user && user.emailVerified) {
+                console.log("User authenticated and verified:", user.uid);
+                
+                // Add event listener for the join class button
+                const joinBtn = document.getElementById('join-class-btn');
+                if(joinBtn) {
+                    joinBtn.addEventListener('click', () => handleJoinGroup(user.uid));
+                }
+                
+                // Update the dashboard UI and render the course in parallel
+                await Promise.all([
+                    updateDashboardData(user),
+                    renderFullCourse('sat-math-prep', user.uid)
+                ]);
 
-            } else {
-                console.log("No user authenticated. Redirecting to login.");
-                window.location.href = 'https://thelo.space/auth';
-            }
-        });
+            } else {
+                // If user is not logged in or not verified, redirect to auth page
+                console.log("Redirecting: User not signed in or not verified.");
+                window.location.href = 'https://thelo.space/auth';
+            }
+        });
     </script>
 </body>
 </html>
