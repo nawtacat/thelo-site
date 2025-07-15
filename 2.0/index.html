@@ -1056,7 +1056,6 @@ body.lang-en {
 
     const auth = firebase.auth();
     const db = firebase.firestore();
-const { addDoc, collection, serverTimestamp } = firebase.firestore;
 
     // =================================================================
     //  NEW FIX: Set auth persistence to 'session' to work around
@@ -2343,14 +2342,14 @@ async function displayLessonComplete() {
         // ANALYTICS: Log the lesson_completed event first
         if (lessonStartTime) {
             const timeToCompleteSeconds = Math.round((Date.now() - lessonStartTime) / 1000);
-            addDoc(collection(db, "analytics_events"), {
+            db.collection("analytics_events").add({
                 type: "lesson_completed",
                 userId: user.uid,
                 lessonId: lessonFileName.replace('.json', ''),
                 courseId: "sat-math-prep", // Replace with dynamic course ID if available
                 timeToCompleteSeconds: timeToCompleteSeconds,
                 sessionScore: sessionPoints,
-                timestamp: serverTimestamp()
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
             }).catch(e => console.error("Analytics event logging error:", e));
             lessonStartTime = null; // Reset for the next lesson
         }
@@ -2454,14 +2453,14 @@ async function displayLessonComplete() {
         const urlParams = new URLSearchParams(window.location.search);
         const lessonFileName = urlParams.get('lessonFile');
         if (user && lessonFileName) {
-            addDoc(collection(db, "analytics_events"), {
-                type: "lesson_started",
-                userId: user.uid,
-                lessonId: lessonFileName.replace('.json', ''),
-                courseId: "sat-math-prep", // Replace with dynamic course ID if available
-                timestamp: serverTimestamp()
-            });
-        }
+        db.collection("analytics_events").add({
+            type: "lesson_started",
+            userId: user.uid,
+            lessonId: lessonFileName.replace('.json', ''),
+            courseId: "sat-math-prep", // Replace with dynamic course ID if available
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    }
         
         transitionToStage(0); // Move to the first stage
         return; // Exit the function after starting the lesson
@@ -2812,13 +2811,13 @@ function logHandwritingAttempt(result) {
     const lessonFileName = urlParams.get('lessonFile');
 
     if (user && lessonFileName && currentStageData) {
-        addDoc(collection(db, "analytics_events"), {
+        db.collection("analytics_events").add({
             type: "handwriting_check_attempt",
             userId: user.uid,
             lessonId: lessonFileName.replace('.json', ''),
             stageIndex: currentStageIndex,
             result: result, // "correct" or "incorrect"
-            timestamp: serverTimestamp()
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
     }
 }
