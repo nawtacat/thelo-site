@@ -116,8 +116,7 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 // ===== MODIFIED: Added sendEmailVerification =====
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
+import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
 const firebaseConfig = {
     // IMPORTANT: SECURE YOUR API KEYS USING FIREBASE APP CHECK
     apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
@@ -300,7 +299,12 @@ async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
                 month: new Date().toISOString().slice(0, 7)
             }
         });
-
+        await addDoc(collection(db, "analytics_events"), {
+            type: "user_signed_up",
+            userId: user.uid,
+            timestamp: serverTimestamp(),
+            signupLanguage: lang // This is a useful detail to capture!
+        });
         console.log("Successfully created user and sent verification email.");
         // ===== MODIFIED: Inform user to check their email =====
         showToast("Account created! Please check your inbox to verify your email.", false);
