@@ -6,17 +6,20 @@
     <title>Thelo Admin Dashboard</title>
     <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
 
+    <!-- Google Fonts: Manrope -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
+    <!-- Font Awesome for Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-
 
     <style>
         :root {
@@ -42,25 +45,44 @@
             background-color: var(--thelo-blue);
             color: white;
         }
-        .kpi-card {
+        .kpi-card, .chart-card {
             background-color: #fff;
             border: 1px solid var(--grid-color);
             border-radius: 0.75rem;
             box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             padding: 1.5rem;
         }
-        .chart-card {
-            background-color: #fff;
-            border: 1px solid var(--grid-color);
+        .loading-placeholder {
+            filter: blur(4px);
+            transition: filter 0.3s;
+        }
+        .loading-spinner-overlay {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(255,255,255,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
             border-radius: 0.75rem;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            padding: 1.5rem;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--thelo-blue);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body class="antialiased">
 
     <div class="flex h-screen bg-gray-100/0">
+        <!-- Sidebar Navigation -->
         <aside class="w-64 flex-shrink-0 bg-white border-r border-gray-200 p-4 hidden md:flex flex-col">
             <div class="flex items-center gap-3 mb-8 px-2">
                 <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo logo" class="h-8 w-auto" />
@@ -74,119 +96,82 @@
                             Dashboard
                         </a>
                     </li>
-                    <li class="mb-2">
-                        <a href="#" class="flex items-center p-3 rounded-lg font-bold text-gray-600 hover:bg-gray-100 transition-colors">
-                            <i class="fas fa-book w-6 text-center mr-3"></i>
-                            Lessons
-                        </a>
-                    </li>
-                    <li class="mb-2">
-                        <a href="#" class="flex items-center p-3 rounded-lg font-bold text-gray-600 hover:bg-gray-100 transition-colors">
-                           <i class="fas fa-users w-6 text-center mr-3"></i>
-                            Users
-                        </a>
-                    </li>
                 </ul>
             </nav>
-            <div class="mt-auto">
-                 <a href="#" class="flex items-center p-3 rounded-lg font-bold text-gray-600 hover:bg-gray-100 transition-colors">
-                    <i class="fas fa-sign-out-alt w-6 text-center mr-3"></i>
-                    Logout
-                </a>
-            </div>
         </aside>
 
+        <!-- Main Content -->
         <main class="flex-1 p-4 md:p-8 overflow-y-auto">
             <header class="mb-8">
-                <h1 class="text-3xl font-extrabold text-gray-800">Admin Dashboard</h1>
-                <p class="text-gray-500 mt-1">Real-time analysis of user engagement and lesson performance.</p>
+                <h1 class="text-3xl font-extrabold text-gray-800">Analytics Dashboard</h1>
+                <p id="lastUpdated" class="text-gray-500 mt-1">Fetching latest data...</p>
             </header>
 
+            <!-- KPI Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div class="kpi-card">
+                <div class="kpi-card relative">
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm font-medium text-gray-500">Total Users</p>
+                        <i class="fas fa-users text-gray-300"></i>
+                    </div>
+                    <p id="kpi-total-users" class="text-3xl font-extrabold text-gray-800 mt-2 loading-placeholder">0</p>
+                </div>
+                <div class="kpi-card relative">
                     <div class="flex items-center justify-between">
                         <p class="text-sm font-medium text-gray-500">Avg. Time to Complete</p>
                         <i class="fas fa-clock text-gray-300"></i>
                     </div>
-                    <p class="text-3xl font-extrabold text-gray-800 mt-2">8m 45s</p>
+                    <p id="kpi-avg-time" class="text-3xl font-extrabold text-gray-800 mt-2 loading-placeholder">0m 0s</p>
                 </div>
-                <div class="kpi-card">
+                <div class="kpi-card relative">
                     <div class="flex items-center justify-between">
-                        <p class="text-sm font-medium text-gray-500">Avg. Completion % Before Quit</p>
-                        <i class="fas fa-door-open text-gray-300"></i>
+                        <p class="text-sm font-medium text-gray-500">Avg. Completion Rate</p>
+                        <i class="fas fa-tasks text-gray-300"></i>
                     </div>
-                    <p class="text-3xl font-extrabold text-gray-800 mt-2">68%</p>
+                    <p id="kpi-completion-rate" class="text-3xl font-extrabold text-gray-800 mt-2 loading-placeholder">0%</p>
                 </div>
-                <div class="kpi-card">
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm font-medium text-gray-500">Most Difficult Stage</p>
-                        <i class="fas fa-exclamation-triangle text-gray-300"></i>
-                    </div>
-                    <p class="text-xl font-extrabold text-gray-800 mt-2 truncate">Quadratics: Stage 7</p>
-                </div>
-                <div class="kpi-card">
+                <div class="kpi-card relative">
                      <div class="flex items-center justify-between">
                         <p class="text-sm font-medium text-gray-500">1st Try Accuracy (Avg)</p>
                         <i class="fas fa-bullseye text-gray-300"></i>
                     </div>
-                    <p class="text-3xl font-extrabold text-gray-800 mt-2">83%</p>
+                    <p id="kpi-accuracy" class="text-3xl font-extrabold text-gray-800 mt-2 loading-placeholder">0%</p>
                 </div>
             </div>
 
+            <!-- Main Charts Area -->
             <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-8">
-                <div class="lg:col-span-3 chart-card">
+                <div class="lg:col-span-3 chart-card relative">
+                    <div class="loading-spinner-overlay"><div class="spinner"></div></div>
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Daily Lesson Completions</h3>
                     <div class="h-80"><canvas id="dailyCompletionsChart"></canvas></div>
                 </div>
-                <div class="lg:col-span-2 chart-card">
+                <div class="lg:col-span-2 chart-card relative">
+                    <div class="loading-spinner-overlay"><div class="spinner"></div></div>
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Lesson Drop-off Funnel</h3>
                     <div class="h-80"><canvas id="lessonDropOffChart"></canvas></div>
                 </div>
             </div>
             
+            <!-- Data Tables -->
             <div class="grid grid-cols-1">
-                <div class="chart-card">
+                <div class="chart-card relative">
+                     <div class="loading-spinner-overlay"><div class="spinner"></div></div>
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Lesson Performance Details</h3>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead>
                                 <tr class="text-xs text-gray-500 border-b-2 border-gray-100">
                                     <th class="py-3 px-4 font-bold">LESSON TITLE</th>
+                                    <th class="py-3 px-4 font-bold text-center">COMPLETIONS</th>
                                     <th class="py-3 px-4 font-bold text-center">AVG. TIME</th>
                                     <th class="py-3 px-4 font-bold text-center">QUIT RATE</th>
-                                    <th class="py-3 px-4 font-bold text-center">AVG. % BEFORE QUIT</th>
                                     <th class="py-3 px-4 font-bold text-center">1ST TRY ACCURACY</th>
                                 </tr>
                             </thead>
-                            <tbody class="text-sm text-gray-700">
-                                <tr class="border-b border-gray-100">
-                                    <td class="py-4 px-4 font-bold">Intro to Linear Equations</td>
-                                    <td class="py-4 px-4 text-center font-semibold">5m 12s</td>
-                                    <td class="py-4 px-4 text-center font-semibold text-green-600">8%</td>
-                                    <td class="py-4 px-4 text-center font-semibold">85%</td>
-                                    <td class="py-4 px-4 text-center font-semibold text-green-600">92%</td>
-                                </tr>
-                                <tr class="border-b border-gray-100">
-                                    <td class="py-4 px-4 font-bold">Solving for Variables</td>
-                                    <td class="py-4 px-4 text-center font-semibold">7m 30s</td>
-                                    <td class="py-4 px-4 text-center font-semibold text-green-600">12%</td>
-                                    <td class="py-4 px-4 text-center font-semibold">78%</td>
-                                    <td class="py-4 px-4 text-center font-semibold text-green-600">89%</td>
-                                </tr>
-                                <tr class="border-b border-gray-100">
-                                    <td class="py-4 px-4 font-bold">Advanced Quadratic Functions</td>
-                                    <td class="py-4 px-4 text-center font-semibold">12m 5s</td>
-                                    <td class="py-4 px-4 text-center font-semibold text-amber-600">26%</td>
-                                    <td class="py-4 px-4 text-center font-semibold">55%</td>
-                                    <td class="py-4 px-4 text-center font-semibold text-amber-600">74%</td>
-                                </tr>
-                                <tr class="">
-                                    <td class="py-4 px-4 font-bold">The Slope-Intercept Form</td>
-                                    <td class="py-4 px-4 text-center font-semibold">11m 45s</td>
-                                    <td class="py-4 px-4 text-center font-semibold text-red-600">35%</td>
-                                    <td class="py-4 px-4 text-center font-semibold">48%</td>
-                                    <td class="py-4 px-4 text-center font-semibold text-red-600">65%</td>
-                                </tr>
+                            <tbody id="lesson-performance-table" class="text-sm text-gray-700 loading-placeholder">
+                                <!-- Dynamic rows will be inserted here -->
+                                <tr><td colspan="5" class="text-center p-8">Loading lesson data...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -195,119 +180,235 @@
         </main>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            // --- Chart Colors & Fonts ---
-            const THELO_BLUE = '#2563EB';
-            const THELO_GREEN = '#10B981';
-            const THELO_RED = '#EF4444';
-            const GRID_COLOR = '#E5E7EB';
-            const FONT_FAMILY = 'Manrope, sans-serif';
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-            // --- Mock Data ---
-            const dateLabels = Array.from({length: 14}, (_, i) => {
-                const d = new Date('2025-07-01T00:00:00.000Z');
-                d.setDate(d.getDate() + i);
-                return d;
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain: "physmathacademy-722b3.firebaseapp.com",
+            projectId: "physmathacademy-722b3",
+            storageBucket: "physmathacademy-722b3.appspot.com",
+            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+        };
+
+        // --- Initialize Firebase ---
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // --- Chart.js Global Configuration ---
+        Chart.defaults.font.family = 'Manrope, sans-serif';
+        Chart.defaults.font.weight = '600';
+        const THELO_BLUE = '#2563EB';
+        const GRID_COLOR = '#E5E7EB';
+
+        let dailyCompletionsChart, lessonDropOffChart;
+
+        // --- Helper Functions ---
+        function formatTime(seconds) {
+            if (isNaN(seconds) || seconds < 0) return 'N/A';
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}m ${s}s`;
+        }
+
+        function removeLoadingState() {
+            document.querySelectorAll('.loading-placeholder').forEach(el => el.classList.remove('loading-placeholder'));
+            document.querySelectorAll('.loading-spinner-overlay').forEach(el => el.style.display = 'none');
+            document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+        }
+
+        // --- Main Data Processing Function ---
+        async function analyzeAndDisplayData() {
+            try {
+                // 1. Fetch all raw events
+                const eventsSnapshot = await getDocs(collection(db, "analytics_events"));
+                const events = eventsSnapshot.docs.map(doc => doc.data());
+
+                // 2. Process data by lesson
+                const lessonData = {};
+
+                events.forEach(event => {
+                    if (!event.lessonId) return;
+
+                    // Initialize lesson object if it doesn't exist
+                    if (!lessonData[event.lessonId]) {
+                        lessonData[event.lessonId] = {
+                            starts: 0,
+                            completions: 0,
+                            quits: 0,
+                            totalCompletionTime: 0,
+                            handwritingAttempts: 0,
+                            handwritingCorrect: 0,
+                        };
+                    }
+
+                    const lesson = lessonData[event.lessonId];
+
+                    switch (event.type) {
+                        case 'lesson_started':
+                            lesson.starts++;
+                            break;
+                        case 'lesson_completed':
+                            lesson.completions++;
+                            lesson.totalCompletionTime += event.timeToCompleteSeconds || 0;
+                            break;
+                        case 'lesson_abandoned':
+                            lesson.quits++;
+                            break;
+                        case 'handwriting_check_attempt':
+                            lesson.handwritingAttempts++;
+                            if (event.result === 'correct') {
+                                lesson.handwritingCorrect++;
+                            }
+                            break;
+                    }
+                });
+
+                // 3. Calculate KPIs and update dashboard
+                updateKPIs(events, lessonData);
+                updateCharts(events, lessonData);
+                updateTable(lessonData);
+
+                removeLoadingState();
+
+            } catch (error) {
+                console.error("Error fetching or analyzing data:", error);
+                document.getElementById('lastUpdated').textContent = "Error loading data.";
+            }
+        }
+
+        // --- UI Update Functions ---
+        function updateKPIs(events, lessonData) {
+            const totalUsers = new Set(events.map(e => e.userId)).size;
+            document.getElementById('kpi-total-users').textContent = totalUsers;
+
+            let totalCompletionTime = 0;
+            let totalCompletions = 0;
+            let totalStarts = 0;
+            let totalAccuracy = 0;
+            let lessonsWithAccuracy = 0;
+
+            Object.values(lessonData).forEach(lesson => {
+                totalCompletionTime += lesson.totalCompletionTime;
+                totalCompletions += lesson.completions;
+                totalStarts += lesson.starts;
+                if (lesson.handwritingAttempts > 0) {
+                    totalAccuracy += (lesson.handwritingCorrect / lesson.handwritingAttempts);
+                    lessonsWithAccuracy++;
+                }
             });
+
+            const avgTime = totalCompletions > 0 ? totalCompletionTime / totalCompletions : 0;
+            document.getElementById('kpi-avg-time').textContent = formatTime(avgTime);
+
+            const completionRate = totalStarts > 0 ? (totalCompletions / totalStarts) * 100 : 0;
+            document.getElementById('kpi-completion-rate').textContent = `${completionRate.toFixed(1)}%`;
             
-            const completionData = [88, 95, 102, 110, 130, 150, 162, 148, 170, 185, 190, 210, 205, 220];
-            const dropOffData = [100, 92, 88, 82]; // Started, >25%, >50%, >75%, Completed
-            const dropOffLabels = ['Started', '>25%', '>50%', 'Completed'];
+            const avgAccuracy = lessonsWithAccuracy > 0 ? (totalAccuracy / lessonsWithAccuracy) * 100 : 0;
+            document.getElementById('kpi-accuracy').textContent = `${avgAccuracy.toFixed(1)}%`;
+        }
 
-            // --- Chart.js Global Configuration ---
-            Chart.defaults.font.family = FONT_FAMILY;
-            Chart.defaults.font.weight = '600';
+        function updateCharts(events, lessonData) {
+            // Daily Completions Chart
+            const completionsByDate = {};
+            events.filter(e => e.type === 'lesson_completed' && e.timestamp).forEach(e => {
+                const date = e.timestamp.toDate().toISOString().split('T')[0];
+                completionsByDate[date] = (completionsByDate[date] || 0) + 1;
+            });
+            const completionLabels = Object.keys(completionsByDate).sort();
+            const completionCounts = completionLabels.map(label => completionsByDate[label]);
 
-            // --- Chart Configurations ---
-            const dailyCompletionsConfig = {
+            if (dailyCompletionsChart) dailyCompletionsChart.destroy();
+            dailyCompletionsChart = new Chart(document.getElementById('dailyCompletionsChart').getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: dateLabels,
+                    labels: completionLabels,
                     datasets: [{
                         label: 'Lessons Completed',
-                        data: completionData,
+                        data: completionCounts,
                         backgroundColor: THELO_BLUE,
-                        borderColor: THELO_BLUE,
-                        borderWidth: 1,
                         borderRadius: 4,
                         barPercentage: 0.6,
                     }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: GRID_COLOR, drawBorder: false },
-                        },
-                        x: {
-                            type: 'time',
-                            time: { unit: 'day', displayFormats: { day: 'MMM d' } },
-                            grid: { display: false },
-                        }
-                    },
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, grid: { color: GRID_COLOR, drawBorder: false } }, x: { grid: { display: false } } },
                     plugins: { legend: { display: false } }
                 }
-            };
+            });
+
+            // Lesson Drop-off Funnel
+            const started = events.filter(e => e.type === 'lesson_started').length;
+            const completed = events.filter(e => e.type === 'lesson_completed').length;
+            const abandoned = events.filter(e => e.type === 'lesson_abandoned');
+            let past25 = completed;
+            let past50 = completed;
+            abandoned.forEach(e => {
+                const progress = e.lastCompletedStageIndex / e.totalStagesInLesson;
+                if (progress > 0.25) past25++;
+                if (progress > 0.50) past50++;
+            });
             
-            const lessonDropOffConfig = {
+            const funnelData = started > 0 ? [
+                100,
+                (past25 / started) * 100,
+                (past50 / started) * 100,
+                (completed / started) * 100
+            ] : [0,0,0,0];
+
+            if (lessonDropOffChart) lessonDropOffChart.destroy();
+            lessonDropOffChart = new Chart(document.getElementById('lessonDropOffChart').getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: dropOffLabels,
+                    labels: ['Started', '>25%', '>50%', 'Completed'],
                     datasets: [{
                         label: '% of Users Reaching Stage',
-                        data: dropOffData,
-                        backgroundColor: [
-                            'rgba(37, 99, 235, 1)',
-                            'rgba(37, 99, 235, 0.8)',
-                            'rgba(37, 99, 235, 0.6)',
-                            'rgba(37, 99, 235, 0.4)',
-                        ],
-                        borderColor: THELO_BLUE,
-                        borderWidth: 1,
-                        borderRadius: 4,
-                        categoryPercentage: 0.7,
+                        data: funnelData,
+                        backgroundColor: [ 'rgba(37, 99, 235, 1)', 'rgba(37, 99, 235, 0.8)', 'rgba(37, 99, 235, 0.6)', 'rgba(37, 99, 235, 0.4)'],
                     }]
                 },
                 options: {
-                    indexAxis: 'y', // Horizontal bar chart
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            beginAtZero: true,
-                            max: 100,
-                            grid: { color: GRID_COLOR, drawBorder: false },
-                            ticks: {
-                                callback: function(value) {
-                                    return value + '%'
-                                }
-                            }
-                        },
-                        y: {
-                            grid: { display: false },
-                        }
-                    },
-                    plugins: { 
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return context.dataset.label + ': ' + context.raw + '%';
-                                }
-                            }
-                        }
-                    }
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    scales: { x: { max: 100, ticks: { callback: (v) => v + '%' } }, y: { grid: { display: false } } },
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw.toFixed(1)}%` } } }
                 }
-            };
+            });
+        }
 
-            // --- Render Charts ---
-            new Chart(document.getElementById('dailyCompletionsChart').getContext('2d'), dailyCompletionsConfig);
-            new Chart(document.getElementById('lessonDropOffChart').getContext('2d'), lessonDropOffConfig);
-        });
+        function updateTable(lessonData) {
+            const tableBody = document.getElementById('lesson-performance-table');
+            tableBody.innerHTML = '';
+
+            if (Object.keys(lessonData).length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-8">No lesson data available yet.</td></tr>';
+                return;
+            }
+
+            for (const lessonId in lessonData) {
+                const data = lessonData[lessonId];
+                const avgTime = data.completions > 0 ? data.totalCompletionTime / data.completions : 0;
+                const quitRate = data.starts > 0 ? (data.quits / data.starts) * 100 : 0;
+                const accuracy = data.handwritingAttempts > 0 ? (data.handwritingCorrect / data.handwritingAttempts) * 100 : 0;
+
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-100';
+                row.innerHTML = `
+                    <td class="py-4 px-4 font-bold">${lessonId}</td>
+                    <td class="py-4 px-4 text-center font-semibold">${data.completions}</td>
+                    <td class="py-4 px-4 text-center font-semibold">${formatTime(avgTime)}</td>
+                    <td class="py-4 px-4 text-center font-semibold ${quitRate > 25 ? 'text-red-600' : 'text-green-600'}">${quitRate.toFixed(1)}%</td>
+                    <td class="py-4 px-4 text-center font-semibold ${accuracy < 75 ? 'text-amber-600' : 'text-green-600'}">${accuracy.toFixed(1)}%</td>
+                `;
+                tableBody.appendChild(row);
+            }
+        }
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', analyzeAndDisplayData);
+
     </script>
-
 </body>
 </html>
