@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thelo Drawing Recorder</title>
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+
+    <!-- Google Fonts: Manrope -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-green: #10B981;
+            --thelo-amber: #F59E0B;
+            --thelo-red: #EF4444;
+            --thelo-purple: #8B5CF6;
+            --thelo-bg: #F3F4F6;
+            --thelo-text: #111827;
+            --thelo-text-light: #6B7280;
+            --grid-color: #E5E7EB;
+        }
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            background-image:
+                linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px),
+                linear-gradient(to right, rgba(0,0,0,0.02) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+        .thelo-card {
+            background-color: #fff;
+            border: 1px solid var(--grid-color);
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        #drawingCanvas {
+            cursor: crosshair;
+            touch-action: none;
+            background-color: #fff;
+            border-radius: 0.5rem;
+            border: 1px solid var(--grid-color);
+        }
+        .thelo-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1rem;
+            font-weight: 700;
+            border-radius: 0.5rem;
+            border: none;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .thelo-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .thelo-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .btn-start { background-color: var(--thelo-blue); }
+        .btn-finish { background-color: var(--thelo-green); }
+        .btn-discard { background-color: var(--thelo-red); }
+        .btn-clear { background-color: var(--thelo-amber); }
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 700;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .status-idle { background-color: var(--thelo-text-light); color: white; }
+        .status-recording { background-color: var(--thelo-red); color: white; animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8">
+
+    <div class="w-full max-w-5xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row justify-between items-center mb-6">
+            <div class="flex items-center gap-4">
+                <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo logo" class="h-10 w-auto" />
+                <h1 class="text-3xl font-extrabold text-gray-800">Drawing Recorder</h1>
+            </div>
+            <div id="recordingStatus" class="status-badge status-idle mt-4 sm:mt-0">Idle</div>
+        </header>
+
+        <!-- Main Content: Recorder and Controls -->
+        <div class="thelo-card p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Controls Column -->
+                <div class="lg:col-span-1 flex flex-col gap-6">
+                    <!-- Session Controls -->
+                    <div class="p-4 border border-gray-200 rounded-lg">
+                        <h3 class="font-bold mb-3 text-lg">Session</h3>
+                        <div class="flex flex-col gap-3">
+                            <button id="startSessionBtn" class="thelo-btn btn-start"><i class="fas fa-play fa-fw"></i> Start Session (S)</button>
+                            <button id="finishSessionBtn" class="thelo-btn btn-finish" disabled><i class="fas fa-stop fa-fw"></i> Finish Session (S)</button>
+                            <button id="discardSessionBtn" class="thelo-btn btn-discard" disabled><i class="fas fa-trash fa-fw"></i> Discard Session</button>
+                        </div>
+                    </div>
+                    <!-- Drawing Controls -->
+                    <div class="p-4 border border-gray-200 rounded-lg">
+                        <h3 class="font-bold mb-3 text-lg">Drawing</h3>
+                        <div class="space-y-4">
+                             <div class="flex items-center justify-between">
+                                <label for="colorPicker" class="font-semibold">Color (A)</label>
+                                <input type="color" id="colorPicker" value="#000000" class="h-8 w-14 rounded border border-gray-300">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <label for="lineWidthPicker" class="font-semibold">Line Width</label>
+                                <input type="number" id="lineWidthPicker" value="3" min="1" max="20" class="w-20 text-center border border-gray-300 rounded-md p-1">
+                            </div>
+                            <button id="clearDrawingBtn" class="thelo-btn btn-clear w-full mt-2"><i class="fas fa-eraser fa-fw"></i> Clear Canvas</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Canvas Column -->
+                <div class="lg:col-span-2">
+                    <canvas id="drawingCanvas" width="1000" height="600" class="w-full h-auto aspect-[5/3]"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Section -->
+        <div class="thelo-card p-6 mt-6">
+            <h3 class="font-bold mb-3 text-lg">Generated JSON Output</h3>
+            <textarea id="jsonOutput" readonly placeholder="JSON output (smoothed, normalized coordinates) will appear here..." class="w-full h-48 p-3 font-mono text-xs bg-gray-50 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+            <button id="copyJsonBtn" class="thelo-btn btn-start mt-3"><i class="fas fa-copy fa-fw"></i> Copy JSON</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Element Selection ---
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const colorPicker = document.getElementById('colorPicker');
+        const lineWidthPicker = document.getElementById('lineWidthPicker');
+        const clearDrawingBtn = document.getElementById('clearDrawingBtn');
+        const startSessionBtn = document.getElementById('startSessionBtn');
+        const finishSessionBtn = document.getElementById('finishSessionBtn');
+        const discardSessionBtn = document.getElementById('discardSessionBtn');
+        const jsonOutputArea = document.getElementById('jsonOutput');
+        const recordingStatus = document.getElementById('recordingStatus');
+        const copyJsonBtn = document.getElementById('copyJsonBtn');
+
+        // --- Constants and State ---
+        const BLUE_COLOR = '#2563eb';
+        const BLACK_COLOR = '#000000';
+        let isDrawing = false;
+        let isRecordingSessionActive = false;
+        let currentStrokePoints = null;
+        let recordedSessionStrokes = [];
+        let recordingStartTime = null;
+        let strokeInternalStartTime = 0;
+
+        // --- Initial Canvas Setup ---
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // --- Helper Functions ---
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+            else if (e.changedTouches && e.changedTouches.length > 0) { clientX = e.changedTouches[0].clientX; clientY = e.changedTouches[0].clientY; }
+            else { clientX = e.clientX; clientY = e.clientY; }
+            if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
+            return { x: parseFloat((clientX - rect.left).toFixed(2)), y: parseFloat((clientY - rect.top).toFixed(2)) };
+        }
+
+        function updateButtonStates() {
+            startSessionBtn.disabled = isRecordingSessionActive;
+            finishSessionBtn.disabled = !isRecordingSessionActive || recordedSessionStrokes.length === 0;
+            discardSessionBtn.disabled = !isRecordingSessionActive;
+            
+            if (isRecordingSessionActive) {
+                recordingStatus.textContent = 'Recording';
+                recordingStatus.classList.remove('status-idle');
+                recordingStatus.classList.add('status-recording');
+            } else {
+                recordingStatus.textContent = 'Idle';
+                recordingStatus.classList.remove('status-recording');
+                recordingStatus.classList.add('status-idle');
+            }
+        }
+
+        // --- Session Logic ---
+        function startSession(triggerSource = 'Button') {
+            if (isRecordingSessionActive) return;
+            isRecordingSessionActive = true;
+            recordingStartTime = Date.now();
+            recordedSessionStrokes = [];
+            jsonOutputArea.value = "";
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            console.log(`Recording Session Started via ${triggerSource}.`);
+            updateButtonStates();
+        }
+
+        function finishSession(triggerSource = 'Button') {
+            if (!isRecordingSessionActive || recordedSessionStrokes.length === 0) return;
+            
+            const sessionEndTime = Date.now();
+            const finalJson = {
+                sessionDuration: sessionEndTime - recordingStartTime,
+                canvasDimensions: { width: canvas.clientWidth, height: canvas.clientHeight },
+                strokes: recordedSessionStrokes
+            };
+            const jsonString = JSON.stringify(finalJson, null, 2);
+            jsonOutputArea.value = jsonString;
+            console.log(`--- Recording Session Finished via ${triggerSource} ---`);
+            
+            isRecordingSessionActive = false;
+            recordingStartTime = null;
+            updateButtonStates();
+            alert("Recording session finished! JSON generated.");
+        }
+
+        function discardSession() {
+            if (!isRecordingSessionActive) return;
+            if (confirm("Are you sure you want to discard this session? All recorded strokes will be lost.")) {
+                isRecordingSessionActive = false;
+                recordingStartTime = null;
+                recordedSessionStrokes = [];
+                isDrawing = false;
+                currentStrokePoints = null;
+                jsonOutputArea.value = "";
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                console.log("Recording Session Discarded.");
+                updateButtonStates();
+            }
+        }
+
+        // --- Drawing Logic ---
+        function startDraw(e) {
+            if (!isRecordingSessionActive || isDrawing) return;
+            e.preventDefault();
+            const pos = getPos(e);
+            if (!pos) return;
+
+            isDrawing = true;
+            strokeInternalStartTime = Date.now();
+            const strokeAbsStartTime = strokeInternalStartTime - recordingStartTime;
+
+            const normX = pos.x / canvas.clientWidth;
+            const normY = pos.y / canvas.clientHeight;
+            currentStrokePoints = [{ normX: Math.max(0, Math.min(1, normX)), normY: Math.max(0, Math.min(1, normY)), timeOffset: 0 }];
+            canvas.dataset.currentStrokeAbsStart = strokeAbsStartTime;
+
+            const scaleX = canvas.width / canvas.clientWidth;
+            const scaleY = canvas.height / canvas.clientHeight;
+            ctx.beginPath();
+            ctx.strokeStyle = colorPicker.value;
+            ctx.lineWidth = parseInt(lineWidthPicker.value, 10);
+            ctx.moveTo(pos.x * scaleX, pos.y * scaleY);
+        }
+
+        function draw(e) {
+            if (!isDrawing || !isRecordingSessionActive) return;
+            e.preventDefault();
+            const pos = getPos(e);
+            if (!pos || !currentStrokePoints) return;
+
+            const timeOffset = Date.now() - strokeInternalStartTime;
+            const normX = pos.x / canvas.clientWidth;
+            const normY = pos.y / canvas.clientHeight;
+            currentStrokePoints.push({ normX: Math.max(0, Math.min(1, normX)), normY: Math.max(0, Math.min(1, normY)), timeOffset: timeOffset });
+            
+            const scaleX = canvas.width / canvas.clientWidth;
+            const scaleY = canvas.height / canvas.clientHeight;
+            ctx.lineTo(pos.x * scaleX, pos.y * scaleY);
+            ctx.stroke();
+        }
+
+        function endDraw() {
+            if (!isDrawing || !isRecordingSessionActive) return;
+            isDrawing = false;
+
+            const strokeAbsEndTime = Date.now() - recordingStartTime;
+            const strokeAbsStartTime = parseFloat(canvas.dataset.currentStrokeAbsStart || "0");
+
+            if (currentStrokePoints && currentStrokePoints.length > 0) {
+                const smoothedPoints = smoothStrokeChaikin(currentStrokePoints, 2);
+                const strokeObject = {
+                    color: ctx.strokeStyle,
+                    lineWidth: parseInt(lineWidthPicker.value, 10),
+                    startTime: strokeAbsStartTime,
+                    endTime: strokeAbsEndTime,
+                    points: smoothedPoints
+                };
+                recordedSessionStrokes.push(strokeObject);
+            }
+            
+            currentStrokePoints = null;
+            canvas.dataset.currentStrokeAbsStart = "";
+            ctx.beginPath();
+            updateButtonStates();
+        }
+
+        function smoothStrokeChaikin(points, iterations = 1) {
+            if (!points || points.length < 3 || iterations < 1) return points;
+            let currentPoints = points;
+            for (let iter = 0; iter < iterations; iter++) {
+                const smoothed = [];
+                if (currentPoints.length > 0) smoothed.push(currentPoints[0]);
+                for (let i = 0; i < currentPoints.length - 1; i++) {
+                    const p0 = currentPoints[i]; const p1 = currentPoints[i+1];
+                    if (typeof p0?.normX !== 'number' || typeof p1?.normX !== 'number') continue;
+                    const qx = 0.75 * p0.normX + 0.25 * p1.normX; const qy = 0.75 * p0.normY + 0.25 * p1.normY;
+                    const qt = p0.timeOffset + 0.25 * (p1.timeOffset - p0.timeOffset);
+                    const rx = 0.25 * p0.normX + 0.75 * p1.normX; const ry = 0.25 * p0.normY + 0.75 * p1.normY;
+                    const rt = p0.timeOffset + 0.75 * (p1.timeOffset - p0.timeOffset);
+                    smoothed.push({ normX: qx, normY: qy, timeOffset: Math.round(qt) });
+                    smoothed.push({ normX: rx, normY: ry, timeOffset: Math.round(rt) });
+                }
+                if (currentPoints.length > 1) smoothed.push(currentPoints[currentPoints.length - 1]);
+                currentPoints = smoothed;
+            }
+            return currentPoints;
+        }
+
+        // --- Event Listeners ---
+        startSessionBtn.addEventListener('click', () => startSession('Button'));
+        finishSessionBtn.addEventListener('click', () => finishSession('Button'));
+        discardSessionBtn.addEventListener('click', discardSession);
+        clearDrawingBtn.addEventListener('click', () => {
+            if (isRecordingSessionActive) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        });
+        copyJsonBtn.addEventListener('click', () => {
+            if (jsonOutputArea.value) {
+                navigator.clipboard.writeText(jsonOutputArea.value)
+                    .then(() => alert('JSON copied to clipboard!'))
+                    .catch(err => alert('Failed to copy JSON.'));
+            }
+        });
+
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', endDraw);
+        window.addEventListener('mouseleave', endDraw);
+        canvas.addEventListener('touchstart', startDraw, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
+        canvas.addEventListener('touchend', endDraw);
+        canvas.addEventListener('touchcancel', endDraw);
+
+        document.addEventListener('keydown', (event) => {
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+            let handled = false;
+            if (event.key.toLowerCase() === 's') {
+                isRecordingSessionActive ? finishSessionBtn.click() : startSessionBtn.click();
+                handled = true;
+            } else if (event.key.toLowerCase() === 'a') {
+                if (isRecordingSessionActive) {
+                    colorPicker.value = (colorPicker.value.toLowerCase() === BLACK_COLOR) ? BLUE_COLOR : BLACK_COLOR;
+                    handled = true;
+                }
+            } else if (event.key === 'Escape' && isRecordingSessionActive) {
+                discardSessionBtn.click();
+                handled = true;
+            }
+            if (handled) event.preventDefault();
+        });
+
+        // --- Initialize ---
+        updateButtonStates();
+        console.log("Thelo Recorder Initialized.");
+    </script>
+</body>
+</html>
