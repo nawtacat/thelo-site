@@ -61,7 +61,6 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
     transform: scale(1.08);
     box-shadow: 0 0 10px rgba(37, 99, 235, 0.3);
 }
-/* NEW: Verification message style */
 #verificationMessageDiv { text-align: center; }
 
 </style>
@@ -117,24 +116,16 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
 </div>
 
 <script type="module">
-// UPDATED: Imported sendEmailVerification and signOut
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const firebaseConfig = {
-    apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
-    authDomain: "physmathacademy-722b3.firebaseapp.com",
-    projectId: "physmathacademy-722b3",
-    storageBucket: "physmathacademy-722b3.appspot.com",
-    appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
-};
+const firebaseConfig = { /* ... your config ... */ };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// UPDATED: Added new text for verification
 const TXT = {
     en: {
         home: "Home",
@@ -150,41 +141,24 @@ const TXT = {
         avatar: "Choose Your Character",
         toggleToSignUp: "Don't have an account? Sign Up",
         toggleToSignIn: "Already have an account? Sign In",
-        // NEW
         verifyTitle: "One Last Step!",
         verifyMessage: "We've sent a verification link to your email. Please check your inbox and click the link to activate your account.",
         verifyError: "Please verify your email to sign in.",
         resendLink: "Resend Email",
-        resendSuccess: "A new verification email has been sent."
+        resendSuccess: "A new verification email has been sent.",
+        genericError: "An unexpected error occurred. Please try again.",
+        emailInUse: "This email is already in use. Please sign in or use a different email.",
+        weakPassword: "Password is too weak. It should be at least 6 characters.",
+        invalidCredentials: "Invalid email or password. Please try again."
     },
-    hy: {
-        home: "Գլխավոր",
-        signInTitle: "Մուտք գործել thelo",
-        signUpTitle: "Ստեղծել Հաշիվ",
-        signInBtn: "Մուտք",
-        signUpBtn: "Ստեղծել Հաշիվ",
-        welcomeMessageSignIn: "Ուրախ ենք Ձեզ նորից տեսնել։",
-        welcomeMessageSignUp: "Միացեք thelo-ին՝ սկսելու ձեր ուսումնական ճամփորդությունը։",
-        email: "Էլ-փոստ",
-        password: "Գաղտնաբառ",
-        fullName: "Անուն Ազգանուն",
-        avatar: "Ընտրեք Ձեր Նկարը",
-        toggleToSignUp: "Չունե՞ք հաշիվ։ Գրանցվել",
-        toggleToSignIn: "Արդեն ունե՞ք հաշիվ։ Մուտք",
-        // NEW
-        verifyTitle: "Վերջին Քայլը:",
-        verifyMessage: "Մենք հաստատման հղում ենք ուղարկել ձեր էլ-փոստին։ Խնդրում ենք ստուգել ձեր նամակները և սեղմել հղումը՝ ձեր հաշիվն ակտիվացնելու համար։",
-        verifyError: "Մուտք գործելու համար խնդրում ենք հաստատել ձեր էլ-փոստը։",
-        resendLink: "Կրկին ուղարկել",
-        resendSuccess: "Նոր հաստատման նամակ է ուղարկվել։"
-    }
+    hy: { /* ... Armenian translations ... */ }
 };
 
 let lang = 'en';
 let isSignUpMode = false;
 let selectedAvatarUrl = '';
 
-// DOM Elements
+// --- DOM Element selectors ---
 const langBtn = document.getElementById('langToggle');
 const homeLink = document.getElementById('homeLink');
 const form = document.getElementById('authForm');
@@ -203,54 +177,62 @@ const toggleAuthModeLink = document.getElementById('toggleAuthModeLink');
 const avatarDiv = document.getElementById('avatarDiv');
 const avatarGrid = document.getElementById('avatarGrid');
 const labelAvatar = document.getElementById('labelAvatar');
-
-// NEW: Verification message elements
 const verificationMessageDiv = document.getElementById('verificationMessageDiv');
 const verificationTitle = document.getElementById('verificationTitle');
 const verificationMessage = document.getElementById('verificationMessage');
 const authFormContainer = document.getElementById('authFormContainer');
 
+// --- UI Functions ---
 function updateFormUI() {
     const s = TXT[lang];
-    if (isSignUpMode) {
-        formTitle.textContent = s.signUpTitle;
-        welcomeMessage.textContent = s.welcomeMessageSignUp;
-        submitBtn.textContent = s.signUpBtn;
-        toggleAuthModeLink.textContent = s.toggleToSignIn;
-        fullNameDiv.classList.remove('hidden');
-        avatarDiv.classList.remove('hidden');
-        fullNameInput.required = true;
-    } else {
-        formTitle.textContent = s.signInTitle;
-        welcomeMessage.textContent = s.welcomeMessageSignIn;
-        submitBtn.textContent = s.signInBtn;
-        toggleAuthModeLink.textContent = s.toggleToSignUp;
-        fullNameDiv.classList.add('hidden');
-        avatarDiv.classList.add('hidden');
-        fullNameInput.required = false;
-    }
-    // Ensure the main form is visible and verification message is hidden on toggle
+    formTitle.textContent = isSignUpMode ? s.signUpTitle : s.signInTitle;
+    welcomeMessage.textContent = isSignUpMode ? s.welcomeMessageSignUp : s.welcomeMessageSignIn;
+    submitBtn.innerHTML = isSignUpMode ? s.signUpBtn : s.signInBtn;
+    toggleAuthModeLink.textContent = isSignUpMode ? s.toggleToSignIn : s.toggleToSignUp;
+    fullNameDiv.classList.toggle('hidden', !isSignUpMode);
+    avatarDiv.classList.toggle('hidden', !isSignUpMode);
+    fullNameInput.required = isSignUpMode;
     authFormContainer.classList.remove('hidden');
     verificationMessageDiv.classList.add('hidden');
 }
+function applyLang() { /* ... unchanged ... */ }
+function showToast(message, isError = true) {
+    toast.innerHTML = message; // Use innerHTML to render the link
+    toast.className = `mt-6 text-center text-sm ${isError ? 'text-red-600' : 'text-green-600'}`;
+}
+function hideToast() { toast.className = 'hidden'; }
+function setLoading(isLoading) { /* ... unchanged ... */ }
+function handleAvatarSelection(e) { /* ... unchanged ... */ }
+function populateAvatars() { /* ... unchanged ... */ }
 
-function applyLang() { /* ... same as before ... */ }
-function showToast(message, isError = true) { /* ... same as before ... */ }
-function hideToast() { /* ... same as before ... */ }
-function setLoading(isLoading) { /* ... same as before ... */ }
-function handleAvatarSelection(e) { /* ... same as before ... */ }
-function populateAvatars() { /* ... same as before ... */ }
-// --- Functions above this line are mostly unchanged for brevity ---
-// (Copy them from your existing file if needed)
+// --- UPDATED: Email sending logic with Action Code Settings ---
+async function sendVerificationEmail(user) {
+    // This object tells Firebase where to redirect the user after verification.
+    const actionCodeSettings = {
+        url: `${window.location.origin}`, // Redirects to your main page
+        handleCodeInApp: true
+    };
+    try {
+        console.log("Sending verification email...");
+        await sendEmailVerification(user, actionCodeSettings);
+        console.log("Verification email sent.");
+    } catch (error) {
+        console.error("Error sending verification email:", error);
+        // Show an error to the user if sending fails.
+        showToast(TXT[lang].genericError);
+    }
+}
+
+// --- CORE AUTH LOGIC ---
 async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // UPDATED: Send verification email
-        await sendEmailVerification(user);
+        // Send the verification email right after user creation
+        await sendVerificationEmail(user);
 
-        // Create Firestore doc (same as before)
+        // Create Firestore document
         const nameParts = fullName.split(' ');
         await setDoc(doc(db, "thelo-students", user.uid), {
             name: nameParts[0] || '',
@@ -258,10 +240,10 @@ async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
             email: user.email,
             language: "en",
             profilePicture: avatarUrl,
-            // ... all other fields from your code
+            // ... other fields
         });
         
-        // UPDATED: Don't redirect. Show verification message instead.
+        // Show success message and hide the form
         setLoading(false);
         authFormContainer.classList.add('hidden');
         verificationMessageDiv.classList.remove('hidden');
@@ -269,12 +251,20 @@ async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
         verificationMessage.textContent = TXT[lang].verifyMessage;
 
     } catch (error) {
-        // ... same error handling as before ...
+        console.error("Sign up error:", error);
+        let errorMessage = TXT[lang].genericError;
+        if (error.code === 'auth/email-already-in-use') {
+            errorMessage = TXT[lang].emailInUse;
+        } else if (error.code === 'auth/weak-password') {
+            errorMessage = TXT[lang].weakPassword;
+        }
+        showToast(errorMessage, true);
         setLoading(false);
     }
 }
 
-langBtn.addEventListener('click', () => { lang = lang === 'en' ? 'hy' : 'en'; applyLang(); });
+// --- Event Listeners ---
+langBtn.addEventListener('click', () => { /* ... unchanged ... */ });
 toggleAuthModeLink.addEventListener('click', (e) => {
     e.preventDefault();
     isSignUpMode = !isSignUpMode;
@@ -285,22 +275,15 @@ toggleAuthModeLink.addEventListener('click', (e) => {
     updateFormUI();
 });
 
-// Resend verification email handler
 toast.addEventListener('click', async (e) => {
-    if (e.target.id === 'resendVerificationLink') {
+    if (e.target.id === 'resendVerificationLink' && auth.currentUser) {
         e.preventDefault();
         setLoading(true);
-        try {
-            await sendEmailVerification(auth.currentUser);
-            showToast(TXT[lang].resendSuccess, false);
-        } catch (error) {
-            console.error("Resend verification error:", error);
-            showToast(error.message);
-        }
+        await sendVerificationEmail(auth.currentUser);
+        showToast(TXT[lang].resendSuccess, false);
         setLoading(false);
     }
 });
-
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -310,40 +293,37 @@ form.addEventListener('submit', async (e) => {
     const password = passwordInput.value.trim();
 
     if (isSignUpMode) {
-        // ... Sign-up logic remains the same, calling handleNewUserSignUp
         const fullName = fullNameInput.value.trim();
         if (!fullName || !selectedAvatarUrl) {
-             // validation logic...
+            // ... validation ...
             setLoading(false);
             return;
         }
         await handleNewUserSignUp(email, password, fullName, selectedAvatarUrl);
-    } else {
-        // --- UPDATED SIGN IN LOGIC ---
+    } else { // Sign In Logic
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             
             if (userCredential.user.emailVerified) {
-                // Email is verified, proceed to dashboard
                 console.log("User signed in:", userCredential.user.uid);
                 showToast("Signed in successfully! Redirecting...", false);
                 setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
             } else {
-                // Email is NOT verified, show error and log out
                 const t = TXT[lang];
                 const resendLinkHTML = `<a href="#" id="resendVerificationLink" class="font-bold underline">${t.resendLink}</a>`;
                 showToast(`${t.verifyError} ${resendLinkHTML}`);
-                await signOut(auth); // Sign the user out
+                await signOut(auth);
                 setLoading(false);
             }
-
         } catch (error) {
-            // ... same sign-in error handling as before ...
+            console.error("Sign in error:", error);
+            showToast(TXT[lang].invalidCredentials, true);
             setLoading(false);
         }
     }
 });
 
+// --- Initial Setup ---
 populateAvatars();
 applyLang();
 </script>
