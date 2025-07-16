@@ -10,7 +10,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.1/math.min.js"></script>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -1002,67 +1001,56 @@ body.lang-en {
     flex:0 0 auto;
     width:100%;
 }
-/* ===== NEW: Graphing Tool Sidebar ===== */
-.graph-sidebar {
+#calculatorOverlay {
     position: absolute;
     top: 0;
     left: 0;
-    width: 300px;
+    width: 100%;
     height: 100%;
-    background-color: rgba(255, 255, 255, 0.85);
+    z-index: 50; /* Higher than thelobook, lower than modals */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+#calculatorOverlay:not(.calculator-hidden) {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+}
+
+#calculatorFrame {
+    width: 90%;
+    height: 90%;
+    max-width: 400px;
+    max-height: 600px;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+}
+
+#calculatorCloseBtn {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background-color: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border-right: 1px solid var(--thelo-border);
-    box-shadow: var(--shadow-lg);
-    z-index: 26;
-    padding: 1.5rem;
-    box-sizing: border-box;
-    transform: translateX(-100%);
-    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-    font-family: 'Manrope', sans-serif;
-}
-
-.graph-sidebar.visible {
-    transform: translateX(0);
-}
-
-.graph-sidebar h3 {
-    margin-top: 0;
-    color: var(--thelo-text);
-}
-
-.function-input-container {
-    margin: 1.5rem 0;
-}
-
-.function-input-container label {
-    font-weight: 500;
-    margin-right: 0.5rem;
-}
-
-.function-input {
-    width: calc(100% - 30px); /* Adjust width to fit the label */
-    padding: 8px;
-    border: 1px solid var(--thelo-border);
-    border-radius: 8px;
-    font-size: 1rem;
-}
-
-#plotFunctionBtn {
-    width: 100%;
-    padding: 0.75rem;
-    font-size: 1rem;
-    font-weight: 500;
-    border: none;
-    border-radius: 0.75rem;
-    background-color: var(--thelo-blue);
-    color: white;
+    font-size: 1.2rem;
     cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-#plotFunctionBtn:hover {
-    background-color: var(--thelo-blue-dark);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 </style>
 </head>
@@ -1072,14 +1060,6 @@ body.lang-en {
     </div>
     <div id="app">
         <div id="lessonArea">
-          <div id="graphSidebar" class="graph-sidebar">
-    <h3>Graphing Tool 📈</h3>
-    <div class="function-input-container">
-        <label for="functionInput1">y =</label>
-        <input type="text" id="functionInput1" class="function-input" placeholder="e.g., sin(x) or x^2">
-    </div>
-    <button id="plotFunctionBtn">Plot Function</button>
-</div>
             <div id="boardWrap">
                 <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
                 <canvas id="backgroundCanvas"></canvas>
@@ -1087,13 +1067,15 @@ body.lang-en {
                 <canvas id="board"></canvas>
                 <canvas id="finalAnswerCanvas"></canvas>
                 <canvas id="thelobookCanvas"></canvas>
-
+		<div id="calculatorOverlay" class="calculator-hidden">
+                <iframe id="calculatorFrame" src="about:blank" allow="clipboard-write"></iframe>
+                <button id="calculatorCloseBtn" title="Close Calculator">✕</button>
+            </div>
                 <div id="thelobookControls">
                     <button id="thelobookPrevPageBtn" title="Previous Page">‹</button>
                     <span id="thelobookPageIndicator">Page 1 / 1</span>
                     <button id="thelobookNextPageBtn" title="Next Page">›</button>
                     <button id="thelobookEraserBtn" title="Eraser">✏️</button>
-                    <button id="thelobookGraphBtn" title="Graph Tool">📈</button>
                     <button id="thelobookAddPageBtn" title="Add New Page">+</button>
                 </div>
 
@@ -1329,11 +1311,7 @@ function getPreviousWeekIdentifier(weekId) {
 	const imageTerminal = document.getElementById('image-terminal');
 	const imageTerminalImgContainer = document.getElementById('image-terminal-img-container');
 	const imageTerminalFeedback = document.getElementById('image-terminal-feedback');
-    const thelobookGraphBtn = document.getElementById('thelobookGraphBtn');
-    // ADD these new lines
-const graphSidebar = document.getElementById('graphSidebar');
-const functionInput = document.getElementById('functionInput1'); // Note the new ID
-    const plotFunctionBtn = document.getElementById('plotFunctionBtn');
+
     const bgCtx = backgroundCanvas.getContext('2d');
     let replayCtx = null;
     const ctx = canvas.getContext('2d');
@@ -1357,7 +1335,9 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const thelobookPageIndicatorEl = document.getElementById('thelobookPageIndicator');
     const thelobookEraserBtn = document.getElementById('thelobookEraserBtn');
     const thelobookAddPageBtn = document.getElementById('thelobookAddPageBtn');
-
+    const calculatorOverlay = document.getElementById('calculatorOverlay');
+    const calculatorFrame = document.getElementById('calculatorFrame');
+    const calculatorCloseBtn = document.getElementById('calculatorCloseBtn');
 
     const audioElements = {};
     const approveSounds_hy = []; const disapproveSounds_hy = [];
@@ -1366,8 +1346,8 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     /* ========== State Variables ========== */
     let isAuthReady = false;
           let isTabletMode = false;
+	let isCalculatorActive = false;
 	let isPageGridVisible = false; 
-  let isThelobookGraphToolActive = false;
         let lessonStartTime = null;
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let isImageModeActive = false;
@@ -3426,138 +3406,48 @@ function closeThelobook(savePage = true) {
        
         wasMediaPlayingBeforeThelobook = false; 
     }
-    
-     function toggleGraphTool() {
-    if (isPageSwitchingAnimation) return;
+   function openCalculator() {
+        if (isCalculatorActive || isThelobookActive || isPageGridVisible) return;
+        isCalculatorActive = true;
 
-    isThelobookGraphToolActive = !isThelobookGraphToolActive;
+        // Pause lesson and capture state
+        captureMediaState();
 
-    if (isThelobookGraphToolActive) {
-        // --- BUG FIX: Save current notes BEFORE clearing the canvas. ---
-        saveCurrentThelobookPageDrawing();
-
-        isThelobookEraserActive = false; // Deactivate eraser
-        thelobookEraserBtn.classList.remove('active');
-        thelobookGraphBtn.classList.add('active');
+        // Set the src only when opening to load it
+        if(calculatorFrame.src === 'about:blank') {
+           calculatorFrame.src = 'https://thelo.space/thelo-calculator/';
+        }
         
-        // Show the new sidebar
-        graphSidebar.classList.add('visible');
-        thelobookCanvas.style.cursor = 'default';
-
-        // Draw the grid for the graph
-        drawGraphGrid();
-
-    } else {
-        // Hide the sidebar
-        graphSidebar.classList.remove('visible');
-        thelobookGraphBtn.classList.remove('active');
-        thelobookCanvas.style.cursor = 'crosshair';
-
-        // --- BUG FIX: This restores the notes that were saved before entering. ---
-        loadThelobookPageDrawing(currentThelobookPageIndex); 
-
-        // --- BUG FIX: Explicitly reset the pen color for thelobook. ---
-        if (thelobookCtx) {
-            thelobookCtx.strokeStyle = INK_COLORS.black;
-            thelobookCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
-        }
-    }
-}
-    // Function to draw the grid and axes
-    function drawGraphGrid() {
-        if (!thelobookCtx) return;
-
-        const canvasWidth = thelobookCanvas.width / devicePixelRatio;
-        const canvasHeight = thelobookCanvas.height / devicePixelRatio;
-
-        // Clear the canvas
-        thelobookCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-        // Grid properties
-        const gridSize = 20; // 20 pixels per grid square
-        const originX = canvasWidth / 2;
-        const originY = canvasHeight / 2;
-
-        thelobookCtx.beginPath();
-        thelobookCtx.strokeStyle = '#e0e0e0'; // Light grey for grid lines
-        thelobookCtx.lineWidth = 1;
-
-        // Draw vertical grid lines
-        for (let x = gridSize; x < canvasWidth; x += gridSize) {
-            thelobookCtx.moveTo(x, 0);
-            thelobookCtx.lineTo(x, canvasHeight);
+        // Show the overlay
+        calculatorOverlay.classList.remove('calculator-hidden');
+        
+        // Blur MCQs if they are visible
+        if (mcqOptionsContainer && mcqOptionsContainer.style.display !== 'none') {
+            mcqOptionsContainer.classList.add('blurred-mcq');
         }
 
-        // Draw horizontal grid lines
-        for (let y = gridSize; y < canvasHeight; y += gridSize) {
-            thelobookCtx.moveTo(0, y);
-            thelobookCtx.lineTo(canvasWidth, y);
-        }
-        thelobookCtx.stroke();
-
-        // Draw main axes
-        thelobookCtx.beginPath();
-        thelobookCtx.strokeStyle = '#000000'; // Black for axes
-        thelobookCtx.lineWidth = 2;
-        // X-axis
-        thelobookCtx.moveTo(0, originY);
-        thelobookCtx.lineTo(canvasWidth, originY);
-        // Y-axis
-        thelobookCtx.moveTo(originX, 0);
-        thelobookCtx.lineTo(originX, canvasHeight);
-        thelobookCtx.stroke();
+        // Disable main controls
+        if (clearBtn)  clearBtn.disabled  = true;
+        if (prevBtn)   prevBtn.disabled   = true;
+        if (nextCheckBtn) nextCheckBtn.disabled = true;
     }
 
-    // Function to plot the user's input
-    function plotUserFunction() {
-    // This function now uses the 'functionInput' from the sidebar
-    const expression = functionInput.value; 
-    if (!expression || !thelobookCtx) return;
-
-    // Redraw the grid to clear any previous function plot
-    drawGraphGrid(); 
-
-    try {
-        const node = math.parse(expression);
-        const code = node.compile();
-
-        thelobookCtx.beginPath();
-        thelobookCtx.strokeStyle = '#2563eb'; // Thelo blue for the function
-        thelobookCtx.lineWidth = 2.5;
-
-        const canvasWidth = thelobookCanvas.width / devicePixelRatio;
-        const canvasHeight = thelobookCanvas.height / devicePixelRatio;
-        const originX = canvasWidth / 2;
-        const originY = canvasHeight / 2;
-        const scale = 20;
-
-        let firstPoint = true;
-
-        for (let pixelX = 0; pixelX < canvasWidth; pixelX++) {
-            const x = (pixelX - originX) / scale;
-            const y = code.evaluate({ x: x });
-            const pixelY = originY - (y * scale);
-
-            if (Number.isFinite(pixelY)) { // Only draw if the y-value is a real number
-                if (firstPoint) {
-                    thelobookCtx.moveTo(pixelX, pixelY);
-                    firstPoint = false;
-                } else {
-                    thelobookCtx.lineTo(pixelX, pixelY);
-                }
-            } else {
-                // If y is not finite (e.g., from log(-1)), start a new path
-                firstPoint = true; 
-            }
+    function closeCalculator() {
+        if (!isCalculatorActive) return;
+        isCalculatorActive = false;
+        
+        // Hide the overlay
+        calculatorOverlay.classList.add('calculator-hidden');
+        
+        // Un-blur MCQs
+        if (mcqOptionsContainer) {
+            mcqOptionsContainer.classList.remove('blurred-mcq');
         }
-        thelobookCtx.stroke();
-
-    } catch (err) {
-        console.error("Error plotting function:", err);
-        alert("Invalid function. Please use 'x' as the variable.\nExample: 2 * x + 1");
-    }
-}
-      function handleKeyDown(event){
+        
+        // Resume lesson state
+        resumeMediaState();
+    }    
+    function handleKeyDown(event){
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
         /* ===== ADDED: Activate 'View Progress' on SPACE key at end of lesson ===== */
@@ -3576,13 +3466,18 @@ function closeThelobook(savePage = true) {
             }
             return;
         }
-
+	if (isCalculatorActive) {
+            if (event.key.toLowerCase() === 'f' || event.key === 'Escape') {
+                closeCalculator();
+                event.preventDefault();
+            }
+            return;
+        }
         if (isThelobookActive) {
             switch(event.key.toLowerCase()) {
                 case 'b': closeThelobook(true); event.preventDefault(); return;
                 case 'escape': closeThelobook(true); event.preventDefault(); return;
                 case 'e': toggleThelobookEraser(); event.preventDefault(); return;
-		case 'f': toggleGraphTool(); event.preventDefault(); return; // ADD THIS LINE
                 case 'c': clearUserCanvas(); event.preventDefault(); return;
             }
             return;
@@ -3614,6 +3509,10 @@ function closeThelobook(savePage = true) {
                 break;
             case 'b':
                 if (currentStageIndex >=0 && currentStageData) { openThelobook(); event.preventDefault(); }
+                break;
+	    case 'f':
+                openCalculator();
+                event.preventDefault();
                 break;
             case 'c':
                 if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled){
@@ -3712,9 +3611,7 @@ window.addEventListener('wheel', function(e) {
         if (thelobookNextPageBtn) thelobookNextPageBtn.onclick = () => changeThelobookPageSimple(1);
         if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
         if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
-      if (thelobookGraphBtn) thelobookGraphBtn.onclick = toggleGraphTool;
-        if (plotFunctionBtn) plotFunctionBtn.onclick = plotUserFunction;
-
+	 if (calculatorCloseBtn) calculatorCloseBtn.onclick = closeCalculator;
 	if (dashboardBtn) {
 	    dashboardBtn.onclick = () => {
 	        window.location.href = 'https://thelo.space/sdashboard';
