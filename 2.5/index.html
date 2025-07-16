@@ -261,23 +261,6 @@ body.lang-en {
     cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="rgba(0,0,0,0.5)" d="M19.78,2.22a1,1,0,0,0-1.42,0L9.12,11.46a1,1,0,0,0,0,1.41L11.24,15A1,1,0,0,0,12.66,15L22.22,5.39A1,1,0,0,0,22.22,4L19.78,2.22ZM8.41,12.88,2,19.29V21a1,1,0,0,0,1,1H4.71l6.47-6.46-1.42-1.42A1,1,0,0,0,8.41,12.88Z"/></svg>')
       12 12, auto;
   }
-  /* ── calculator overlay inherits same blur recipe ─────────── */
-.tool-overlay{
-  position:absolute; inset:0;
-  display:flex; justify-content:center; align-items:center;
-  opacity:0; visibility:hidden; transform:scale(.95);
-  transition:opacity .3s ease, transform .3s ease,
-             visibility 0s linear .3s;
-  z-index:14;                           /* one layer below thelobook */
-  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-}
-.tool-overlay.active{opacity:1;visibility:visible;transform:scale(1)}
-#calculatorFrame{
-  width:95%; height:90%;
-  border:1px solid var(--thelo-border);
-  border-radius:.75rem; box-shadow:var(--shadow-lg);
-  background:var(--bg-white);
-}
 
   /* ===== UI Controls ===== */
   #bottomBar {
@@ -1018,7 +1001,57 @@ body.lang-en {
     flex:0 0 auto;
     width:100%;
 }
+#calculatorOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 50; /* Higher than thelobook, lower than modals */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
 
+#calculatorOverlay:not(.calculator-hidden) {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+}
+
+#calculatorFrame {
+    width: 90%;
+    height: 90%;
+    max-width: 400px;
+    max-height: 600px;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+}
+
+#calculatorCloseBtn {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background-color: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    font-size: 1.2rem;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 </style>
 </head>
 <body>
@@ -1034,20 +1067,12 @@ body.lang-en {
                 <canvas id="board"></canvas>
                 <canvas id="finalAnswerCanvas"></canvas>
                 <canvas id="thelobookCanvas"></canvas>
-
+		<div id="calculatorOverlay" class="calculator-hidden">
+                <iframe id="calculatorFrame" src="about:blank" allow="clipboard-write"></iframe>
+                <button id="calculatorCloseBtn" title="Close Calculator">✕</button>
+            </div>
                 <div id="thelobookControls">
                     <button id="thelobookPrevPageBtn" title="Previous Page">‹</button>
-			<!-- ── Graphing‑calculator overlay (F‑key) ───────────────────────────── -->
-<div id="calculatorOverlay" class="tool-overlay">
-  <iframe id="calculatorFrame"
-          src="https://thelo.space/thelo-calculator"
-          title="Graphing calculator"
-          loading="lazy"
-          sandbox="allow-scripts allow-same-origin"
-  ></iframe>
-</div>
-<!-- ──────────────────────────────────────────────────────────────────── -->
-
                     <span id="thelobookPageIndicator">Page 1 / 1</span>
                     <button id="thelobookNextPageBtn" title="Next Page">›</button>
                     <button id="thelobookEraserBtn" title="Eraser">✏️</button>
@@ -1310,7 +1335,9 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const thelobookPageIndicatorEl = document.getElementById('thelobookPageIndicator');
     const thelobookEraserBtn = document.getElementById('thelobookEraserBtn');
     const thelobookAddPageBtn = document.getElementById('thelobookAddPageBtn');
-
+    const calculatorOverlay = document.getElementById('calculatorOverlay');
+    const calculatorFrame = document.getElementById('calculatorFrame');
+    const calculatorCloseBtn = document.getElementById('calculatorCloseBtn');
 
     const audioElements = {};
     const approveSounds_hy = []; const disapproveSounds_hy = [];
@@ -1337,10 +1364,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     let thelobookPages = []; let currentThelobookPageIndex = 0;
     let thelobookDrawListenersAttached = false;
     let isThelobookEraserActive = false;
-    /* calculator state */
-let isCalculatorActive        = false;
-let wasMediaPlayingBeforeCalc = false;
-
     const THELOBOOK_ERASER_LINEWIDTH = 20;
     const THELOBOOK_PEN_LINEWIDTH = 3;
     let isPageSwitchingAnimation = false;
@@ -1762,12 +1785,6 @@ function resizeCanvases() {
             colorIndicator.style.display = showIndicator ? 'inline-flex' : 'none';
         }
         if(canvas) canvas.classList.toggle('blue-mode', currentColor === 'blue' && !isThelobookActive && !isPageGridVisible);
-	    canvas.style.pointerEvents =
-    (isStudentInputAllowed &&
-     !isThelobookActive   &&
-     !isPageGridVisible   &&
-     !isCalculatorActive) ? 'auto' : 'none';
-
     }
     function getPos(e, targetCanvas) {
         if (!targetCanvas) return null;
@@ -3254,26 +3271,6 @@ if (detectedAnswer && parseFloat(detectedAnswer) === parseFloat(correctAnswer)) 
         if (thelobookCanvas) thelobookCanvas.classList.toggle('eraser-active', isThelobookEraserActive);
         updateColorIndicator();
     }
-    /* ── calculator overlay control ───────────────────────────── */
-function openCalculator(){
-  if (isCalculatorActive || isThelobookActive || isPageGridVisible) return;
-
-  captureMediaState();                         // pause audio / replay
-  document.getElementById('calculatorOverlay').classList.add('active');
-  isCalculatorActive = true;
-
-  if (prevBtn)      prevBtn.disabled   = true;
-  if (nextCheckBtn) nextCheckBtn.disabled = true;
-  if (clearBtn)     clearBtn.disabled  = true;
-}
-
-function closeCalculator(){
-  if (!isCalculatorActive) return;
-
-  document.getElementById('calculatorOverlay').classList.remove('active');
-  isCalculatorActive = false;
-  resumeMediaState();                          // resume audio / replay
-}
 
     /* ---------------- helper: snapshot & pause media ---------------- */
     function captureMediaState() {
@@ -3408,7 +3405,47 @@ function closeThelobook(savePage = true) {
        
         wasMediaPlayingBeforeThelobook = false; 
     }
-    
+   function openCalculator() {
+        if (isCalculatorActive || isThelobookActive || isPageGridVisible) return;
+        isCalculatorActive = true;
+
+        // Pause lesson and capture state
+        captureMediaState();
+
+        // Set the src only when opening to load it
+        if(calculatorFrame.src === 'about:blank') {
+           calculatorFrame.src = 'https://thelo.space/thelo-calculator/';
+        }
+        
+        // Show the overlay
+        calculatorOverlay.classList.remove('calculator-hidden');
+        
+        // Blur MCQs if they are visible
+        if (mcqOptionsContainer && mcqOptionsContainer.style.display !== 'none') {
+            mcqOptionsContainer.classList.add('blurred-mcq');
+        }
+
+        // Disable main controls
+        if (clearBtn)  clearBtn.disabled  = true;
+        if (prevBtn)   prevBtn.disabled   = true;
+        if (nextCheckBtn) nextCheckBtn.disabled = true;
+    }
+
+    function closeCalculator() {
+        if (!isCalculatorActive) return;
+        isCalculatorActive = false;
+        
+        // Hide the overlay
+        calculatorOverlay.classList.add('calculator-hidden');
+        
+        // Un-blur MCQs
+        if (mcqOptionsContainer) {
+            mcqOptionsContainer.classList.remove('blurred-mcq');
+        }
+        
+        // Resume lesson state
+        resumeMediaState();
+    }    
     function handleKeyDown(event){
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
@@ -3428,7 +3465,13 @@ function closeThelobook(savePage = true) {
             }
             return;
         }
-
+	if (isCalculatorActive) {
+            if (event.key.toLowerCase() === 'f' || event.key === 'Escape') {
+                closeCalculator();
+                event.preventDefault();
+            }
+            return;
+        }
         if (isThelobookActive) {
             switch(event.key.toLowerCase()) {
                 case 'b': closeThelobook(true); event.preventDefault(); return;
@@ -3438,19 +3481,6 @@ function closeThelobook(savePage = true) {
             }
             return;
         }
-	        /* ===== CALCULATOR OVERLAY HOTKEYS ===== */
-        if (isCalculatorActive) {
-            switch (event.key.toLowerCase()) {
-                case 'f':                // toggle with F again
-                case 'escape':           // or close with Esc
-                    closeCalculator();
-                    event.preventDefault();
-                    return;
-            }
-            return;                      // block other keys while open
-        }
-        /* ====================================== */
-
         /* ── QUICK-START LESSON WITH SPACE ──────────────────────────────── */
         if (
         event.key === ' ' &&             // space-bar hit
@@ -3480,11 +3510,9 @@ function closeThelobook(savePage = true) {
                 if (currentStageIndex >=0 && currentStageData) { openThelobook(); event.preventDefault(); }
                 break;
 	    case 'f':
-    if (isCalculatorActive) closeCalculator();
-    else                    openCalculator();
-    event.preventDefault();
-    return;
-
+                openCalculator();
+                event.preventDefault();
+                break;
             case 'c':
                 if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled){
                     clearUserCanvas(); event.preventDefault();
@@ -3582,7 +3610,7 @@ window.addEventListener('wheel', function(e) {
         if (thelobookNextPageBtn) thelobookNextPageBtn.onclick = () => changeThelobookPageSimple(1);
         if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
         if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
-
+	 if (calculatorCloseBtn) calculatorCloseBtn.onclick = closeCalculator;
 	if (dashboardBtn) {
 	    dashboardBtn.onclick = () => {
 	        window.location.href = 'https://thelo.space/sdashboard';
