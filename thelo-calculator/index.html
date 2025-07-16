@@ -272,10 +272,16 @@
                     isPinching: false,
                     initialPinchDistance: 0,
                 },
-                intersectionPoint: {
+                intersections: [], 
+                hoverPoint: { 
                     visible: false,
-                    x: 0, // math coordinate
-                    y: 0, // math coordinate
+                    x: 0, 
+                    y: 0,
+                },
+                lockedPoint: {
+                    visible: false,
+                    x: 0, 
+                    y: 0, 
                     color: '#000'
                 }
             };
@@ -283,7 +289,8 @@
             // --- INITIALIZATION ---
             function initialize() {
                 resizeCanvas();
-                addFunctionInput('sin(x)');
+                addFunctionInput('4*x');
+                addFunctionInput('8*x'); 
                 setupEventListeners();
                 requestAnimationFrame(plotAllFunctions);
             }
@@ -318,9 +325,10 @@
                 canvas.addEventListener('mousemove', handleGraphPanMove);
                 window.addEventListener('mouseup', handleGraphPanEnd);
                 
-                canvas.addEventListener('mousemove', handleMouseMoveForIntersection);
+                canvas.addEventListener('click', handleGraphClick);
+                canvas.addEventListener('mousemove', handleMouseMoveForHover);
                 canvas.addEventListener('mouseleave', () => {
-                    graphState.intersectionPoint.visible = false;
+                    graphState.hoverPoint.visible = false;
                     requestAnimationFrame(plotAllFunctions);
                 });
 
@@ -416,6 +424,9 @@
                 graphState.isPanning = true;
                 graphState.panStart.x = e.clientX;
                 graphState.panStart.y = e.clientY;
+                if (graphState.lockedPoint.visible) {
+                    graphState.lockedPoint.visible = false;
+                }
             }
 
             function handleGraphPanMove(e) {
@@ -494,48 +505,155 @@
 
                 requestAnimationFrame(plotAllFunctions);
             }
+            
+            function findClosestIntersection(pixelX, pixelY) {
+                let closestDist = Infinity;
+                let closestPoint = null;
 
-            function handleMouseMoveForIntersection(e) {
+                graphState.intersections.forEach(point => {
+                    const pointPixelX = graphState.originX + point.x * graphState.scale;
+                    const pointPixelY = graphState.originY - point.y * graphState.scale;
+                    
+                    const dist = Math.sqrt(Math.pow(pixelX - pointPixelX, 2) + Math.pow(pixelY - pointPixelY, 2));
+
+                    if (dist < closestDist && dist < 20 * devicePixelRatio) {
+                        closestDist = dist;
+                        closestPoint = point;
+                    }
+                });
+                return closestPoint;
+            }
+
+            function handleMouseMoveForHover(e) {
                 if (graphState.isPanning) return;
+                
                 const rect = canvas.getBoundingClientRect();
                 const mouseX = (e.clientX - rect.left) * devicePixelRatio;
                 const mouseY = (e.clientY - rect.top) * devicePixelRatio;
 
-                const mathX = (mouseX - graphState.originX) / graphState.scale;
+                const closestPoint = findClosestIntersection(mouseX, mouseY);
+
+                if (closestPoint) {
+                    graphState.hoverPoint.visible = true;
+                    graphState.hoverPoint.x = closestPoint.x;
+                    graphState.hoverPoint.y = closestPoint.y;
+                } else {
+                    graphState.hoverPoint.visible = false;
+                }
+                requestAnimationFrame(plotAllFunctions);
+            }
+
+            function handleGraphClick(e) {
+                if (graphState.isPanning) return;
                 
-                let closestDist = Infinity;
-                let foundPoint = false;
+                const rect = canvas.getBoundingClientRect();
+                const clickX = (e.clientX - rect.left) * devicePixelRatio;
+                const clickY = (e.clientY - rect.top) * devicePixelRatio;
+                
+                const pointToLock = findClosestIntersection(clickX, clickY);
 
-                graphState.functions.forEach(func => {
-                    if (!func.compiled) return;
-                    try {
-                        const mathY = func.compiled.evaluate({ x: mathX });
-                        if (!Number.isFinite(mathY)) return;
-
-                        const pixelY = graphState.originY - mathY * graphState.scale;
-                        const dist = Math.abs(pixelY - mouseY);
-
-                        if (dist < closestDist && dist < 20 * devicePixelRatio) {
-                            closestDist = dist;
-                            graphState.intersectionPoint = {
-                                visible: true,
-                                x: mathX,
-                                y: mathY,
-                                color: func.color
-                            };
-                            foundPoint = true;
-                        }
-                    } catch (err) {}
-                });
-
-                if (!foundPoint) {
-                    graphState.intersectionPoint.visible = false;
+                if (pointToLock) {
+                    graphState.lockedPoint = {
+                        visible: true,
+                        x: pointToLock.x,
+                        y: pointToLock.y,
+                        color: THELO_TEXT_COLOR
+                    };
+                } else {
+                    graphState.lockedPoint.visible = false;
                 }
                 requestAnimationFrame(plotAllFunctions);
             }
 
 
             // --- CORE DRAWING LOGIC ---
+            /**
+             * Uses the bisection method to find a root of f1(x) - f2(x) = 0.
+             * @param {function} f1 - The compiled math.js function for the first curve.
+             * @param {function} f2 - The compiled math.js function for the second curve.
+             * @param {number} a - The start of the interval.
+             * @param {number} b - The end of the interval.
+             * @returns {number|null} The x-coordinate of the intersection, or null if not found.
+             */
+            function bisectionSolve(f1, f2, a, b, tolerance = 1e-9, maxIterations = 50) {
+                let fa = f1.evaluate({x: a}) - f2.evaluate({x: a});
+                let fb = f1.evaluate({x: b}) - f2.evaluate({x: b});
+
+                if (Math.sign(fa) === Math.sign(fb)) {
+                    return null; // No root in this interval
+                }
+
+                let c = a;
+                for (let i = 0; i < maxIterations; i++) {
+                    c = (a + b) / 2;
+                    let fc = f1.evaluate({x: c}) - f2.evaluate({x: c});
+
+                    if (Math.abs(fc) < tolerance || (b - a) / 2 < tolerance) {
+                        return c;
+                    }
+
+                    if (Math.sign(fc) === Math.sign(fa)) {
+                        a = c;
+                        fa = fc;
+                    } else {
+                        b = c;
+                    }
+                }
+                return c;
+            }
+
+            function findAndStoreIntersections() {
+                graphState.intersections = [];
+                const validFuncs = graphState.functions.filter(f => f.compiled);
+                if (validFuncs.length < 2) return;
+
+                const step = 1 / graphState.scale; // One pixel step in math units
+
+                for (let i = 0; i < validFuncs.length; i++) {
+                    for (let j = i + 1; j < validFuncs.length; j++) {
+                        const f1 = validFuncs[i].compiled;
+                        const f2 = validFuncs[j].compiled;
+
+                        let x_prev = -graphState.originX / graphState.scale;
+                        let y1_prev = 0;
+                        let y2_prev = 0;
+                        try {
+                             y1_prev = f1.evaluate({x: x_prev});
+                             y2_prev = f2.evaluate({x: x_prev});
+                        } catch(e) { continue; }
+                        
+                        let diff_prev = y1_prev - y2_prev;
+
+                        for (let px = 1; px < canvas.width; px++) {
+                            const x_curr = (px - graphState.originX) / graphState.scale;
+                            let y1, y2;
+                            try {
+                                y1 = f1.evaluate({ x: x_curr });
+                                y2 = f2.evaluate({ x: x_curr });
+                            } catch (e) { continue; }
+
+                            if (!Number.isFinite(y1) || !Number.isFinite(y2)) {
+                                x_prev = x_curr;
+                                continue;
+                            };
+                            
+                            const diff_curr = y1 - y2;
+
+                            if (Math.sign(diff_curr) !== Math.sign(diff_prev)) {
+                                // A sign change indicates an intersection in the interval [x_prev, x_curr]
+                                const intersectionX = bisectionSolve(f1, f2, x_prev, x_curr);
+                                if (intersectionX !== null) {
+                                    const intersectionY = f1.evaluate({x: intersectionX});
+                                    graphState.intersections.push({ x: intersectionX, y: intersectionY });
+                                }
+                            }
+                            diff_prev = diff_curr;
+                            x_prev = x_curr;
+                        }
+                    }
+                }
+            }
+
             function drawGraphGrid() {
                 ctx.save();
                 ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -593,6 +711,7 @@
 
             function plotAllFunctions() {
                 drawGraphGrid();
+                findAndStoreIntersections();
                 ctx.lineWidth = 2.5 * devicePixelRatio;
                 
                 graphState.functions.forEach(func => {
@@ -622,30 +741,49 @@
                     ctx.stroke();
                 });
 
-                if (graphState.intersectionPoint.visible) {
-                    drawIntersectionPoint();
+                drawAllIntersectionPoints();
+
+                if (graphState.hoverPoint.visible) {
+                    drawHoverPoint();
+                }
+
+                if (graphState.lockedPoint.visible) {
+                    drawLockedPoint();
                 }
             }
+            
+            function drawAllIntersectionPoints() {
+                ctx.fillStyle = THELO_TEXT_LIGHT_COLOR;
+                graphState.intersections.forEach(point => {
+                    const pixelX = graphState.originX + point.x * graphState.scale;
+                    const pixelY = graphState.originY - point.y * graphState.scale;
+                    ctx.beginPath();
+                    ctx.arc(pixelX, pixelY, 4 * devicePixelRatio, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
 
-            function drawIntersectionPoint() {
-                const { x, y, color } = graphState.intersectionPoint;
+            function drawHoverPoint() {
+                const { x, y } = graphState.hoverPoint;
+                const pixelX = graphState.originX + x * graphState.scale;
+                const pixelY = graphState.originY - y * graphState.scale;
+                
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(pixelX, pixelY, 6 * devicePixelRatio, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            function drawLockedPoint() {
+                const { x, y, color } = graphState.lockedPoint;
                 const pixelX = graphState.originX + x * graphState.scale;
                 const pixelY = graphState.originY - y * graphState.scale;
 
-                // Draw pulsing outer circle
-                ctx.fillStyle = color + '33'; // transparent version of the color
-                const pulseRadius = 10 * devicePixelRatio * (1 + Math.sin(Date.now() / 200) * 0.1);
-                ctx.beginPath();
-                ctx.arc(pixelX, pixelY, pulseRadius, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Draw solid inner circle
                 ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.arc(pixelX, pixelY, 5 * devicePixelRatio, 0, Math.PI * 2);
+                ctx.arc(pixelX, pixelY, 6 * devicePixelRatio, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Draw coordinate box
                 const coordText = `(${x.toFixed(2)}, ${y.toFixed(2)})`;
                 ctx.font = `${12 * devicePixelRatio}px 'Manrope'`;
                 const textMetrics = ctx.measureText(coordText);
@@ -655,7 +793,6 @@
                 let boxX = pixelX + 15 * devicePixelRatio;
                 let boxY = pixelY - (boxHeight / 2);
 
-                // Prevent box from going off-screen
                 if (boxX + boxWidth > canvas.width) {
                     boxX = pixelX - boxWidth - 15 * devicePixelRatio;
                 }
