@@ -63,10 +63,14 @@
             color: white;
             border: none;
             border-radius: 8px;
-            padding: 0.5rem 0.75rem;
+            padding: 0.5rem;
             font-weight: 500;
             cursor: pointer;
             transition: background-color 0.2s;
+            width: 36px;
+            height: 36px;
+            font-size: 1.5rem;
+            line-height: 1;
         }
 
         #addFunctionBtn:hover {
@@ -222,7 +226,7 @@
     <div id="sidebar">
         <div class="sidebar-header">
             <h1>Graphing Calculator</h1>
-            <button id="addFunctionBtn">+ Function</button>
+            <button id="addFunctionBtn">+</button>
         </div>
         <div id="functionListContainer">
             <!-- Function inputs will be dynamically added here -->
@@ -247,10 +251,11 @@
             const addFunctionBtn = document.getElementById('addFunctionBtn');
             const homeBtn = document.getElementById('homeBtn');
 
-            // --- STYLE CACHING (FIX FOR JAVASCRIPT ERROR) ---
+            // --- STYLE CACHING ---
             const computedStyles = getComputedStyle(document.documentElement);
             const THELO_BORDER_COLOR = computedStyles.getPropertyValue('--thelo-border').trim();
             const THELO_TEXT_LIGHT_COLOR = computedStyles.getPropertyValue('--thelo-text-light').trim();
+            const THELO_TEXT_COLOR = computedStyles.getPropertyValue('--thelo-text').trim();
 
             // --- STATE MANAGEMENT ---
             let devicePixelRatio = window.devicePixelRatio || 1;
@@ -266,6 +271,12 @@
                 touchState: {
                     isPinching: false,
                     initialPinchDistance: 0,
+                },
+                intersectionPoint: {
+                    visible: false,
+                    x: 0, // math coordinate
+                    y: 0, // math coordinate
+                    color: '#000'
                 }
             };
 
@@ -283,7 +294,7 @@
                 canvas.height = rect.height * devicePixelRatio;
                 canvas.style.width = `${rect.width}px`;
                 canvas.style.height = `${rect.height}px`;
-                resetView(false); // Reset view without redrawing yet
+                resetView(false);
                 requestAnimationFrame(plotAllFunctions);
             }
             
@@ -302,14 +313,17 @@
                 addFunctionBtn.addEventListener('click', () => addFunctionInput());
                 homeBtn.addEventListener('click', () => resetView());
 
-                // Mouse listeners
                 canvas.addEventListener('wheel', handleGraphZoom, { passive: false });
                 canvas.addEventListener('mousedown', handleGraphPanStart);
                 canvas.addEventListener('mousemove', handleGraphPanMove);
                 window.addEventListener('mouseup', handleGraphPanEnd);
-                canvas.addEventListener('mouseleave', handleGraphPanEnd);
+                
+                canvas.addEventListener('mousemove', handleMouseMoveForIntersection);
+                canvas.addEventListener('mouseleave', () => {
+                    graphState.intersectionPoint.visible = false;
+                    requestAnimationFrame(plotAllFunctions);
+                });
 
-                // Touch listeners
                 canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
                 canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
                 canvas.addEventListener('touchend', handleTouchEnd);
@@ -387,7 +401,7 @@
                 requestAnimationFrame(plotAllFunctions);
             }
 
-            // --- GRAPH INTERACTION (MOUSE) ---
+            // --- GRAPH INTERACTION ---
             function handleGraphZoom(e) {
                 e.preventDefault();
                 const rect = canvas.getBoundingClientRect();
@@ -419,7 +433,6 @@
                 graphState.isPanning = false;
             }
 
-            // --- GRAPH INTERACTION (TOUCH) ---
             function handleTouchStart(e) {
                 e.preventDefault();
                 const touches = e.touches;
@@ -448,11 +461,9 @@
                 } else if (graphState.touchState.isPinching && touches.length === 2) {
                     const newDist = getPinchDistance(touches);
                     const zoomFactor = newDist / graphState.touchState.initialPinchDistance;
-                    
                     const rect = canvas.getBoundingClientRect();
                     const midX = ((touches[0].clientX + touches[1].clientX) / 2 - rect.left) * devicePixelRatio;
                     const midY = ((touches[0].clientY + touches[1].clientY) / 2 - rect.top) * devicePixelRatio;
-                    
                     applyZoom(midX, midY, zoomFactor);
                     graphState.touchState.initialPinchDistance = newDist;
                 }
@@ -484,6 +495,45 @@
                 requestAnimationFrame(plotAllFunctions);
             }
 
+            function handleMouseMoveForIntersection(e) {
+                if (graphState.isPanning) return;
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = (e.clientX - rect.left) * devicePixelRatio;
+                const mouseY = (e.clientY - rect.top) * devicePixelRatio;
+
+                const mathX = (mouseX - graphState.originX) / graphState.scale;
+                
+                let closestDist = Infinity;
+                let foundPoint = false;
+
+                graphState.functions.forEach(func => {
+                    if (!func.compiled) return;
+                    try {
+                        const mathY = func.compiled.evaluate({ x: mathX });
+                        if (!Number.isFinite(mathY)) return;
+
+                        const pixelY = graphState.originY - mathY * graphState.scale;
+                        const dist = Math.abs(pixelY - mouseY);
+
+                        if (dist < closestDist && dist < 20 * devicePixelRatio) {
+                            closestDist = dist;
+                            graphState.intersectionPoint = {
+                                visible: true,
+                                x: mathX,
+                                y: mathY,
+                                color: func.color
+                            };
+                            foundPoint = true;
+                        }
+                    } catch (err) {}
+                });
+
+                if (!foundPoint) {
+                    graphState.intersectionPoint.visible = false;
+                }
+                requestAnimationFrame(plotAllFunctions);
+            }
+
 
             // --- CORE DRAWING LOGIC ---
             function drawGraphGrid() {
@@ -504,7 +554,6 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
 
-                // Draw vertical lines and labels
                 const startX = Math.floor(-graphState.originX / graphState.scale / dynamicGrid) * dynamicGrid;
                 for (let x = startX; (x * graphState.scale + graphState.originX) < canvas.width; x += dynamicGrid) {
                     const px = x * graphState.scale + graphState.originX;
@@ -517,7 +566,6 @@
                     }
                 }
 
-                // Draw horizontal lines and labels
                 const startY = Math.floor(graphState.originY / graphState.scale / dynamicGrid) * dynamicGrid;
                 for (let y = startY; (graphState.originY - y * graphState.scale) < canvas.height; y -= dynamicGrid) {
                     const py = graphState.originY - y * graphState.scale;
@@ -533,7 +581,6 @@
                     }
                 }
 
-                // Draw main axes
                 ctx.strokeStyle = THELO_TEXT_LIGHT_COLOR;
                 ctx.lineWidth = 2 * devicePixelRatio;
                 ctx.beginPath();
@@ -546,16 +593,13 @@
 
             function plotAllFunctions() {
                 drawGraphGrid();
-
                 ctx.lineWidth = 2.5 * devicePixelRatio;
                 
                 graphState.functions.forEach(func => {
                     if (!func.compiled) return;
-
                     ctx.strokeStyle = func.color;
                     ctx.beginPath();
                     let firstPoint = true;
-
                     for (let pixelX = 0; pixelX < canvas.width; pixelX += 1) {
                         const x = (pixelX - graphState.originX) / graphState.scale;
                         try {
@@ -577,6 +621,63 @@
                     }
                     ctx.stroke();
                 });
+
+                if (graphState.intersectionPoint.visible) {
+                    drawIntersectionPoint();
+                }
+            }
+
+            function drawIntersectionPoint() {
+                const { x, y, color } = graphState.intersectionPoint;
+                const pixelX = graphState.originX + x * graphState.scale;
+                const pixelY = graphState.originY - y * graphState.scale;
+
+                // Draw pulsing outer circle
+                ctx.fillStyle = color + '33'; // transparent version of the color
+                const pulseRadius = 10 * devicePixelRatio * (1 + Math.sin(Date.now() / 200) * 0.1);
+                ctx.beginPath();
+                ctx.arc(pixelX, pixelY, pulseRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw solid inner circle
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(pixelX, pixelY, 5 * devicePixelRatio, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw coordinate box
+                const coordText = `(${x.toFixed(2)}, ${y.toFixed(2)})`;
+                ctx.font = `${12 * devicePixelRatio}px 'Manrope'`;
+                const textMetrics = ctx.measureText(coordText);
+                const boxWidth = textMetrics.width + 16 * devicePixelRatio;
+                const boxHeight = 24 * devicePixelRatio;
+                
+                let boxX = pixelX + 15 * devicePixelRatio;
+                let boxY = pixelY - (boxHeight / 2);
+
+                // Prevent box from going off-screen
+                if (boxX + boxWidth > canvas.width) {
+                    boxX = pixelX - boxWidth - 15 * devicePixelRatio;
+                }
+                if (boxY < 0) {
+                    boxY = 5 * devicePixelRatio;
+                }
+                if (boxY + boxHeight > canvas.height) {
+                    boxY = canvas.height - boxHeight - 5 * devicePixelRatio;
+                }
+                
+                ctx.fillStyle = '#fff';
+                ctx.shadowColor = 'rgba(0,0,0,0.2)';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5 * devicePixelRatio);
+                ctx.fill();
+                ctx.shadowColor = 'transparent';
+
+                ctx.fillStyle = THELO_TEXT_COLOR;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(coordText, boxX + boxWidth / 2, boxY + boxHeight / 2);
             }
 
             // --- START THE APP ---
