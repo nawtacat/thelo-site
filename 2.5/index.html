@@ -1001,21 +1001,37 @@ body.lang-en {
     flex:0 0 auto;
     width:100%;
 }
+/* REPLACE the old #calculatorOverlay and #calculatorFrame rules with these */
+
 #calculatorOverlay {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 50; /* Higher than thelobook, lower than modals */
+    z-index: 50;
     display: flex;
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    background-color: rgba(255, 255, 255, 0.5); /* Soft white background */
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+#calculatorFrame {
+    /* This makes the iframe fill most of the overlay */
+    width: 98%;
+    height: 98%;
+    border: none; /* The overlay provides the visual boundary */
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+}
+/* ADD THIS NEW RULE */
+.terminal-hidden-by-calculator {
+    display: none !important;
 }
 
 #calculatorOverlay:not(.calculator-hidden) {
@@ -1024,15 +1040,6 @@ body.lang-en {
     transition-delay: 0s;
 }
 
-#calculatorFrame {
-    width: 90%;
-    height: 90%;
-    max-width: 400px;
-    max-height: 600px;
-    border: 1px solid rgba(0,0,0,0.1);
-    border-radius: 1rem;
-    box-shadow: var(--shadow-lg);
-}
 
 #calculatorCloseBtn {
     position: absolute;
@@ -1323,6 +1330,7 @@ function getPreviousWeekIdentifier(weekId) {
     const clearBtn = document.getElementById('clearBtn');
     const thelobookBtn = document.getElementById('thelobookBtn');
     const chatArea = document.getElementById('chat');
+    const chatCol = document.getElementById('chatCol'); // <-- ADD THIS LINE
     const colorIndicator = document.getElementById('colorIndicator');
     if (colorIndicator){ colorIndicator.addEventListener('click', () => { toggleColor(); }); }
     const pointsDisplayElement = document.getElementById('pointsDisplay');
@@ -3406,47 +3414,55 @@ function closeThelobook(savePage = true) {
        
         wasMediaPlayingBeforeThelobook = false; 
     }
-   function openCalculator() {
-        if (isCalculatorActive || isThelobookActive || isPageGridVisible) return;
-        isCalculatorActive = true;
+   // REPLACE your existing open/close calculator functions with these
 
-        // Pause lesson and capture state
-        captureMediaState();
+function openCalculator() {
+    if (isCalculatorActive || isThelobookActive || isPageGridVisible) return;
+    isCalculatorActive = true;
 
-        // Set the src only when opening to load it
-        if(calculatorFrame.src === 'about:blank') {
-           calculatorFrame.src = 'https://thelo.space/thelo-calculator/';
-        }
-        
-        // Show the overlay
-        calculatorOverlay.classList.remove('calculator-hidden');
-        
-        // Blur MCQs if they are visible
-        if (mcqOptionsContainer && mcqOptionsContainer.style.display !== 'none') {
-            mcqOptionsContainer.classList.add('blurred-mcq');
-        }
+    // Hide the terminal
+    if (chatCol) chatCol.classList.add('terminal-hidden-by-calculator');
 
-        // Disable main controls
-        if (clearBtn)  clearBtn.disabled  = true;
-        if (prevBtn)   prevBtn.disabled   = true;
-        if (nextCheckBtn) nextCheckBtn.disabled = true;
+    // Pause lesson and capture state
+    captureMediaState();
+
+    // Set the src only when opening to load it
+    if(calculatorFrame.src === 'about:blank') {
+       calculatorFrame.src = 'https://thelo.space/thelo-calculator/';
+    }
+    
+    // Show the overlay
+    calculatorOverlay.classList.remove('calculator-hidden');
+    
+    // Blur MCQs if they are visible
+    if (mcqOptionsContainer && mcqOptionsContainer.style.display !== 'none') {
+        mcqOptionsContainer.classList.add('blurred-mcq');
     }
 
-    function closeCalculator() {
-        if (!isCalculatorActive) return;
-        isCalculatorActive = false;
-        
-        // Hide the overlay
-        calculatorOverlay.classList.add('calculator-hidden');
-        
-        // Un-blur MCQs
-        if (mcqOptionsContainer) {
-            mcqOptionsContainer.classList.remove('blurred-mcq');
-        }
-        
-        // Resume lesson state
-        resumeMediaState();
-    }    
+    // Disable main controls
+    if (clearBtn)  clearBtn.disabled  = true;
+    if (prevBtn)   prevBtn.disabled   = true;
+    if (nextCheckBtn) nextCheckBtn.disabled = true;
+}
+
+function closeCalculator() {
+    if (!isCalculatorActive) return;
+    isCalculatorActive = false;
+    
+    // Show the terminal again
+    if (chatCol) chatCol.classList.remove('terminal-hidden-by-calculator');
+    
+    // Hide the overlay
+    calculatorOverlay.classList.add('calculator-hidden');
+    
+    // Un-blur MCQs
+    if (mcqOptionsContainer) {
+        mcqOptionsContainer.classList.remove('blurred-mcq');
+    }
+    
+    // Resume lesson state
+    resumeMediaState();
+}    
     function handleKeyDown(event){
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
