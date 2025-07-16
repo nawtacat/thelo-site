@@ -2167,11 +2167,7 @@ function handleDrawingEnd(e) {
 }
 
 	// REPLACE your entire renderStageUI function with this one
-
-// REPLACE your entire renderStageUI function with this one
-// REPLACE your entire renderStageUI function with this one
 function renderStageUI(index, isResize = false) {
-    // --- NEW: Return a promise to handle async image loading ---
     return new Promise((resolve, reject) => {
         if (isLessonLoading || index < 0 || index >= lessonStages.length) {
             if (index < 0) {
@@ -2181,7 +2177,7 @@ function renderStageUI(index, isResize = false) {
                 if (colorIndicator && colorIndicator.style) colorIndicator.style.display = 'none';
                 if (mcqOptionsContainer && mcqOptionsContainer.style) mcqOptionsContainer.style.display = 'none';
             }
-            return resolve(); // Resolve the promise even if there's nothing to render
+            return resolve();
         }
         const TXT = getCurrentUIText();
         if (!isResize && isThelobookActive) closeThelobook(true);
@@ -2200,27 +2196,19 @@ function renderStageUI(index, isResize = false) {
         currentColor = 'black';
         if (ctx) ctx.strokeStyle = INK_COLORS[currentColor];
 
-        // --- NEW: Identify if this stage needs the split-screen layout ---
         const mcqDetails = currentStageData.optionsQuiz;
         const isSplitView = !!(currentStageData.image && mcqDetails && Array.isArray(mcqDetails.choices));
 
-        // --- NEW: Get DOM elements for layout changes ---
-        const boardWrap = document.getElementById('boardWrap');
-        const canvasContainer = document.getElementById('canvasContainer');
-        
-        // --- NEW: Reset layout classes before rendering ---
-        boardWrap.classList.remove('split-view');
-        if (canvasContainer) canvasContainer.classList.remove('split-view-left');
         mcqOptionsContainer.classList.remove('split-view-right');
-
-        // --- NEW: Apply split-view classes if needed ---
         if (isSplitView) {
-            boardWrap.classList.add('split-view');
-            if (canvasContainer) canvasContainer.classList.add('split-view-left');
             mcqOptionsContainer.classList.add('split-view-right');
         }
 
-        if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
+        if (mcqOptionsContainer && !isSplitView) {
+            mcqOptionsContainer.innerHTML = '';
+            mcqOptionsContainer.style.display = 'none';
+        }
+
         if (!isResize) {
             clearUserCanvas();
             if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
@@ -2228,24 +2216,19 @@ function renderStageUI(index, isResize = false) {
         } else {
             if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
         }
-        
+
         // =======================================================
         // == NESTED HELPER FUNCTION: drawHeadlineText
         // =======================================================
         function drawHeadlineText() {
-            // The `isSplitView` variable is available from the parent `renderStageUI` scope
             const padding = 27;
-            const cssTotalWidth = backgroundCanvas.width / devicePixelRatio;
-
-            // --- MODIFIED: Adjust text area and positioning based on view type ---
-            const cssWidthForText = isSplitView ? cssTotalWidth / 2 : cssTotalWidth;
-            const textX = isSplitView ? cssWidthForText / 2 : cssTotalWidth / 2; // Center within the available space
+            const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
             const maxWidth = cssWidthForText * 0.8;
-            // --- END MODIFICATION ---
-
-            let headlineCurrentY = padding * 2;
+            const textX = cssWidthForText / 2;
+            let headlineCurrentY = padding;
             const lineHeight = 30;
             let headlineText = currentStageData.headline || '';
+            let totalHeight = 0;
 
             if (headlineText && bgCtx && (bgCtx.canvas.width > 0)) {
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
@@ -2254,32 +2237,31 @@ function renderStageUI(index, isResize = false) {
                 bgCtx.textAlign = 'center';
                 bgCtx.textBaseline = 'top';
                 const plainHeadlineText = headlineText.replace(/<strong>(.*?)<\/strong>/gi, '$1');
-                wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
+                const lineCount = wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
+                totalHeight = (lineCount * lineHeight) + (padding * 2);
             }
+            return totalHeight;
         }
 
         // =======================================================
         // == NESTED HELPER FUNCTION: setupStageContent
         // =======================================================
         function setupStageContent() {
-            drawHeadlineText();
-
-            // Use the mcqDetails variable defined in the parent scope
             const isMCQDisplayStage = mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
             const isQuestionStage = currentStageData.type === 'question_handwriting' || isMCQDisplayStage;
 
             if (isQuestionStage) {
                 if (!isResize) isMediaScrubbingActive = false;
-                if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                if (isMCQDisplayStage) { // This handles both split-view and fullscreen MCQs
+                if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                if (isMCQDisplayStage) {
                     if (bottomBar) bottomBar.style.display = 'flex';
                     displayMcq(mcqDetails);
-                    if(clearBtn) clearBtn.style.display = 'none';
-                    if(nextCheckBtn) nextCheckBtn.disabled = true;
+                    if (clearBtn) clearBtn.style.display = 'none';
+                    if (nextCheckBtn) nextCheckBtn.disabled = true;
                 } else if (currentStageData.type === 'question_handwriting') {
                     if (bottomBar) bottomBar.style.display = 'flex';
-                    if(nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
-                    if(clearBtn) clearBtn.style.display = 'inline-flex';
+                    if (nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
+                    if (clearBtn) clearBtn.style.display = 'inline-flex';
                 }
                 if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => {}, () => {}, isResize); }
             } else {
@@ -2292,7 +2274,7 @@ function renderStageUI(index, isResize = false) {
                     if (!isResize) { isMediaScrubbingActive = true; lastFrameTimestampForManualAdvance = 0; internalPlaybackTime = 0; }
                     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
                     const audioMetaPromise = new Promise((resolve) => {
-                        if(currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolve(duration || 0), () => {}, isResize); }
+                        if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolve(duration || 0), () => {}, isResize); }
                         else { resolve(0); }
                     });
                     let drawingDataPromise;
@@ -2306,7 +2288,7 @@ function renderStageUI(index, isResize = false) {
                         const oldTotalDuration = currentStageTotalDuration;
                         const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
                         currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
-                        if(isResize && oldTotalDuration !== currentStageTotalDuration) { internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration); }
+                        if (isResize && oldTotalDuration !== currentStageTotalDuration) { internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration); }
                         if (!isMediaScrubbingActive && internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0) {
                             if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx); }
                             updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
@@ -2318,94 +2300,90 @@ function renderStageUI(index, isResize = false) {
                             currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
                         } else if (currentStageTotalDuration === 0 && currentStageDrawingData && replayCtx) {
                             renderDrawingAtTime(0, currentStageDrawingData, replayCtx);
-                            if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                            if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                         } else {
                             isMediaScrubbingActive = false;
-                            if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                            if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                         }
-                    }).catch(e => { console.error("Error in media setup promise:", e); isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible'); });
+                    }).catch(e => { console.error("Error in media setup promise:", e); isMediaScrubbingActive = false; if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible'); });
                 } else {
-                    isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                    isMediaScrubbingActive = false; if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                     currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
                     if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
                 }
-                if(nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
+                if (nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
             }
 
             updateColorIndicator();
             canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible) ? 'auto' : 'none';
-            if(nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
+            if (nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
             if (!isResize) userDrawingOccurred = false;
-            if(prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible);
-            if(nextCheckBtn) {
+            if (prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible);
+            if (nextCheckBtn) {
                 const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
                 nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || isMCQDisplayStage || isCorrectlyAnsweredHW);
             }
-            if(clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible);
+            if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible);
         }
 
         // =======================================================
         // == Main renderStageUI Logic Continues
         // =======================================================
         if (currentStageData.image && bgCtx && !isResize) {
-            isImageModeActive = false;
             const img = new Image();
             img.src = currentStageData.image;
 
             img.onload = () => {
+                const headlineHeight = drawHeadlineText();
                 const canvasTotalWidth = bgCtx.canvas.width / devicePixelRatio;
-                const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
-                
-                // --- MODIFIED: Adjust drawing area for split view ---
+                const canvasTotalHeight = bgCtx.canvas.height / devicePixelRatio;
+                const availableHeight = canvasTotalHeight - headlineHeight;
                 const drawingAreaWidth = isSplitView ? canvasTotalWidth / 2 : canvasTotalWidth;
-                
-                const maxSizePercentage = isSplitView ? 0.80 : 0.50;
+                const maxSizePercentage = 0.85;
                 const maxContainerWidth = drawingAreaWidth * maxSizePercentage;
-                const maxContainerHeight = canvasHeight * maxSizePercentage;
-
+                const maxContainerHeight = availableHeight * maxSizePercentage;
                 const scale = Math.min(maxContainerWidth / img.width, maxContainerHeight / img.height);
                 const scaledWidth = img.width * scale;
                 const scaledHeight = img.height * scale;
-                
-                // --- MODIFIED: Center the image within the appropriate drawing area ---
                 const x = (drawingAreaWidth - scaledWidth) / 2;
-                const y = (canvasHeight - scaledHeight) / 2;
+                const y = headlineHeight + (availableHeight - scaledHeight) / 2;
 
                 bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
-                
-                // Now that the image is drawn, set up the rest of the stage content
                 setupStageContent();
                 resolve();
             };
 
             img.onerror = () => {
                 console.error("Failed to load stage image:", currentStageData.image);
+                drawHeadlineText();
                 setupStageContent();
-                resolve(); // Still resolve so the app doesn't hang
+                resolve();
             };
         } else {
-            // Handle resize or no-image stages
+            drawHeadlineText();
             if (isResize && currentStageData.image && bgCtx) {
-               const img = new Image();
-               img.src = currentStageData.image;
-               img.onload = () => {
+                // Simplified redraw on resize
+                const img = new Image();
+                img.src = currentStageData.image;
+                img.onload = () => {
+                    const headlineHeight = drawHeadlineText();
                     const canvasTotalWidth = bgCtx.canvas.width / devicePixelRatio;
-                    const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
+                    const canvasTotalHeight = bgCtx.canvas.height / devicePixelRatio;
+                    const availableHeight = canvasTotalHeight - headlineHeight;
                     const drawingAreaWidth = isSplitView ? canvasTotalWidth / 2 : canvasTotalWidth;
-                    const maxSizePercentage = isSplitView ? 0.80 : 0.50;
+                    const maxSizePercentage = 0.85;
                     const maxContainerWidth = drawingAreaWidth * maxSizePercentage;
-                    const maxContainerHeight = canvasHeight * maxSizePercentage;
+                    const maxContainerHeight = availableHeight * maxSizePercentage;
                     const scale = Math.min(maxContainerWidth / img.width, maxContainerHeight / img.height);
                     const scaledWidth = img.width * scale;
                     const scaledHeight = img.height * scale;
                     const x = (drawingAreaWidth - scaledWidth) / 2;
-                    const y = (canvasHeight - scaledHeight) / 2;
+                    const y = headlineHeight + (availableHeight - scaledHeight) / 2;
                     bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
-                    drawHeadlineText(); // Redraw headline on resize
-               }
+                }
             }
             setupStageContent();
-            resolve(); // Resolve immediately if there's no image to load
+            resolve();
         }
     });
 }
