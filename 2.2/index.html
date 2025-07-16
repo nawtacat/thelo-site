@@ -2141,22 +2141,36 @@ function handleDrawingEnd(e) {
 }
 
 	// REPLACE your entire renderStageUI function with this one
-
-// REPLACE your entire renderStageUI function with this one
+// REPLACE your entire old function with this new one
 function renderStageUI(index, isResize = false) {
-    return new Promise((resolve) => {
+    // The Promise starts here, wrapping all the logic.
+    return new Promise((resolve, reject) => {
         if (isLessonLoading || index < 0 || index >= lessonStages.length) {
             if (index < 0) {
                 if (nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = getCurrentUIText().start; }
                 if (prevBtn) prevBtn.disabled = true;
+                if (clearBtn && clearBtn.style) clearBtn.style.display = 'none';
+                if (colorIndicator && colorIndicator.style) colorIndicator.style.display = 'none';
+                if (mcqOptionsContainer && mcqOptionsContainer.style) mcqOptionsContainer.style.display = 'none';
             }
-            return resolve();
+            return resolve(); // Resolve the promise even if there's nothing to render
         }
-
-        // --- 1. General Setup ---
         const TXT = getCurrentUIText();
+        if (!isResize && isThelobookActive) closeThelobook(true);
+        if (!isResize && isPageGridVisible) closePageGridView();
+
+        if (!isResize) {
+            if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+            if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+            isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
+            if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+            if (stageProgressFill) stageProgressFill.style.width = '0%';
+        }
         currentStageData = lessonStages[index];
         currentStageIndex = index;
+        isStudentInputAllowed = currentStageData.studentInput === true;
+        currentColor = 'black';
+        if (ctx) ctx.strokeStyle = INK_COLORS[currentColor];
 
         if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
         if (!isResize) {
@@ -2167,91 +2181,8 @@ function renderStageUI(index, isResize = false) {
             if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
         }
 
-        // --- 2. Draw Headline ---
-        const headlineText = currentStageData.headline || '';
-        if (headlineText && bgCtx) {
-            const padding = 27;
-            const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
-            const textX = cssWidthForText / 2;
-            const headlineCurrentY = padding;
-            const lineHeight = 30;
-            const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-            bgCtx.font = `20px ${fontFamily}`;
-            bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-            bgCtx.textAlign = 'center';
-            bgCtx.textBaseline = 'top';
-            wrapText(bgCtx, headlineText, textX, headlineCurrentY, cssWidthForText * 0.9, lineHeight);
-        }
-
-        // --- 3. Handle Stage Content Based on Type ---
-
-        // >>>>>>> PRIMARY CASE: An MCQ that ALSO has an image (our split-screen layout) <<<<<<<
-        if (currentStageData.type === 'explanation_with_mcq' && currentStageData.image) {
-            isStudentInputAllowed = false; // Intentionally disable drawing for this layout
-            canvas.style.pointerEvents = 'none';
-            if (nextCheckBtn) nextCheckBtn.disabled = true;
-            if (clearBtn) clearBtn.style.display = 'none';
-
-            const img = new Image();
-            img.crossOrigin = "Anonymous"; // Add this for cross-origin images
-            img.src = currentStageData.image;
-
-            img.onload = () => {
-                const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-                const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
-                const imageAreaWidth = canvasWidth / 2; // Left half
-                const maxImageHeight = canvasHeight * 0.7; // Use 70% of height
-
-                const scale = Math.min(imageAreaWidth * 0.85 / img.width, maxImageHeight / img.height);
-                const scaledWidth = img.width * scale;
-                const scaledHeight = img.height * scale;
-
-                const x = (imageAreaWidth - scaledWidth) / 2; // Center in left half
-                const y = ((canvasHeight - scaledHeight) / 2) + 20; // Nudge down a bit
-
-                bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
-                displayMcq(currentStageData.optionsQuiz); // Now display MCQs on the right
-                
-                if (currentStageData.audioFile) {
-                    playStageAudio(currentStageData.audioFile, () => {}, () => {}, isResize);
-                }
-                resolve();
-            };
-            img.onerror = () => { console.error("Image load failed for MCQ stage"); resolve(); };
-
-        // >>>>>>> SECONDARY CASE: All other stages without our special split-screen layout <<<<<<<
-        } else {
-            isStudentInputAllowed = currentStageData.studentInput === true;
-            canvas.style.pointerEvents = isStudentInputAllowed ? 'auto' : 'none';
-            if (clearBtn) clearBtn.style.display = isStudentInputAllowed ? 'inline-flex' : 'none';
-
-            if (currentStageData.type === "explanation_with_mcq") {
-                displayMcq(currentStageData.optionsQuiz);
-                if (nextCheckBtn) nextCheckBtn.disabled = true;
-            } else if (currentStageData.type === 'question_handwriting') {
-                if (nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
-            } else {
-                if (nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
-            }
-            
-            // Handle audio/drawing playback if they exist
-            if (currentStageData.audioFile || currentStageData.drawingRecord) {
-                // Your existing media playback logic can be placed here, it won't interfere.
-            }
-             if (currentStageData.audioFile) {
-                playStageAudio(currentStageData.audioFile, () => {}, () => {}, isResize);
-            }
-            resolve();
-        }
-
-        // --- 4. Final UI State Updates ---
-        updateColorIndicator();
-        if (prevBtn) prevBtn.disabled = (index === 0);
-    });
-}
         function setupStageContent() {
-            // (The content of this nested function remains exactly the same as before)
-            drawHeadlineText(); 
+            drawHeadlineText();
 
             const mcqDetails = currentStageData.optionsQuiz;
             const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
@@ -2261,7 +2192,8 @@ function renderStageUI(index, isResize = false) {
                 if (!isResize) isMediaScrubbingActive = false;
                 if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                 if (isMCQDisplayStage && mcqDetails) {
-                    if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
+                    if (bottomBar) bottomBar.style.display = 'flex';
+                    displayMcq(mcqDetails);
                     if(clearBtn) clearBtn.style.display = 'none';
                     if(nextCheckBtn) nextCheckBtn.disabled = true;
                 } else if (currentStageData.type === 'question_handwriting') {
@@ -2327,13 +2259,14 @@ function renderStageUI(index, isResize = false) {
             if(prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible);
             if(nextCheckBtn) {
                 const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
+                const mcqDetails = currentStageData.optionsQuiz;
+                const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
                 nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW);
             }
             if(clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible);
         }
         
         function drawHeadlineText() {
-             // (The content of this nested function remains exactly the same as before)
             const padding = 27; const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
             const maxWidth = cssWidthForText * 0.8; const textX = cssWidthForText / 2;
             let headlineCurrentY = padding * 2; const lineHeight = 30;
@@ -2350,9 +2283,8 @@ function renderStageUI(index, isResize = false) {
             }
         }
         
-        // --- THIS IS THE KEY CHANGE AREA ---
         if (currentStageData.image && bgCtx && !isResize) {
-            isImageModeActive = false; 
+            isImageModeActive = false;
             const img = new Image();
             img.src = currentStageData.image;
             
@@ -2370,13 +2302,13 @@ function renderStageUI(index, isResize = false) {
                 bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
                 
                 setupStageContent();
-                resolve(); // <<< Tell the promise we are done AFTER image is loaded and drawn
+                resolve(); 
             };
 
             img.onerror = () => {
                 console.error("Failed to load stage image:", currentStageData.image);
                 setupStageContent();
-                resolve(); // <<< Also resolve on error so the app doesn't get stuck
+                resolve(); 
             };
         } else {
             if (isResize && currentStageData.image && bgCtx) {
@@ -2397,10 +2329,15 @@ function renderStageUI(index, isResize = false) {
                     drawHeadlineText();
                }
             }
+            // This is the crucial part: All logic paths now correctly call setupStageContent
+            // and resolve() from WITHIN the Promise.
             setupStageContent();
-            resolve(); // <<< Tell the promise we are done immediately if there's no image
+            resolve();
         }
-}    // REPLACE your old transitionToStage function with this one
+    // The Promise correctly ends here, after all possible logic paths.
+    });
+}
+// REPLACE your entire renderStageUI function with this one
 function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
     if (isThelobookActive) closeThelobook(true);
