@@ -1001,34 +1001,65 @@ body.lang-en {
     flex:0 0 auto;
     width:100%;
 }
-#calculatorOverlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 20; /* Sits above thelobook canvas (15) but below controls (25) */
-    background-color: #fff; /* A solid background for the calculator */
+/* ===== Calculator Overlay ===== */
+#calculator-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 360px;
+    height: 540px;
+    background-color: var(--thelo-bg);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    transition: opacity 0.3s ease, visibility 0.3s;
+    opacity: 0;
+    visibility: hidden;
+}
 
-    /* Hidden by default */
+#calculator-container:not(.calculator-hidden) {
+    opacity: 1;
+    visibility: visible;
+}
+
+#calculator-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--thelo-border);
+    cursor: move;
+    background-color: #f9fafb;
+    border-top-left-radius: 1rem;
+    border-top-right-radius: 1rem;
+}
+
+#calculator-header span {
+    font-weight: 500;
+}
+
+#close-calculator-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--thelo-text-light);
+}
+
+#calculator-container iframe {
+    flex-grow: 1;
+    border: none;
+    border-bottom-left-radius: 1rem;
+    border-bottom-right-radius: 1rem;
+}
+
+.calculator-hidden {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-
-    /* Smooth transition */
-    transition: opacity 0.3s ease, visibility 0.3s ease;
-}
-
-#calculatorOverlay.active {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: all; /* Allow interaction when visible */
-}
-
-#calculatorOverlay iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
 }
 </style>
 </head>
@@ -1045,12 +1076,7 @@ body.lang-en {
                 <canvas id="board"></canvas>
                 <canvas id="finalAnswerCanvas"></canvas>
                 <canvas id="thelobookCanvas"></canvas>
-                <canvas id="thelobookCanvas"></canvas>
 
-                        <div id="calculatorOverlay">
-                            <iframe id="calculatorFrame" src="https://thelo.space/thelo-calculator" frameborder="0"></iframe>
-                        </div>
-                        <div id="thelobookControls">
                 <div id="thelobookControls">
                     <button id="thelobookPrevPageBtn" title="Previous Page">‹</button>
                     <span id="thelobookPageIndicator">Page 1 / 1</span>
@@ -1278,7 +1304,6 @@ function getPreviousWeekIdentifier(weekId) {
     const backgroundCanvas = document.getElementById('backgroundCanvas');
     const replayCanvas = document.getElementById('replayCanvas');
     const canvas = document.getElementById('board');
-          const calculatorOverlay = document.getElementById('calculatorOverlay');
     const loadingOverlay = document.getElementById('loading-overlay'); // <-- ADD THIS
     const finalAnswerCanvas = document.getElementById('finalAnswerCanvas');
     const thelobookCanvas = document.getElementById('thelobookCanvas');
@@ -1308,7 +1333,8 @@ function getPreviousWeekIdentifier(weekId) {
     if (colorIndicator){ colorIndicator.addEventListener('click', () => { toggleColor(); }); }
     const pointsDisplayElement = document.getElementById('pointsDisplay');
 const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
-
+const calculatorContainer = document.getElementById('calculator-container');
+const closeCalculatorBtn = document.getElementById('close-calculator-btn');
     const thelobookControlsEl = document.getElementById('thelobookControls');
     const thelobookPagesBtn = document.getElementById('thelobookPagesBtn');
     const thelobookPrevPageBtn = document.getElementById('thelobookPrevPageBtn');
@@ -1327,8 +1353,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
           let isTabletMode = false;
 	let isPageGridVisible = false; 
         let lessonStartTime = null;
-    let isCalculatorVisible = false;
-          let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
+    let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let isImageModeActive = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
     let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
@@ -3351,163 +3376,141 @@ if (detectedAnswer && parseFloat(detectedAnswer) === parseFloat(correctAnswer)) 
 function closeThelobook(savePage = true) {
     if (!isThelobookActive) return;
 
-    // ADD THIS CHECK: Ensure calculator is closed when the notebook is.
-    if (isCalculatorVisible) {
-        toggleCalculator();
-    }
-
     /* ── restore MCQ clarity ── */
     if (mcqOptionsContainer) {
         mcqOptionsContainer.classList.remove('blurred-mcq');
     }
 
-    if (savePage) saveCurrentThelobookPageDrawing();
-    isThelobookActive = false; const TXT = getCurrentUIText();
+        if (savePage) saveCurrentThelobookPageDrawing();
+        isThelobookActive = false; const TXT = getCurrentUIText();
 
-    thelobookCanvas.classList.remove('active');
-    thelobookCanvas.classList.remove('grid-underlay');
-    thelobookControlsEl.classList.remove('visible');
-    removeThelobookDrawListeners(); addBoardDrawListeners();
-    thelobookBtn.textContent = TXT.thelobookOpen;
-    
-    resumeMediaState();
-    
-    // ======================= FIX STARTS HERE =======================
-    if (currentStageIndex === -1) {
-        // This is the edge case: lesson hasn't started.
-        // Manually re-enable the 'Start' button.
-        if (nextCheckBtn) nextCheckBtn.disabled = false;
-    }
-    // ======================== FIX ENDS HERE ========================
+        thelobookCanvas.classList.remove('active');
+        thelobookCanvas.classList.remove('grid-underlay');
+        thelobookControlsEl.classList.remove('visible');
+        removeThelobookDrawListeners(); addBoardDrawListeners();
+        thelobookBtn.textContent = TXT.thelobookOpen;
+        
+        resumeMediaState();
+        
+        // ======================= FIX STARTS HERE =======================
+        if (currentStageIndex === -1) {
+            // This is the edge case: lesson hasn't started.
+            // Manually re-enable the 'Start' button.
+            if (nextCheckBtn) nextCheckBtn.disabled = false;
+        }
+        // ======================== FIX ENDS HERE ========================
 
-    // The original logic can remain or be cleaned up, but the fix above is key.
-    if (currentStageData) {
-        // renderStageUI is called by resumeMediaState
-    } else {
-        updateColorIndicator();
-        canvas.style.pointerEvents = 'none';
+        // The original logic can remain or be cleaned up, but the fix above is key.
+        if (currentStageData) {
+            // renderStageUI is called by resumeMediaState
+        } else {
+            updateColorIndicator();
+            canvas.style.pointerEvents = 'none';
+        }
+       
+        wasMediaPlayingBeforeThelobook = false; 
     }
-    
-    wasMediaPlayingBeforeThelobook = false;
-}    // ADD THIS NEW FUNCTION
 function toggleCalculator() {
-    // Only works if the thelobook is active
-    if (!isThelobookActive) return;
+    if (!calculatorContainer) return;
+    const isHidden = calculatorContainer.classList.contains('calculator-hidden');
 
-    isCalculatorVisible = !isCalculatorVisible; // Flip the state
-
-    // Toggle the .active class on the overlay
-    if (calculatorOverlay) {
-        calculatorOverlay.classList.toggle('active', isCalculatorVisible);
-    }
-
-    // Also hide/show the standard thelobook controls for a cleaner UI
-    if (thelobookControlsEl) {
-        thelobookControlsEl.style.display = isCalculatorVisible ? 'none' : 'flex';
+    if (isHidden) {
+        calculatorContainer.classList.remove('calculator-hidden');
+    } else {
+        calculatorContainer.classList.add('calculator-hidden');
     }
 }
+    
     function handleKeyDown(event){
-    if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
+        if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
-    /* ===== ADDED: Activate 'View Progress' on SPACE key at end of lesson ===== */
-    if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
-        dashboardBtn.click(); // Trigger the button's click event
-        event.preventDefault(); // Prevent default spacebar action (e.g., scrolling)
-        return; // Stop further execution
-    }
-    /* ========================================================================= */
-
-    if (isPageGridVisible) {
-        switch(event.key.toLowerCase()) {
-            case 'c': changePageGridBatch(1); event.preventDefault(); return;
-            case 'x': changePageGridBatch(-1); event.preventDefault(); return;
-            case 'escape': closePageGridView(); event.preventDefault(); return;
+        /* ===== ADDED: Activate 'View Progress' on SPACE key at end of lesson ===== */
+        if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
+            dashboardBtn.click(); // Trigger the button's click event
+            event.preventDefault(); // Prevent default spacebar action (e.g., scrolling)
+            return; // Stop further execution
         }
-        return;
-    }
+        /* ========================================================================= */
 
-    if (isThelobookActive) {
-        switch(event.key.toLowerCase()) {
-            case 'f': // <<< NEW LOGIC
-                toggleCalculator();
-                event.preventDefault();
-                return;
+        if (isPageGridVisible) {
+            switch(event.key.toLowerCase()) {
+                case 'c': changePageGridBatch(1); event.preventDefault(); return;
+                case 'x': changePageGridBatch(-1); event.preventDefault(); return;
+                case 'escape': closePageGridView(); event.preventDefault(); return;
+            }
+            return;
+        }
+
+        if (isThelobookActive) {
+            switch(event.key.toLowerCase()) {
+                case 'b': closeThelobook(true); event.preventDefault(); return;
+                case 'escape': closeThelobook(true); event.preventDefault(); return;
+                case 'e': toggleThelobookEraser(); event.preventDefault(); return;
+                case 'c': clearUserCanvas(); event.preventDefault(); return;
+            }
+            return;
+        }
+        /* ── QUICK-START LESSON WITH SPACE ──────────────────────────────── */
+        if (
+        event.key === ' ' &&             // space-bar hit
+        currentStageIndex === -1 &&       // lesson not started yet
+        !isLessonLoading && !isTransitioning &&
+        !isThelobookActive && !isPageGridVisible &&
+        nextCheckBtn && !nextCheckBtn.disabled
+        ) {
+        handleNextCheckClick();           // same action as the “Start” button
+        event.preventDefault();           // stop page scrolling, etc.
+        return;                           // nothing else to do for this keypress
+        }
+        /* ───────────────────────────────────────────────────────────────── */
+
+        if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
+        const mcqDetails = currentStageData.optionsQuiz;
+        const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
+
+        switch (event.key.toLowerCase()){
+            case ' ':
+                if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled){ handleNextCheckClick(); event.preventDefault(); }
+                break;
+            case 'a':
+                if (isStudentInputAllowed && !isMcqActive) { toggleColor(); event.preventDefault(); }
+                break;
             case 'b':
-                closeThelobook(true);
-                event.preventDefault();
-                return;
-            case 'escape':
-                closeThelobook(true);
-                event.preventDefault();
-                return;
-            case 'e':
-                toggleThelobookEraser();
-                event.preventDefault();
-                return;
+                if (currentStageIndex >=0 && currentStageData) { openThelobook(); event.preventDefault(); }
+                break;
             case 'c':
-                clearUserCanvas();
-                event.preventDefault();
-                return;
+                if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled){
+                    clearUserCanvas(); event.preventDefault();
+                }
+                break;
+	    case 'f': // <-- ADD THIS NEW CASE
+            toggleCalculator();
+            event.preventDefault();
+            break;
         }
-        return; // Important to return after handling a thelobook key
-    }
-    /* ── QUICK-START LESSON WITH SPACE ──────────────────────────────── */
-    if (
-    event.key === ' ' &&          // space-bar hit
-    currentStageIndex === -1 &&      // lesson not started yet
-    !isLessonLoading && !isTransitioning &&
-    !isThelobookActive && !isPageGridVisible &&
-    nextCheckBtn && !nextCheckBtn.disabled
-    ) {
-    handleNextCheckClick();          // same action as the “Start” button
-    event.preventDefault();          // stop page scrolling, etc.
-    return;                          // nothing else to do for this keypress
-    }
-    /* ───────────────────────────────────────────────────────────────── */
+        const canScrub = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
+        if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && canScrub && !isThelobookActive && !isPageGridVisible) {
+            const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
+            let newTime = internalPlaybackTime + diff; newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
+            internalPlaybackTime = newTime;
 
-    if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
-    const mcqDetails = currentStageData.optionsQuiz;
-    const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
-
-    switch (event.key.toLowerCase()){
-        case ' ':
-            if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled){ handleNextCheckClick(); event.preventDefault(); }
-            break;
-        case 'a':
-            if (isStudentInputAllowed && !isMcqActive) { toggleColor(); event.preventDefault(); }
-            break;
-        case 'b':
-            if (currentStageIndex >=0 && currentStageData) { openThelobook(); event.preventDefault(); }
-            break;
-        case 'c':
-            if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled){
-                clearUserCanvas(); event.preventDefault();
+            if (currentStageAudio && currentStageData.audioFile){
+                currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+                if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01) && currentStageAudio.src.includes(currentStageData.audioFile)){
+                    currentStageAudio.play().catch(()=>{});
+                }
             }
-            break;
-    }
-    const canScrub = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
-    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && canScrub && !isThelobookActive && !isPageGridVisible) {
-        const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
-        let newTime = internalPlaybackTime + diff; newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
-        internalPlaybackTime = newTime;
-
-        if (currentStageAudio && currentStageData.audioFile){
-            currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
-            if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01) && currentStageAudio.src.includes(currentStageData.audioFile)){
-                currentStageAudio.play().catch(()=>{});
+            if (!isMediaScrubbingActive && currentStageTotalDuration > 0){
+                isMediaScrubbingActive = true;
+                if (!currentReplayAnimationId){ currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop); }
             }
+            if (currentStageDrawingData && replayCtx && currentStageData.drawingRecord){
+                    renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+            }
+            updateMediaProgressBar(newTime, currentStageTotalDuration);
+            lastFrameTimestampForManualAdvance = performance.now(); event.preventDefault();
         }
-        if (!isMediaScrubbingActive && currentStageTotalDuration > 0){
-            isMediaScrubbingActive = true;
-            if (!currentReplayAnimationId){ currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop); }
-        }
-        if (currentStageDrawingData && replayCtx && currentStageData.drawingRecord){
-                renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
-        }
-        updateMediaProgressBar(newTime, currentStageTotalDuration);
-        lastFrameTimestampForManualAdvance = performance.now(); event.preventDefault();
     }
-}
     // Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
@@ -3582,6 +3585,9 @@ window.addEventListener('wheel', function(e) {
 	        window.location.href = 'https://thelo.space/sdashboard';
 	    };
 	}
+	if (closeCalculatorBtn) {
+        closeCalculatorBtn.onclick = toggleCalculator;
+    }
         // ... inside the initApp() function
 
         document.querySelectorAll('button').forEach(button => {
@@ -3729,6 +3735,13 @@ async function logDigitForTraining(recognizedValue, feedbackType) {
         <p id="streakModalBody"></p>
         <button id="streakModalConfirmBtn" class="control-btn">Awesome!</button>
     </div>
+</div>
+<div id="calculator-container" class="calculator-hidden">
+    <div id="calculator-header">
+        <span>Calculator</span>
+        <button id="close-calculator-btn">&times;</button>
+    </div>
+    <iframe src="https://thelo.space/thelo-calculator" frameborder="0"></iframe>
 </div>
 </body>
 </html>
