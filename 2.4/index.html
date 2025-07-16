@@ -1002,7 +1002,68 @@ body.lang-en {
     flex:0 0 auto;
     width:100%;
 }
+/* ===== NEW: Graphing Tool Sidebar ===== */
+.graph-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 300px;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-right: 1px solid var(--thelo-border);
+    box-shadow: var(--shadow-lg);
+    z-index: 26;
+    padding: 1.5rem;
+    box-sizing: border-box;
+    transform: translateX(-100%);
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    font-family: 'Manrope', sans-serif;
+}
 
+.graph-sidebar.visible {
+    transform: translateX(0);
+}
+
+.graph-sidebar h3 {
+    margin-top: 0;
+    color: var(--thelo-text);
+}
+
+.function-input-container {
+    margin: 1.5rem 0;
+}
+
+.function-input-container label {
+    font-weight: 500;
+    margin-right: 0.5rem;
+}
+
+.function-input {
+    width: calc(100% - 30px); /* Adjust width to fit the label */
+    padding: 8px;
+    border: 1px solid var(--thelo-border);
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+#plotFunctionBtn {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    font-weight: 500;
+    border: none;
+    border-radius: 0.75rem;
+    background-color: var(--thelo-blue);
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#plotFunctionBtn:hover {
+    background-color: var(--thelo-blue-dark);
+}
 </style>
 </head>
 <body>
@@ -1011,11 +1072,14 @@ body.lang-en {
     </div>
     <div id="app">
         <div id="lessonArea">
-          <div id="graphInputBar" style="display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 26; background: white; padding: 8px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <span style="font-family: 'Manrope', sans-serif; margin-right: 5px;">y =</span>
-                <input type="text" id="functionInput" placeholder="e.g., x^2" style="border: 1px solid #ccc; border-radius: 4px; padding: 5px;">
-                <button id="plotFunctionBtn" style="padding: 5px 10px; margin-left: 5px; background-color: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">Plot</button>
-            </div>
+          <div id="graphSidebar" class="graph-sidebar">
+    <h3>Graphing Tool 📈</h3>
+    <div class="function-input-container">
+        <label for="functionInput1">y =</label>
+        <input type="text" id="functionInput1" class="function-input" placeholder="e.g., sin(x) or x^2">
+    </div>
+    <button id="plotFunctionBtn">Plot Function</button>
+</div>
             <div id="boardWrap">
                 <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
                 <canvas id="backgroundCanvas"></canvas>
@@ -1266,8 +1330,9 @@ function getPreviousWeekIdentifier(weekId) {
 	const imageTerminalImgContainer = document.getElementById('image-terminal-img-container');
 	const imageTerminalFeedback = document.getElementById('image-terminal-feedback');
     const thelobookGraphBtn = document.getElementById('thelobookGraphBtn');
-    const graphInputBar = document.getElementById('graphInputBar');
-    const functionInput = document.getElementById('functionInput');
+    // ADD these new lines
+const graphSidebar = document.getElementById('graphSidebar');
+const functionInput = document.getElementById('functionInput1'); // Note the new ID
     const plotFunctionBtn = document.getElementById('plotFunctionBtn');
     const bgCtx = backgroundCanvas.getContext('2d');
     let replayCtx = null;
@@ -3362,36 +3427,42 @@ function closeThelobook(savePage = true) {
         wasMediaPlayingBeforeThelobook = false; 
     }
     
-      function toggleGraphTool() {
-        if (isPageSwitchingAnimation) return;
+     function toggleGraphTool() {
+    if (isPageSwitchingAnimation) return;
+
+    isThelobookGraphToolActive = !isThelobookGraphToolActive;
+
+    if (isThelobookGraphToolActive) {
+        // --- BUG FIX: Save current notes BEFORE clearing the canvas. ---
+        saveCurrentThelobookPageDrawing();
+
+        isThelobookEraserActive = false; // Deactivate eraser
+        thelobookEraserBtn.classList.remove('active');
+        thelobookGraphBtn.classList.add('active');
         
-        isThelobookGraphToolActive = !isThelobookGraphToolActive;
-        
-        if (isThelobookGraphToolActive) {
-            // Deactivate other tools
-            isThelobookEraserActive = false;
-            thelobookEraserBtn.classList.remove('active');
-            thelobookCanvas.classList.remove('eraser-active');
+        // Show the new sidebar
+        graphSidebar.classList.add('visible');
+        thelobookCanvas.style.cursor = 'default';
 
-            // Show the graphing UI
-            graphInputBar.style.display = 'flex';
-            thelobookGraphBtn.classList.add('active'); // Highlight the graph button
-            thelobookCanvas.style.cursor = 'default';
+        // Draw the grid for the graph
+        drawGraphGrid();
 
-            // Redraw the canvas with the grid
-            drawGraphGrid();
+    } else {
+        // Hide the sidebar
+        graphSidebar.classList.remove('visible');
+        thelobookGraphBtn.classList.remove('active');
+        thelobookCanvas.style.cursor = 'crosshair';
 
-        } else {
-            // Hide graphing UI and restore default state
-            graphInputBar.style.display = 'none';
-            thelobookGraphBtn.classList.remove('active');
-            thelobookCanvas.style.cursor = 'crosshair';
+        // --- BUG FIX: This restores the notes that were saved before entering. ---
+        loadThelobookPageDrawing(currentThelobookPageIndex); 
 
-            // Restore the user's drawing for the current page
-            loadThelobookPageDrawing(currentThelobookPageIndex); 
+        // --- BUG FIX: Explicitly reset the pen color for thelobook. ---
+        if (thelobookCtx) {
+            thelobookCtx.strokeStyle = INK_COLORS.black;
+            thelobookCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
         }
     }
-
+}
     // Function to draw the grid and axes
     function drawGraphGrid() {
         if (!thelobookCtx) return;
@@ -3439,53 +3510,53 @@ function closeThelobook(savePage = true) {
 
     // Function to plot the user's input
     function plotUserFunction() {
-        const expression = functionInput.value;
-        if (!expression || !thelobookCtx) return;
+    // This function now uses the 'functionInput' from the sidebar
+    const expression = functionInput.value; 
+    if (!expression || !thelobookCtx) return;
 
-        // First, redraw the grid to clear any previous plot
-        drawGraphGrid();
+    // Redraw the grid to clear any previous function plot
+    drawGraphGrid(); 
 
-        try {
-            const node = math.parse(expression);
-            const code = node.compile();
+    try {
+        const node = math.parse(expression);
+        const code = node.compile();
 
-            thelobookCtx.beginPath();
-            thelobookCtx.strokeStyle = '#2563eb'; // Thelo blue for the function
-            thelobookCtx.lineWidth = 2.5;
+        thelobookCtx.beginPath();
+        thelobookCtx.strokeStyle = '#2563eb'; // Thelo blue for the function
+        thelobookCtx.lineWidth = 2.5;
 
-            const canvasWidth = thelobookCanvas.width / devicePixelRatio;
-            const canvasHeight = thelobookCanvas.height / devicePixelRatio;
-            const originX = canvasWidth / 2;
-            const originY = canvasHeight / 2;
-            const scale = 20; // This should match your gridSize
+        const canvasWidth = thelobookCanvas.width / devicePixelRatio;
+        const canvasHeight = thelobookCanvas.height / devicePixelRatio;
+        const originX = canvasWidth / 2;
+        const originY = canvasHeight / 2;
+        const scale = 20;
 
-            let firstPoint = true;
+        let firstPoint = true;
 
-            // Iterate over canvas pixels
-            for (let pixelX = 0; pixelX < canvasWidth; pixelX++) {
-                // Convert pixel coordinate to math coordinate
-                const x = (pixelX - originX) / scale;
-                
-                // Calculate y value
-                const y = code.evaluate({ x: x });
+        for (let pixelX = 0; pixelX < canvasWidth; pixelX++) {
+            const x = (pixelX - originX) / scale;
+            const y = code.evaluate({ x: x });
+            const pixelY = originY - (y * scale);
 
-                // Convert math coordinate back to pixel coordinate
-                const pixelY = originY - (y * scale);
-
+            if (Number.isFinite(pixelY)) { // Only draw if the y-value is a real number
                 if (firstPoint) {
                     thelobookCtx.moveTo(pixelX, pixelY);
                     firstPoint = false;
                 } else {
                     thelobookCtx.lineTo(pixelX, pixelY);
                 }
+            } else {
+                // If y is not finite (e.g., from log(-1)), start a new path
+                firstPoint = true; 
             }
-            thelobookCtx.stroke();
-
-        } catch (err) {
-            console.error("Error plotting function:", err);
-            alert("Invalid function. Please use 'x' as the variable.\nExample: 2 * x + 1");
         }
+        thelobookCtx.stroke();
+
+    } catch (err) {
+        console.error("Error plotting function:", err);
+        alert("Invalid function. Please use 'x' as the variable.\nExample: 2 * x + 1");
     }
+}
       function handleKeyDown(event){
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
@@ -3511,6 +3582,7 @@ function closeThelobook(savePage = true) {
                 case 'b': closeThelobook(true); event.preventDefault(); return;
                 case 'escape': closeThelobook(true); event.preventDefault(); return;
                 case 'e': toggleThelobookEraser(); event.preventDefault(); return;
+		case 'f': toggleGraphTool(); event.preventDefault(); return; // ADD THIS LINE
                 case 'c': clearUserCanvas(); event.preventDefault(); return;
             }
             return;
