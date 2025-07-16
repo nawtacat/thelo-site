@@ -3421,96 +3421,101 @@ function toggleCalculator() {
     }
 }
     
-    function handleKeyDown(event){
+   function handleKeyDown(event){
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
-        /* ===== ADDED: Activate 'View Progress' on SPACE key at end of lesson ===== */
-        if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
-            dashboardBtn.click(); // Trigger the button's click event
-            event.preventDefault(); // Prevent default spacebar action (e.g., scrolling)
-            return; // Stop further execution
-        }
-        /* ========================================================================= */
-
-        if (isPageGridVisible) {
-            switch(event.key.toLowerCase()) {
-                case 'c': changePageGridBatch(1); event.preventDefault(); return;
-                case 'x': changePageGridBatch(-1); event.preventDefault(); return;
-                case 'escape': closePageGridView(); event.preventDefault(); return;
-            }
-            return;
-        }
-
-        if (isThelobookActive) {
-            switch(event.key.toLowerCase()) {
-                case 'b': closeThelobook(true); event.preventDefault(); return;
-                case 'escape': closeThelobook(true); event.preventDefault(); return;
-                case 'e': toggleThelobookEraser(); event.preventDefault(); return;
-                case 'c': clearUserCanvas(); event.preventDefault(); return;
-            }
-            return;
-        }
-        /* ── QUICK-START LESSON WITH SPACE ──────────────────────────────── */
-        if (
-        event.key === ' ' &&             // space-bar hit
-        currentStageIndex === -1 &&       // lesson not started yet
-        !isLessonLoading && !isTransitioning &&
-        !isThelobookActive && !isPageGridVisible &&
-        nextCheckBtn && !nextCheckBtn.disabled
-        ) {
-        handleNextCheckClick();           // same action as the “Start” button
-        event.preventDefault();           // stop page scrolling, etc.
-        return;                           // nothing else to do for this keypress
-        }
-        /* ───────────────────────────────────────────────────────────────── */
-
-        if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
-        const mcqDetails = currentStageData.optionsQuiz;
-        const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
-
-        switch (event.key.toLowerCase()){
-            case ' ':
-                if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled){ handleNextCheckClick(); event.preventDefault(); }
-                break;
-            case 'a':
-                if (isStudentInputAllowed && !isMcqActive) { toggleColor(); event.preventDefault(); }
-                break;
-            case 'b':
-                if (currentStageIndex >=0 && currentStageData) { openThelobook(); event.preventDefault(); }
-                break;
-            case 'c':
-                if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled){
-                    clearUserCanvas(); event.preventDefault();
-                }
-                break;
-	    case 'f': // <-- ADD THIS NEW CASE
+        // --- FIX: Handle calculator toggle globally ---
+        if (event.key.toLowerCase() === 'f') {
             toggleCalculator();
             event.preventDefault();
-            break;
+            return;
         }
-        const canScrub = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
-        if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && canScrub && !isThelobookActive && !isPageGridVisible) {
-            const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
-            let newTime = internalPlaybackTime + diff; newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
-            internalPlaybackTime = newTime;
+        // -----------------------------------------
 
-            if (currentStageAudio && currentStageData.audioFile){
-                currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
-                if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01) && currentStageAudio.src.includes(currentStageData.audioFile)){
-                    currentStageAudio.play().catch(()=>{});
-                }
-            }
-            if (!isMediaScrubbingActive && currentStageTotalDuration > 0){
-                isMediaScrubbingActive = true;
-                if (!currentReplayAnimationId){ currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop); }
-            }
-            if (currentStageDrawingData && replayCtx && currentStageData.drawingRecord){
-                    renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
-            }
-            updateMediaProgressBar(newTime, currentStageTotalDuration);
-            lastFrameTimestampForManualAdvance = performance.now(); event.preventDefault();
-        }
-    }
+        /* ===== ADDED: Activate 'View Progress' on SPACE key at end of lesson ===== */
+        if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
+            dashboardBtn.click(); // Trigger the button's click event
+            event.preventDefault(); // Prevent default spacebar action (e.g., scrolling)
+            return; // Stop further execution
+        }
+        /* ========================================================================= */
+
+        if (isPageGridVisible) {
+            switch(event.key.toLowerCase()) {
+                case 'c': changePageGridBatch(1); event.preventDefault(); return;
+                case 'x': changePageGridBatch(-1); event.preventDefault(); return;
+                case 'escape': closePageGridView(); event.preventDefault(); return;
+            }
+            return;
+        }
+
+        if (isThelobookActive) {
+            switch(event.key.toLowerCase()) {
+                case 'b': closeThelobook(true); event.preventDefault(); return;
+                case 'escape': closeThelobook(true); event.preventDefault(); return;
+                case 'e': toggleThelobookEraser(); event.preventDefault(); return;
+                case 'c': clearUserCanvas(); event.preventDefault(); return;
+            }
+            return;
+        }
+        /* ── QUICK-START LESSON WITH SPACE ──────────────────────────────── */
+        if (
+        event.key === ' ' &&             // space-bar hit
+        currentStageIndex === -1 &&       // lesson not started yet
+        !isLessonLoading && !isTransitioning &&
+        !isThelobookActive && !isPageGridVisible &&
+        nextCheckBtn && !nextCheckBtn.disabled
+        ) {
+        handleNextCheckClick();           // same action as the “Start” button
+        event.preventDefault();           // stop page scrolling, etc.
+        return;                           // nothing else to do for this keypress
+        }
+        /* ───────────────────────────────────────────────────────────────── */
+
+        if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
+        const mcqDetails = currentStageData.optionsQuiz;
+        const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
+
+        switch (event.key.toLowerCase()){
+            case ' ':
+                if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled){ handleNextCheckClick(); event.preventDefault(); }
+                break;
+            case 'a':
+                if (isStudentInputAllowed && !isMcqActive) { toggleColor(); event.preventDefault(); }
+                break;
+            case 'b':
+                if (currentStageIndex >=0 && currentStageData) { openThelobook(); event.preventDefault(); }
+                break;
+            case 'c':
+                if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled){
+                    clearUserCanvas(); event.preventDefault();
+                }
+                break;
+            // The 'f' case is now removed from here
+        }
+        const canScrub = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
+        if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && canScrub && !isThelobookActive && !isPageGridVisible) {
+            const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
+            let newTime = internalPlaybackTime + diff; newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
+            internalPlaybackTime = newTime;
+
+            if (currentStageAudio && currentStageData.audioFile){
+                currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+                if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01) && currentStageAudio.src.includes(currentStageData.audioFile)){
+                    currentStageAudio.play().catch(()=>{});
+                }
+            }
+            if (!isMediaScrubbingActive && currentStageTotalDuration > 0){
+                isMediaScrubbingActive = true;
+                if (!currentReplayAnimationId){ currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop); }
+            }
+            if (currentStageDrawingData && replayCtx && currentStageData.drawingRecord){
+                    renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+            }
+            updateMediaProgressBar(newTime, currentStageTotalDuration);
+            lastFrameTimestampForManualAdvance = performance.now(); event.preventDefault();
+        }
+    }
     // Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
