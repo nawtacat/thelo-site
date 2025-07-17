@@ -55,17 +55,37 @@
             margin: 0;
             font-size: 1.25rem;
         }
+        .header-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .header-btn {
+            background-color: var(--sidebar-bg);
+            color: var(--thelo-text-light);
+            border: 1px solid var(--thelo-border);
+            border-radius: 8px;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .header-btn:hover, .header-btn.active {
+            background-color: var(--thelo-blue);
+            color: white;
+            border-color: var(--thelo-blue);
+        }
+        .header-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke-width: 2;
+        }
         #addFunctionBtn {
             background-color: var(--thelo-blue);
             color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            width: 36px;
-            height: 36px;
             font-size: 1.5rem;
             line-height: 1;
         }
@@ -177,9 +197,12 @@
             padding: 1rem;
             border-top: 1px solid var(--thelo-border);
             flex-shrink: 0;
-            display: grid;
+            display: none; /* Hidden by default */
             grid-template-columns: repeat(auto-fill, minmax(45px, 1fr));
             gap: 8px;
+        }
+        #sidebar.keyboard-open #mathKeyboard {
+            display: grid; /* Show when class is present */
         }
         #mathKeyboard button {
             background: #fff;
@@ -255,7 +278,14 @@
     <div id="sidebar">
         <div class="sidebar-header">
             <h1>Advanced Calculator</h1>
-            <button id="addFunctionBtn" title="Add new expression">+</button>
+            <div class="header-buttons">
+                <button id="toggleKeyboardBtn" class="header-btn" title="Toggle Keyboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h18M3 7h18M3 11h18M3 15h18M4 21h4M10 21h4M16 21h4" />
+                    </svg>
+                </button>
+                <button id="addFunctionBtn" class="header-btn" title="Add new expression">+</button>
+            </div>
         </div>
         <div id="expressionListContainer">
             <!-- Expression items will be dynamically added here -->
@@ -278,12 +308,14 @@
     // --- Advanced Interactive Calculator ---
     document.addEventListener('DOMContentLoaded', () => {
         // --- DOM ELEMENTS & CONSTANTS ---
+        const sidebar = document.getElementById('sidebar');
         const canvas = document.getElementById('graphCanvas');
         const ctx = canvas.getContext('2d');
         const expressionListContainer = document.getElementById('expressionListContainer');
         const addFunctionBtn = document.getElementById('addFunctionBtn');
         const homeBtn = document.getElementById('homeBtn');
         const mathKeyboard = document.getElementById('mathKeyboard');
+        const toggleKeyboardBtn = document.getElementById('toggleKeyboardBtn');
 
         const devicePixelRatio = window.devicePixelRatio || 1;
         const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
@@ -306,12 +338,22 @@
             touchState: { isPinching: false, initialPinchDistance: 0 },
         };
 
+        // --- OPTIMIZATION ---
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+        const debouncedEvaluateAndPlotAll = debounce(evaluateAndPlotAll, 250);
+
         // --- INITIALIZATION ---
         function initialize() {
             setupMathKeyboard();
             resizeCanvas();
             addExpressionInput('y = a*x^2 + k');
-            addExpressionInput('y < sin(x) {x > 0}');
+            addExpressionInput('y < sin(x)');
             addExpressionInput('2^4 / 4');
             setupEventListeners();
             evaluateAndPlotAll();
@@ -321,6 +363,10 @@
             window.addEventListener('resize', resizeCanvas);
             addFunctionBtn.addEventListener('click', () => addExpressionInput());
             homeBtn.addEventListener('click', () => resetView());
+            toggleKeyboardBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('keyboard-open');
+                toggleKeyboardBtn.classList.toggle('active', sidebar.classList.contains('keyboard-open'));
+            });
             canvas.addEventListener('wheel', handleGraphZoom, { passive: false });
             canvas.addEventListener('mousedown', handleGraphPanStart);
             canvas.addEventListener('mousemove', handleGraphPanMove);
@@ -369,7 +415,7 @@
             const expr = graphState.expressions.find(e => e.id === exprId);
             if (expr) {
                 expr.str = input.value;
-                evaluateAndPlotAll();
+                debouncedEvaluateAndPlotAll();
             }
         }
         
@@ -404,7 +450,7 @@
             const input = item.querySelector('.expression-input');
             input.addEventListener('input', (e) => {
                 newExpr.str = e.target.value;
-                evaluateAndPlotAll();
+                debouncedEvaluateAndPlotAll();
             });
             input.addEventListener('focus', () => { graphState.activeInput = input; });
             input.addEventListener('keydown', (e) => {
@@ -450,7 +496,6 @@
             expr.error = null;
             expr.result = null;
             expr.sliders = expr.sliders || {};
-            expr.domain = null;
             expr.poi = { roots: [], y_intercept: null, extrema: [] };
             expr.node = null;
 
@@ -458,13 +503,6 @@
             if (!cleanStr) return;
 
             try {
-                const domainMatch = cleanStr.match(/\{(.*)\}/);
-                if (domainMatch) {
-                    const domainStr = domainMatch[1];
-                    expr.domain = math.parse(domainStr).compile();
-                    cleanStr = cleanStr.replace(/\{(.*)\}/, '').trim();
-                }
-
                 const inequalityMatch = cleanStr.match(/y\s*([<>]=?)\s*(.*)/);
                 if (inequalityMatch) {
                     expr.type = 'inequality';
@@ -570,15 +608,6 @@
                 const x = (px - graphState.originX) / graphState.scale;
                 scope.x = x;
                 
-                if (expr.domain) {
-                    try {
-                        if (!expr.domain.evaluate(scope)) {
-                           firstPoint = true;
-                           continue;
-                        }
-                    } catch (e) { firstPoint = true; continue; }
-                }
-
                 try {
                     const y = expr.compiled.evaluate(scope);
                     if (!Number.isFinite(y)) { firstPoint = true; continue; }
@@ -599,16 +628,12 @@
             ctx.fillStyle = expr.color;
             ctx.globalAlpha = INEQUALITY_ALPHA;
             
-            for(let px = 0; px < canvas.width; px += 4) {
-                for (let py_px = 0; py_px < canvas.height; py_px += 4) {
+            const step = 8;
+            for(let px = 0; px < canvas.width; px += step) {
+                for (let py_px = 0; py_px < canvas.height; py_px += step) {
                     const x = (px - graphState.originX) / graphState.scale;
                     const y = (graphState.originY - py_px) / graphState.scale;
                     scope.x = x;
-
-                    if (expr.domain) {
-                        try { if (!expr.domain.evaluate(scope)) continue; } 
-                        catch (e) { continue; }
-                    }
                     
                     try {
                         const y_func = expr.compiled.evaluate(scope);
@@ -619,7 +644,7 @@
                         else if (expr.inequalityType === '>=') satisfied = y >= y_func;
                         
                         if(satisfied) {
-                            ctx.fillRect(px, py_px, 4, 4);
+                            ctx.fillRect(px, py_px, step, step);
                         }
                     } catch(e) {}
                 }
@@ -635,10 +660,8 @@
 
             try {
                 scope.x = 0;
-                if (!expr.domain || expr.domain.evaluate(scope)) {
-                    const y_intercept = expr.compiled.evaluate(scope);
-                    if (Number.isFinite(y_intercept)) expr.poi.y_intercept = { x: 0, y: y_intercept };
-                }
+                const y_intercept = expr.compiled.evaluate(scope);
+                if (Number.isFinite(y_intercept)) expr.poi.y_intercept = { x: 0, y: y_intercept };
             } catch (e) {}
 
             let prev_y, prev_slope_sign;
@@ -647,11 +670,6 @@
                  const x = (px - graphState.originX) / graphState.scale;
                  scope.x = x;
                  
-                 if (expr.domain) {
-                    try { if (!expr.domain.evaluate(scope)) { prev_y = undefined; continue; } }
-                    catch(e) { prev_y = undefined; continue; }
-                 }
-
                  try {
                     const y = expr.compiled.evaluate(scope);
                     if (prev_y !== undefined && Number.isFinite(y) && Number.isFinite(prev_y)) {
