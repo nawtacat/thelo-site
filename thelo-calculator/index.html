@@ -339,7 +339,6 @@
         };
 
         // --- OPTIMIZATION ---
-        // Debounce function to limit how often a function is called
         function debounce(func, delay) {
             let timeout;
             return function(...args) {
@@ -347,13 +346,13 @@
                 timeout = setTimeout(() => func.apply(this, args), delay);
             };
         }
-        // Create a debounced version of the main evaluation function
         const debouncedEvaluateAndPlotAll = debounce(evaluateAndPlotAll, 250);
 
         // --- INITIALIZATION ---
         function initialize() {
             setupMathKeyboard();
             resizeCanvas();
+            addExpressionInput(''); // Start with one empty expression bar
             setupEventListeners();
             evaluateAndPlotAll();
         }
@@ -449,7 +448,6 @@
             const input = item.querySelector('.expression-input');
             input.addEventListener('input', (e) => {
                 newExpr.str = e.target.value;
-                // Use the debounced function here for performance
                 debouncedEvaluateAndPlotAll();
             });
             input.addEventListener('focus', () => { graphState.activeInput = input; });
@@ -496,7 +494,6 @@
             expr.error = null;
             expr.result = null;
             expr.sliders = expr.sliders || {};
-            expr.domain = null;
             expr.poi = { roots: [], y_intercept: null, extrema: [] };
             expr.node = null;
 
@@ -504,13 +501,6 @@
             if (!cleanStr) return;
 
             try {
-                const domainMatch = cleanStr.match(/\{(.*)\}/);
-                if (domainMatch) {
-                    const domainStr = domainMatch[1];
-                    expr.domain = math.parse(domainStr).compile();
-                    cleanStr = cleanStr.replace(/\{(.*)\}/, '').trim();
-                }
-
                 const inequalityMatch = cleanStr.match(/y\s*([<>]=?)\s*(.*)/);
                 if (inequalityMatch) {
                     expr.type = 'inequality';
@@ -616,15 +606,6 @@
                 const x = (px - graphState.originX) / graphState.scale;
                 scope.x = x;
                 
-                if (expr.domain) {
-                    try {
-                        if (!expr.domain.evaluate(scope)) {
-                           firstPoint = true;
-                           continue;
-                        }
-                    } catch (e) { firstPoint = true; continue; }
-                }
-
                 try {
                     const y = expr.compiled.evaluate(scope);
                     if (!Number.isFinite(y)) { firstPoint = true; continue; }
@@ -645,18 +626,12 @@
             ctx.fillStyle = expr.color;
             ctx.globalAlpha = INEQUALITY_ALPHA;
             
-            // OPTIMIZATION: Increased step size from 4 to 8 for faster rendering.
             const step = 8;
             for(let px = 0; px < canvas.width; px += step) {
                 for (let py_px = 0; py_px < canvas.height; py_px += step) {
                     const x = (px - graphState.originX) / graphState.scale;
                     const y = (graphState.originY - py_px) / graphState.scale;
                     scope.x = x;
-
-                    if (expr.domain) {
-                        try { if (!expr.domain.evaluate(scope)) continue; } 
-                        catch (e) { continue; }
-                    }
                     
                     try {
                         const y_func = expr.compiled.evaluate(scope);
@@ -683,10 +658,8 @@
 
             try {
                 scope.x = 0;
-                if (!expr.domain || expr.domain.evaluate(scope)) {
-                    const y_intercept = expr.compiled.evaluate(scope);
-                    if (Number.isFinite(y_intercept)) expr.poi.y_intercept = { x: 0, y: y_intercept };
-                }
+                const y_intercept = expr.compiled.evaluate(scope);
+                if (Number.isFinite(y_intercept)) expr.poi.y_intercept = { x: 0, y: y_intercept };
             } catch (e) {}
 
             let prev_y, prev_slope_sign;
@@ -695,11 +668,6 @@
                  const x = (px - graphState.originX) / graphState.scale;
                  scope.x = x;
                  
-                 if (expr.domain) {
-                    try { if (!expr.domain.evaluate(scope)) { prev_y = undefined; continue; } }
-                    catch(e) { prev_y = undefined; continue; }
-                 }
-
                  try {
                     const y = expr.compiled.evaluate(scope);
                     if (prev_y !== undefined && Number.isFinite(y) && Number.isFinite(prev_y)) {
