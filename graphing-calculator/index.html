@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Interactive Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.1/math.min.js"></script>
+    <style>
+        :root {
+            --thelo-blue: #2563eb;
+            --thelo-blue-dark: #1d4ed8;
+            --thelo-bg: #f9fafb;
+            --sidebar-bg: #ffffff;
+            --thelo-text: #111827;
+            --thelo-text-light: #6b7280;
+            --thelo-border: #e5e7eb;
+            --error-red: #ef4444;
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+        }
+
+        #sidebar {
+            width: 380px;
+            height: 100%;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--thelo-border);
+            box-shadow: var(--shadow-lg);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--thelo-border);
+            flex-shrink: 0;
+        }
+
+        .sidebar-header h1 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+        
+        #addFunctionBtn {
+            background-color: var(--thelo-blue);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 36px;
+            height: 36px;
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        #addFunctionBtn:hover {
+            background-color: var(--thelo-blue-dark);
+        }
+
+        #expressionListContainer {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 0.5rem 0;
+        }
+
+        .expression-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            border-bottom: 1px solid var(--thelo-border);
+            padding: 0.75rem 1rem 0.75rem 1.5rem;
+        }
+
+        .expression-item:focus-within {
+            background-color: #f0f3ff;
+        }
+        
+        .expression-color-bar {
+            width: 4px;
+            height: 40px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        .expression-number {
+            color: var(--thelo-text-light);
+            font-weight: 500;
+            user-select: none;
+        }
+
+        .expression-input-wrapper {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+            border-radius: 8px;
+        }
+        
+        .expression-input {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            background: transparent;
+            font-size: 1.1rem;
+            font-family: 'Manrope', monospace;
+            color: var(--thelo-text);
+        }
+
+        .expression-input:focus {
+            outline: none;
+        }
+
+        .expression-input.input-error {
+            color: var(--error-red);
+        }
+        
+        .expression-result {
+            padding: 0 0.75rem;
+            font-size: 1.1rem;
+            color: var(--thelo-text-light);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .remove-expression-btn {
+            background: transparent;
+            border: none;
+            font-size: 1.75rem;
+            color: var(--thelo-text-light);
+            cursor: pointer;
+            padding: 0 0.5rem;
+            transition: color 0.2s;
+        }
+        .remove-expression-btn:hover {
+            color: var(--error-red);
+        }
+
+        #canvasContainer {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        #graphCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        
+        #graphCanvas:active {
+            cursor: grabbing;
+        }
+        
+        #homeBtn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 44px;
+            height: 44px;
+            background-color: var(--sidebar-bg);
+            border: 1px solid var(--thelo-border);
+            border-radius: 50%;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            z-index: 5;
+        }
+        #homeBtn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        #homeBtn svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--thelo-text-light);
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            #sidebar {
+                width: 100%;
+                height: 45vh;
+                border-right: none;
+                border-bottom: 1px solid var(--thelo-border);
+                box-shadow: none;
+            }
+            .sidebar-header h1 {
+                font-size: 1.1rem;
+            }
+            #homeBtn {
+                bottom: 15px;
+                right: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div class="sidebar-header">
+            <h1>Calculator</h1>
+            <button id="addFunctionBtn">+</button>
+        </div>
+        <div id="expressionListContainer">
+            </div>
+    </div>
+
+    <div id="canvasContainer">
+        <canvas id="graphCanvas"></canvas>
+        <button id="homeBtn" title="Reset View">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h7.5" />
+            </svg>                      
+        </button>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+        const expressionListContainer = document.getElementById('expressionListContainer');
+        const addFunctionBtn = document.getElementById('addFunctionBtn');
+        const homeBtn = document.getElementById('homeBtn');
+
+        const computedStyles = getComputedStyle(document.documentElement);
+        const THELO_BORDER_COLOR = computedStyles.getPropertyValue('--thelo-border').trim();
+        const THELO_TEXT_LIGHT_COLOR = computedStyles.getPropertyValue('--thelo-text-light').trim();
+        const THELO_TEXT_COLOR = computedStyles.getPropertyValue('--thelo-text').trim();
+
+        let devicePixelRatio = window.devicePixelRatio || 1;
+        const PLOT_COLORS = ['#2563eb', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#d946ef', '#14b8a6'];
+        
+        let graphState = {
+            originX: 0, originY: 0, scale: 40,
+            isPanning: false, panStart: { x: 0, y: 0 },
+            expressions: [],
+            touchState: { isPinching: false, initialPinchDistance: 0 },
+            intersections: [],  
+            hoverPoint: { visible: false, x: 0, y: 0 },
+            lockedPoint: { visible: false, x: 0, y: 0, color: '#000' }
+        };
+
+        function initialize() {
+            resizeCanvas();
+            addExpressionInput('3x');
+            addExpressionInput('3+6'); 
+            setupEventListeners();
+            requestAnimationFrame(plotAllExpressions);
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * devicePixelRatio;
+            canvas.height = rect.height * devicePixelRatio;
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+            resetView(false);
+            requestAnimationFrame(plotAllExpressions);
+        }
+        
+        function resetView(redraw = true) {
+            graphState.originX = canvas.width / 2;
+            graphState.originY = canvas.height / 2;
+            graphState.scale = 40;
+            if (redraw) requestAnimationFrame(plotAllExpressions);
+        }
+
+        function setupEventListeners() {
+            window.addEventListener('resize', resizeCanvas);
+            addFunctionBtn.addEventListener('click', () => addExpressionInput());
+            homeBtn.addEventListener('click', () => resetView());
+            canvas.addEventListener('wheel', handleGraphZoom, { passive: false });
+            canvas.addEventListener('mousedown', handleGraphPanStart);
+            canvas.addEventListener('mousemove', handleGraphPanMove);
+            window.addEventListener('mouseup', handleGraphPanEnd);
+            canvas.addEventListener('click', handleGraphClick);
+            canvas.addEventListener('mousemove', handleMouseMoveForHover);
+            canvas.addEventListener('mouseleave', () => {
+                graphState.hoverPoint.visible = false;
+                requestAnimationFrame(plotAllExpressions);
+            });
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            canvas.addEventListener('touchend', handleTouchEnd);
+            canvas.addEventListener('touchcancel', handleTouchEnd);
+        }
+
+        function addExpressionInput(expressionStr = '') {
+            const exprIndex = graphState.expressions.length;
+            const color = PLOT_COLORS[exprIndex % PLOT_COLORS.length];
+
+            const newExpr = {
+                expression: expressionStr,
+                color: color,
+                compiled: null,
+                result: null,
+                isFunction: false,
+                id: `expr-${Date.now()}`
+            };
+            graphState.expressions.push(newExpr);
+
+            const item = document.createElement('div');
+            item.className = 'expression-item';
+            item.id = newExpr.id;
+            item.innerHTML = `
+                <div class="expression-color-bar" style="background-color: ${color};"></div>
+                <span class="expression-number">${exprIndex + 1}</span>
+                <div class="expression-input-wrapper">
+                    <input type="text" class="expression-input" value="${expressionStr}" placeholder="Enter expression...">
+                </div>
+                <span class="expression-result"></span>
+                <button class="remove-expression-btn" title="Remove expression">&times;</button>
+            `;
+            expressionListContainer.appendChild(item);
+
+            const input = item.querySelector('.expression-input');
+            input.addEventListener('input', () => evaluateAndPlot());
+
+            const removeBtn = item.querySelector('.remove-expression-btn');
+            removeBtn.addEventListener('click', () => {
+                graphState.expressions = graphState.expressions.filter(f => f.id !== newExpr.id);
+                item.remove();
+                updateExpressionNumbers();
+                evaluateAndPlot();
+            });
+
+            input.focus();
+            evaluateAndPlot();
+        }
+
+        function updateExpressionNumbers() {
+            const items = expressionListContainer.querySelectorAll('.expression-item');
+            items.forEach((item, index) => {
+                item.querySelector('.expression-number').textContent = index + 1;
+            });
+        }
+
+        function evaluateAndPlot() {
+            const inputs = expressionListContainer.querySelectorAll('.expression-item');
+            inputs.forEach(item => {
+                const input = item.querySelector('.expression-input');
+                const resultEl = item.querySelector('.expression-result');
+                const colorBar = item.querySelector('.expression-color-bar');
+                const expr = graphState.expressions.find(f => f.id === item.id);
+                
+                if (expr) {
+                    expr.expression = input.value;
+                    expr.compiled = null;
+                    expr.result = null;
+                    expr.isFunction = false;
+                    resultEl.textContent = '';
+                    input.classList.remove('input-error');
+
+                    if (expr.expression.trim()) {
+                        try {
+                            const parsedNode = math.parse(expr.expression);
+                            const isFunction = parsedNode.filter(node => node.isSymbolNode && node.name === 'x').length > 0;
+
+                            if (isFunction) {
+                                expr.compiled = parsedNode.compile();
+                                expr.isFunction = true;
+                                colorBar.style.backgroundColor = expr.color;
+                            } else {
+                                expr.result = parsedNode.evaluate();
+                                resultEl.textContent = `= ${math.format(expr.result, {precision: 14})}`;
+                                colorBar.style.backgroundColor = 'var(--thelo-text-light)';
+                            }
+                        } catch (err) {
+                            input.classList.add('input-error');
+                            colorBar.style.backgroundColor = 'var(--error-red)';
+                        }
+                    } else {
+                         colorBar.style.backgroundColor = 'transparent';
+                    }
+                }
+            });
+            requestAnimationFrame(plotAllExpressions);
+        }
+        
+        function plotAllExpressions() {
+            drawGraphGrid();
+            findAndStoreIntersections();
+            ctx.lineWidth = 2.5 * devicePixelRatio;
+            
+            graphState.expressions.forEach(expr => {
+                if (expr.isFunction && expr.compiled) {
+                    plotSingleFunction(expr);
+                }
+            });
+
+            drawAllIntersectionPoints();
+            if (graphState.hoverPoint.visible) drawHoverPoint();
+            if (graphState.lockedPoint.visible) drawLockedPoint();
+        }
+
+        function plotSingleFunction(func) {
+             ctx.strokeStyle = func.color;
+             ctx.beginPath();
+             let firstPoint = true;
+             for (let pixelX = 0; pixelX < canvas.width; pixelX += 1) {
+                 const x = (pixelX - graphState.originX) / graphState.scale;
+                 try {
+                     const y = func.compiled.evaluate({ x: x });
+                     if (!Number.isFinite(y)) {
+                         firstPoint = true;
+                         continue;
+                     }
+                     const pixelY = graphState.originY - (y * graphState.scale);
+                     if (firstPoint) {
+                         ctx.moveTo(pixelX, pixelY);
+                         firstPoint = false;
+                     } else {
+                         ctx.lineTo(pixelX, pixelY);
+                     }
+                 } catch (err) {
+                     firstPoint = true;
+                 }
+             }
+             ctx.stroke();
+        }
+
+        function handleGraphZoom(e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * devicePixelRatio;
+            const mouseY = (e.clientY - rect.top) * devicePixelRatio;
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+            applyZoom(mouseX, mouseY, zoomFactor);
+        }
+
+        function handleGraphPanStart(e) {
+            if (e.button !== 0) return;
+            graphState.isPanning = true;
+            graphState.panStart.x = e.clientX;
+            graphState.panStart.y = e.clientY;
+            if (graphState.lockedPoint.visible) {
+                graphState.lockedPoint.visible = false;
+            }
+        }
+
+        function handleGraphPanMove(e) {
+            if (!graphState.isPanning) return;
+            const dx = (e.clientX - graphState.panStart.x) * devicePixelRatio;
+            const dy = (e.clientY - graphState.panStart.y) * devicePixelRatio;
+            graphState.originX += dx;
+            graphState.originY += dy;
+            graphState.panStart.x = e.clientX;
+            graphState.panStart.y = e.clientY;
+            requestAnimationFrame(plotAllExpressions);
+        }
+
+        function handleGraphPanEnd() {
+            graphState.isPanning = false;
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const touches = e.touches;
+            if (touches.length === 1) {
+                graphState.isPanning = true;
+                graphState.panStart.x = touches[0].clientX;
+                graphState.panStart.y = touches[0].clientY;
+            } else if (touches.length === 2) {
+                graphState.isPanning = false;
+                graphState.touchState.isPinching = true;
+                graphState.touchState.initialPinchDistance = getPinchDistance(touches);
+            }
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            const touches = e.touches;
+            if (graphState.isPanning && touches.length === 1) {
+                const dx = (touches[0].clientX - graphState.panStart.x) * devicePixelRatio;
+                const dy = (touches[0].clientY - graphState.panStart.y) * devicePixelRatio;
+                graphState.originX += dx;
+                graphState.originY += dy;
+                graphState.panStart.x = touches[0].clientX;
+                graphState.panStart.y = touches[0].clientY;
+                requestAnimationFrame(plotAllExpressions);
+            } else if (graphState.touchState.isPinching && touches.length === 2) {
+                const newDist = getPinchDistance(touches);
+                const zoomFactor = newDist / graphState.touchState.initialPinchDistance;
+                const rect = canvas.getBoundingClientRect();
+                const midX = ((touches[0].clientX + touches[1].clientX) / 2 - rect.left) * devicePixelRatio;
+                const midY = ((touches[0].clientY + touches[1].clientY) / 2 - rect.top) * devicePixelRatio;
+                applyZoom(midX, midY, zoomFactor);
+                graphState.touchState.initialPinchDistance = newDist;
+            }
+        }
+
+        function handleTouchEnd(e) {
+            graphState.isPanning = false;
+            graphState.touchState.isPinching = false;
+        }
+
+        function getPinchDistance(touches) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function applyZoom(centerX, centerY, zoomFactor) {
+            const mouseGraphX_before = (centerX - graphState.originX) / graphState.scale;
+            const mouseGraphY_before = (graphState.originY - centerY) / graphState.scale;
+            graphState.scale *= zoomFactor;
+            const mouseGraphX_after = (centerX - graphState.originX) / graphState.scale;
+            const mouseGraphY_after = (graphState.originY - centerY) / graphState.scale;
+            graphState.originX += (mouseGraphX_after - mouseGraphX_before) * graphState.scale;
+            graphState.originY -= (mouseGraphY_after - mouseGraphY_before) * graphState.scale;
+            requestAnimationFrame(plotAllExpressions);
+        }
+
+        function findClosestIntersection(pixelX, pixelY) {
+            let closestDist = Infinity;
+            let closestPoint = null;
+            graphState.intersections.forEach(point => {
+                const pointPixelX = graphState.originX + point.x * graphState.scale;
+                const pointPixelY = graphState.originY - point.y * graphState.scale;
+                const dist = Math.sqrt(Math.pow(pixelX - pointPixelX, 2) + Math.pow(pixelY - pointPixelY, 2));
+                if (dist < closestDist && dist < 20 * devicePixelRatio) {
+                    closestDist = dist;
+                    closestPoint = point;
+                }
+            });
+            return closestPoint;
+        }
+
+        function handleMouseMoveForHover(e) {
+            if (graphState.isPanning) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * devicePixelRatio;
+            const mouseY = (e.clientY - rect.top) * devicePixelRatio;
+            const closestPoint = findClosestIntersection(mouseX, mouseY);
+            if (closestPoint) {
+                graphState.hoverPoint.visible = true;
+                graphState.hoverPoint.x = closestPoint.x;
+                graphState.hoverPoint.y = closestPoint.y;
+            } else {
+                graphState.hoverPoint.visible = false;
+            }
+            requestAnimationFrame(plotAllExpressions);
+        }
+
+        function handleGraphClick(e) {
+            if (graphState.isPanning) return;
+            const rect = canvas.getBoundingClientRect();
+            const clickX = (e.clientX - rect.left) * devicePixelRatio;
+            const clickY = (e.clientY - rect.top) * devicePixelRatio;
+            const pointToLock = findClosestIntersection(clickX, clickY);
+            if (pointToLock) {
+                graphState.lockedPoint = {
+                    visible: true,
+                    x: pointToLock.x,
+                    y: pointToLock.y,
+                    color: THELO_TEXT_COLOR
+                };
+            } else {
+                graphState.lockedPoint.visible = false;
+            }
+            requestAnimationFrame(plotAllExpressions);
+        }
+
+        function bisectionSolve(f1, f2, a, b, tolerance = 1e-9, maxIterations = 50) {
+            let fa = f1.evaluate({
+                x: a
+            }) - f2.evaluate({
+                x: a
+            });
+            let fb = f1.evaluate({
+                x: b
+            }) - f2.evaluate({
+                x: b
+            });
+            if (Math.sign(fa) === Math.sign(fb)) {
+                return null;
+            }
+            let c = a;
+            for (let i = 0; i < maxIterations; i++) {
+                c = (a + b) / 2;
+                let fc = f1.evaluate({
+                    x: c
+                }) - f2.evaluate({
+                    x: c
+                });
+                if (Math.abs(fc) < tolerance || (b - a) / 2 < tolerance) {
+                    return c;
+                }
+                if (Math.sign(fc) === Math.sign(fa)) {
+                    a = c;
+                    fa = fc;
+                } else {
+                    b = c;
+                }
+            }
+            return c;
+        }
+
+        function findAndStoreIntersections() {
+            graphState.intersections = [];
+            const validFuncs = graphState.expressions.filter(f => f.isFunction && f.compiled);
+            if (validFuncs.length < 2) return;
+            for (let i = 0; i < validFuncs.length; i++) {
+                for (let j = i + 1; j < validFuncs.length; j++) {
+                    const f1 = validFuncs[i].compiled;
+                    const f2 = validFuncs[j].compiled;
+                    let x_prev = -graphState.originX / graphState.scale;
+                    let y1_prev, y2_prev;
+                    try {
+                        y1_prev = f1.evaluate({
+                            x: x_prev
+                        });
+                        y2_prev = f2.evaluate({
+                            x: x_prev
+                        });
+                    } catch (e) {
+                        continue;
+                    }
+                    let diff_prev = y1_prev - y2_prev;
+                    for (let px = 1; px < canvas.width; px++) {
+                        const x_curr = (px - graphState.originX) / graphState.scale;
+                        let y1, y2;
+                        try {
+                            y1 = f1.evaluate({
+                                x: x_curr
+                            });
+                            y2 = f2.evaluate({
+                                x: x_curr
+                            });
+                        } catch (e) {
+                            continue;
+                        }
+                        if (!Number.isFinite(y1) || !Number.isFinite(y2)) {
+                            x_prev = x_curr;
+                            continue;
+                        };
+                        const diff_curr = y1 - y2;
+                        if (Math.sign(diff_curr) !== Math.sign(diff_prev)) {
+                            const intersectionX = bisectionSolve(f1, f2, x_prev, x_curr);
+                            if (intersectionX !== null) {
+                                const intersectionY = f1.evaluate({
+                                    x: intersectionX
+                                });
+                                graphState.intersections.push({
+                                    x: intersectionX,
+                                    y: intersectionY
+                                });
+                            }
+                        }
+                        diff_prev = diff_curr;
+                        x_prev = x_curr;
+                    }
+                }
+            }
+        }
+
+        function drawGraphGrid() {
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+            const baseGridUnits = 1;
+            let dynamicGrid = baseGridUnits;
+            while (dynamicGrid * graphState.scale < 40 * devicePixelRatio) dynamicGrid *= 2;
+            while (dynamicGrid * graphState.scale > 80 * devicePixelRatio) dynamicGrid /= 2;
+            ctx.strokeStyle = THELO_BORDER_COLOR;
+            ctx.lineWidth = 1 * devicePixelRatio;
+            ctx.font = `${10 * devicePixelRatio}px 'Manrope'`;
+            ctx.fillStyle = THELO_TEXT_LIGHT_COLOR;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const startX = Math.floor(-graphState.originX / graphState.scale / dynamicGrid) * dynamicGrid;
+            for (let x = startX;
+                (x * graphState.scale + graphState.originX) < canvas.width; x += dynamicGrid) {
+                const px = x * graphState.scale + graphState.originX;
+                ctx.beginPath();
+                ctx.moveTo(px, 0);
+                ctx.lineTo(px, canvas.height);
+                ctx.stroke();
+                if (Math.abs(x) > 1e-9) {
+                    ctx.fillText(x.toPrecision(2), px, graphState.originY + 15 * devicePixelRatio);
+                }
+            }
+            const startY = Math.floor(graphState.originY / graphState.scale / dynamicGrid) * dynamicGrid;
+            for (let y = startY;
+                (graphState.originY - y * graphState.scale) < canvas.height; y -= dynamicGrid) {
+                const py = graphState.originY - y * graphState.scale;
+                ctx.beginPath();
+                ctx.moveTo(0, py);
+                ctx.lineTo(canvas.width, py);
+                ctx.stroke();
+                if (Math.abs(y) > 1e-9) {
+                    ctx.save();
+                    ctx.textAlign = 'right';
+                    ctx.fillText(y.toPrecision(2), graphState.originX - 8 * devicePixelRatio, py);
+                    ctx.restore();
+                }
+            }
+            ctx.strokeStyle = THELO_TEXT_LIGHT_COLOR;
+            ctx.lineWidth = 2 * devicePixelRatio;
+            ctx.beginPath();
+            ctx.moveTo(0, graphState.originY);
+            ctx.lineTo(canvas.width, graphState.originY);
+            ctx.moveTo(graphState.originX, 0);
+            ctx.lineTo(graphState.originX, canvas.height);
+            ctx.stroke();
+        }
+
+        function drawAllIntersectionPoints() {
+            ctx.fillStyle = THELO_TEXT_LIGHT_COLOR;
+            graphState.intersections.forEach(point => {
+                const pixelX = graphState.originX + point.x * graphState.scale;
+                const pixelY = graphState.originY - point.y * graphState.scale;
+                ctx.beginPath();
+                ctx.arc(pixelX, pixelY, 4 * devicePixelRatio, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawHoverPoint() {
+            const {
+                x,
+                y
+            } = graphState.hoverPoint;
+            const pixelX = graphState.originX + x * graphState.scale;
+            const pixelY = graphState.originY - y * graphState.scale;
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(pixelX, pixelY, 6 * devicePixelRatio, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawLockedPoint() {
+            const {
+                x,
+                y,
+                color
+            } = graphState.lockedPoint;
+            const pixelX = graphState.originX + x * graphState.scale;
+            const pixelY = graphState.originY - y * graphState.scale;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(pixelX, pixelY, 6 * devicePixelRatio, 0, Math.PI * 2);
+            ctx.fill();
+            const coordText = `(${x.toFixed(2)}, ${y.toFixed(2)})`;
+            ctx.font = `${12 * devicePixelRatio}px 'Manrope'`;
+            const textMetrics = ctx.measureText(coordText);
+            const boxWidth = textMetrics.width + 16 * devicePixelRatio;
+            const boxHeight = 24 * devicePixelRatio;
+            let boxX = pixelX + 15 * devicePixelRatio;
+            let boxY = pixelY - (boxHeight / 2);
+            if (boxX + boxWidth > canvas.width) {
+                boxX = pixelX - boxWidth - 15 * devicePixelRatio;
+            }
+            if (boxY < 0) {
+                boxY = 5 * devicePixelRatio;
+            }
+            if (boxY + boxHeight > canvas.height) {
+                boxY = canvas.height - boxHeight - 5 * devicePixelRatio;
+            }
+            ctx.fillStyle = '#fff';
+            ctx.shadowColor = 'rgba(0,0,0,0.2)';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5 * devicePixelRatio);
+            ctx.fill();
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = THELO_TEXT_COLOR;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(coordText, boxX + boxWidth / 2, boxY + boxHeight / 2);
+        }
+        
+        initialize();
+    });
+    </script>
+</body>
+</html>
