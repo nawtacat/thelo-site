@@ -336,6 +336,9 @@
             expressions: [],
             activeInput: null,
             touchState: { isPinching: false, initialPinchDistance: 0 },
+            intersections: [],
+            hoverPoint: { visible: false, x: 0, y: 0 },
+            lockedPoint: { visible: false, x: 0, y: 0, color: '#000' }
         };
 
         // --- OPTIMIZATION ---
@@ -372,6 +375,13 @@
             canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
             canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
             canvas.addEventListener('touchend', handleTouchEnd);
+            
+            canvas.addEventListener('click', handleGraphClick);
+            canvas.addEventListener('mousemove', handleMouseMoveForHover);
+            canvas.addEventListener('mouseleave', () => {
+                graphState.hoverPoint.visible = false;
+                requestAnimationFrame(renderAll);
+            });
         }
         
         // --- MATH KEYBOARD ---
@@ -482,8 +492,59 @@
         }
         
         // --- PARSING & EVALUATION ENGINE ---
+
+        /**
+         * Recursively traverses a math.js node tree to find the coefficients of a linear expression ax+b.
+         * @param {math.Node} node - The root node of the expression.
+         * @returns {{a: number, b: number}|null} - An object with coefficients {a, b}, or null if not linear.
+         */
+        function getLinearCoefficients(node) {
+            if (node.isConstantNode) {
+                return { a: 0, b: node.value };
+            }
+            if (node.isSymbolNode && node.name === 'x') {
+                return { a: 1, b: 0 };
+            }
+            if (node.isOperatorNode) {
+                if (node.op === '+' && node.args.length === 2) {
+                    const c1 = getLinearCoefficients(node.args[0]);
+                    const c2 = getLinearCoefficients(node.args[1]);
+                    if (!c1 || !c2) return null;
+                    return { a: c1.a + c2.a, b: c1.b + c2.b };
+                }
+                if (node.op === '-' && node.args.length === 2) {
+                    const c1 = getLinearCoefficients(node.args[0]);
+                    const c2 = getLinearCoefficients(node.args[1]);
+                    if (!c1 || !c2) return null;
+                    return { a: c1.a - c2.a, b: c1.b - c2.b };
+                }
+                if (node.op === '*' && node.args.length === 2) {
+                    const c1 = getLinearCoefficients(node.args[0]);
+                    const c2 = getLinearCoefficients(node.args[1]);
+                    if (!c1 || !c2) return null;
+                    if (c1.a === 0 && c2.a === 0) return { a: 0, b: c1.b * c2.b };
+                    if (c1.a === 0) return { a: c1.b * c2.a, b: c1.b * c2.b };
+                    if (c2.a === 0) return { a: c2.b * c1.a, b: c2.b * c1.b };
+                    return null;
+                }
+                if (node.op === '/' && node.args.length === 2) {
+                    const c1 = getLinearCoefficients(node.args[0]);
+                    const c2 = getLinearCoefficients(node.args[1]);
+                    if (!c1 || !c2 || c2.a !== 0 || c2.b === 0) return null;
+                    return { a: c1.a / c2.b, b: c1.b / c2.b };
+                }
+                if (node.op === 'unaryMinus' && node.args.length === 1) {
+                    const c1 = getLinearCoefficients(node.args[0]);
+                    if (!c1) return null;
+                    return { a: -c1.a, b: -c1.b };
+                }
+            }
+            return null;
+        }
+
         function evaluateAndPlotAll() {
             graphState.expressions.forEach(parseSingleExpression);
+            findAndStoreIntersections();
             graphState.expressions.forEach(updateExpressionUI);
             requestAnimationFrame(renderAll);
         }
@@ -501,11 +562,35 @@
             if (!cleanStr) return;
 
             try {
-                const inequalityMatch = cleanStr.match(/y\s*([<>]=?)\s*(.*)/);
-                if (inequalityMatch) {
+                // NEW: Handle vertical inequalities like '2x-1 < 0' or 'x > 5'
+                const inequalityMatchX = cleanStr.match(/(.+)\s*([<>]=?)\s*(.+)/);
+                if (inequalityMatchX && !cleanStr.includes('y')) {
+                    const left = inequalityMatchX[1];
+                    const op = inequalityMatchX[2];
+                    const right = inequalityMatchX[3];
+
+                    const simplifiedNode = math.simplify(`${left} - (${right})`);
+                    const coeffs = getLinearCoefficients(simplifiedNode);
+
+                    if (coeffs && coeffs.a !== 0) {
+                        expr.type = 'vertical_inequality';
+                        expr.x_value = -coeffs.b / coeffs.a;
+                        
+                        let finalOp = op;
+                        if (coeffs.a < 0) { // Flip operator if we divided by a negative
+                           finalOp = op.replace('<', 'TEMP').replace('>', '<').replace('TEMP', '>');
+                        }
+                        expr.inequalityType = finalOp;
+                        expr.compiled = true; // Mark as plottable
+                        return; // Done with this expression
+                    }
+                }
+
+                const inequalityMatchY = cleanStr.match(/y\s*([<>]=?)\s*(.*)/);
+                if (inequalityMatchY) {
                     expr.type = 'inequality';
-                    expr.inequalityType = inequalityMatch[1].replace(/\s/g, '');
-                    const funcStr = inequalityMatch[2];
+                    expr.inequalityType = inequalityMatchY[1].replace(/\s/g, '');
+                    const funcStr = inequalityMatchY[2];
                     expr.node = math.parse(funcStr);
                 } else if (cleanStr.includes('y=')) {
                      expr.type = 'function';
@@ -590,11 +675,17 @@
                 
                 if (expr.type === 'inequality') {
                     plotInequality(expr, scope);
+                } else if (expr.type === 'vertical_inequality') {
+                    plotVerticalInequality(expr);
                 } else if (expr.type === 'function') {
                     plotFunction(expr, scope);
                     drawPointsOfInterest(expr);
                 }
             });
+            
+            drawAllIntersectionPoints();
+            if (graphState.hoverPoint.visible) drawHoverPoint();
+            if (graphState.lockedPoint.visible) drawLockedPoint();
         }
         
         function plotFunction(expr, scope) {
@@ -648,7 +739,50 @@
                 }
             }
             ctx.globalAlpha = 1.0;
-            plotFunction({...expr, color: `rgba(0,0,0,0.3)`}, scope);
+
+            // Draw boundary line
+            ctx.strokeStyle = expr.color;
+            ctx.lineWidth = 2.5 * devicePixelRatio;
+            if (expr.inequalityType === '<' || expr.inequalityType === '>') {
+                ctx.setLineDash([8 * devicePixelRatio, 8 * devicePixelRatio]);
+            }
+            plotFunction(expr, scope);
+            ctx.setLineDash([]); // Reset for other plots
+        }
+
+        // NEW: Function to plot vertical inequalities like x > 2
+        function plotVerticalInequality(expr) {
+            ctx.fillStyle = expr.color;
+            ctx.globalAlpha = INEQUALITY_ALPHA;
+
+            const boundaryPx = graphState.originX + expr.x_value * graphState.scale;
+            const op = expr.inequalityType;
+
+            if (op.includes('<')) { // < or <=
+                ctx.fillRect(0, 0, boundaryPx, canvas.height);
+            }
+            if (op.includes('>')) { // > or >=
+                ctx.fillRect(boundaryPx, 0, canvas.width - boundaryPx, canvas.height);
+            }
+
+            ctx.globalAlpha = 1.0;
+
+            // Draw boundary line
+            ctx.strokeStyle = expr.color;
+            ctx.lineWidth = 2.5 * devicePixelRatio;
+            
+            // Dotted line for strict inequalities
+            if (!op.includes('=')) {
+                ctx.setLineDash([8 * devicePixelRatio, 8 * devicePixelRatio]);
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(boundaryPx, 0);
+            ctx.lineTo(boundaryPx, canvas.height);
+            ctx.stroke();
+
+            // Reset line dash for other plots
+            ctx.setLineDash([]);
         }
 
         function findPointsOfInterest(expr) {
@@ -669,21 +803,21 @@
                  scope.x = x;
                  
                  try {
-                    const y = expr.compiled.evaluate(scope);
-                    if (prev_y !== undefined && Number.isFinite(y) && Number.isFinite(prev_y)) {
-                        if (Math.sign(y) !== Math.sign(prev_y)) {
-                             expr.poi.roots.push({ x: (x - step/2), y: 0 });
-                        }
-                        const next_y = expr.compiled.evaluate({ ...scope, x: x + step });
-                        if (Number.isFinite(next_y)) {
-                            const slope_sign = Math.sign(next_y - y);
-                            if (prev_slope_sign !== undefined && slope_sign !== prev_slope_sign) {
-                                expr.poi.extrema.push({ x: x, y: y });
-                            }
-                            prev_slope_sign = slope_sign;
-                        }
-                    }
-                    prev_y = y;
+                     const y = expr.compiled.evaluate(scope);
+                     if (prev_y !== undefined && Number.isFinite(y) && Number.isFinite(prev_y)) {
+                         if (Math.sign(y) !== Math.sign(prev_y)) {
+                              expr.poi.roots.push({ x: (x - step/2), y: 0 });
+                         }
+                         const next_y = expr.compiled.evaluate({ ...scope, x: x + step });
+                         if (Number.isFinite(next_y)) {
+                             const slope_sign = Math.sign(next_y - y);
+                             if (prev_slope_sign !== undefined && slope_sign !== prev_slope_sign) {
+                                 expr.poi.extrema.push({ x: x, y: y });
+                             }
+                             prev_slope_sign = slope_sign;
+                         }
+                     }
+                     prev_y = y;
                  } catch (e) { prev_y = undefined; }
             }
         }
@@ -703,6 +837,159 @@
             });
         }
         
+        // --- INTERSECTION FUNCTIONS ---
+        function bisectionSolve(f1, f2, a, b, scope1, scope2, tolerance = 1e-7, maxIterations = 50) {
+            let fa = f1.evaluate({...scope1, x: a}) - f2.evaluate({...scope2, x: a});
+            let fb = f1.evaluate({...scope1, x: b}) - f2.evaluate({...scope2, x: b});
+
+            if (isNaN(fa) || isNaN(fb) || Math.sign(fa) === Math.sign(fb)) {
+                return null;
+            }
+
+            let c = a;
+            for (let i = 0; i < maxIterations; i++) {
+                c = (a + b) / 2;
+                let fc = f1.evaluate({...scope1, x: c}) - f2.evaluate({...scope2, x: c});
+
+                if (Math.abs(fc) < tolerance || (b - a) / 2 < tolerance) {
+                    return c;
+                }
+
+                if (Math.sign(fc) === Math.sign(fa)) {
+                    a = c;
+                    fa = fc;
+                } else {
+                    b = c;
+                }
+            }
+            return c;
+        }
+
+        function findAndStoreIntersections() {
+            graphState.intersections = [];
+            const validFuncs = graphState.expressions.filter(e => e.visible && e.compiled && (e.type === 'function' || e.type === 'inequality'));
+            if (validFuncs.length < 2) return;
+
+            for (let i = 0; i < validFuncs.length; i++) {
+                for (let j = i + 1; j < validFuncs.length; j++) {
+                    const f1_expr = validFuncs[i];
+                    const f2_expr = validFuncs[j];
+                    const f1 = f1_expr.compiled;
+                    const f2 = f2_expr.compiled;
+                    
+                    const scope1 = {};
+                    Object.keys(f1_expr.sliders).forEach(name => { scope1[name] = f1_expr.sliders[name].val; });
+                    const scope2 = {};
+                    Object.keys(f2_expr.sliders).forEach(name => { scope2[name] = f2_expr.sliders[name].val; });
+
+                    let prev_diff;
+                    for (let px = 0; px < canvas.width; px++) {
+                        const x = (px - graphState.originX) / graphState.scale;
+                        try {
+                            const y1 = f1.evaluate({...scope1, x: x});
+                            const y2 = f2.evaluate({...scope2, x: x});
+                            const diff = y1 - y2;
+
+                            if (prev_diff !== undefined && Math.sign(diff) !== Math.sign(prev_diff)) {
+                                const intersectionX = bisectionSolve(f1, f2, x - (1 / graphState.scale), x, scope1, scope2);
+                                if (intersectionX !== null) {
+                                    const intersectionY = f1.evaluate({...scope1, x: intersectionX});
+                                    if(Number.isFinite(intersectionY)) {
+                                        graphState.intersections.push({ x: intersectionX, y: intersectionY });
+                                    }
+                                }
+                            }
+                            prev_diff = diff;
+                        } catch (e) {
+                            prev_diff = undefined;
+                        }
+                    }
+                }
+            }
+        }
+
+        function drawAllIntersectionPoints() {
+            ctx.fillStyle = '#000';
+            graphState.intersections.forEach(point => {
+                const pixelX = graphState.originX + point.x * graphState.scale;
+                const pixelY = graphState.originY - point.y * graphState.scale;
+                ctx.beginPath();
+                ctx.arc(pixelX, pixelY, POI_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        function drawHoverPoint() {
+            const { x, y } = graphState.hoverPoint;
+            const pixelX = graphState.originX + x * graphState.scale;
+            const pixelY = graphState.originY - y * graphState.scale;
+            ctx.fillStyle = '#000';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 3 * devicePixelRatio;
+            ctx.beginPath();
+            ctx.arc(pixelX, pixelY, POI_RADIUS * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fill();
+        }
+
+        function drawLockedPoint() {
+            const { x, y } = graphState.lockedPoint;
+            const pixelX = graphState.originX + x * graphState.scale;
+            const pixelY = graphState.originY - y * graphState.scale;
+
+            // Draw Point
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(pixelX, pixelY, POI_RADIUS * 1.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Coordinate Box
+            const coordText = `(${x.toFixed(3)}, ${y.toFixed(3)})`;
+            const FONT_SIZE = 12 * devicePixelRatio;
+            ctx.font = `bold ${FONT_SIZE}px 'Manrope'`;
+            const textMetrics = ctx.measureText(coordText);
+            const boxWidth = textMetrics.width + 16 * devicePixelRatio;
+            const boxHeight = FONT_SIZE + 12 * devicePixelRatio;
+            
+            let boxX = pixelX + 15 * devicePixelRatio;
+            let boxY = pixelY - (boxHeight / 2);
+
+            if (boxX + boxWidth > canvas.width) boxX = pixelX - boxWidth - 15 * devicePixelRatio;
+            if (boxY < 0) boxY = 5 * devicePixelRatio;
+            if (boxY + boxHeight > canvas.height) boxY = canvas.height - boxHeight - 5 * devicePixelRatio;
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.shadowColor = 'rgba(0,0,0,0.2)';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5 * devicePixelRatio);
+            ctx.fill();
+            ctx.shadowColor = 'transparent';
+
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(coordText, boxX + boxWidth / 2, boxY + boxHeight / 2);
+        }
+
+        function findClosestPoint(pixelX, pixelY, points) {
+            let closestDist = Infinity;
+            let closestPoint = null;
+            const CLICK_RADIUS = 20 * devicePixelRatio;
+
+            points.forEach(point => {
+                const pointPixelX = graphState.originX + point.x * graphState.scale;
+                const pointPixelY = graphState.originY - point.y * graphState.scale;
+                const dist = Math.sqrt(Math.pow(pixelX - pointPixelX, 2) + Math.pow(pixelY - pointPixelY, 2));
+
+                if (dist < closestDist && dist < CLICK_RADIUS) {
+                    closestDist = dist;
+                    closestPoint = point;
+                }
+            });
+            return closestPoint;
+        }
+
         // --- UTILITY & INTERACTION FUNCTIONS ---
         function resizeCanvas() {
             const rect = canvas.parentElement.getBoundingClientRect();
@@ -736,6 +1023,10 @@
             graphState.isPanning = true;
             graphState.panStart.x = e.clientX;
             graphState.panStart.y = e.clientY;
+            if (graphState.lockedPoint.visible) {
+                 graphState.lockedPoint.visible = false;
+                 requestAnimationFrame(renderAll);
+            }
         }
 
         function handleGraphPanMove(e) {
@@ -814,6 +1105,53 @@
             graphState.originY -= (mouseGraphY_after - mouseGraphY_before) * graphState.scale;
 
             evaluateAndPlotAll();
+        }
+        
+        function handleMouseMoveForHover(e) {
+            if (graphState.isPanning) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * devicePixelRatio;
+            const mouseY = (e.clientY - rect.top) * devicePixelRatio;
+            
+            const allPoints = [...graphState.intersections];
+            graphState.expressions.forEach(expr => {
+                if (expr.poi) {
+                    allPoints.push(...expr.poi.roots, ...expr.poi.extrema, expr.poi.y_intercept);
+                }
+            });
+
+            const closestPoint = findClosestPoint(mouseX, mouseY, allPoints.filter(p => p));
+            
+            if (closestPoint) {
+                graphState.hoverPoint.visible = true;
+                graphState.hoverPoint.x = closestPoint.x;
+                graphState.hoverPoint.y = closestPoint.y;
+            } else {
+                graphState.hoverPoint.visible = false;
+            }
+            requestAnimationFrame(renderAll);
+        }
+        
+        function handleGraphClick(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = (e.clientX - rect.left) * devicePixelRatio;
+            const clickY = (e.clientY - rect.top) * devicePixelRatio;
+
+            const allPoints = [...graphState.intersections];
+            graphState.expressions.forEach(expr => {
+                if (expr.poi) {
+                    allPoints.push(...expr.poi.roots, ...expr.poi.extrema, expr.poi.y_intercept);
+                }
+            });
+            
+            const pointToLock = findClosestPoint(clickX, clickY, allPoints.filter(p => p));
+
+            if (pointToLock) {
+                graphState.lockedPoint.visible = true;
+                graphState.lockedPoint.x = pointToLock.x;
+                graphState.lockedPoint.y = pointToLock.y;
+            }
+            requestAnimationFrame(renderAll);
         }
 
         function drawGraphGrid() {
