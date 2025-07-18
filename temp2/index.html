@@ -411,38 +411,36 @@
             });
         }
         
-        function insertSymbol(symbol) {
-            if (!graphState.activeInput) return;
-            const input = graphState.activeInput;
-            const start = input.selectionStart;
-            const end = input.selectionEnd;
-            let template = symbol;
+        // REPLACE your old insertSymbol function with this new one
+function insertSymbol(symbol) {
+    const mathField = graphState.activeInput; // Get the active MathQuill field
+    if (!mathField) return; // Do nothing if no field is active
 
-            if (['sin', 'cos', 'tan', 'log', 'ln', 'abs', '√'].includes(symbol)) {
-                template = `${symbol}()`;
-            } else if (symbol === '^') {
-                template = '^()';
-            } else if (symbol === 'd/dx') {
-                template = 'derivative( , x)';
-            } else if (symbol === '≤') {
-                template = '<=';
-            } else if (symbol === '≥') {
-                template = '>=';
-            }
-
-            input.setRangeText(template, start, end, 'end');
-            input.focus();
-            if (template.includes('()') || template.includes('( ,')) {
-                 input.setSelectionRange(input.selectionStart - 1, input.selectionStart - 1);
-            }
-            
-            const exprId = input.closest('.expression-item').id;
-            const expr = graphState.expressions.find(e => e.id === exprId);
-            if (expr) {
-                expr.str = input.value;
-                debouncedEvaluateAndPlotAll();
-            }
-        }
+    // Use MathQuill's API to insert symbols
+    if (['sin', 'cos', 'tan', 'log', 'ln', 'abs', 'sqrt'].includes(symbol)) {
+        mathField.cmd(`\\${symbol}`);
+    } else if (symbol === '^') {
+        mathField.cmd('^');
+    } else if (symbol === '√') {
+        mathField.cmd('\\sqrt');
+    } else if (symbol === 'π') {
+        mathField.cmd('\\pi');
+    } else if (symbol === 'θ') {
+        mathField.cmd('\\theta');
+    } else if (symbol === '≤') {
+        mathField.cmd('\\le');
+    } else if (symbol === '≥') {
+        mathField.cmd('\\ge');
+    } else if (symbol === 'd/dx') {
+        mathField.write('d/dx()');
+        mathField.keystroke('Left'); // Move cursor inside parentheses
+    } else {
+        // For all other characters (numbers, operators, etc.)
+        mathField.write(symbol);
+    }
+    
+    mathField.focus(); // Keep the field focused after insertion
+}
         
         // --- UI & EXPRESSION MANAGEMENT ---
         function addExpressionInput(str = '') {
