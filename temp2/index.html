@@ -442,9 +442,7 @@ function insertSymbol(symbol) {
     mathField.focus(); // Keep the field focused after insertion
 }
         
-        // --- UI & EXPRESSION MANAGEMENT ---
-           // REPLACE your addExpressionInput function one last time with this version
-            // REPLACE your addExpressionInput function with this final version
+             // REPLACE your addExpressionInput function with this updated version
 function addExpressionInput(str = '') {
     const exprIndex = graphState.expressions.length;
     const newExpr = {
@@ -481,15 +479,28 @@ function addExpressionInput(str = '') {
         handlers: {
             edit: function() {
                 let latexString = mathField.latex();
+                
+                // ⭐ START OF THE FIX ⭐
+                // The translator now includes rules for LaTeX functions
                 let mathjsString = latexString
+                    // Functions
+                    .replace(/\\sin/g, 'sin')
+                    .replace(/\\cos/g, 'cos')
+                    .replace(/\\tan/g, 'tan')
+                    .replace(/\\log/g, 'log')
+                    .replace(/\\ln/g, 'ln')
+                    .replace(/\\sqrt/g, 'sqrt')
+                    // Inequalities
                     .replace(/\\le/g, '<=')
                     .replace(/\\ge/g, '>=')
+                    // Symbols & Formatting
                     .replace(/\\left\(/g, '(')
                     .replace(/\\right\)/g, ')')
                     .replace(/\\cdot/g, '*')
                     .replace(/\\frac{/g, '(/')
                     .replace(/}{/g, ')/(')
                     .replace(/}/g, ')');
+                // ⭐ END OF THE FIX ⭐
                 
                 newExpr.str = mathjsString;
                 debouncedEvaluateAndPlotAll();
@@ -497,25 +508,16 @@ function addExpressionInput(str = '') {
             enter: function() {
                 addExpressionInput();
             },
-            // ⭐ START OF NEW LOGIC ⭐
             deleteOutOf: function(dir) {
-                // dir === -1 means backspace at the beginning
                 if (dir === -1 && graphState.expressions.length > 1) {
                     const currentId = newExpr.id;
-                    const currentIndex = graphState.expressions.findIndex(e => e.id === currentId);
-
-                    // Find the previous element to focus it later
-                    const prevItem = item.previousElementSibling;
-                    
-                    // Remove the current expression
                     item.remove();
                     graphState.expressions = graphState.expressions.filter(e => e.id !== currentId);
                     
-                    // Update UI
                     updateExpressionNumbers();
                     evaluateAndPlotAll();
                     
-                    // Focus the previous field for a smooth workflow
+                    const prevItem = item.previousElementSibling;
                     if (prevItem) {
                         const prevMathField = MQ(prevItem.querySelector('.math-input-field'));
                         if (prevMathField) {
@@ -525,7 +527,6 @@ function addExpressionInput(str = '') {
                     }
                 }
             }
-            // ⭐ END OF NEW LOGIC ⭐
         }
     });
 
