@@ -382,8 +382,6 @@
         function initialize() {
             setupMathKeyboard();
             resizeCanvas();
-            addExpressionInput('y=sin(x)'); // Start with a default expression
-            addExpressionInput('y=x^2-1');
             setupEventListeners();
             evaluateAndPlotAll();
         }
@@ -585,7 +583,7 @@
             graphState.expressions.forEach(expr => {
                 if (!expr.latex) return;
                 try {
-                    const node = math.parse(latexToMathJs(expr.latex));
+                    const node = math.parse(preprocessInputString(latexToMathJs(expr.latex)));
                     if (node.isAssignmentNode) {
                         const varName = node.object.name;
                         // Avoid evaluating if it depends on 'x' or 'y'
@@ -633,6 +631,20 @@
         }
 
         /**
+         * NEW: Pre-processes a math string to handle more "humane" inputs before parsing.
+         * @param {string} str - The input string (e.g., from latexToMathJs).
+         * @returns {string} - The processed string, ready for math.js.
+         */
+        function preprocessInputString(str) {
+            // Converts "sin 30" to "sin(30)" or "log x" to "log(x)".
+            // This allows users to type expressions more naturally without explicit parentheses for single arguments.
+            const functionNames = 'sin|cos|tan|asin|acos|atan|log10|log|sqrt|abs';
+            const funcArgRegex = new RegExp(`\\b(${functionNames})\\s+([a-zA-Z0-9πθ.]+)`, 'g');
+            return str.replace(funcArgRegex, '$1($2)');
+        }
+
+
+        /**
          * Creates the evaluation scope for a math.js expression, including sliders,
          * global variables, and angle mode-specific functions.
          * @param {object} expr - The expression object.
@@ -667,8 +679,9 @@
                 type: 'empty', compiled: null, error: null, result: null, node: null,
                 inequalityType: null, isImplicit: false
             });
-
-            const cleanStr = latexToMathJs(expr.latex.trim());
+            
+            // Apply humane parsing before sending to math.js
+            let cleanStr = preprocessInputString(latexToMathJs(expr.latex.trim()));
             if (!cleanStr) return;
 
             try {
