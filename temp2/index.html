@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.1/math.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-sN/g2QAidQzY+H7C19PIRMIfQDVf2S9sS/KPCcrTcEjayQFhbLpSQrQ6SjYdnyat" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoIeYJkL3BPl1goppnTMgZouP21UfgRxqVJr3vK1AqtTCmh2GCoqHjE3wslG882" crossorigin="anonymous"></script>
     <style>
         :root {
             --thelo-blue: #2563eb;
@@ -271,6 +273,25 @@
                 right: 15px;
             }
         }
+        .expression-rendered {
+    padding: 12px; /* Match your input padding */
+    width: 100%;
+    font-size: 1.1rem;
+    cursor: text;
+}
+
+/* By default, hide the input field */
+.expression-item .expression-input {
+    display: none;
+}
+
+/* When editing, show the input and hide the rendered view */
+.expression-item.editing .expression-input {
+    display: block;
+}
+.expression-item.editing .expression-rendered {
+    display: none;
+}
     </style>
 </head>
 <body>
@@ -429,62 +450,104 @@
         
         // --- UI & EXPRESSION MANAGEMENT ---
         function addExpressionInput(str = '') {
-            const exprIndex = graphState.expressions.length;
-            const newExpr = {
-                id: `expr-${Date.now()}`,
-                str: str,
-                visible: true,
-                color: PLOT_COLORS[exprIndex % PLOT_COLORS.length],
-            };
-            graphState.expressions.push(newExpr);
-            
-            const item = document.createElement('div');
-            item.className = 'expression-item';
-            item.id = newExpr.id;
-            item.innerHTML = `
-                <div class="expression-main">
-                    <span class="expression-number">${exprIndex + 1}</span>
-                    <div class="expression-color-bar" title="Toggle visibility"></div>
-                    <div class="expression-input-wrapper">
-                        <input type="text" class="expression-input" value="${newExpr.str}" placeholder="Enter expression...">
-                    </div>
-                    <span class="expression-result"></span>
-                    <button class="remove-expression-btn" title="Remove expression">&times;</button>
-                </div>
-                <div class="expression-extras"></div>
-            `;
-            expressionListContainer.appendChild(item);
-            
-            const input = item.querySelector('.expression-input');
-            input.addEventListener('input', (e) => {
-                newExpr.str = e.target.value;
-                debouncedEvaluateAndPlotAll();
-            });
-            input.addEventListener('focus', () => { graphState.activeInput = input; });
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addExpressionInput();
-                }
-            });
-            
-            item.querySelector('.remove-expression-btn').addEventListener('click', () => {
-                graphState.expressions = graphState.expressions.filter(e => e.id !== newExpr.id);
-                item.remove();
-                updateExpressionNumbers();
-                evaluateAndPlotAll();
-            });
+    const exprIndex = graphState.expressions.length;
+    const newExpr = {
+        id: `expr-${Date.now()}`,
+        str: str,
+        visible: true,
+        color: PLOT_COLORS[exprIndex % PLOT_COLORS.length],
+    };
+    graphState.expressions.push(newExpr);
 
-            item.querySelector('.expression-color-bar').addEventListener('click', (e) => {
-                newExpr.visible = !newExpr.visible;
-                e.currentTarget.classList.toggle('hidden-expr', !newExpr.visible);
-                evaluateAndPlotAll();
-            });
+    const item = document.createElement('div');
+    item.className = 'expression-item';
+    item.id = newExpr.id;
+    // ⭐ NEW: Updated HTML structure
+    item.innerHTML = `
+        <div class="expression-main">
+            <span class="expression-number">${exprIndex + 1}</span>
+            <div class="expression-color-bar" title="Toggle visibility"></div>
+            <div class="expression-input-wrapper">
+                <div class="expression-rendered"></div>
+                <input type="text" class="expression-input" value="${newExpr.str}" placeholder="Enter expression...">
+            </div>
+            <span class="expression-result"></span>
+            <button class="remove-expression-btn" title="Remove expression">&times;</button>
+        </div>
+        <div class="expression-extras"></div>
+    `;
+    expressionListContainer.appendChild(item);
 
-            item.querySelector('input').focus();
-            graphState.activeInput = input;
+    const input = item.querySelector('.expression-input');
+    const renderedDiv = item.querySelector('.expression-rendered'); // ⭐ NEW: Get the rendered div
+
+    // ⭐ NEW: Function to render the math expression
+    const renderMath = () => {
+        try {
+            katex.render(newExpr.str || "\\text{Enter expression...}", renderedDiv, {
+                throwOnError: false, // Prevents crashing on invalid syntax
+                displayMode: false,
+                colorIsTextColor: true,
+                macros: { "\\ddx": "derivative(,x)" } // Example custom macro
+            });
+        } catch (e) {
+            renderedDiv.textContent = e.message;
         }
+    };
 
+    // ⭐ NEW: Event listeners to toggle editing mode
+    item.querySelector('.expression-input-wrapper').addEventListener('click', () => {
+        item.classList.add('editing');
+        input.focus();
+    });
+
+    input.addEventListener('blur', () => { // When the input loses focus
+        item.classList.remove('editing');
+        renderMath(); // Re-render in case of final changes
+    });
+
+    input.addEventListener('input', (e) => {
+        newExpr.str = e.target.value;
+        renderMath(); // Live-update the rendered view as the user types
+        debouncedEvaluateAndPlotAll();
+    });
+    
+    input.addEventListener('focus', () => {
+        graphState.activeInput = input;
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addExpressionInput();
+        } else if (e.key === 'Escape') {
+            input.blur(); // Exit editing mode
+        }
+    });
+
+    // --- (Your other event listeners for remove, color bar, etc. remain the same) ---
+    item.querySelector('.remove-expression-btn').addEventListener('click', () => {
+        graphState.expressions = graphState.expressions.filter(e => e.id !== newExpr.id);
+        item.remove();
+        updateExpressionNumbers();
+        evaluateAndPlotAll();
+    });
+
+    item.querySelector('.expression-color-bar').addEventListener('click', (e) => {
+        newExpr.visible = !newExpr.visible;
+        e.currentTarget.classList.toggle('hidden-expr', !newExpr.visible);
+        evaluateAndPlotAll();
+    });
+    
+    renderMath(); // ⭐ NEW: Initial render of the math expression
+    
+    if (str === '') {
+        item.classList.add('editing'); // Start in editing mode for new, empty inputs
+        input.focus();
+    } else {
+        input.blur();
+    }
+}
         function updateExpressionNumbers() {
             expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
                 item.querySelector('.expression-number').textContent = index + 1;
