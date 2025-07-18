@@ -590,81 +590,82 @@ function insertSymbol(symbol) {
             requestAnimationFrame(renderAll);
         }
 
-        function parseSingleExpression(expr) {
-            expr.type = 'calculation';
-            expr.compiled = null;
-            expr.error = null;
-            expr.result = null;
-            expr.sliders = expr.sliders || {};
-            expr.poi = { roots: [], y_intercept: null, extrema: [] };
-            expr.node = null;
+        // REPLACE your old parseSingleExpression function with this new one
+function parseSingleExpression(expr) {
+    expr.type = 'calculation';
+    expr.compiled = null;
+    expr.error = null;
+    expr.result = null;
+    expr.sliders = expr.sliders || {};
+    expr.poi = { roots: [], y_intercept: null, extrema: [] };
+    expr.node = null;
 
-            let cleanStr = expr.str.trim();
-            if (!cleanStr) return;
+    let cleanStr = expr.str.trim();
+    if (!cleanStr) return;
 
-            try {
-                // NEW: Handle vertical inequalities like '2x-1 < 0' or 'x > 5'
-                const inequalityMatchX = cleanStr.match(/(.+)\s*([<>]=?)\s*(.+)/);
-                if (inequalityMatchX && !cleanStr.includes('y')) {
-                    const left = inequalityMatchX[1];
-                    const op = inequalityMatchX[2];
-                    const right = inequalityMatchX[3];
+    try {
+        // Match any inequality that does NOT contain 'y'
+        const inequalityMatchX = cleanStr.match(/(.+)\s*([<>]=?)\s*(.+)/);
+        if (inequalityMatchX && !cleanStr.includes('y')) {
+            const left = inequalityMatchX[1];
+            const op = inequalityMatchX[2];
+            const right = inequalityMatchX[3];
 
-                    const simplifiedNode = math.simplify(`${left} - (${right})`);
-                    const coeffs = getLinearCoefficients(simplifiedNode);
+            // Rearrange to the form 'f(x) op 0' e.g., '3x - 4 <= 0'
+            const simplifiedNode = math.simplify(`${left} - (${right})`);
+            const coeffs = getLinearCoefficients(simplifiedNode); // Use our helper function
 
-                    if (coeffs && coeffs.a !== 0) {
-                        expr.type = 'vertical_inequality';
-                        expr.x_value = -coeffs.b / coeffs.a;
-                        
-                        let finalOp = op;
-                        if (coeffs.a < 0) { // Flip operator if we divided by a negative
-                           finalOp = op.replace('<', 'TEMP').replace('>', '<').replace('TEMP', '>');
-                        }
-                        expr.inequalityType = finalOp;
-                        expr.compiled = true; // Mark as plottable
-                        return; // Done with this expression
-                    }
-                }
-
-                const inequalityMatchY = cleanStr.match(/y\s*([<>]=?)\s*(.*)/);
-                if (inequalityMatchY) {
-                    expr.type = 'inequality';
-                    expr.inequalityType = inequalityMatchY[1].replace(/\s/g, '');
-                    const funcStr = inequalityMatchY[2];
-                    expr.node = math.parse(funcStr);
-                } else if (cleanStr.includes('y=')) {
-                     expr.type = 'function';
-                     const funcStr = cleanStr.split('=')[1];
-                     expr.node = math.parse(funcStr);
-                } else if (cleanStr.match(/(^|[^a-zA-Z])x([^a-zA-Z]|$)/)) {
-                    expr.type = 'function';
-                    expr.node = math.parse(cleanStr);
-                }
-
-                if (expr.node) {
-                    expr.compiled = expr.node.compile();
-                    expr.node.filter(node => node.isSymbolNode && !['x', 'y', 'e', 'pi', 'i', 'true', 'false'].includes(node.name))
-                        .forEach(sliderNode => {
-                            if (!expr.sliders[sliderNode.name]) {
-                                expr.sliders[sliderNode.name] = { val: 1, min: -5, max: 5, step: 0.1 };
-                            }
-                        });
-                }
+            if (coeffs && coeffs.a !== 0) { // Check if it's a linear function of x
+                expr.type = 'vertical_inequality';
+                expr.x_value = -coeffs.b / coeffs.a; // Solve for x
                 
-                if (expr.type === 'calculation') {
-                    expr.result = math.parse(cleanStr).evaluate();
+                let finalOp = op;
+                // If the coefficient of x was negative, we need to flip the inequality sign
+                if (coeffs.a < 0) {
+                    finalOp = op.replace('<', 'TEMP').replace('>', '<').replace('TEMP', '>');
                 }
-
-                if (expr.type === 'function') {
-                    findPointsOfInterest(expr);
-                }
-
-            } catch (err) {
-                expr.error = err.message;
+                expr.inequalityType = finalOp;
+                expr.compiled = true; // Mark as plottable
+                return; // Done with this expression
             }
         }
+        
+        // This part handles y=, y>, etc., and remains the same
+        const inequalityMatchY = cleanStr.match(/y\s*([<>]=?)\s*(.*)/);
+        if (inequalityMatchY) {
+            expr.type = 'inequality';
+            expr.inequalityType = inequalityMatchY[1].replace(/\s/g, '');
+            expr.node = math.parse(inequalityMatchY[2]);
+        } else if (cleanStr.includes('y=')) {
+            expr.type = 'function';
+            expr.node = math.parse(cleanStr.split('=')[1]);
+        } else if (cleanStr.match(/(^|[^a-zA-Z])x([^a-zA-Z]|$)/)) {
+            expr.type = 'function';
+            expr.node = math.parse(cleanStr);
+        }
 
+        if (expr.node) {
+            expr.compiled = expr.node.compile();
+            expr.node.filter(node => node.isSymbolNode && !['x', 'y', 'e', 'pi', 'i', 'true', 'false'].includes(node.name))
+                .forEach(sliderNode => {
+                    if (!expr.sliders[sliderNode.name]) {
+                        expr.sliders[sliderNode.name] = { val: 1, min: -5, max: 5, step: 0.1 };
+                    }
+                });
+        }
+        
+        if (expr.type === 'calculation') {
+            expr.result = math.parse(cleanStr).evaluate();
+        }
+
+        if (expr.type === 'function') {
+            findPointsOfInterest(expr);
+        }
+
+    } catch (err) {
+        expr.error = err.message;
+    }
+}
         function updateExpressionUI(expr) {
             const item = document.getElementById(expr.id);
             if (!item) return;
