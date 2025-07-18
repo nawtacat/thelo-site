@@ -443,7 +443,8 @@ function insertSymbol(symbol) {
 }
         
         // --- UI & EXPRESSION MANAGEMENT ---
-        function addExpressionInput(str = '') {
+           // REPLACE your addExpressionInput function one last time with this version
+function addExpressionInput(str = '') {
     const exprIndex = graphState.expressions.length;
     const newExpr = {
         id: `expr-${Date.now()}`,
@@ -456,7 +457,6 @@ function insertSymbol(symbol) {
     const item = document.createElement('div');
     item.className = 'expression-item';
     item.id = newExpr.id;
-    // The HTML is much simpler now
     item.innerHTML = `
         <div class="expression-main">
             <span class="expression-number">${exprIndex + 1}</span>
@@ -473,46 +473,44 @@ function insertSymbol(symbol) {
 
     const mathFieldSpan = item.querySelector('.math-input-field');
     
-    // Let MathQuill know that we've added a new field
     var MQ = MathQuill.getInterface(2);
     
-    // Initialize the MathQuill field
     const mathField = MQ.MathField(mathFieldSpan, {
         spaceBehavesLikeTab: true,
         handlers: {
             edit: function() {
-                // This function is called every time the content changes
                 let latexString = mathField.latex();
                 
-                // Convert some LaTeX to math.js compatible syntax
-                // This is a crucial step!
+                // ⭐ START OF THE FIX ⭐
+                // The translator now includes rules for \le and \ge
                 let mathjsString = latexString
+                    .replace(/\\le/g, '<=')      // new rule
+                    .replace(/\\ge/g, '>=')      // new rule
                     .replace(/\\left\(/g, '(')
                     .replace(/\\right\)/g, ')')
                     .replace(/\\cdot/g, '*')
                     .replace(/\\frac{/g, '(/')
                     .replace(/}{/g, ')/(')
                     .replace(/}/g, ')');
+                // ⭐ END OF THE FIX ⭐
                 
                 newExpr.str = mathjsString;
                 debouncedEvaluateAndPlotAll();
             },
             enter: function() {
-                addExpressionInput(); // Add a new expression on Enter
+                addExpressionInput();
             }
         }
     });
 
-    // Set the initial value if one is provided
     if (str) {
         mathField.latex(str);
     }
     
-    // Focus the new field
     mathField.focus();
-    graphState.activeInput = mathField; // Store the mathField object as the active input
+    graphState.activeInput = mathField;
 
-    // --- (Your other event listeners for remove, color bar, etc. remain the same) ---
+    // --- (Your other event listeners remain the same) ---
     item.querySelector('.remove-expression-btn').addEventListener('click', () => {
         graphState.expressions = graphState.expressions.filter(e => e.id !== newExpr.id);
         item.remove();
