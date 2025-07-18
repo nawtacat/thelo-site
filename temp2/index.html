@@ -615,8 +615,7 @@ function addExpressionInput(str = '') {
             graphState.expressions.forEach(updateExpressionUI);
             requestAnimationFrame(renderAll);
         }
-
-        // REPLACE your old parseSingleExpression function with this new one
+                // REPLACE your parseSingleExpression function with this version
 function parseSingleExpression(expr) {
     expr.type = 'calculation';
     expr.compiled = null;
@@ -630,33 +629,29 @@ function parseSingleExpression(expr) {
     if (!cleanStr) return;
 
     try {
-        // Match any inequality that does NOT contain 'y'
         const inequalityMatchX = cleanStr.match(/(.+)\s*([<>]=?)\s*(.+)/);
         if (inequalityMatchX && !cleanStr.includes('y')) {
             const left = inequalityMatchX[1];
             const op = inequalityMatchX[2];
             const right = inequalityMatchX[3];
 
-            // Rearrange to the form 'f(x) op 0' e.g., '3x - 4 <= 0'
             const simplifiedNode = math.simplify(`${left} - (${right})`);
-            const coeffs = getLinearCoefficients(simplifiedNode); // Use our helper function
+            const coeffs = getLinearCoefficients(simplifiedNode);
 
-            if (coeffs && coeffs.a !== 0) { // Check if it's a linear function of x
+            if (coeffs && coeffs.a !== 0) {
                 expr.type = 'vertical_inequality';
-                expr.x_value = -coeffs.b / coeffs.a; // Solve for x
+                expr.x_value = -coeffs.b / coeffs.a;
                 
                 let finalOp = op;
-                // If the coefficient of x was negative, we need to flip the inequality sign
                 if (coeffs.a < 0) {
                     finalOp = op.replace('<', 'TEMP').replace('>', '<').replace('TEMP', '>');
                 }
                 expr.inequalityType = finalOp;
-                expr.compiled = true; // Mark as plottable
-                return; // Done with this expression
+                expr.compiled = true;
+                return;
             }
         }
         
-        // This part handles y=, y>, etc., and remains the same
         const inequalityMatchY = cleanStr.match(/y\s*([<>]=?)\s*(.*)/);
         if (inequalityMatchY) {
             expr.type = 'inequality';
@@ -672,7 +667,10 @@ function parseSingleExpression(expr) {
 
         if (expr.node) {
             expr.compiled = expr.node.compile();
-            expr.node.filter(node => node.isSymbolNode && !['x', 'y', 'e', 'pi', 'i', 'true', 'false'].includes(node.name))
+            
+            // ⭐ THE FIX IS HERE ⭐
+            // This list now tells the slider logic to ignore common function names
+            expr.node.filter(node => node.isSymbolNode && !['x', 'y', 'e', 'pi', 'i', 'true', 'false', 'sin', 'cos', 'tan', 'log', 'ln', 'sqrt', 'abs'].includes(node.name))
                 .forEach(sliderNode => {
                     if (!expr.sliders[sliderNode.name]) {
                         expr.sliders[sliderNode.name] = { val: 1, min: -5, max: 5, step: 0.1 };
@@ -692,6 +690,7 @@ function parseSingleExpression(expr) {
         expr.error = err.message;
     }
 }
+        // REPLACE your old parseSingleExpression function with this new one
         function updateExpressionUI(expr) {
             const item = document.getElementById(expr.id);
             if (!item) return;
