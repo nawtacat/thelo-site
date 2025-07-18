@@ -265,7 +265,7 @@
     </div>
 
     <script>
-    // --- Advanced Interactive Calculator (v4.2 - Bug Fixes) ---
+    // --- Advanced Interactive Calculator (v4.3 - Final Fixes) ---
     document.addEventListener('DOMContentLoaded', () => {
         // --- DOM ELEMENTS ---
         const sidebar = document.getElementById('sidebar');
@@ -286,7 +286,6 @@
         const INEQUALITY_ALPHA = 0.2;
         const POI_RADIUS = 4 * devicePixelRatio;
 
-        // --- Keyboard Layout ---
         const KEYBOARD_LAYOUT = {
             main: [
                 'x', 'y', 'a^b', '√', '7', '8', '9', '/',
@@ -295,16 +294,12 @@
                 'functions', 'π', 'e', 'θ', '0', '.', '[]', '+'
             ],
             functions: {
-                'Trig Functions': {
-                    'sin': 'sin', 'cos': 'cos', 'tan': 'tan', 
-                    'asin': 'sin<sup>-1</sup>', 'acos': 'cos<sup>-1</sup>', 'atan': 'tan<sup>-1</sup>'
-                },
+                'Trig Functions': { 'sin': 'sin', 'cos': 'cos', 'tan': 'tan', 'asin': 'sin<sup>-1</sup>', 'acos': 'cos<sup>-1</sup>', 'atan': 'tan<sup>-1</sup>' },
                 'Statistics': ['mean', 'median', 'stdev', 'min', 'max', 'total', 'quartile'],
                 'Misc': ['nCr', 'nPr', '!', 'd/dx', 'log', 'ln']
             }
         };
 
-        // --- STATE MANAGEMENT ---
         let graphState = {
             originX: 0, originY: 0, scale: 40,
             isPanning: false, panStart: { x: 0, y: 0 },
@@ -318,18 +313,15 @@
             definedVariables: {}
         };
 
-        // --- OPTIMIZATION ---
         function debounce(func, delay) {
             let timeout;
             return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); };
         }
         const debouncedEvaluateAndPlotAll = debounce(evaluateAndPlotAll, 200);
 
-        // --- INITIALIZATION ---
         function initialize() {
             setupKeyboards();
             resizeCanvas();
-            // Add example expressions to showcase functionality
             addExpressionInput('y=|x+1|+3');
             addExpressionInput('L=[1, 5, 2, 8, 9]');
             addExpressionInput('median(L)');
@@ -364,7 +356,6 @@
             window.addEventListener('mouseup', handleGraphPanEnd);
         }
         
-        // --- Keyboard Setup ---
         function setupKeyboards() {
             KEYBOARD_LAYOUT.main.forEach(symbol => {
                 const btn = createKeyboardButton(symbol, symbol);
@@ -430,8 +421,7 @@
                 mathField.keystroke('Left');
             } else if (symbol === 'nCr' || symbol === 'nPr') {
                 mathField.write(`\\operatorname{${symbol}}\\left(,\\right)`);
-                mathField.keystroke('Left');
-                mathField.keystroke('Left');
+                mathField.keystroke('Left Left');
             } else if (symbol === 'a^b') {
                 mathField.cmd('^');
             } else if (symbol === '|a|') {
@@ -451,41 +441,30 @@
             mathField.focus();
         }
 
-        // --- Expression Management ---
         function addExpressionInput(latexStr = '') { const exprIndex = graphState.expressions.length; const newExpr = { id: `expr-${Date.now()}-${Math.random()}`, latex: latexStr, visible: true, color: PLOT_COLORS[exprIndex % PLOT_COLORS.length], sliders: {}, }; graphState.expressions.push(newExpr); const item = document.createElement('div'); item.className = 'expression-item'; item.id = newExpr.id; item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex + 1}</span><div class="expression-color-bar" title="Toggle visibility"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span><button class="remove-expression-btn" title="Remove expression">&times;</button></div><div class="expression-extras"></div>`; expressionListContainer.appendChild(item); const mathFieldSpan = item.querySelector('.math-input-field'); const mathField = MQ.MathField(mathFieldSpan, { spaceBehavesLikeTab: true, handlers: { edit: () => { newExpr.latex = mathField.latex(); debouncedEvaluateAndPlotAll(); }, enter: () => addExpressionInput(), deleteOutOf: (dir, field) => { if (dir === -1 && field.latex() === '' && graphState.expressions.length > 1) removeExpression(newExpr.id, item.previousElementSibling); }, upOutOf: () => { const prevItem = item.previousElementSibling; if (prevItem) MQ(prevItem.querySelector('.math-input-field')).focus().moveToRightEnd(); }, downOutOf: () => { const nextItem = item.nextElementSibling; if (nextItem) MQ(nextItem.querySelector('.math-input-field')).focus().moveToRightEnd(); } } }); if (latexStr) mathField.latex(latexStr); mathField.focus(); graphState.activeInput = mathField; item.querySelector('.remove-expression-btn').addEventListener('click', () => { if (graphState.expressions.length > 1) removeExpression(newExpr.id); }); item.querySelector('.expression-color-bar').addEventListener('click', (e) => { newExpr.visible = !newExpr.visible; e.currentTarget.classList.toggle('hidden-expr', !newExpr.visible); evaluateAndPlotAll(); }); mathFieldSpan.addEventListener('focusin', () => { graphState.activeInput = mathField; }); }
         function removeExpression(id, focusTarget = null) { const item = document.getElementById(id); if (!item) return; const nextFocusItem = focusTarget || item.previousElementSibling || item.nextElementSibling; item.remove(); graphState.expressions = graphState.expressions.filter(e => e.id !== id); updateExpressionNumbers(); evaluateAndPlotAll(); if (nextFocusItem) { const prevMathField = MQ(nextFocusItem.querySelector('.math-input-field')); if (prevMathField) { prevMathField.focus().moveToRightEnd(); graphState.activeInput = prevMathField; } } }
         function updateExpressionNumbers() { expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => { item.querySelector('.expression-number').textContent = index + 1; }); }
         
         // --- Parsing & Evaluation Engine ---
-        function evaluateAndPlotAll() {
-            // First pass: Clear old state and find all variable assignments.
-            // This ensures that variables are available for subsequent expressions.
-            graphState.definedVariables = {};
-            graphState.expressions.forEach(expr => {
-                if (!expr.latex) return;
-                try {
-                    // Temporarily parse to find assignments
-                    const node = math.parse(preprocessInputString(latexToMathJs(expr.latex)));
-                    if (node.isAssignmentNode && !node.toString().match(/[xy]/)) {
-                        const value = node.evaluate(graphState.definedVariables);
-                        graphState.definedVariables[node.object.name] = value;
-                    }
-                } catch (e) { /* Ignore errors in this preliminary pass */ }
-            });
 
-            // Second pass: Fully parse and evaluate each expression using the now-populated state
+        // BUG FIX: Re-architected to a simpler, single-pass evaluation model.
+        function evaluateAndPlotAll() {
+            graphState.definedVariables = {}; // Reset state at the beginning of a full run.
+
+            // A single, sequential pass. As this loop runs, `definedVariables` is populated
+            // and immediately becomes available to the next expression in the list.
             graphState.expressions.forEach(parseSingleExpression);
-            
-            // Final steps: find intersections and render everything
+
+            // Post-processing and rendering.
             findAndStoreIntersections();
             graphState.expressions.forEach(updateExpressionUI);
             requestAnimationFrame(renderAll);
         }
 
+        // BUG FIX: Added a rule for absolute value.
         function latexToMathJs(latex) {
             return latex
-                // BUG FIX: Convert \left|...\right| into abs(...)
-                .replace(/\\left\|([^]+?)\\right\|/g, 'abs($1)')
+                .replace(/\\left\|([^]+?)\\right\|/g, 'abs($1)') // Absolute value fix
                 .replace(/\\operatorname{([a-zA-Z]+)}/g, '$1')
                 .replace(/\\frac{d}{dx}\\left\(([^)]+)\\right\)/g, "derivative('$1', 'x')")
                 .replace(/\\sin/g, 'sin').replace(/\\cos/g, 'cos').replace(/\\tan/g, 'tan')
@@ -521,6 +500,7 @@
             return scope;
         }
 
+        // BUG FIX: This function now reliably updates the global variable state.
         function parseSingleExpression(expr) {
             Object.assign(expr, { type: 'empty', compiled: null, error: null, result: null, node: null, inequalityType: null, isImplicit: false });
             let cleanStr = preprocessInputString(latexToMathJs(expr.latex.trim()));
@@ -530,16 +510,18 @@
                 expr.node = node;
                 const scope = getEvaluationScope(expr);
                 
-                // BUG FIX: When an assignment is parsed, its value must be re-added to the
-                // global state so it's available to expressions below it in the same pass.
                 if (node.isAssignmentNode) {
                     const varName = node.object.name;
-                    if (varName !== 'x' && varName !== 'y') {
-                        expr.type = 'assignment';
-                        const result = node.evaluate(scope);
-                        expr.result = result;
-                        graphState.definedVariables[varName] = result; // This is the crucial fix
+                    // An assignment cannot be a function of x or y
+                    if (node.toString().match(/[xy]/)) {
+                         expr.error = "Cannot assign expression with x or y.";
+                         return;
                     }
+                    expr.type = 'assignment';
+                    const result = node.evaluate(scope);
+                    expr.result = result;
+                    // This is the crucial fix: update the global state immediately.
+                    graphState.definedVariables[varName] = result;
                 } else if (cleanStr.includes('x') || cleanStr.includes('y')) {
                     expr.type = 'function';
                     let parseableNode = node;
@@ -587,7 +569,7 @@
             }
         }
         
-        function updateExpressionUI(expr) { const item = document.getElementById(expr.id); if (!item) return; const resultEl = item.querySelector('.expression-result'); const extrasEl = item.querySelector('.expression-extras'); const colorBar = item.querySelector('.expression-color-bar'); resultEl.textContent = ''; extrasEl.innerHTML = ''; colorBar.style.backgroundColor = expr.error ? 'var(--error-red)' : (expr.visible ? expr.color : '#ccc'); colorBar.style.borderColor = expr.error ? 'var(--error-red)' : expr.color; colorBar.title = expr.error ? expr.error : "Toggle visibility"; if (expr.error) { resultEl.textContent = 'Error'; } else if (expr.result !== null && expr.result !== undefined) { try { if (Array.isArray(expr.result)) { resultEl.textContent = `${expr.result.length} elements`; } else if (typeof expr.result === 'function') { resultEl.textContent = 'f(x)'; } else { resultEl.textContent = `= ${math.format(expr.result, {precision: 5})}`; } } catch { resultEl.textContent = `= ${expr.result.toString()}`; } } Object.keys(expr.sliders).forEach(name => { const slider = expr.sliders[name]; const sliderDiv = document.createElement('div'); sliderDiv.className = 'slider-container'; sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}">`; extrasEl.appendChild(sliderDiv); sliderDiv.querySelector('input[type=range]').addEventListener('input', (e) => { slider.val = parseFloat(e.target.value); sliderDiv.querySelector('label').textContent = `${name} = ${slider.val}`; evaluateAndPlotAll(); }); }); }
+        function updateExpressionUI(expr) { const item = document.getElementById(expr.id); if (!item) return; const resultEl = item.querySelector('.expression-result'); const extrasEl = item.querySelector('.expression-extras'); const colorBar = item.querySelector('.expression-color-bar'); resultEl.textContent = ''; extrasEl.innerHTML = ''; colorBar.style.backgroundColor = expr.error ? 'var(--error-red)' : (expr.visible ? expr.color : '#ccc'); colorBar.style.borderColor = expr.error ? 'var(--error-red)' : expr.color; colorBar.title = expr.error ? expr.error : "Toggle visibility"; if (expr.error) { resultEl.textContent = 'Error'; } else if (expr.result !== null && expr.result !== undefined) { try { if (Array.isArray(expr.result)) { resultEl.textContent = `= [${expr.result.map(v => math.format(v, {precision: 3})).join(', ')}]`; } else if (typeof expr.result === 'function') { resultEl.textContent = 'f(x)'; } else { resultEl.textContent = `= ${math.format(expr.result, {precision: 5})}`; } } catch { resultEl.textContent = `= ${expr.result.toString()}`; } } Object.keys(expr.sliders).forEach(name => { const slider = expr.sliders[name]; const sliderDiv = document.createElement('div'); sliderDiv.className = 'slider-container'; sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}">`; extrasEl.appendChild(sliderDiv); sliderDiv.querySelector('input[type=range]').addEventListener('input', (e) => { slider.val = parseFloat(e.target.value); sliderDiv.querySelector('label').textContent = `${name} = ${slider.val}`; evaluateAndPlotAll(); }); }); }
         
         // --- Full, readable helper functions follow ---
         function renderAll() { ctx.clearRect(0, 0, canvas.width, canvas.height); drawGraphGrid(); graphState.expressions.forEach(expr => { if (!expr.visible || expr.error) return; if (expr.type === 'inequality') plotInequality(expr); else if (expr.type === 'vertical_inequality') plotVerticalInequality(expr); else if (expr.type === 'function') { plotFunction(expr); drawPointsOfInterest(expr); } else if (expr.type === 'vertical_line') plotVerticalLine(expr); }); drawAllIntersectionPoints(); if (graphState.hoverPoint.visible) drawHoverPoint(); if (graphState.lockedPoint.visible) drawLockedPoint(); }
