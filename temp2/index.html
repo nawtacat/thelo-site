@@ -412,13 +412,13 @@
         }
         
         // REPLACE your old insertSymbol function with this new one
-function insertSymbol(symbol) {
-    const mathField = graphState.activeInput; // Get the active MathQuill field
-    if (!mathField) return; // Do nothing if no field is active
+        function insertSymbol(symbol) {
+    const mathField = graphState.activeInput;
+    if (!mathField) return;
 
-    // Use MathQuill's API to insert symbols
-    if (['sin', 'cos', 'tan', 'log', 'ln', 'abs', 'sqrt'].includes(symbol)) {
-        mathField.cmd(`\\${symbol}`);
+    if (['sin', 'cos', 'tan', 'log', 'ln', 'sqrt'].includes(symbol)) {
+        mathField.write(`\\${symbol}\\left(\\right)`);
+        mathField.keystroke('Left');
     } else if (symbol === '^') {
         mathField.cmd('^');
     } else if (symbol === '√') {
@@ -426,24 +426,21 @@ function insertSymbol(symbol) {
     } else if (symbol === 'π') {
         mathField.cmd('\\pi');
     } else if (symbol === 'θ') {
-        mathField.cmd('\\theta');
+        mathFiel.cmd('\\theta');
     } else if (symbol === '≤') {
         mathField.cmd('\\le');
     } else if (symbol === '≥') {
         mathField.cmd('\\ge');
     } else if (symbol === 'd/dx') {
         mathField.write('d/dx()');
-        mathField.keystroke('Left'); // Move cursor inside parentheses
+        mathField.keystroke('Left');
     } else {
-        // For all other characters (numbers, operators, etc.)
         mathField.write(symbol);
     }
     
-    mathField.focus(); // Keep the field focused after insertion
-}
-        
-             // REPLACE your addExpressionInput function with this updated version
-function addExpressionInput(str = '') {
+    mathField.focus();
+    }        
+            function addExpressionInput(str = '') {
     const exprIndex = graphState.expressions.length;
     const newExpr = {
         id: `expr-${Date.now()}`,
@@ -480,8 +477,6 @@ function addExpressionInput(str = '') {
             edit: function() {
                 let latexString = mathField.latex();
                 
-                // ⭐ START OF THE FIX ⭐
-                // The translator now includes rules for LaTeX functions
                 let mathjsString = latexString
                     // Functions
                     .replace(/\\sin/g, 'sin')
@@ -490,17 +485,18 @@ function addExpressionInput(str = '') {
                     .replace(/\\log/g, 'log')
                     .replace(/\\ln/g, 'ln')
                     .replace(/\\sqrt/g, 'sqrt')
+                    // Symbols
+                    .replace(/\\pi/g, 'pi')
                     // Inequalities
                     .replace(/\\le/g, '<=')
                     .replace(/\\ge/g, '>=')
-                    // Symbols & Formatting
+                    // Formatting
                     .replace(/\\left\(/g, '(')
                     .replace(/\\right\)/g, ')')
                     .replace(/\\cdot/g, '*')
                     .replace(/\\frac{/g, '(/')
                     .replace(/}{/g, ')/(')
                     .replace(/}/g, ')');
-                // ⭐ END OF THE FIX ⭐
                 
                 newExpr.str = mathjsString;
                 debouncedEvaluateAndPlotAll();
@@ -511,13 +507,14 @@ function addExpressionInput(str = '') {
             deleteOutOf: function(dir) {
                 if (dir === -1 && graphState.expressions.length > 1) {
                     const currentId = newExpr.id;
+                    const prevItem = item.previousElementSibling;
+                    
                     item.remove();
                     graphState.expressions = graphState.expressions.filter(e => e.id !== currentId);
                     
                     updateExpressionNumbers();
                     evaluateAndPlotAll();
                     
-                    const prevItem = item.previousElementSibling;
                     if (prevItem) {
                         const prevMathField = MQ(prevItem.querySelector('.math-input-field'));
                         if (prevMathField) {
@@ -552,7 +549,7 @@ function addExpressionInput(str = '') {
         evaluateAndPlotAll();
     });
 }
-        function updateExpressionNumbers() {
+    function updateExpressionNumbers() {
             expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
                 item.querySelector('.expression-number').textContent = index + 1;
             });
