@@ -4,13 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Advanced Interactive Calculator</title>
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.1/math.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+    
     <style>
+        /* --- General Setup & Variables --- */
         :root {
             --thelo-blue: #2563eb;
             --thelo-blue-dark: #1d4ed8;
@@ -32,6 +37,8 @@
             background-color: var(--thelo-bg);
             color: var(--thelo-text);
         }
+
+        /* --- Sidebar & Header --- */
         #sidebar {
             width: 420px;
             min-width: 320px;
@@ -94,6 +101,8 @@
         #addFunctionBtn:hover {
             background-color: var(--thelo-blue-dark);
         }
+
+        /* --- Expression List --- */
         #expressionListContainer {
             flex-grow: 1;
             overflow-y: auto;
@@ -107,9 +116,6 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-        }
-        .expression-item:focus-within {
-            background-color: #f0f3ff;
         }
         .expression-color-bar {
             width: 28px;
@@ -140,23 +146,7 @@
             align-items: center;
             flex-grow: 1;
             border-radius: 8px;
-            border: 1px solid transparent;
             padding: 4px;
-        }
-        .expression-input {
-            width: 100%;
-            padding: 8px;
-            border: none;
-            background: transparent;
-            font-size: 1.1rem;
-            font-family: 'Manrope', monospace;
-            color: var(--thelo-text);
-        }
-        .expression-input:focus {
-            outline: none;
-        }
-        .expression-input.input-error {
-            color: var(--error-red);
         }
         .expression-result {
             padding: 0 0.75rem;
@@ -177,6 +167,22 @@
         .remove-expression-btn:hover {
             color: var(--error-red);
         }
+
+        /* --- MathQuill Input Field Styling --- */
+        .math-input-field {
+            width: 100%;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid var(--thelo-border);
+            font-size: 1.1rem;
+            cursor: text;
+        }
+        .math-input-field.mq-focused {
+            border-color: var(--thelo-blue);
+            box-shadow: 0 0 0 2px #bfdbfe; /* A light blue glow to indicate focus */
+        }
+        
+        /* --- Sliders & Extras --- */
         .expression-extras {
             padding: 0.5rem 0 0.5rem 52px;
         }
@@ -194,6 +200,8 @@
         .slider-container input[type=range] {
             flex-grow: 1;
         }
+
+        /* --- Math Keyboard --- */
         #mathKeyboard {
             background: #f0f3ff;
             padding: 1rem;
@@ -218,6 +226,8 @@
         #mathKeyboard button:hover {
             background-color: #e0e8ff;
         }
+
+        /* --- Canvas & Graphing Area --- */
         #canvasContainer {
             flex-grow: 1;
             position: relative;
@@ -259,6 +269,8 @@
             height: 24px;
             stroke: var(--thelo-text-light);
         }
+
+        /* --- Responsive Design --- */
         @media (max-width: 768px) {
             body {
                 flex-direction: column;
@@ -273,25 +285,6 @@
                 right: 15px;
             }
         }
-        .expression-rendered {
-    padding: 12px; /* Match your input padding */
-    width: 100%;
-    font-size: 1.1rem;
-    cursor: text;
-}
-
-/* By default, hide the input field */
-.expression-item .expression-input {
-    display: none;
-}
-
-/* When editing, show the input and hide the rendered view */
-.expression-item.editing .expression-input {
-    display: block;
-}
-.expression-item.editing .expression-rendered {
-    display: none;
-}
     </style>
 </head>
 <body>
@@ -309,11 +302,9 @@
             </div>
         </div>
         <div id="expressionListContainer">
-            <!-- Expression items will be dynamically added here -->
-        </div>
+            </div>
         <div id="mathKeyboard">
-            <!-- Math keyboard buttons will be dynamically added here -->
-        </div>
+            </div>
     </div>
 
     <div id="canvasContainer">
@@ -462,14 +453,13 @@
     const item = document.createElement('div');
     item.className = 'expression-item';
     item.id = newExpr.id;
-    // ⭐ NEW: Updated HTML structure
+    // The HTML is much simpler now
     item.innerHTML = `
         <div class="expression-main">
             <span class="expression-number">${exprIndex + 1}</span>
             <div class="expression-color-bar" title="Toggle visibility"></div>
             <div class="expression-input-wrapper">
-                <div class="expression-rendered"></div>
-                <input type="text" class="expression-input" value="${newExpr.str}" placeholder="Enter expression...">
+                <span class="math-input-field"></span>
             </div>
             <span class="expression-result"></span>
             <button class="remove-expression-btn" title="Remove expression">&times;</button>
@@ -478,52 +468,46 @@
     `;
     expressionListContainer.appendChild(item);
 
-    const input = item.querySelector('.expression-input');
-    const renderedDiv = item.querySelector('.expression-rendered'); // ⭐ NEW: Get the rendered div
-
-    // ⭐ NEW: Function to render the math expression
-    const renderMath = () => {
-        try {
-            katex.render(newExpr.str || "\\text{Enter expression...}", renderedDiv, {
-                throwOnError: false, // Prevents crashing on invalid syntax
-                displayMode: false,
-                colorIsTextColor: true,
-                macros: { "\\ddx": "derivative(,x)" } // Example custom macro
-            });
-        } catch (e) {
-            renderedDiv.textContent = e.message;
-        }
-    };
-
-    // ⭐ NEW: Event listeners to toggle editing mode
-    item.querySelector('.expression-input-wrapper').addEventListener('click', () => {
-        item.classList.add('editing');
-        input.focus();
-    });
-
-    input.addEventListener('blur', () => { // When the input loses focus
-        item.classList.remove('editing');
-        renderMath(); // Re-render in case of final changes
-    });
-
-    input.addEventListener('input', (e) => {
-        newExpr.str = e.target.value;
-        renderMath(); // Live-update the rendered view as the user types
-        debouncedEvaluateAndPlotAll();
-    });
+    const mathFieldSpan = item.querySelector('.math-input-field');
     
-    input.addEventListener('focus', () => {
-        graphState.activeInput = input;
-    });
-
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            addExpressionInput();
-        } else if (e.key === 'Escape') {
-            input.blur(); // Exit editing mode
+    // Let MathQuill know that we've added a new field
+    var MQ = MathQuill.getInterface(2);
+    
+    // Initialize the MathQuill field
+    const mathField = MQ.MathField(mathFieldSpan, {
+        spaceBehavesLikeTab: true,
+        handlers: {
+            edit: function() {
+                // This function is called every time the content changes
+                let latexString = mathField.latex();
+                
+                // Convert some LaTeX to math.js compatible syntax
+                // This is a crucial step!
+                let mathjsString = latexString
+                    .replace(/\\left\(/g, '(')
+                    .replace(/\\right\)/g, ')')
+                    .replace(/\\cdot/g, '*')
+                    .replace(/\\frac{/g, '(/')
+                    .replace(/}{/g, ')/(')
+                    .replace(/}/g, ')');
+                
+                newExpr.str = mathjsString;
+                debouncedEvaluateAndPlotAll();
+            },
+            enter: function() {
+                addExpressionInput(); // Add a new expression on Enter
+            }
         }
     });
+
+    // Set the initial value if one is provided
+    if (str) {
+        mathField.latex(str);
+    }
+    
+    // Focus the new field
+    mathField.focus();
+    graphState.activeInput = mathField; // Store the mathField object as the active input
 
     // --- (Your other event listeners for remove, color bar, etc. remain the same) ---
     item.querySelector('.remove-expression-btn').addEventListener('click', () => {
@@ -538,15 +522,6 @@
         e.currentTarget.classList.toggle('hidden-expr', !newExpr.visible);
         evaluateAndPlotAll();
     });
-    
-    renderMath(); // ⭐ NEW: Initial render of the math expression
-    
-    if (str === '') {
-        item.classList.add('editing'); // Start in editing mode for new, empty inputs
-        input.focus();
-    } else {
-        input.blur();
-    }
 }
         function updateExpressionNumbers() {
             expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
