@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Calculator Replay</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        button, input {
+            font-size: 1rem;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+        button {
+            background-color: #007aff;
+            color: white;
+            cursor: pointer;
+            border-color: #007aff;
+        }
+        button:disabled {
+            background-color: #a0a0a0;
+            cursor: not-allowed;
+            border-color: #a0a0a0;
+        }
+        #status {
+            font-weight: 500;
+        }
+        iframe {
+            width: 90vw;
+            height: 80vh;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Calculator Session Replay</h1>
+
+    <div class="controls">
+        <label for="jsonFile">Load Recording:</label>
+        <input type="file" id="jsonFile" accept="application/json">
+        <button id="startReplayBtn" disabled>Start Replay</button>
+        <div id="status">Status: Waiting for file...</div>
+    </div>
+
+    <iframe id="calculator-iframe" src="./your-calculator-file.html"></iframe>
+
+    <script>
+        const fileInput = document.getElementById('jsonFile');
+        const startBtn = document.getElementById('startReplayBtn');
+        const statusDiv = document.getElementById('status');
+        const iframe = document.getElementById('calculator-iframe');
+
+        let recordingData = null;
+        // IMPORTANT: Set this to the URL where your calculator is hosted.
+        // For local files, it's often 'null' or the file's origin. '*' is insecure but works for local testing.
+        const targetOrigin = '*'; 
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    recordingData = JSON.parse(e.target.result);
+                    startBtn.disabled = false;
+                    statusDiv.textContent = 'Status: Ready to Play.';
+                } catch (err) {
+                    statusDiv.textContent = 'Error: Invalid JSON file.';
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        startBtn.addEventListener('click', () => {
+            if (!recordingData) {
+                alert('No recording data loaded.');
+                return;
+            }
+            playRecording(recordingData);
+        });
+
+        async function playRecording(actions) {
+            startBtn.disabled = true;
+            statusDiv.textContent = 'Status: Replaying...';
+
+            for (const command of actions) {
+                if (command.action === 'delay') {
+                    statusDiv.textContent = `Status: Waiting for ${command.ms}ms...`;
+                    await new Promise(resolve => setTimeout(resolve, command.ms));
+                } else {
+                    statusDiv.textContent = `Status: Executing "${command.action}"...`;
+                    // Send the command to the iframe
+                    iframe.contentWindow.postMessage(command, targetOrigin);
+                }
+            }
+
+            statusDiv.textContent = 'Status: Replay Finished.';
+            startBtn.disabled = false;
+        }
+    </script>
+
+</body>
+</html>
