@@ -2783,27 +2783,34 @@ async function displayLessonComplete() {
     if (isMCQStage) return; 
 
     if (nextCheckBtn.textContent === TXT.gotIt) {
-        // ADD THIS BLOCK TO HANDLE REPLAY PLAYER
-        if (isReplayActive) {
-            closeReplayPlayer();
-        }
+        // Check if the current stage is a media replay stage.
+        const isMediaReplayStage = currentStageData.replayDataUrl || currentStageData.drawingRecord;
 
-        // Logic for 'Got It!' scenarios (non-question stages)
-        if (!stagesWithPointsAwarded.has(currentStageIndex)) {
-            stagesWithPointsAwarded.add(currentStageIndex);
-            stopCurrentStageAudio();
-            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-            userPoints += randomPoints;
-            sessionPoints += randomPoints;
-            updateUserPointsInFirestore(randomPoints);
-            updatePointsDisplay();
-            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
+        if (isMediaReplayStage) {
+            // For media stages, just advance to the next stage.
+            // Do NOT stop audio or award points here.
+            nextStage();
+        } else {
+            // This is the original logic for simple explanation stages (no media).
+            if (isReplayActive) {
+                closeReplayPlayer();
+            }
+
+            if (!stagesWithPointsAwarded.has(currentStageIndex)) {
+                stagesWithPointsAwarded.add(currentStageIndex);
+                stopCurrentStageAudio(); // This is now safe to call here.
+                const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
+                userPoints += randomPoints;
+                sessionPoints += randomPoints;
+                updateUserPointsInFirestore(randomPoints);
+                updatePointsDisplay();
+                addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+                if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
+            }
+            nextStage();
         }
-        nextStage(); // Immediately go to the next stage after 'Got It!'
         return;
     }
-
     // Logic for 'Check' scenarios (handwriting question stages)
     if (currentStageData.type === 'question_handwriting') {
         checkHandwritingAnswer();
