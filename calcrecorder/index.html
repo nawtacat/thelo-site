@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Graphing Calculator</title>
+    <title>Graphing Calculator Recorder</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -363,11 +363,29 @@ document.addEventListener('DOMContentLoaded', () => {
         definedVariables: {}
     };
 
+    // --- UTILITY FUNCTIONS ---
     function debounce(func, delay) {
         let timeout;
         return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); };
     }
+    
+    function throttle(func, limit) {
+        let inThrottle;
+        return function() {
+            const args = arguments;
+            const context = this;
+            if (!inThrottle) {
+                func.apply(context, args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, limit);
+            }
+        }
+    }
+
     const debouncedEvaluateAndPlotAll = debounce(evaluateAndPlotAll, 200);
+    // NEW: Throttled functions for high-frequency recording
+    const throttledRecordLiveView = throttle(() => recordAction('liveUpdateView', { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale }), 50);
+    const throttledRecordLatex = throttle((id, latex) => recordAction('setLatex', { id, latex }), 100);
 
     function initialize() {
         setupKeyboards();
@@ -385,8 +403,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupEventListeners() {
         window.addEventListener('resize', resizeCanvas);
         addFunctionBtn.addEventListener('click', () => {
-            recordAction('addExpression', {});
-            addExpressionInput();
+            const newExprId = `expr-${Date.now()}-${Math.random()}`;
+            recordAction('addExpression', { id: newExprId });
+            addExpressionInput('', newExprId);
         });
         homeBtn.addEventListener('click', () => {
             recordAction('resetView', {});
@@ -431,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             } else {
                 btn.addEventListener('click', () => {
-                    recordAction('insertSymbol', { symbol: symbol });
+                    // We record the latex change in the 'edit' handler, so no separate record here
                     insertSymbol(symbol);
                 });
             }
@@ -450,20 +469,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (Array.isArray(categorySymbols)) {
                 categorySymbols.forEach(symbol => {
                     const btn = createKeyboardButton(symbol, symbol);
-                    btn.addEventListener('click', () => {
-                        recordAction('insertSymbol', { symbol: symbol });
-                        insertSymbol(symbol);
-                    });
+                    btn.addEventListener('click', () => insertSymbol(symbol));
                     gridDiv.appendChild(btn);
                 });
             } else {
                 for (const symbol in categorySymbols) {
                     const displayHTML = categorySymbols[symbol];
                     const btn = createKeyboardButton(symbol, displayHTML);
-                    btn.addEventListener('click', () => {
-                        recordAction('insertSymbol', { symbol: symbol });
-                        insertSymbol(symbol);
-                    });
+                    btn.addEventListener('click', () => insertSymbol(symbol));
                     gridDiv.appendChild(btn);
                 }
             }
@@ -515,17 +528,17 @@ document.addEventListener('DOMContentLoaded', () => {
         mathField.focus();
     }
 
-    function addExpressionInput(latexStr = '') {
+    function addExpressionInput(latexStr = '', id = null) {
         const exprIndex = graphState.expressions.length;
         const newExpr = {
-            id: `expr-${Date.now()}-${Math.random()}`,
+            id: id || `expr-${Date.now()}-${Math.random()}`,
             latex: latexStr,
             visible: true,
             color: PLOT_COLORS[exprIndex % PLOT_COLORS.length],
             sliders: {},
         };
         graphState.expressions.push(newExpr);
-       
+        
         const item = document.createElement('div');
         item.className = 'expression-item';
         item.id = newExpr.id;
@@ -537,11 +550,14 @@ document.addEventListener('DOMContentLoaded', () => {
             handlers: {
                 edit: () => {
                     newExpr.latex = mathField.latex();
+                    // NEW: Record typing with throttling
+                    throttledRecordLatex(newExpr.id, newExpr.latex);
                     debouncedEvaluateAndPlotAll();
                 },
                 enter: () => {
-                    recordAction('addExpression', {});
-                    addExpressionInput()
+                    const nextExprId = `expr-${Date.now()}-${Math.random()}`;
+                    recordAction('addExpression', { id: nextExprId });
+                    addExpressionInput('', nextExprId)
                 },
                 deleteOutOf: (dir, field) => {
                     if (dir === -1 && field.latex() === '' && graphState.expressions.length > 1) removeExpression(newExpr.id, item.previousElementSibling);
@@ -765,15 +781,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetView(redraw = true) { graphState.originX = canvas.width / 2; graphState.originY = canvas.height / 2; graphState.scale = 40; if (redraw) { evaluateAndPlotAll(); } }
     function handleGraphZoom(e) { e.preventDefault(); const rect = canvas.getBoundingClientRect(); const mouseX = (e.clientX - rect.left) * devicePixelRatio; const mouseY = (e.clientY - rect.top) * devicePixelRatio; const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1; applyZoom(mouseX, mouseY, zoomFactor); }
     function handleGraphPanStart(e) { if (e.button !== 0) return; graphState.isPanning = true; graphState.panStart = { x: e.clientX, y: e.clientY }; if (graphState.lockedPoint.visible) { graphState.lockedPoint.visible = false; requestAnimationFrame(renderAll); } }
-    function handleGraphPanMove(e) { if (!graphState.isPanning) return; const dx = (e.clientX - graphState.panStart.x) * devicePixelRatio; const dy = (e.clientY - graphState.panStart.y) * devicePixelRatio; graphState.originX += dx; graphState.originY += dy; graphState.panStart = { x: e.clientX, y: e.clientY }; requestAnimationFrame(renderAll); }
+    function handleGraphPanMove(e) { if (!graphState.isPanning) return; const dx = (e.clientX - graphState.panStart.x) * devicePixelRatio; const dy = (e.clientY - graphState.panStart.y) * devicePixelRatio; graphState.originX += dx; graphState.originY += dy; graphState.panStart = { x: e.clientX, y: e.clientY }; requestAnimationFrame(renderAll); throttledRecordLiveView(); }
     function handleGraphPanEnd() { if (graphState.isPanning) { graphState.isPanning = false; recordAction('setViewState', { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale }); evaluateAndPlotAll(); } }
     function handleTouchStart(e) { e.preventDefault(); const touches = e.touches; if (touches.length === 1) { graphState.isPanning = true; graphState.panStart = { x: touches[0].clientX, y: touches[0].clientY }; } else if (touches.length === 2) { graphState.isPanning = false; graphState.touchState.isPinching = true; graphState.touchState.initialPinchDistance = getPinchDistance(touches); } }
-    function handleTouchMove(e) { e.preventDefault(); const touches = e.touches; if (graphState.isPanning && touches.length === 1) { const dx = (touches[0].clientX - graphState.panStart.x) * devicePixelRatio; const dy = (touches[0].clientY - graphState.panStart.y) * devicePixelRatio; graphState.originX += dx; graphState.originY += dy; graphState.panStart = { x: touches[0].clientX, y: touches[0].clientY }; requestAnimationFrame(renderAll); } else if (graphState.touchState.isPinching && touches.length === 2) { const newDist = getPinchDistance(touches); const zoomFactor = newDist / graphState.touchState.initialPinchDistance; const rect = canvas.getBoundingClientRect(); const midX = ((touches[0].clientX + touches[1].clientX) / 2 - rect.left) * devicePixelRatio; const midY = ((touches[0].clientY + touches[1].clientY) / 2 - rect.top) * devicePixelRatio; applyZoom(midX, midY, zoomFactor); graphState.touchState.initialPinchDistance = newDist; } }
+    function handleTouchMove(e) { e.preventDefault(); const touches = e.touches; if (graphState.isPanning && touches.length === 1) { const dx = (touches[0].clientX - graphState.panStart.x) * devicePixelRatio; const dy = (touches[0].clientY - graphState.panStart.y) * devicePixelRatio; graphState.originX += dx; graphState.originY += dy; graphState.panStart = { x: touches[0].clientX, y: touches[0].clientY }; requestAnimationFrame(renderAll); throttledRecordLiveView(); } else if (graphState.touchState.isPinching && touches.length === 2) { const newDist = getPinchDistance(touches); const zoomFactor = newDist / graphState.touchState.initialPinchDistance; const rect = canvas.getBoundingClientRect(); const midX = ((touches[0].clientX + touches[1].clientX) / 2 - rect.left) * devicePixelRatio; const midY = ((touches[0].clientY + touches[1].clientY) / 2 - rect.top) * devicePixelRatio; applyZoom(midX, midY, zoomFactor); graphState.touchState.initialPinchDistance = newDist; } }
     function handleTouchEnd(e) { if (graphState.touchState.isPinching || graphState.isPanning) { recordAction('setViewState', { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale }); evaluateAndPlotAll(); } graphState.isPanning = false; graphState.touchState.isPinching = false; }
     function getPinchDistance(touches) { const dx = touches[0].clientX - touches[1].clientX; const dy = touches[0].clientY - touches[1].clientY; return Math.sqrt(dx * dx + dy * dy); }
-    function applyZoom(centerX, centerY, zoomFactor) { const mouseGraphX_before = (centerX - graphState.originX) / graphState.scale; const mouseGraphY_before = (graphState.originY - centerY) / graphState.scale; graphState.scale *= zoomFactor; graphState.scale = Math.max(0.1, Math.min(graphState.scale, 20000)); const mouseGraphX_after = (centerX - graphState.originX) / graphState.scale; const mouseGraphY_after = (graphState.originY - centerY) / graphState.scale; graphState.originX += (mouseGraphX_after - mouseGraphX_before) * graphState.scale; graphState.originY -= (mouseGraphY_after - mouseGraphY_before) * graphState.scale; evaluateAndPlotAll(); }
+    function applyZoom(centerX, centerY, zoomFactor) { const mouseGraphX_before = (centerX - graphState.originX) / graphState.scale; const mouseGraphY_before = (graphState.originY - centerY) / graphState.scale; graphState.scale *= zoomFactor; graphState.scale = Math.max(0.1, Math.min(graphState.scale, 20000)); const mouseGraphX_after = (centerX - graphState.originX) / graphState.scale; const mouseGraphY_after = (graphState.originY - centerY) / graphState.scale; graphState.originX += (mouseGraphX_after - mouseGraphX_before) * graphState.scale; graphState.originY -= (mouseGraphY_after - mouseGraphY_before) * graphState.scale; throttledRecordLiveView(); evaluateAndPlotAll(); }
     function handleMouseMoveForHover(e) { if (graphState.isPanning) return; const rect = canvas.getBoundingClientRect(); const mouseX = (e.clientX - rect.left) * devicePixelRatio; const mouseY = (e.clientY - rect.top) * devicePixelRatio; const closestPoint = findClosestPoint(mouseX, mouseY); graphState.hoverPoint.visible = !!closestPoint; if (closestPoint) { graphState.hoverPoint.x = closestPoint.x; graphState.hoverPoint.y = closestPoint.y; } requestAnimationFrame(renderAll); }
-    function handleGraphClick(e) { if (graphState.isPanning) return; const rect = canvas.getBoundingClientRect(); const clickX = (e.clientX - rect.left) * devicePixelRatio; const clickY = (e.clientY - rect.top) * devicePixelRatio; const pointToLock = findClosestPoint(clickX, clickY); graphState.lockedPoint.visible = !!pointToLock; if (pointToLock) { graphState.lockedPoint.x = pointToLock.x; graphState.lockedPoint.y = pointToLock.y; recordAction('lockPoint', { x: pointToLock.x, y: pointToLock.y }); } requestAnimationFrame(renderAll); }
+    function handleGraphClick(e) { if (graphState.isPanning) return; const rect = canvas.getBoundingClientRect(); const clickX = (e.clientX - rect.left) * devicePixelRatio; const clickY = (e.clientY - rect.top) * devicePixelRatio; const pointToLock = findClosestPoint(clickX, clickY); if (graphState.lockedPoint.visible && !pointToLock) { recordAction('unlockPoint', {}); graphState.lockedPoint.visible = false; } else if (pointToLock) { graphState.lockedPoint = { visible: true, ...pointToLock }; recordAction('lockPoint', { x: pointToLock.x, y: pointToLock.y }); } requestAnimationFrame(renderAll); }
     function drawGraphGrid() { const computedStyles = getComputedStyle(document.documentElement); const THELO_BORDER_COLOR = computedStyles.getPropertyValue('--thelo-border').trim(); const THELO_TEXT_LIGHT_COLOR = computedStyles.getPropertyValue('--thelo-text-light').trim(); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); let dynamicGrid = 1; while (dynamicGrid * graphState.scale < 50 * devicePixelRatio) { dynamicGrid *= (dynamicGrid * graphState.scale < 25 * devicePixelRatio) ? 2 : 2.5; } while (dynamicGrid * graphState.scale > 100 * devicePixelRatio) { dynamicGrid /= (dynamicGrid * graphState.scale > 250 * devicePixelRatio) ? 2.5 : 2; } ctx.strokeStyle = THELO_BORDER_COLOR; ctx.lineWidth = 1 * devicePixelRatio; ctx.font = `${10 * devicePixelRatio}px 'Manrope'`; ctx.fillStyle = THELO_TEXT_LIGHT_COLOR; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const startX = Math.floor(-graphState.originX / (graphState.scale * dynamicGrid)) * dynamicGrid; for (let x = startX; (x * graphState.scale + graphState.originX) < canvas.width; x += dynamicGrid) { const px = x * graphState.scale + graphState.originX; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height); ctx.stroke(); if (Math.abs(x) > 1e-9) { ctx.fillText(Number(x.toPrecision(4)), px + 2 * devicePixelRatio, graphState.originY - 5 * devicePixelRatio); } } const startY = Math.floor(graphState.originY / (graphState.scale * dynamicGrid)) * dynamicGrid; for (let y = startY; (graphState.originY - y * graphState.scale) < canvas.height; y -= dynamicGrid) { const py = graphState.originY - y * graphState.scale; ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(canvas.width, py); ctx.stroke(); if (Math.abs(y) > 1e-9) { ctx.save(); ctx.textAlign = 'right'; ctx.fillText(Number(y.toPrecision(4)), graphState.originX - 5 * devicePixelRatio, py + 2 * devicePixelRatio); ctx.restore(); } } ctx.strokeStyle = THELO_TEXT_LIGHT_COLOR; ctx.lineWidth = 1.5 * devicePixelRatio; ctx.beginPath(); ctx.moveTo(0, graphState.originY); ctx.lineTo(canvas.width, graphState.originY); ctx.stroke(); ctx.beginPath(); ctx.moveTo(graphState.originX, 0); ctx.lineTo(graphState.originX, canvas.height); ctx.stroke(); }
 
     // ======================================================
@@ -793,12 +809,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function recordAction(actionType, payload) {
         if (!isRecording) return;
         const now = Date.now();
-        if (lastActionTimestamp !== 0) {
-            const delay = now - lastActionTimestamp;
-            if (delay > 20) { // Add a small threshold to avoid tiny delays
-                recordedActions.push({ action: 'delay', ms: delay });
-            }
+        const delay = now - lastActionTimestamp;
+        
+        // Add a delay action if enough time has passed
+        if (delay > 20) { 
+            recordedActions.push({ action: 'delay', ms: delay });
         }
+        
         recordedActions.push({ action: actionType, payload });
         lastActionTimestamp = now;
     }
@@ -807,7 +824,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startRecBtn.addEventListener('click', () => {
             isRecording = true;
             recordedActions = [];
-            lastActionTimestamp = Date.now();
+            lastActionTimestamp = Date.now(); // Initialize timestamp
             
             recordingControls.classList.add('is-recording');
             recStatusText.textContent = "RECORDING";
@@ -815,6 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stopRecBtn.disabled = false;
             getJsonBtn.disabled = true;
 
+            // Record the absolute initial state of the calculator
             recordAction('initialState', {
                 view: { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale },
                 expressions: graphState.expressions.map(e => ({ id: e.id, latex: e.latex, visible: e.visible, color: e.color })),
@@ -824,8 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         stopRecBtn.addEventListener('click', () => {
             isRecording = false;
-            lastActionTimestamp = 0;
-
+            
             recordingControls.classList.remove('is-recording');
             recStatusText.textContent = "IDLE";
             startRecBtn.disabled = false;
@@ -835,7 +852,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         getJsonBtn.addEventListener('click', () => {
             if (recordedActions.length === 0) {
-                alert("No actions recorded to generate JSON.");
+                // Using a custom modal/alert in a real app would be better
+                console.warn("No actions recorded to generate JSON.");
                 return;
             }
             downloadJSON(recordedActions, 'recording.json');
@@ -843,7 +861,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function downloadJSON(data, filename) {
-        const jsonStr = JSON.stringify(data, null, 2);
+        // The last action might be a throttled one, so we add a final state capture to be safe.
+        const finalData = [...data, { action: 'setViewState', payload: { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale } }];
+        const jsonStr = JSON.stringify({
+            meta: {
+                recordedAt: new Date().toISOString(),
+                canvasDimensions: { width: canvas.width, height: canvas.height }
+            },
+            actions: finalData
+        }, null, 2);
         const blob = new Blob([jsonStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -853,101 +879,6 @@ document.addEventListener('DOMContentLoaded', () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-    }
-
-    // ======================================================
-    // ================= REPLAY LOGIC =======================
-    // ======================================================
-
-    window.addEventListener('message', (event) => {
-        // A security check can be added here
-        const command = event.data;
-        executeReplayCommand(command);
-    });
-
-    function executeReplayCommand(command) {
-        if (!command || !command.action) return;
-
-        const { action, payload } = command;
-        let expr, mathField;
-
-        switch (action) {
-            case 'initialState':
-                document.getElementById('expressionListContainer').innerHTML = '';
-                graphState.expressions = [];
-                Object.assign(graphState, payload.view);
-                graphState.angleMode = payload.angleMode;
-                payload.expressions.forEach(initialExpr => {
-                    const newExpr = { ...initialExpr, sliders: {} };
-                    graphState.expressions.push(newExpr);
-                    const item = document.createElement('div');
-                    item.className = 'expression-item';
-                    item.id = newExpr.id;
-                    item.innerHTML = `<div class="expression-main"><span class="expression-number">${graphState.expressions.length}</span><div class="expression-color-bar" title="Toggle visibility"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span><button class="remove-expression-btn" title="Remove expression">&times;</button></div><div class="expression-extras"></div>`;
-                    expressionListContainer.appendChild(item);
-                    MQ.MathField(item.querySelector('.math-input-field')).latex(newExpr.latex);
-                });
-                evaluateAndPlotAll();
-                break;
-            
-            case 'focusExpression':
-                mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
-                if (mathField) {
-                    mathField.focus();
-                    graphState.activeInput = mathField;
-                }
-                break;
-            
-            case 'insertSymbol':
-                if (graphState.activeInput) insertSymbol(payload.symbol);
-                break;
-
-            case 'liveUpdateView':
-                graphState.originX = payload.originX;
-                graphState.originY = payload.originY;
-                graphState.scale = payload.scale;
-                requestAnimationFrame(renderAll);
-                break;
-
-            case 'setViewState':
-                Object.assign(graphState, payload);
-                evaluateAndPlotAll();
-                break;
-
-            case 'lockPoint':
-                graphState.lockedPoint = { visible: true, ...payload };
-                requestAnimationFrame(renderAll);
-                break;
-
-            case 'setSlider':
-                expr = graphState.expressions.find(e => e.id === payload.exprId);
-                if (expr && expr.sliders[payload.name]) {
-                    expr.sliders[payload.name].val = payload.value;
-                    evaluateAndPlotAll();
-                }
-                break;
-
-            case 'toggleVisibility':
-                expr = graphState.expressions.find(e => e.id === payload.id);
-                if(expr) {
-                    expr.visible = payload.visible;
-                    document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
-                    evaluateAndPlotAll();
-                }
-                break;
-                
-            case 'resetView':
-                resetView();
-                break;
-
-            case 'addExpression':
-                addExpressionInput('');
-                break;
-
-            case 'removeExpression':
-                removeExpression(payload.id);
-                break;
-        }
     }
 
     // --- START THE APP ---
