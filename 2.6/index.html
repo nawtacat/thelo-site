@@ -3536,43 +3536,70 @@ function closeCalculator() {
 /**
  * Opens the replay player overlay and sends the lesson's replay data to it.
  */
-function openReplayPlayer() {
-    if (isReplayActive || !currentStageData || !currentStageData.replayData) return;
+async function openReplayPlayer() {
+    // Check for either embedded data or a URL
+    if (isReplayActive || !currentStageData || (!currentStageData.replayData && !currentStageData.replayDataUrl)) {
+        console.warn("No replay data or URL found for this stage.");
+        return;
+    }
     isReplayActive = true;
 
-    // Pause the main lesson's media
     captureMediaState();
 
-    // The URL to your standalone player file
-    const playerURL = 'https://thelo.space/thelo-calc-player.html';
+    const playerURL = 'https://thelo.space/replay'; // Your player's URL
 
-    // This function will be called once the iframe is loaded and ready
-    const sendDataToPlayer = () => {
+    const sendDataToPlayer = (replayActions) => {
         const replayPayload = {
             meta: { source: 'thelo-lesson' },
-            actions: currentStageData.replayData
+            actions: replayActions
         };
         // Use postMessage to securely send the replay data into the iframe
-        replayFrame.contentWindow.postMessage(replayPayload, '*');
-        console.log("Replay data sent to player iframe.");
+        if (replayFrame.contentWindow) {
+            replayFrame.contentWindow.postMessage(replayPayload, '*');
+            console.log("Replay data sent to player iframe.");
+        }
     };
 
-    // If the iframe is already loaded with the player, send the data immediately.
-    // Otherwise, set the src and wait for it to load.
-    if (replayFrame.src.includes(playerURL)) {
-        sendDataToPlayer();
-    } else {
-        replayFrame.src = playerURL;
-        replayFrame.onload = sendDataToPlayer;
+    try {
+        let replayActions;
+        if (currentStageData.replayData) {
+            // Use embedded data if it exists
+            replayActions = currentStageData.replayData;
+        } else {
+            // Fetch the data from the URL
+            const response = await fetch(currentStageData.replayDataUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const replayJson = await response.json();
+            // The replay data is inside the 'actions' property of the fetched file
+            replayActions = replayJson.actions; 
+        }
+
+        if (!replayActions) {
+            throw new Error("Could not load replay actions.");
+        }
+
+        // Load the iframe and send the data
+        if (replayFrame.src.includes(playerURL)) {
+            sendDataToPlayer(replayActions);
+        } else {
+            replayFrame.src = playerURL;
+            replayFrame.onload = () => sendDataToPlayer(replayActions);
+        }
+
+        // Show the overlay and disable main controls
+        replayOverlay.classList.remove('calculator-hidden');
+        if (mcqOptionsContainer) mcqOptionsContainer.classList.add('blurred-mcq');
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextCheckBtn) nextCheckBtn.disabled = true;
+
+    } catch (error) {
+        console.error("Failed to load or send replay data:", error);
+        addChatMessage('AI', 'Error: Could not load the interactive replay for this step.');
+        isReplayActive = false; // Reset state on failure
     }
-
-    // Show the overlay and disable main controls
-    replayOverlay.classList.remove('calculator-hidden');
-    if (mcqOptionsContainer) mcqOptionsContainer.classList.add('blurred-mcq');
-    if (prevBtn) prevBtn.disabled = true;
-    if (nextCheckBtn) nextCheckBtn.disabled = true;
 }
-
 /**
  * Closes the replay player overlay and resumes the lesson.
  */
