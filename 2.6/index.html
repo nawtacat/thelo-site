@@ -1059,58 +1059,46 @@ body.lang-en {
     align-items: center;
     justify-content: center;
 }
-  /* ADD THESE NEW STYLES */
-#replayOverlay {
+	/* ===== NEW: Embedded Replay Player Styles ===== */
+
+#replayPlayerContainer {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 55; /* Slightly higher than the calculator */
+    z-index: 5; /* Below UI controls, but above canvases */
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    background-color: rgba(249, 250, 251, 0.6); /* Lighter background for replays */
+    
+    /* This pushes the iframe down from the top to leave space for the headline */
+    padding-top: 80px; 
+    box-sizing: border-box;
+
+    /* Animation for smooth appearance */
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+    transform: scale(0.95);
+    transition: opacity 0.3s ease, visibility 0s linear 0.3s, transform 0.3s ease;
 }
 
-#replayOverlay:not(.calculator-hidden) {
+#replayPlayerContainer:not(.replay-hidden) {
     opacity: 1;
     visibility: visible;
+    transform: scale(1);
     transition-delay: 0s;
 }
 
 #replayFrame {
-    width: 85%; /* Responsive width */
-    height: 85%; /* Responsive height */
-    max-width: 1400px; /* Max size for very large screens */
-    max-height: 800px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    width: 80%;
+    height: 80%;
+    max-width: 1200px;
+    max-height: 700px;
+    border: 1px solid var(--thelo-border);
     border-radius: 1rem;
     box-shadow: var(--shadow-lg);
-}
-
-#replayCloseBtn {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: none;
-    background-color: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    font-size: 1.2rem;
-    cursor: pointer;
-    box-shadow: var(--shadow-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background-color: var(--thelo-bg); /* Ensures it has a solid background */
 }
 </style>
 </head>
@@ -1131,10 +1119,9 @@ body.lang-en {
                 <iframe id="calculatorFrame" src="about:blank" allow="clipboard-write"></iframe>
                 <button id="calculatorCloseBtn" title="Close Calculator">✕</button>
             </div>
-              <div id="replayOverlay" class="calculator-hidden">
-    <iframe id="replayFrame" src="about:blank"></iframe>
-    <button id="replayCloseBtn" title="Close Replay">✕</button>
-</div>
+		    <div id="replayPlayerContainer" class="replay-hidden">
+			<iframe id="replayFrame" src="about:blank"></iframe>
+		</div>
                 <div id="thelobookControls">
                     <button id="thelobookPrevPageBtn" title="Previous Page">‹</button>
                     <span id="thelobookPageIndicator">Page 1 / 1</span>
@@ -1403,10 +1390,8 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     const calculatorOverlay = document.getElementById('calculatorOverlay');
     const calculatorFrame = document.getElementById('calculatorFrame');
     const calculatorCloseBtn = document.getElementById('calculatorCloseBtn');
-          const replayOverlay = document.getElementById('replayOverlay');
-const replayFrame = document.getElementById('replayFrame');
-const replayCloseBtn = document.getElementById('replayCloseBtn');
-
+	const replayPlayerContainer = document.getElementById('replayPlayerContainer');
+	const replayFrame = document.getElementById('replayFrame');
     const audioElements = {};
     const approveSounds_hy = []; const disapproveSounds_hy = [];
     const approveSounds_en = []; const disapproveSounds_en = [];
@@ -1415,7 +1400,7 @@ const replayCloseBtn = document.getElementById('replayCloseBtn');
     let isAuthReady = false;
           let isTabletMode = false;
 	let isCalculatorActive = false;
-  let isReplayActive = false;
+	let isReplayActive = false;
 	let isPageGridVisible = false; 
         let lessonStartTime = null;
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
@@ -2357,6 +2342,61 @@ function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
         bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
     }
 }
+/**
+ * Opens the replay player, fetches the replay data, and sends it to the iframe.
+ */
+async function openReplayPlayer() {
+    if (isReplayActive || !currentStageData || !currentStageData.replayDataUrl) {
+        console.warn("No replay data URL found for this stage.");
+        return;
+    }
+    isReplayActive = true;
+
+    const playerURL = 'https://thelo.space/replay1'; // The URL of your automated player
+
+    const sendDataToPlayer = (replayActions) => {
+        if (replayFrame.contentWindow) {
+            replayFrame.contentWindow.postMessage({
+                meta: { source: 'thelo-lesson' },
+                actions: replayActions
+            }, '*');
+            console.log("Replay data sent to player iframe.");
+        }
+    };
+
+    try {
+        // Fetch the external replay data file
+        const response = await fetch(currentStageData.replayDataUrl);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+        const replayJson = await response.json();
+        const replayActions = replayJson.actions;
+
+        if (!replayActions) throw new Error("Could not find 'actions' in replay JSON.");
+
+        // Load the iframe and send data once it's ready
+        replayFrame.src = playerURL;
+        replayFrame.onload = () => sendDataToPlayer(replayActions);
+
+        replayPlayerContainer.classList.remove('replay-hidden');
+
+    } catch (error) {
+        console.error("Failed to load or send replay data:", error);
+        addChatMessage('AI', 'Error: Could not load the interactive replay.');
+        isReplayActive = false; // Reset on failure
+    }
+}
+
+/**
+ * Closes the replay player and clears its content.
+ */
+function closeReplayPlayer() {
+    if (!isReplayActive) return;
+    isReplayActive = false;
+    replayPlayerContainer.classList.add('replay-hidden');
+    // Reset the iframe src to stop playback and free up resources
+    replayFrame.src = 'about:blank';
+}
 // REPLACE your entire renderStageUI function with this one
 function renderStageUI(index, isResize = false) {
     return new Promise((resolve, reject) => {
@@ -2399,91 +2439,96 @@ function renderStageUI(index, isResize = false) {
         }
 
         function setupStageContent() {
-            const mcqDetails = currentStageData.optionsQuiz;
-            const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-            const isQuestionStage = currentStageData.type === 'question_handwriting' || isMCQDisplayStage;
-            if (currentStageData.type === 'calculator_replay') {
-                openReplayPlayer();
-                if(nextCheckBtn) {
-                    nextCheckBtn.textContent = TXT.gotIt;
-                    nextCheckBtn.disabled = false;
-                }
-                if(clearBtn) clearBtn.style.display = 'none';
-            }
-            if (isQuestionStage) {
-                if (!isResize) isMediaScrubbingActive = false;
-                if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                if (isMCQDisplayStage && mcqDetails) {
-                    if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
-                    if(clearBtn) clearBtn.style.display = 'none';
-                    if(nextCheckBtn) nextCheckBtn.disabled = true;
-                } else if (currentStageData.type === 'question_handwriting') {
-                    if (bottomBar) bottomBar.style.display = 'flex';
-                    if(nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
-                    if(clearBtn) clearBtn.style.display = 'inline-flex';
-                }
-                if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => {}, () => {}, isResize); }
-            } else {
-                if (bottomBar) bottomBar.style.display = 'flex';
-                if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
-                const isDrawingInputStage = currentStageData.studentInput === true;
-                if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
+                const mcqDetails = currentStageData.optionsQuiz;
+                const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+                const isQuestionStage = currentStageData.type === 'question_handwriting' || isMCQDisplayStage;
 
-                if (currentStageData.audioFile || currentStageData.drawingRecord) {
-                    if (!isResize) { isMediaScrubbingActive = true; lastFrameTimestampForManualAdvance = 0; internalPlaybackTime = 0; }
-                    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
-                    const audioMetaPromise = new Promise((resolve) => {
-                        if(currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolve(duration || 0), () => {}, isResize); }
-                        else { resolve(0); }
-                    });
-                    let drawingDataPromise;
-                    if (currentStageData.drawingRecord) {
-                        if (!isResize || !currentStageDrawingData) {
-                            drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
-                        } else { drawingDataPromise = Promise.resolve(currentStageDrawingData); }
-                    } else { currentStageDrawingData = null; drawingDataPromise = Promise.resolve(null); }
-                    Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
-                        if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
-                        const oldTotalDuration = currentStageTotalDuration;
-                        const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
-                        currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
-                        if(isResize && oldTotalDuration !== currentStageTotalDuration) { internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration); }
-                        if (!isMediaScrubbingActive && internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0) {
-                            if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx); }
-                            updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
-                            if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
-                        } else if (isMediaScrubbingActive && currentStageTotalDuration > 0) {
-                            updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
-                            if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
-                            if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-                            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-                        } else if (currentStageTotalDuration === 0 && currentStageDrawingData && replayCtx) {
-                            renderDrawingAtTime(0, currentStageDrawingData, replayCtx);
-                            if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                        } else {
-                            isMediaScrubbingActive = false;
-                            if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                        }
-                    }).catch(e => { console.error("Error in media setup promise:", e); isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible'); });
-                } else {
-                    isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                    currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
-                    if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-                }
-                if(nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
-            }
+                // NEW LOGIC BLOCK FOR REPLAY STAGES
+                if (currentStageData.type === 'calculator_replay') {
+                    openReplayPlayer();
+                    if (nextCheckBtn) {
+                        nextCheckBtn.textContent = TXT.gotIt;
+                        nextCheckBtn.disabled = false;
+                    }
+                    if (clearBtn) clearBtn.style.display = 'none';
+                } 
+                // ORIGINAL LOGIC FOR QUESTION STAGES
+                else if (isQuestionStage) {
+                    if (!isResize) isMediaScrubbingActive = false;
+                    if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                    if (isMCQDisplayStage && mcqDetails) {
+                        if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
+                        if(clearBtn) clearBtn.style.display = 'none';
+                        if(nextCheckBtn) nextCheckBtn.disabled = true;
+                    } else if (currentStageData.type === 'question_handwriting') {
+                        if (bottomBar) bottomBar.style.display = 'flex';
+                        if(nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
+                        if(clearBtn) clearBtn.style.display = 'inline-flex';
+                    }
+                    if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => {}, () => {}, isResize); }
+                } 
+                // ORIGINAL LOGIC FOR EXPLANATION STAGES
+                else {
+                    if (bottomBar) bottomBar.style.display = 'flex';
+                    if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
+                    const isDrawingInputStage = currentStageData.studentInput === true;
+                    if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
 
-            updateColorIndicator();
-            canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible) ? 'auto' : 'none';
-            if(nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
-            if (!isResize) userDrawingOccurred = false;
-            if(prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible);
-            if(nextCheckBtn) {
-                const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
-                nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW);
-            }
-            if(clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible);
-        }
+                    if (currentStageData.audioFile || currentStageData.drawingRecord) {
+                        if (!isResize) { isMediaScrubbingActive = true; lastFrameTimestampForManualAdvance = 0; internalPlaybackTime = 0; }
+                        updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
+                        const audioMetaPromise = new Promise((resolve) => {
+                            if(currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolve(duration || 0), () => {}, isResize); }
+                            else { resolve(0); }
+                        });
+                        let drawingDataPromise;
+                        if (currentStageData.drawingRecord) {
+                            if (!isResize || !currentStageDrawingData) {
+                                drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
+                            } else { drawingDataPromise = Promise.resolve(currentStageDrawingData); }
+                        } else { currentStageDrawingData = null; drawingDataPromise = Promise.resolve(null); }
+                        Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
+                            if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
+                            const oldTotalDuration = currentStageTotalDuration;
+                            const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
+                            currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
+                            if(isResize && oldTotalDuration !== currentStageTotalDuration) { internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration); }
+                            if (!isMediaScrubbingActive && internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0) {
+                                if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx); }
+                                updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
+                                if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+                            } else if (isMediaScrubbingActive && currentStageTotalDuration > 0) {
+                                updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+                                if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+                                if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+                                currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+                            } else if (currentStageTotalDuration === 0 && currentStageDrawingData && replayCtx) {
+                                renderDrawingAtTime(0, currentStageDrawingData, replayCtx);
+                                if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                            } else {
+                                isMediaScrubbingActive = false;
+                                if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                            }
+                        }).catch(e => { console.error("Error in media setup promise:", e); isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible'); });
+                    } else {
+                        isMediaScrubbingActive = false; if(stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                        currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
+                        if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+                    }
+                    if(nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
+                }
+
+                updateColorIndicator();
+                canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible) ? 'auto' : 'none';
+                if(nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
+                if (!isResize) userDrawingOccurred = false;
+                if(prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible);
+                if(nextCheckBtn) {
+                    const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
+                    nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW);
+                }
+                if(clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible);
+            }
         
         function drawHeadlineText() {
             const padding = 27; const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
@@ -2534,6 +2579,7 @@ function renderStageUI(index, isResize = false) {
 }
           function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
+		  if (isReplayActive) closeReplayPlayer();
     if (isThelobookActive) closeThelobook(true);
     if (isPageGridVisible) closePageGridView();
 
@@ -2683,63 +2729,64 @@ async function displayLessonComplete() {
     }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
 }
 		function handleNextCheckClick() {
-    if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
-    const TXT = getCurrentUIText();
+    if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
+    const TXT = getCurrentUIText();
 
-    // Handle the initial "Start" button click
-    // Handle the initial "Start" button click
-    if (currentStageIndex === -1 && lessonStages.length > 0) {
-        // ANALYTICS: Set start time and log the lesson_started event
-        lessonStartTime = Date.now();
-        const user = auth.currentUser;
-        const urlParams = new URLSearchParams(window.location.search);
-        const lessonFileName = urlParams.get('lessonFile');
-        if (user && lessonFileName) {
-        db.collection("analytics_events").add({
-            type: "lesson_started",
-            userId: user.uid,
-            lessonId: lessonFileName.replace('.json', ''),
-            courseId: "sat-math-prep", // Replace with dynamic course ID if available
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
+    // Handle the initial "Start" button click
+    if (currentStageIndex === -1 && lessonStages.length > 0) {
+        // ANALYTICS: Set start time and log the lesson_started event
+        lessonStartTime = Date.now();
+        const user = auth.currentUser;
+        const urlParams = new URLSearchParams(window.location.search);
+        const lessonFileName = urlParams.get('lessonFile');
+        if (user && lessonFileName) {
+        db.collection("analytics_events").add({
+            type: "lesson_started",
+            userId: user.uid,
+            lessonId: lessonFileName.replace('.json', ''),
+            courseId: "sat-math-prep", // Replace with dynamic course ID if available
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
     }
-        
-        transitionToStage(0); // Move to the first stage
-        return; // Exit the function after starting the lesson
-    }
+        
+        transitionToStage(0); // Move to the first stage
+        return; // Exit the function after starting the lesson
+    }
 
-    // The rest of your existing logic for handling 'Got It!' or 'Check'
-    // This part only runs AFTER the lesson has actually started (currentStageIndex >= 0)
-    const mcqDetails = currentStageData.optionsQuiz; // Now currentStageData will not be null here
-    const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-    if (isMCQStage) return; // MCQ handling happens within displayMcq() or handleMcqOptionClick()
+    const mcqDetails = currentStageData.optionsQuiz; 
+    const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+    if (isMCQStage) return; 
 
-    if (nextCheckBtn.textContent === TXT.gotIt) {
-        // Logic for 'Got It!' scenarios (non-question stages)
-        if (!stagesWithPointsAwarded.has(currentStageIndex)) {
-            stagesWithPointsAwarded.add(currentStageIndex);
-            stopCurrentStageAudio();
-            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-            userPoints += randomPoints;
-            sessionPoints += randomPoints;
-            updateUserPointsInFirestore(randomPoints);
-            updatePointsDisplay();
-            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
+    if (nextCheckBtn.textContent === TXT.gotIt) {
+        // ADD THIS BLOCK TO HANDLE REPLAY PLAYER
+        if (isReplayActive) {
+            closeReplayPlayer();
         }
-        nextStage(); // Immediately go to the next stage after 'Got It!'
-        return;
-    }
 
-    // Logic for 'Check' scenarios (handwriting question stages)
-    if (currentStageData.type === 'question_handwriting') {
-        checkHandwritingAnswer();
-    } else {
-        // Fallback for other types if they somehow reach here without hitting 'Got It' condition
-        // This case should ideally not be reached if 'Got It' is handled first for non-questions.
-        nextStage();
-    }
-}    function clearUserCanvas() {
+        // Logic for 'Got It!' scenarios (non-question stages)
+        if (!stagesWithPointsAwarded.has(currentStageIndex)) {
+            stagesWithPointsAwarded.add(currentStageIndex);
+            stopCurrentStageAudio();
+            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
+            userPoints += randomPoints;
+            sessionPoints += randomPoints;
+            updateUserPointsInFirestore(randomPoints);
+            updatePointsDisplay();
+            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+            if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
+        }
+        nextStage(); // Immediately go to the next stage after 'Got It!'
+        return;
+    }
+
+    // Logic for 'Check' scenarios (handwriting question stages)
+    if (currentStageData.type === 'question_handwriting') {
+        checkHandwritingAnswer();
+    } else {
+        nextStage();
+    }
+}
+		function clearUserCanvas() {
         if (isPageGridVisible) return;
         if (isThelobookActive) {
             if (thelobookCtx) {
@@ -3531,90 +3578,6 @@ function closeCalculator() {
     // Resume lesson state
     resumeMediaState();
 }
-          // ADD THESE TWO NEW FUNCTIONS
-
-/**
- * Opens the replay player overlay and sends the lesson's replay data to it.
- */
-async function openReplayPlayer() {
-    // Check for either embedded data or a URL
-    if (isReplayActive || !currentStageData || (!currentStageData.replayData && !currentStageData.replayDataUrl)) {
-        console.warn("No replay data or URL found for this stage.");
-        return;
-    }
-    isReplayActive = true;
-
-    captureMediaState();
-
-    const playerURL = 'https://thelo.space/replay'; // Your player's URL
-
-    const sendDataToPlayer = (replayActions) => {
-        const replayPayload = {
-            meta: { source: 'thelo-lesson' },
-            actions: replayActions
-        };
-        // Use postMessage to securely send the replay data into the iframe
-        if (replayFrame.contentWindow) {
-            replayFrame.contentWindow.postMessage(replayPayload, '*');
-            console.log("Replay data sent to player iframe.");
-        }
-    };
-
-    try {
-        let replayActions;
-        if (currentStageData.replayData) {
-            // Use embedded data if it exists
-            replayActions = currentStageData.replayData;
-        } else {
-            // Fetch the data from the URL
-            const response = await fetch(currentStageData.replayDataUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const replayJson = await response.json();
-            // The replay data is inside the 'actions' property of the fetched file
-            replayActions = replayJson.actions; 
-        }
-
-        if (!replayActions) {
-            throw new Error("Could not load replay actions.");
-        }
-
-        // Load the iframe and send the data
-        if (replayFrame.src.includes(playerURL)) {
-            sendDataToPlayer(replayActions);
-        } else {
-            replayFrame.src = playerURL;
-            replayFrame.onload = () => sendDataToPlayer(replayActions);
-        }
-
-        // Show the overlay and disable main controls
-        replayOverlay.classList.remove('calculator-hidden');
-        if (mcqOptionsContainer) mcqOptionsContainer.classList.add('blurred-mcq');
-        if (prevBtn) prevBtn.disabled = true;
-        if (nextCheckBtn) nextCheckBtn.disabled = true;
-
-    } catch (error) {
-        console.error("Failed to load or send replay data:", error);
-        addChatMessage('AI', 'Error: Could not load the interactive replay for this step.');
-        isReplayActive = false; // Reset state on failure
-    }
-}
-/**
- * Closes the replay player overlay and resumes the lesson.
- */
-function closeReplayPlayer() {
-    if (!isReplayActive) return;
-    isReplayActive = false;
-
-    // Hide the overlay and stop the iframe content
-    replayOverlay.classList.add('calculator-hidden');
-    replayFrame.src = 'about:blank'; // Important for performance
-
-    // Un-blur other UI elements and resume the lesson
-    if (mcqOptionsContainer) mcqOptionsContainer.classList.remove('blurred-mcq');
-    resumeMediaState();
-}
 function handleKeyDown(event){
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
@@ -3641,13 +3604,6 @@ function handleKeyDown(event){
             }
             return;
         }
-          if (isReplayActive) {
-    if (event.key === 'Escape') {
-        closeReplayPlayer();
-        event.preventDefault();
-    }
-    return;
-}
         if (isThelobookActive) {
             switch(event.key.toLowerCase()) {
                 case 'b': closeThelobook(true); event.preventDefault(); return;
@@ -3787,7 +3743,6 @@ window.addEventListener('wheel', function(e) {
         if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
         if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
 	 if (calculatorCloseBtn) calculatorCloseBtn.onclick = closeCalculator;
-      if (replayCloseBtn) replayCloseBtn.onclick = closeReplayPlayer;
 	if (dashboardBtn) {
 	    dashboardBtn.onclick = () => {
 	        window.location.href = 'https://thelo.space/sdashboard';
