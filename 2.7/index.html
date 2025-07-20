@@ -2751,69 +2751,70 @@ async function displayLessonComplete() {
         }
     }
 }		function handleNextCheckClick() {
-    if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
-    const TXT = getCurrentUIText();
+    if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
+    const TXT = getCurrentUIText();
 
-    // Handle the initial "Start" button click
-    if (currentStageIndex === -1 && lessonStages.length > 0) {
-        // ANALYTICS: Set start time and log the lesson_started event
-        lessonStartTime = Date.now();
-        const user = auth.currentUser;
-        const urlParams = new URLSearchParams(window.location.search);
-        const lessonFileName = urlParams.get('lessonFile');
-        if (user && lessonFileName) {
-        db.collection("analytics_events").add({
-            type: "lesson_started",
-            userId: user.uid,
-            lessonId: lessonFileName.replace('.json', ''),
-            courseId: "sat-math-prep", // Replace with dynamic course ID if available
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
+    // Handle the initial "Start" button click (no changes here)
+    if (currentStageIndex === -1 && lessonStages.length > 0) {
+        lessonStartTime = Date.now();
+        const user = auth.currentUser;
+        const urlParams = new URLSearchParams(window.location.search);
+        const lessonFileName = urlParams.get('lessonFile');
+        if (user && lessonFileName) {
+            db.collection("analytics_events").add({
+                type: "lesson_started",
+                userId: user.uid,
+                lessonId: lessonFileName.replace('.json', ''),
+                courseId: "sat-math-prep",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        transitionToStage(0);
+        return;
     }
-        
-        transitionToStage(0); // Move to the first stage
-        return; // Exit the function after starting the lesson
-    }
 
-    const mcqDetails = currentStageData.optionsQuiz; 
-    const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-    if (isMCQStage) return; 
+    const mcqDetails = currentStageData.optionsQuiz;
+    const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+    if (isMCQStage) return;
 
-    if (nextCheckBtn.textContent === TXT.gotIt) {
-        // Check if the current stage is a media replay stage.
-        const isMediaReplayStage = currentStageData.replayDataUrl || currentStageData.drawingRecord;
+    // --- FIX: UNIFIED LOGIC FOR ALL "GOT IT" STAGES ---
+    if (nextCheckBtn.textContent === TXT.gotIt) {
+        
+        // 1. Award points and play sound if this stage hasn't been rewarded yet.
+        if (!stagesWithPointsAwarded.has(currentStageIndex)) {
+            stagesWithPointsAwarded.add(currentStageIndex);
+            stopCurrentStageAudio();
+            
+            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
+            userPoints += randomPoints;
+            sessionPoints += randomPoints;
+            updateUserPointsInFirestore(randomPoints);
+            updatePointsDisplay();
+            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+            
+            // This restores the sound effect
+            if (window.userInteracted && gotItSoundPlayer) {
+                gotItSoundPlayer.currentTime = 0;
+                gotItSoundPlayer.play().catch(e => {});
+            }
+        }
 
-        if (isMediaReplayStage) {
-            // For media stages, just advance to the next stage.
-            // Do NOT stop audio or award points here.
-            nextStage();
-        } else {
-            // This is the original logic for simple explanation stages (no media).
-            if (isReplayActive) {
-                closeReplayPlayer();
-            }
+        // 2. If an interactive replay was active, close it.
+        if (isReplayActive) {
+            closeReplayPlayer();
+        }
 
-            if (!stagesWithPointsAwarded.has(currentStageIndex)) {
-                stagesWithPointsAwarded.add(currentStageIndex);
-                stopCurrentStageAudio(); // This is now safe to call here.
-                const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-                userPoints += randomPoints;
-                sessionPoints += randomPoints;
-                updateUserPointsInFirestore(randomPoints);
-                updatePointsDisplay();
-                addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-                if (window.userInteracted && gotItSoundPlayer) { gotItSoundPlayer.currentTime = 0; gotItSoundPlayer.play().catch(e => {});}
-            }
-            nextStage();
-        }
-        return;
-    }
-    // Logic for 'Check' scenarios (handwriting question stages)
-    if (currentStageData.type === 'question_handwriting') {
-        checkHandwritingAnswer();
-    } else {
-        nextStage();
-    }
+        // 3. Always advance to the next stage.
+        nextStage();
+        return;
+    }
+    
+    // Logic for 'Check' scenarios (handwriting question stages)
+    if (currentStageData.type === 'question_handwriting') {
+        checkHandwritingAnswer();
+    } else {
+        nextStage();
+    }
 }
 		function clearUserCanvas() {
         if (isPageGridVisible) return;
