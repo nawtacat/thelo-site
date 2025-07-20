@@ -2645,118 +2645,90 @@ function renderStageUI(index, isResize = false) {
     function nextStage() { transitionToStage(currentStageIndex + 1); }
     function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
     // FULL UPDATED FUNCTION
-async function displayLessonComplete() {
+// ADD THIS NEW FUNCTION
+async function finalizeLessonInBackground(user, lessonFileName, lessonTitle, points) {
+    if (!user || !lessonFileName) return;
+
+    // --- All background tasks are now handled here ---
+
+    // 1. Log analytics event
+    if (lessonStartTime) {
+        const timeToCompleteSeconds = Math.round((Date.now() - lessonStartTime) / 1000);
+        db.collection("analytics_events").add({
+            type: "lesson_completed",
+            userId: user.uid,
+            lessonId: lessonFileName.replace('.json', ''),
+            courseId: "sat-math-prep", // Replace with dynamic course ID if available
+            timeToCompleteSeconds: timeToCompleteSeconds,
+            sessionScore: points,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(e => console.error("Analytics event logging error:", e));
+        lessonStartTime = null; // Reset for next lesson
+    }
+
+    const topicId = lessonFileName.replace('.json', '');
+    const studentDocRef = db.collection('thelo-students').doc(user.uid);
+
+    // 2. Update student progress and post to bulletin
+    try {
+        const progressDocRef = studentDocRef.collection('progress').doc(topicId);
+        const progressDoc = await progressDocRef.get();
+        const wasAlreadyCompleted = progressDoc.exists;
+
+        await updateStudentProgress(user.uid, topicId, {
+            status: 'completed',
+            score: points
+        });
+
+        if (!wasAlreadyCompleted) {
+            await studentDocRef.update({
+                lessonsCompleted: firebase.firestore.FieldValue.increment(1)
+            });
+        }
+
+        const studentDoc = await studentDocRef.get();
+        if (studentDoc.exists() && studentDoc.data().groupId) {
+            const studentData = studentDoc.data();
+            await addDoc(collection(db, "bulletin-posts"), {
+                groupId: studentData.groupId,
+                authorId: user.uid,
+                type: "activity",
+                timestamp: serverTimestamp(),
+                content: { action: "just finished", topic: lessonTitle }
+            });
+        }
+    } catch (error) {
+        console.error("Error finalizing lesson completion in background:", error);
+    }
+
+    // 3. Update weekly streak
+    updateWeeklyStreak();
+}
+function displayLessonComplete() {
     isTransitioning = true;
     const TXT = getCurrentUIText();
+
+    // --- Part 1: Immediate UI Updates ---
+    if (isThelobookActive) closeThelobook(false);
+    if (isPageGridVisible) closePageGridView();
+    // ... (rest of the immediate UI hiding/stopping logic) ...
     
+    setTimeout(() => {
+        // ... (Code to show the green "Lesson Complete" text and buttons) ...
+        addChatMessage('AI', `🎉 ${TXT.lessonComplete}`);
+        isTransitioning = false;
+    }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
+
+    // --- Part 2: "Fire and Forget" Background Tasks ---
     const user = auth.currentUser;
     const urlParams = new URLSearchParams(window.location.search);
     const lessonFileName = urlParams.get('lessonFile');
-
-    // This block now handles analytics, student progress, and bulletin posts
-    if (user && lessonFileName) {
-        // ANALYTICS: Log the lesson_completed event first
-        if (lessonStartTime) {
-            const timeToCompleteSeconds = Math.round((Date.now() - lessonStartTime) / 1000);
-            db.collection("analytics_events").add({
-                type: "lesson_completed",
-                userId: user.uid,
-                lessonId: lessonFileName.replace('.json', ''),
-                courseId: "sat-math-prep", // Replace with dynamic course ID if available
-                timeToCompleteSeconds: timeToCompleteSeconds,
-                sessionScore: sessionPoints,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(e => console.error("Analytics event logging error:", e));
-            lessonStartTime = null; // Reset for the next lesson
-        }
-
-        const topicId = lessonFileName.replace('.json', '');
-        const studentDocRef = db.collection('thelo-students').doc(user.uid);
-
-        // Update student progress and bulletin board
-        try {
-            const progressDocRef = studentDocRef.collection('progress').doc(topicId);
-            const progressDoc = await progressDocRef.get();
-            const wasAlreadyCompleted = progressDoc.exists;
-
-            await updateStudentProgress(user.uid, topicId, {
-                status: 'completed',
-                score: sessionPoints
-            });
-
-            if (!wasAlreadyCompleted) {
-                await studentDocRef.update({
-                    lessonsCompleted: firebase.firestore.FieldValue.increment(1)
-                });
-                console.log("Incremented lessonsCompleted count.");
-            }
-
-            const studentDoc = await studentDocRef.get();
-            if (studentDoc.exists() && studentDoc.data().groupId) {
-                const studentData = studentDoc.data();
-                const lessonTitle = lessonStagesRoot?.lessonTitle || 'a lesson';
-                await addDoc(collection(db, "bulletin-posts"), {
-                    groupId: studentData.groupId,
-                    authorId: user.uid,
-                    type: "activity",
-                    timestamp: serverTimestamp(),
-                    content: { action: "just finished", topic: lessonTitle }
-                });
-                console.log("Activity post created for lesson completion.");
-            }
-        } catch (error) {
-            console.error("Error finalizing lesson completion:", error);
-        }
-    }
-
-    // --- The rest of the function to update the UI remains the same ---
-    if (isThelobookActive) closeThelobook(false);
-    if (isPageGridVisible) closePageGridView();
-    backgroundCanvas.classList.add('fade-out');
-    if (replayCanvas) replayCanvas.classList.add('fade-out');
-    if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
-    if (currentReplayAnimationId) {
-        cancelAnimationFrame(currentReplayAnimationId);
-        currentReplayAnimationId = null;
-    }
-    if (currentStageAudio && !currentStageAudio.paused) {
-        currentStageAudio.pause();
-        currentStageAudio.currentTime = 0;
-    }
-    isMediaScrubbingActive = false;
-    if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-
-    setTimeout(() => {
-        const cssWidth = backgroundCanvas.width / devicePixelRatio;
-        const cssHeight = backgroundCanvas.height / devicePixelRatio;
-        bgCtx.clearRect(0, 0, cssWidth, cssHeight);
-        const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-        bgCtx.font = `bold 24px ${fontFamily}`;
-        bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--success-green').trim();
-        bgCtx.textAlign = 'center';
-        bgCtx.textBaseline = 'middle';
-        bgCtx.fillText(TXT.lessonComplete, cssWidth / 2, cssHeight / 3);
-        clearUserCanvas();
-        if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-
-        if(nextCheckBtn) nextCheckBtn.style.display = 'none';
-        if(prevBtn) prevBtn.style.display = 'none';
-        if(clearBtn) clearBtn.style.display = 'none';
-        if(thelobookBtn) thelobookBtn.style.display = 'none';
-        if(dashboardBtn) {
-            dashboardBtn.innerHTML = TXT.viewDashboard;
-            dashboardBtn.classList.add('visible');
-        }
-
-        if(colorIndicator) colorIndicator.style.display = 'none';
-        addChatMessage('AI', `🎉 ${TXT.lessonComplete}`);
-        updateWeeklyStreak();
-        backgroundCanvas.classList.remove('fade-out');
-        if (replayCanvas) replayCanvas.classList.remove('fade-out');
-        isTransitioning = false;
-    }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
-}
-		function handleNextCheckClick() {
+    const lessonTitle = lessonStagesRoot?.lessonTitle || 'a lesson';
+    
+    // Call the background function WITHOUT 'await'.
+    // The UI is already updated, and this will run separately.
+    finalizeLessonInBackground(user, lessonFileName, lessonTitle, sessionPoints);
+}		function handleNextCheckClick() {
     if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
     const TXT = getCurrentUIText();
 
