@@ -166,7 +166,9 @@ document.addEventListener('DOMContentLoaded', () => {
         angleMode: 'rad',
         definedVariables: {}
     };
-    let isReplaying = false;
+    
+    // CORRECT: Only declare this variable once
+    let replayActions = [];
 
     // --- INITIALIZATION ---
     function initialize() {
@@ -175,121 +177,57 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAll();
     }
 
+    // --- NEW CONTROLLABLE REPLAY LOGIC ---
+
     /**
-     * Listens for a 'message' event from the parent window (thelo app).
-     * When valid replay data is received, it triggers the playback.
+     * Listens for messages from the parent window (thelo app).
+     * Handles the initial data load and subsequent 'seek' commands.
      */
-   // Keep these at a higher scope
-let replayActions = [];
+    function setupMessageListener() {
+        window.addEventListener('message', (event) => {
+            const receivedData = event.data;
 
-/**
- * Listens for messages from the parent window (thelo app).
- * It now handles two scenarios: receiving the initial data, and
- * receiving 'seek' commands to update the visual state.
- */
-// Add this variable at the top of your script, near the other state variables
-let replayActions = [];
+            if (receivedData && Array.isArray(receivedData.actions)) {
+                console.log("Replay data received and stored.");
+                replayActions = receivedData.actions;
+                setStateAtTime(0, replayActions);
+            }
 
-/**
- * Listens for messages from the parent window (thelo app).
- * It now handles two scenarios: 
- * 1. Receiving the initial replay data.
- * 2. Receiving 'seek' commands to update the visual state.
- */
-function setupMessageListener() {
-    window.addEventListener('message', (event) => {
-        const receivedData = event.data;
-
-        // If the message contains the main 'actions' array, it's the initial data load.
-        if (receivedData && Array.isArray(receivedData.actions)) {
-            console.log("Replay data received and stored.");
-            replayActions = receivedData.actions;
-            // Immediately render the very first frame (time = 0).
-            setStateAtTime(0, replayActions);
-        }
-
-        // If the message is a 'seek' command, update the calculator to that specific time.
-        if (receivedData && receivedData.command === 'seek') {
-            setStateAtTime(receivedData.time, replayActions);
-        }
-    });
-}
-        function loop(currentTime) {
-            if (!isReplaying) return;
-
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
-            timeSinceLastAction += deltaTime;
-
-            // Process all actions that are due to happen in this frame.
-            while (actionIndex < actions.length) {
-                const command = actions[actionIndex];
-                
-                if (command.action === 'delay' && timeSinceLastAction < command.ms) {
-                    break; // Wait until the delay has passed.
-                }
-
-                // If we are here, the action is ready to be executed.
-                timeSinceLastAction = 0; // Reset timer for the next delay.
-
-                if (command.action === 'liveUpdateView') {
-                    // This is a high-frequency event; prepare to animate towards it.
-                    viewAnimation.active = true;
-                    viewAnimation.duration = actions[actionIndex+1]?.ms || 16.67; // Animate over the time until the next frame.
-                    viewAnimation.elapsed = 0;
-                    viewAnimation.start = { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale };
-                    viewAnimation.end = command.payload;
-                } else {
-                    // For all other actions, execute them instantly.
-                    viewAnimation.active = false;
-                    executeReplayCommand(command);
-                }
-                actionIndex++;
-            }
-
-            // If a view animation is active, interpolate the state for this frame.
-            if (viewAnimation.active) {
-                viewAnimation.elapsed += deltaTime;
-                let progress = Math.min(viewAnimation.elapsed / viewAnimation.duration, 1);
-                
-                // Linear interpolation (lerp) for smooth movement.
-                const lerp = (start, end, t) => start + (end - start) * t;
-                graphState.originX = lerp(viewAnimation.start.originX, viewAnimation.end.originX, progress);
-                graphState.originY = lerp(viewAnimation.start.originY, viewAnimation.end.originY, progress);
-                graphState.scale = lerp(viewAnimation.start.scale, viewAnimation.end.scale, progress);
-                
-                evaluateAndPlotAll();
-                
-                if (progress >= 1) {
-                    viewAnimation.active = false;
-                }
-            }
-
-            // Update progress bar
-            const progressPercentage = (actionIndex / actions.length) * 100;
-            progressBar.style.width = `${progressPercentage}%`;
-            
-            // Continue the loop if there are more actions.
-            if (actionIndex < actions.length) {
-                requestAnimationFrame(loop);
-            } else {
-                isReplaying = false;
-                console.log("Replay finished.");
-                setTimeout(() => { progressBar.style.width = '0%'; }, 1000);
-            }
-        }
-        
-        // Start the animation loop.
-        requestAnimationFrame(loop);
-    }
+            if (receivedData && receivedData.command === 'seek') {
+                setStateAtTime(receivedData.time, replayActions);
+            }
+        });
+    }
 
     /**
-     * Executes a single command from the replay sequence to update the calculator's state.
-     * @param {object} command - The command object { action, payload }.
+     * Sets the entire calculator state based on a timeline and a specific time.
+     */
+    function setStateAtTime(time, actions) {
+        if (!actions || actions.length === 0) return;
+
+        executeReplayCommand(actions[0]); // Reset to initial state
+
+        let cumulativeTime = 0;
+        for (let i = 1; i < actions.length; i++) {
+            const command = actions[i];
+            if (command.action === 'delay') {
+                cumulativeTime += command.ms;
+            }
+            if (cumulativeTime > time) {
+                break;
+            }
+            if (command.action !== 'delay') {
+                executeReplayCommand(command);
+            }
+        }
+        evaluateAndPlotAll();
+    }
+    
+    /**
+     * Executes a single command from the replay sequence.
      */
     function executeReplayCommand(command) {
         if (!command || !command.action) return;
-
         const { action, payload } = command;
         let expr, mathField, item;
 
@@ -301,26 +239,22 @@ function setupMessageListener() {
                 graphState.angleMode = payload.angleMode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
-                
                 payload.expressions.forEach(initialExpr => {
                     const completeExpr = { sliders: {}, ...initialExpr };
                     addExpressionUI(completeExpr);
                 });
                 break;
-            
             case 'addExpression':
                 const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
                 const newExprData = { id: payload.id, latex: '', visible: true, color: color, sliders: {} };
                 addExpressionUI(newExprData);
                 break;
-
             case 'removeExpression':
                 item = document.getElementById(payload.id);
                 if (item) item.remove();
                 graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
                 updateExpressionNumbers();
                 break;
-
             case 'focusExpression':
                 document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
                 item = document.getElementById(payload.id);
@@ -328,7 +262,6 @@ function setupMessageListener() {
                     item.querySelector('.math-input-field').classList.add('mq-focused');
                 }
                 break;
-
             case 'setLatex':
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if (expr) {
@@ -339,27 +272,22 @@ function setupMessageListener() {
                     }
                 }
                 break;
-
             case 'liveUpdateView':
             case 'setViewState':
                 Object.assign(graphState, payload);
                 break;
-
             case 'lockPoint':
                 graphState.lockedPoint = { visible: true, ...payload };
                 break;
-            
             case 'unlockPoint':
                 graphState.lockedPoint.visible = false;
                 break;
-
             case 'setSlider':
                 expr = graphState.expressions.find(e => e.id === payload.exprId);
                 if (expr && expr.sliders[payload.name]) {
                     expr.sliders[payload.name].val = payload.value;
                 }
                 break;
-
             case 'toggleVisibility':
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if(expr) {
@@ -367,56 +295,18 @@ function setupMessageListener() {
                     document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
                 }
                 break;
-                
             case 'resetView':
                 resetView(false);
                 break;
-            
             case 'setAngleMode':
                 graphState.angleMode = payload.mode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
                 break;
         }
-
-        evaluateAndPlotAll();
-    }
-        /**
- * Sets the entire calculator state based on a timeline and a specific time.
- * This function is the new core of the replay logic, allowing for external control.
- * @param {number} time - The time in milliseconds to seek to.
- * @param {Array} actions - The array of actions from the recording.
- */
-function setStateAtTime(time, actions) {
-    if (!actions || actions.length === 0) return;
-
-    // Always start from the absolute initial state
-    executeReplayCommand(actions[0]);
-
-    let cumulativeTime = 0;
-
-    // Apply all actions sequentially up to the target time
-    for (let i = 1; i < actions.length; i++) {
-        const command = actions[i];
-
-        if (command.action === 'delay') {
-            cumulativeTime += command.ms;
-        }
-
-        if (cumulativeTime > time) {
-            // We've gone past our target time, so we stop here.
-            break;
-        }
-
-        // Execute any non-delay command that falls within the target time
-        if (command.action !== 'delay') {
-            executeReplayCommand(command);
-        }
+        // NOTE: We don't call evaluateAndPlotAll() here anymore; setStateAtTime handles it once at the end.
     }
 
-    // After setting the state, perform a final render.
-    evaluateAndPlotAll();
-}
     function addExpressionUI(exprData) {
         graphState.expressions.push(exprData);
         const item = document.createElement('div');
@@ -425,7 +315,6 @@ function setStateAtTime(time, actions) {
         const exprIndex = graphState.expressions.length;
         item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
         expressionListContainer.appendChild(item);
-        
         const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
         if (exprData.latex) {
             mathField.latex(exprData.latex);
@@ -440,7 +329,9 @@ function setStateAtTime(time, actions) {
         });
     }
 
-    // --- CORE GRAPHING LOGIC (Complete Implementation) ---
+    // --- CORE GRAPHING LOGIC (All these functions are necessary for rendering) ---
+    // (evaluateAndPlotAll, parseSingleExpression, updateExpressionUI, renderAll, all plotting functions, etc.)
+    // These functions remain exactly the same as in your original file.
     function evaluateAndPlotAll() {
         graphState.definedVariables = {};
         graphState.expressions.forEach(parseSingleExpression);
@@ -974,5 +865,7 @@ function setStateAtTime(time, actions) {
     initialize();
 });
 </script>
+</body>
+</html>
 </body>
 </html>
