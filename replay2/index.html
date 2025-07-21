@@ -140,8 +140,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // ======================================================
-    // =========== AUTOMATED REPLAY ENGINE V5.1 =============
-    // ===========  (Handles new AnimateView actions) ======
+    // =========== AUTOMATED REPLAY ENGINE V5.2 =============
+    // =========== (Improved Stability on Seek) =============
     // ======================================================
 
     // --- DOM ELEMENTS ---
@@ -159,17 +159,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const INEQUALITY_ALPHA = 0.2;
     let POI_RADIUS = 4 * currentDevicePixelRatio;
 
-    const SEEK_AMOUNT_MS = 5000;
+    const SEEK_AMOUNT_MS = 5000; // Time in milliseconds for seeking with arrow keys
 
     // --- STATE MANAGEMENT ---
+    // Define initialGraphState to easily reset to default view settings
+    const initialGraphView = { originX: 0, originY: 0, scale: 40 };
+
     let graphState = {
-        originX: 0, originY: 0, scale: 40,
+        ...initialGraphView,
         expressions: [],
         intersections: [],
         lockedPoint: { visible: false, x: 0, y: 0 },
         angleMode: 'rad',
         definedVariables: {},
-        activeAnimateView: null
+        activeAnimateView: null // { startTime: ms, duration: ms, startView: {x,y,s}, endView: {x,y,s} }
     };
 
     // --- PLAYBACK CONTROL STATE ---
@@ -179,82 +182,92 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlaying = false;
     let animationFrameId = null;
     let lastTimestamp = 0;
-    let lastProcessedEventIndex = -1;
+    let lastProcessedEventIndex = -1; // Index of the last command processed by renderStateAtTime or animationLoop
 
     // --- INITIALIZATION & EVENT LISTENERS ---
     function initialize() {
-        resizeCanvases();
+        // Set initial origin values correctly for the current canvas size
+        graphState.originX = canvas.width / 2;
+        graphState.originY = canvas.height / 2;
+
+        resizeCanvases(); // Initial resize and draw of empty grid
         setupMessageListener();
         setupKeyListeners();
-        renderAll(); // Initial render to display empty grid/axes
+        renderAll(); // Ensure an empty grid is drawn on load
     }
 
     function setupMessageListener() {
         window.addEventListener('message', (event) => {
             const receivedData = event.data;
             if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
+                // Adjust devicePixelRatio and canvas size based on recorder metadata
                 if (receivedData.meta.devicePixelRatio) {
                     currentDevicePixelRatio = receivedData.meta.devicePixelRatio;
                     POI_RADIUS = 4 * currentDevicePixelRatio;
-                    resizeCanvases(receivedData.meta.canvasDimensions);
                 }
+                resizeCanvases(receivedData.meta.canvasDimensions); // Pass recorded dimensions
                 startReplay(receivedData.actions);
             } else if (receivedData && receivedData.command === 'seekToTime' && typeof receivedData.timeMs === 'number') {
-                // This is the core fix: When 'seekToTime' is received, directly call seekToAbsoluteTime
                 seekToAbsoluteTime(receivedData.timeMs);
             } else if (receivedData && receivedData.command === 'seek') {
-                // This branch handles directional seeks (e.g., from internal keyboard).
-                // The main app should now send 'seekToTime' for absolute control.
-                seek(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
+                // Internal directional seek (e.g., keyboard within iframe)
+                seekRelative(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
             }
         });
     }
 
     function setupKeyListeners() {
         window.addEventListener('keydown', (e) => {
-            if (timeline.length === 0) return;
-            if (e.key === 'ArrowRight') seek(SEEK_AMOUNT_MS);
-            else if (e.key === 'ArrowLeft') seek(-SEEK_AMOUNT_MS);
+            if (timeline.length === 0) return; // No replay loaded
+            if (e.key === 'ArrowRight') seekRelative(SEEK_AMOUNT_MS);
+            else if (e.key === 'ArrowLeft') seekRelative(-SEEK_AMOUNT_MS);
             else if (e.key === ' ') {
-                e.preventDefault();
+                e.preventDefault(); // Prevent scrolling page
                 togglePlayPause();
             }
         });
     }
 
+    /**
+     * Builds the timeline of all actions with absolute timestamps.
+     * @param {Array<Object>} actions - Array of raw replay actions.
+     */
     function buildTimeline(actions) {
         let currentTime = 0;
         timeline = [];
         actions.forEach(action => {
+            // Store action with its starting time
+            timeline.push({ time: currentTime, ...action });
+
+            // Advance time based on action type
             if (action.action === 'delay') {
                 currentTime += action.ms;
-            } else {
-                if (action.action === 'animateView') {
-                    timeline.push({ time: currentTime, ...action });
-                    currentTime += action.payload.duration;
-                } else {
-                    timeline.push({ time: currentTime, ...action });
-                }
+            } else if (action.action === 'animateView') {
+                currentTime += action.payload.duration;
             }
+            // Other actions implicitly take 0 time for timeline progression
         });
         totalDuration = currentTime;
     }
 
+    /**
+     * Starts the replay from the beginning of the loaded actions.
+     * @param {Array<Object>} actions - The replay actions to play.
+     */
     function startReplay(actions) {
-        if (isPlaying) pause();
-        buildTimeline(actions);
-        playbackTime = 0;
-        lastProcessedEventIndex = -1;
-        graphState.activeAnimateView = null;
-        renderStateAtTime(0);
-        play();
+        if (isPlaying) pause(); // Stop any ongoing playback
+        buildTimeline(actions); // Create the full timeline
+        seekToAbsoluteTime(0); // Jump to time 0 to initialize state and begin playback
+        play(); // Start playing
     }
+
+    // --- PLAYBACK CONTROLS ---
 
     function play() {
         if (isPlaying) return;
         isPlaying = true;
-        // progressBarContainer.style.display = 'block'; // Uncomment if you want to show the bar
-        lastTimestamp = performance.now();
+        // progressBarContainer.style.display = 'block'; // Uncomment if you want to show the progress bar
+        lastTimestamp = performance.now(); // Initialize lastTimestamp for accurate deltaTime
         animationFrameId = requestAnimationFrame(animationLoop);
     }
 
@@ -269,87 +282,86 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isPlaying) {
             pause();
         } else {
+            // If at the end, restart from beginning before playing
             if (playbackTime >= totalDuration) {
-                playbackTime = 0;
-                lastProcessedEventIndex = -1;
-                graphState.activeAnimateView = null;
-                renderStateAtTime(0);
+                seekToAbsoluteTime(0);
             }
             play();
         }
     }
 
-    function seek(amountMs) {
-        // This function is for internal directional seeks (e.g., keyboard arrow keys within iframe).
-        // It updates playbackTime relative to the current position.
-        const wasAtEnd = playbackTime >= totalDuration;
-        const wasPlaying = isPlaying;
-        if (wasPlaying) pause();
-
-        playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
-
-        graphState.activeAnimateView = null; // Clear any active animation
-        renderStateAtTime(playbackTime); // Fully reconstruct state at new time
-
-        if (wasPlaying || (wasAtEnd && amountMs < 0)) {
-            play(); // Resume if was playing, or if seeking backward from end
-        }
+    /**
+     * Seeks playback relative to the current playback time.
+     * Used for internal keyboard controls.
+     * @param {number} amountMs - Milliseconds to move forward (+) or backward (-).
+     */
+    function seekRelative(amountMs) {
+        const targetTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
+        seekToAbsoluteTime(targetTime);
     }
 
     /**
-     * **NEW/UPDATED:** Seeks to an absolute time in the replay.
-     * This is the function the parent window should call via postMessage.
+     * Seeks playback to an absolute time in the replay timeline.
+     * This is the robust method for jumps, especially from external controls.
      * @param {number} targetTimeMs - The absolute time in milliseconds to seek to.
      */
     function seekToAbsoluteTime(targetTimeMs) {
         const wasPlaying = isPlaying;
-        if (wasPlaying) pause(); // Pause playback to prepare for seek
+        if (wasPlaying) pause(); // Pause current animation/loop
 
-        // Set playbackTime directly to the absolute target.
+        // Clamp target time within valid duration
         playbackTime = Math.max(0, Math.min(targetTimeMs, totalDuration));
 
-        graphState.activeAnimateView = null; // Clear any active animation
-        // Crucially, call renderStateAtTime to fully reconstruct the graph state
-        // for this precise point in the timeline.
+        // Fully reconstruct the state at the target time
         renderStateAtTime(playbackTime);
 
+        // Resume playback if it was playing before the seek
         if (wasPlaying) {
-            play(); // Resume playback if it was playing before the seek
+            play();
         }
     }
 
     // --- CORE RENDERING & PLAYBACK LOGIC ---
 
+    /**
+     * The main animation loop, called repeatedly by requestAnimationFrame.
+     * Manages time progression, continuous animations, and discrete event processing.
+     * @param {DOMHighResTimeStamp} currentDOMTime - Current time provided by requestAnimationFrame.
+     */
     function animationLoop(currentDOMTime) {
         if (!isPlaying) return;
 
         const deltaTime = currentDOMTime - lastTimestamp;
         lastTimestamp = currentDOMTime;
-        playbackTime = Math.min(playbackTime + deltaTime, totalDuration);
+        playbackTime = Math.min(playbackTime + deltaTime, totalDuration); // Advance time
 
         let needsFullReevaluation = false;
-        let nextEventIndex = lastProcessedEventIndex + 1;
+        // Start processing from the command immediately after the last one handled by renderStateAtTime or previous loop iteration
+        let nextCommandIndex = lastProcessedEventIndex + 1;
 
-        // Handle active animateView interpolation
+        // Handle interpolation for an active 'animateView' command
         if (graphState.activeAnimateView) {
             const { startTime, duration, startView, endView } = graphState.activeAnimateView;
             const animationProgress = Math.min(1, (playbackTime - startTime) / duration);
 
             if (animationProgress < 1) {
+                // Interpolate current view properties
                 graphState.originX = startView.originX + (endView.originX - startView.originX) * animationProgress;
                 graphState.originY = startView.originY + (endView.originY - startView.originY) * animationProgress;
                 graphState.scale = startView.scale + (endView.scale - startView.scale) * animationProgress;
             } else {
+                // Animation finished: snap to end state and clear active animation
                 Object.assign(graphState, endView);
                 graphState.activeAnimateView = null;
-                needsFullReevaluation = true;
+                needsFullReevaluation = true; // State changed discretely, re-evaluate
             }
         }
 
-        // Process discrete timeline events
-        while (nextEventIndex < timeline.length && timeline[nextEventIndex].time <= playbackTime) {
-            const command = timeline[nextEventIndex];
+        // Process discrete commands that have become due
+        while (nextCommandIndex < timeline.length && timeline[nextCommandIndex].time <= playbackTime) {
+            const command = timeline[nextCommandIndex];
 
+            // If a new 'animateView' command is encountered, set it as active
             if (command.action === 'animateView') {
                 graphState.activeAnimateView = {
                     startTime: command.time,
@@ -357,95 +369,102 @@ document.addEventListener('DOMContentLoaded', () => {
                     startView: command.payload.startView,
                     endView: command.payload.endView
                 };
-                Object.assign(graphState, command.payload.startView);
+                Object.assign(graphState, command.payload.startView); // Immediately apply start state
                 needsFullReevaluation = true;
-            } else {
-                executeReplayCommand(command);
+            } else if (command.action !== 'delay') { // Skip 'delay' as it only advances time, not state
+                executeReplayCommand(command); // Apply the command's effect
+                // Mark for re-evaluation if command changes graph math/visibility
                 if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView', 'lockPoint', 'unlockPoint'].includes(command.action)) {
                     needsFullReevaluation = true;
                 }
             }
-            lastProcessedEventIndex = nextEventIndex;
-            nextEventIndex++;
+            lastProcessedEventIndex = nextCommandIndex; // Mark as processed
+            nextCommandIndex++; // Move to next command
         }
 
+        // Only perform heavy re-evaluation if a state-changing command was processed
         if (needsFullReevaluation) {
             evaluateAndCacheAll();
         }
 
-        renderAll();
+        renderAll(); // Always render the current graphical state
 
+        // Update progress bar
         progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
 
+        // If replay finished, pause
         if (playbackTime >= totalDuration) {
             pause();
             progressBar.style.width = '100%';
         } else {
-            animationFrameId = requestAnimationFrame(animationLoop);
+            animationFrameId = requestAnimationFrame(animationLoop); // Continue loop
         }
     }
 
     /**
      * The "Cold Path": Reconstructs the entire calculator state for a specific time.
-     * Used for seeking or initializing the replay.
+     * This is the critical function for reliable seeking.
+     * It ensures the `graphState` and UI are precisely as they would be if the replay played linearly to `time`.
      * @param {number} time - The target time in milliseconds to reconstruct the state for.
      */
     function renderStateAtTime(time) {
-        // --- STEP 1: Full Reset of UI and Internal State ---
-        // Clear all existing expressions from the UI
-        expressionListContainer.innerHTML = '';
-        // Reset graphState to its initial, default values
+        // --- STEP 1: Perform a complete reset of the replay player's UI and internal state.
+        // This is crucial for stability, especially when seeking backward.
+        expressionListContainer.innerHTML = ''; // Clear all expression UI elements
+        
+        // Reset main graphState properties to their defaults (or initial state)
         graphState = {
-            originX: canvas.width / 2, // Default view
-            originY: canvas.height / 2, // Default view
-            scale: 40,                  // Default view
-            expressions: [],
+            ...initialGraphView, // Reset view to default
+            expressions: [],     // Clear all expressions
             intersections: [],
             lockedPoint: { visible: false, x: 0, y: 0 },
-            angleMode: 'rad', // Default angle mode
+            angleMode: 'rad',    // Reset angle mode
             definedVariables: {},
-            activeAnimateView: null
+            activeAnimateView: null // No active animation when starting reconstruction
         };
         // Reset angle mode button to default visual state
         toggleAngleModeBtn.textContent = 'RAD';
         toggleAngleModeBtn.classList.add('active'); // Assuming RAD is default active
 
-        // Clear canvas
+        // Clear the canvas to remove any previous drawing
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Reset the index for future forward playback
+        // Reset the last processed event index.
+        // This tells the `animationLoop` to start processing from the beginning
+        // if it resumes playback after this reconstruction.
         lastProcessedEventIndex = -1;
 
-        // --- STEP 2: Iterate through the timeline up to the target time ---
-        // Process commands to build the state step-by-step
+        // --- STEP 2: Iterate through the entire timeline from the beginning up to the target time. ---
+        // Apply each command's effect to the `graphState` and UI chronologically.
         for (let i = 0; i < timeline.length; i++) {
             const command = timeline[i];
 
-            // If the command is *after* the target time, we stop.
-            // Exception: an animateView that started before 'time' but ends after 'time'.
+            // If the command's starting time is strictly after the target 'time',
+            // we've processed all relevant past commands. Break the loop.
+            // EXCEPTION: if the target 'time' falls *within* an 'animateView' command that has already started.
             if (command.time > time) {
-                // If the command is an animateView that started *before* 'time'
-                // but extends *beyond* 'time', we need to interpolate.
+                // Special handling for 'animateView' if we seek *into* it.
                 if (command.action === 'animateView' && command.time < time) {
                     const animationEndTime = command.time + command.payload.duration;
-                    if (time < animationEndTime) { // 'time' is within this animation
+                    if (time < animationEndTime) { // Target 'time' is inside this specific animation
+                        // Calculate interpolated view properties for this exact moment
                         const progress = (time - command.time) / command.payload.duration;
                         graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
                         graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
                         graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
                         
-                        // Mark this as the active animation for the animationLoop to continue
+                        // Mark this as the active animation for the `animationLoop` to continue from
                         graphState.activeAnimateView = { ...command.payload, startTime: command.time };
-                        lastProcessedEventIndex = i; // This command is now "active"
-                        break; // Stop, as we've landed in an interpolated state
+                        lastProcessedEventIndex = i; // This command is now the "last processed" for the animation loop
+                        break; // Stop reconstruction, as we are now in an interpolated state
                     }
                 }
-                break; // Stop processing if command time is after target time
+                break; // Stop, no more commands to process up to 'time'
             }
 
-            // --- Apply the command's effect ---
+            // --- Apply the command's effect to the state ---
             if (command.action === 'initialState') {
-                // InitialState command is special, it sets the base state
+                // Apply the initial view and expressions
                 Object.assign(graphState, command.payload.view);
                 graphState.angleMode = command.payload.angleMode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
@@ -453,39 +472,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 command.payload.expressions.forEach(initialExpr => {
                     const clonedSliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
                     const completeExpr = { plotPoints: [], ...initialExpr, sliders: clonedSliders };
-                    addExpressionUI(completeExpr); // Re-adds UI elements and sets LaTeX
+                    addExpressionUI(completeExpr); // This function creates DOM elements and initializes MathQuill
                 });
             } else if (command.action === 'animateView') {
-                // If we are strictly past this animation, apply its final state
-                // (Interpolation for "within" is handled above at the 'break' condition)
+                // If we are rebuilding *past* an animateView (i.e., it completed before 'time'),
+                // apply its final state to graphState.
                 Object.assign(graphState, command.payload.endView);
-            } else if (command.action !== 'delay') { // 'delay' commands just affect timeline time, not state
+            } else if (command.action !== 'delay') { // 'delay' commands just advance timeline time, not graph state
                 // Execute all other discrete commands
                 executeReplayCommand(command);
             }
 
-            // Update the lastProcessedEventIndex to this command's index
-            // This is crucial for the animationLoop to pick up correctly.
+            // After processing each command, update `lastProcessedEventIndex`.
+            // This is crucial for the `animationLoop` to know where to start if it takes over.
             lastProcessedEventIndex = i;
         }
 
-        // --- STEP 3: Finalize State and Render ---
-        // Recalculate all mathematical properties (plot points, intersections) based on the reconstructed state
+        // --- STEP 3: Finalize state and perform initial render for the reconstructed state. ---
+        // After all relevant commands are applied, re-evaluate all expressions (compiling, plotting points, finding intersections).
         evaluateAndCacheAll();
-        // Redraw the canvas with the fully reconstructed state
+        // Redraw the canvas with the fully reconstructed graphical state.
         renderAll();
-        // Update the progress bar visual
+        // Update the visual progress bar to reflect the new playback position.
         progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
     }
 
+    /**
+     * Executes a single replay command, applying its effect to the graphState and UI.
+     * This function is used by both `renderStateAtTime` (cold path) and `animationLoop` (hot path).
+     * @param {Object} command - The command object from the timeline.
+     */
     function executeReplayCommand(command) {
-        if (!command || !command.action) return;
+        if (!command || !command.action) return; // Basic validation
         const { action, payload } = command;
         let expr, mathField, item;
+
         switch (action) {
             case 'initialState':
-                // This case should primarily be handled by renderStateAtTime for reconstruction.
-                // In executeReplayCommand, it implies a reset.
+                // `initialState` should primarily be handled by `renderStateAtTime`'s top-level reset and loop.
+                // If it somehow gets called here, it would trigger a reset.
+                // For robustness, ensure all relevant state is reset.
                 expressionListContainer.innerHTML = '';
                 graphState.expressions = [];
                 Object.assign(graphState, payload.view);
@@ -495,37 +521,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 payload.expressions.forEach(initialExpr => {
                     const completeExpr = { sliders: {}, ...initialExpr };
                     completeExpr.sliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
-                    addExpressionUI(completeExpr);
+                    addExpressionUI(completeExpr); // This re-creates UI, vital!
                 });
                 break;
             case 'addExpression':
+                // When adding, ensure we generate a unique ID if not provided (should be provided by recorder)
+                // and assign a plot color.
                 const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
                 const newExprData = {
-                    id: payload.id,
+                    id: payload.id, // Use ID from payload for consistency
                     latex: payload.latex || '',
                     visible: payload.visible !== undefined ? payload.visible : true,
                     color: payload.color || color,
                     sliders: payload.sliders || {}
                 };
-                addExpressionUI(newExprData);
+                addExpressionUI(newExprData); // Calls addExpressionUI to create the UI element
                 break;
             case 'removeExpression':
+                // Find and remove the expression's UI element
                 item = document.getElementById(payload.id);
                 if (item) item.remove();
+                // Filter the expression from the global state array
                 graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
-                updateExpressionNumbers();
+                updateExpressionNumbers(); // Re-index expression numbers in UI
                 break;
             case 'focusExpression':
+                // Remove focus from any currently focused MathQuill fields
                 document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
+                // Add focus to the target expression's field
                 item = document.getElementById(payload.id);
                 if (item) {
                     item.querySelector('.math-input-field').classList.add('mq-focused');
                 }
                 break;
             case 'setLatex':
+                // Find the expression in state and update its latex
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if (expr) {
                     expr.latex = payload.latex;
+                    // Find the MathQuill field and update its displayed LaTeX
                     mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
                     if (mathField) {
                         mathField.latex(payload.latex);
@@ -533,15 +567,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'animateView':
-                // For 'animateView', executeReplayCommand is generally only called if we are applying
-                // its START state as part of a cold path reconstruction, or if animationLoop is
-                // setting up a new animation. The actual interpolation happens in animationLoop.
-                Object.assign(graphState, payload.startView); // Set to start of animation view
+                // `animateView` is largely handled by `renderStateAtTime` and `animationLoop`
+                // for interpolation. If `executeReplayCommand` is called with it, it means
+                // we should apply the *start* view as a discrete jump.
+                Object.assign(graphState, payload.startView);
                 break;
             case 'setSlider':
+                // Find the expression and its slider, then update the value
                 expr = graphState.expressions.find(e => e.id === payload.exprId);
                 if (expr && expr.sliders[payload.name]) {
                     expr.sliders[payload.name].val = payload.value;
+                    // Update the visible slider and its label in the UI
                     const itemElement = document.getElementById(payload.exprId);
                     if (itemElement) {
                         const sliderInputs = itemElement.querySelectorAll(`.slider-container input[type=range]`);
@@ -564,6 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'toggleVisibility':
+                // Update expression's visibility in state and its UI indicator
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if (expr) {
                     expr.visible = payload.visible;
@@ -571,67 +608,112 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'resetView':
+                // Reset graph view to defaults (without immediately redrawing; renderAll will do that)
                 resetView(false);
                 break;
             case 'setAngleMode':
+                // Update angle mode in state and its UI button
                 graphState.angleMode = payload.mode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
                 break;
             case 'lockPoint':
+                // Set the locked point's properties
                 graphState.lockedPoint = { visible: true, ...payload };
                 break;
             case 'unlockPoint':
+                // Hide the locked point
                 graphState.lockedPoint.visible = false;
                 break;
         }
     }
+
+    /**
+     * Adds an expression's UI element to the sidebar and initializes its MathQuill field.
+     * Crucial for rebuilding the UI during `renderStateAtTime`.
+     * @param {Object} exprData - The expression data to add.
+     */
     function addExpressionUI(exprData) {
-        const newExpr = { plotPoints: [], ...exprData };
-        newExpr.sliders = JSON.parse(JSON.stringify(exprData.sliders || {}));
-        graphState.expressions.push(newExpr);
+        // Create a deep copy to ensure independence
+        const newExpr = JSON.parse(JSON.stringify(exprData));
+        newExpr.plotPoints = []; // Initialize plotPoints cache
+
+        graphState.expressions.push(newExpr); // Add to the state
 
         const item = document.createElement('div');
         item.className = 'expression-item';
-        item.id = newExpr.id;
-        const exprIndex = graphState.expressions.length;
-        item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
+        item.id = newExpr.id; // Set the ID from data
+        const exprIndex = graphState.expressions.length; // Use current length for display number
+        item.innerHTML = `
+            <div class="expression-main">
+                <span class="expression-number">${exprIndex}</span>
+                <div class="expression-color-bar"></div>
+                <div class="expression-input-wrapper">
+                    <span class="math-input-field"></span>
+                </div>
+                <span class="expression-result"></span>
+            </div>
+            <div class="expression-extras"></div>
+        `;
         expressionListContainer.appendChild(item);
-        const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
 
+        // Initialize MathQuill StaticMath for the new field
+        const mathFieldElement = item.querySelector('.math-input-field');
+        const mathField = MQ.StaticMath(mathFieldElement);
+
+        // **IMPORTANT:** Set the LaTeX for the MathQuill field immediately after initialization.
+        // This ensures the content is displayed correctly from the start.
         if (newExpr.latex) {
             mathField.latex(newExpr.latex);
         }
 
+        // Apply initial styling for color and visibility
         item.querySelector('.expression-color-bar').style.backgroundColor = newExpr.color;
         item.querySelector('.expression-color-bar').style.borderColor = newExpr.color;
         item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !newExpr.visible);
 
+        // Populate sliders UI (non-interactive in replay)
         const extrasEl = item.querySelector('.expression-extras');
-        Object.keys(newExpr.sliders).forEach(name => {
-            const slider = newExpr.sliders[name];
-            const sliderDiv = document.createElement('div');
-            sliderDiv.className = 'slider-container';
-            sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`;
-            extrasEl.appendChild(sliderDiv);
-        });
+        if (newExpr.sliders) {
+            Object.keys(newExpr.sliders).forEach(name => {
+                const slider = newExpr.sliders[name];
+                const sliderDiv = document.createElement('div');
+                sliderDiv.className = 'slider-container';
+                sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`;
+                extrasEl.appendChild(sliderDiv);
+            });
+        }
 
-        updateExpressionNumbers();
+        updateExpressionNumbers(); // Update numbers for all expressions
     }
+
     function updateExpressionNumbers() {
         expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
             item.querySelector('.expression-number').textContent = index + 1;
         });
     }
 
+    /**
+     * Heavy evaluation path. Parses expressions, calculates plot points, and finds intersections.
+     * Called after any state change that affects the graph's mathematical rendering.
+     */
     function evaluateAndCacheAll() {
+        // Reset defined variables for a clean re-evaluation
         graphState.definedVariables = {};
+        // Parse and compile each expression, also identifying sliders
         graphState.expressions.forEach(parseSingleExpression);
+        // Calculate and cache plot points for all visible functions/inequalities
         graphState.expressions.forEach(calculatePlotPoints);
+        // Find and store intersection points
         findAndStoreIntersections();
+        // Update the UI elements (results, slider values) based on current state
         graphState.expressions.forEach(updateExpressionUI);
     }
 
+    /**
+     * Calculates a high-density set of points for a function and caches them.
+     * This pre-computation makes `plotFunction` very fast.
+     */
     function calculatePlotPoints(expr) {
         if (!expr.compiled || (expr.type !== 'function' && expr.type !== 'inequality')) {
             expr.plotPoints = [];
@@ -640,9 +722,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const scope = getEvaluationScope(expr);
         const points = [];
-        const xMin = -100;
+        const xMin = -100; // Wide range for data, regardless of current zoom
         const xMax = 100;
-        const numPoints = 10000;
+        const numPoints = 10000; // High density for smooth curves
         const dx = (xMax - xMin) / numPoints;
 
         for (let i = 0; i <= numPoints; i++) {
@@ -653,48 +735,58 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (Number.isFinite(y)) {
                     points.push({ x, y });
                 } else {
-                    points.push(null);
+                    points.push(null); // Indicates a break or discontinuity
                 }
             } catch (e) {
-                points.push(null);
+                points.push(null); // Error in evaluation
             }
         }
         expr.plotPoints = points;
     }
 
+    /**
+     * Fast rendering path. Draws grid, cached points, and overlays. Always fast.
+     * This function should only *draw* based on the current `graphState` and `plotPoints` cache.
+     */
     function renderAll() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawGraphGrid();
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the entire canvas
+        drawGraphGrid(); // Draw the background grid and axes
         graphState.expressions.forEach(expr => {
-            if (!expr.visible || expr.error) return;
+            if (!expr.visible || expr.error) return; // Skip hidden or erroring expressions
             if (expr.type === "inequality") plotInequality(expr);
             else if (expr.type === "vertical_inequality") plotVerticalInequality(expr);
             else if (expr.type === "function") { plotFunction(expr); drawPointsOfInterest(expr); }
             else if (expr.type === "vertical_line") plotVerticalLine(expr);
         });
-        drawAllIntersectionPoints();
-        if (graphState.lockedPoint.visible) drawLockedPoint()
+        drawAllIntersectionPoints(); // Draw intersection points
+        if (graphState.lockedPoint.visible) drawLockedPoint(); // Draw the locked point if visible
     }
 
+    /**
+     * High-performance plot function that uses the pre-calculated point cache.
+     */
     function plotFunction(expr) {
         if (!expr.plotPoints || expr.plotPoints.length === 0) return;
 
         ctx.strokeStyle = expr.color;
         ctx.lineWidth = 2.5 * currentDevicePixelRatio;
         ctx.beginPath();
-        let firstPoint = true;
+        let firstPoint = true; // Flag to handle discontinuities (moveTo vs lineTo)
 
         for (const point of expr.plotPoints) {
             if (point === null) {
-                firstPoint = true;
+                firstPoint = true; // Start a new segment after a discontinuity
                 continue;
             }
+            // Transform graph coordinates to pixel coordinates
             const px = graphState.originX + point.x * graphState.scale;
-            if (px < -10 || px > canvas.width + 10) {
-                firstPoint = true;
-                continue;
+            const py = graphState.originY - point.y * graphState.scale; // Y-axis inverted for canvas
+
+            // Basic culling: skip drawing points far off-screen to save performance
+            if (px < -10 || px > canvas.width + 10 || py < -10 || py > canvas.height + 10) {
+                 firstPoint = true; // Treat as discontinuity if off-screen
+                 continue;
             }
-            const py = graphState.originY - point.y * graphState.scale;
 
             if (firstPoint) {
                 ctx.moveTo(px, py);
@@ -703,8 +795,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.lineTo(px, py);
             }
         }
-        ctx.stroke();
+        ctx.stroke(); // Draw the path
     }
+
+    // --- Graphing Helpers (Remaining functions largely unchanged, but included for completeness) ---
 
     function plotInequality(expr) { if (!expr.plotPoints || expr.plotPoints.length === 0) return; const scope = getEvaluationScope(expr); ctx.fillStyle = expr.color; ctx.globalAlpha = INEQUALITY_ALPHA; ctx.beginPath(); let firstPoint = !0; for (const point of expr.plotPoints) { if (point === null) { firstPoint = !0; continue } const px = graphState.originX + point.x * graphState.scale; if (px < -10 || px > canvas.width + 10) { firstPoint = !0; continue } const py = graphState.originY - point.y * graphState.scale; if (firstPoint) { ctx.moveTo(px, py); firstPoint = !1 } else { ctx.lineTo(px, py) } } const op = expr.inequalityType; if (op.includes(">")) { ctx.lineTo(canvas.width, 0); ctx.lineTo(0, 0) } else { ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(0, canvas.height) } ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; if (op === "<" || op === ">") { ctx.setLineDash([8 * currentDevicePixelRatio, 8 * currentDevicePixelRatio]) } plotFunction(expr); ctx.setLineDash([]) }
     function parseSingleExpression(expr) { Object.assign(expr, { type: "empty", compiled: null, error: null, result: null, node: null, inequalityType: null, isImplicit: !1 }); let cleanStr = preprocessInputString(latexToMathJs(expr.latex.trim())); if (!cleanStr) return; try { const node = math.parse(cleanStr); expr.node = node; const scope = getEvaluationScope(expr); if (node.isAssignmentNode) { const varName = node.object.name; if (node.toString().match(/[xy]/)) { expr.error = "Cannot assign expression with x or y."; return } expr.type = "assignment"; const result = node.evaluate(scope); expr.result = result; graphState.definedVariables[varName] = result } else if (cleanStr.includes("x") || cleanStr.includes("y")) { expr.type = "function"; let parseableNode = node; if (node.isOperatorNode && node.op === "=") { const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { parseableNode = right } else if (right.isSymbolNode && right.name === "y") { parseableNode = left } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_line"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_line"; expr.x_value = left.evaluate(scope) } else { expr.error = "Implicit functions not supported yet." } } if (expr.type === "function") { expr.node = parseableNode; expr.compiled = parseableNode.compile() } } else if (node.isOperatorNode && ["<", ">", "<=", ">="].includes(node.op)) { expr.inequalityType = node.op; const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { expr.type = "inequality"; expr.compiled = right.compile() } else if (right.isSymbolNode && right.name === "y") { expr.type = "inequality"; expr.compiled = left.compile(); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_inequality"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_inequality"; expr.x_value = left.evaluate(scope); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } if (expr.type === "function" || expr.type === "inequality") { const knownSymbols = ["x", "y", "e", "pi", "i", "true", "false", "theta", ...Object.keys(math)]; const foundSymbols = new Set; expr.node.traverse(n => { if (n.isSymbolNode && !knownSymbols.includes(n.name) && !graphState.definedVariables.hasOwnProperty(n.name)) { foundSymbols.add(n.name) } }); foundSymbols.forEach(name => { if (!expr.sliders[name]) expr.sliders[name] = { val: 1, min: -5, max: 5, step: .1 } }); Object.keys(expr.sliders).forEach(name => { if (!foundSymbols.has(name)) delete expr.sliders[name] }) } else { expr.sliders = {} } if (expr.type === "function") findPointsOfInterest(expr) } catch (err) { expr.error = err.message.length > 50 ? err.message.substring(0, 50) + "..." : err.message } }
@@ -786,9 +880,27 @@ document.addEventListener('DOMContentLoaded', () => {
             canvas.style.width = `${rect.width}px`;
             canvas.style.height = `${rect.height}px`;
         }
-        resetView(false);
+        // When resizing, we must reset the view based on the new dimensions
+        // and trigger a full state re-evaluation and render.
+        graphState.originX = canvas.width / 2;
+        graphState.originY = canvas.height / 2;
+        // Don't reset scale, as it should persist across resizes unless explicitly reset by command
+        
+        // No need to call evaluateAndCacheAll() or renderAll() here directly,
+        // because initialize() or startReplay() will call renderStateAtTime(0)
+        // or a subsequent seekToAbsoluteTime() will trigger it, which covers all drawing.
     }
-    function resetView(redraw = !0) { graphState.originX = canvas.width / 2; graphState.originY = canvas.height / 2; graphState.scale = 40; if (redraw) { evaluateAndCacheAll(); renderAll(); } }
+    // Updated resetView to use initialGraphView constants
+    function resetView(redraw = true) {
+        Object.assign(graphState, initialGraphView); // Reset to predefined initial view
+        // Adjust origin based on current canvas size, which might have changed since initialGraphView was defined
+        graphState.originX = canvas.width / 2;
+        graphState.originY = canvas.height / 2;
+        if (redraw) {
+            evaluateAndCacheAll();
+            renderAll();
+        }
+    }
     function drawGraphGrid() {
         const computedStyles = getComputedStyle(document.documentElement); const THELO_BORDER_COLOR = computedStyles.getPropertyValue("--thelo-border").trim(); const THELO_TEXT_LIGHT_COLOR = computedStyles.getPropertyValue("--thelo-text-light").trim(); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); let dynamicGrid = 1; while (dynamicGrid * graphState.scale < 50 * currentDevicePixelRatio) { dynamicGrid *= (dynamicGrid * graphState.scale < 25 * currentDevicePixelRatio ? 2 : 2.5) }
         while (dynamicGrid * graphState.scale > 100 * currentDevicePixelRatio) { dynamicGrid /= (dynamicGrid * graphState.scale > 250 * currentDevicePixelRatio ? 2.5 : 2) }
@@ -803,7 +915,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function preprocessInputString(str) { const functionNames = "sin|cos|tan|asin|acos|atan|log10|log|sqrt|abs|mean|median|stdev|min|max|total|quartile"; const funcArgRegex = new RegExp(`\\b(${functionNames})\\s+([a-zA-Z0-9πθ.\\[\\]]+)`, "g"); return str.replace(funcArgRegex, "$1($2)") }
     function getEvaluationScope(expr) {
-        const scope = { ...graphState.definedVariables }; Object.keys(expr.sliders).forEach(name => { scope[name] = expr.sliders[name].val }); scope.total = math.sum; scope.stdev = math.std; scope.mean = math.mean; scope.median = math.median; scope.min = math.min; scope.max = math.max; scope.quartile = math.quantileSeq; scope.nCr = math.combinations; scope.nPr = math.permutations; if (graphState.angleMode === "deg") { scope.sin = math.sind; scope.cos = math.cosd; scope.tan = math.tand; scope.asin = math.asind; scope.acos = math.acosd; scope.atan = math.atand; scope.atan2 = math.atan2d } return scope
+        const scope = { ...graphState.definedVariables }; Object.keys(expr.sliders).forEach(name => { scope[name] = expr.sliders[name].val }); scope.total = math.sum; scope.stdev = math.std; scope.mean = math.median; scope.median = math.median; scope.min = math.min; scope.max = math.max; scope.quartile = math.quantileSeq; scope.nCr = math.combinations; scope.nPr = math.permutations; if (graphState.angleMode === "deg") { scope.sin = math.sind; scope.cos = math.cosd; scope.tan = math.tand; scope.asin = math.asind; scope.acos = math.acosd; scope.atan = math.atand; scope.atan2 = math.atan2d } return scope
     }
 
     initialize();
