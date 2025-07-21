@@ -112,7 +112,7 @@
             #homeBtn { bottom: 15px; right: 15px; }
         }
         #progressBarContainer {
-    display: none;
+    display: none; /* This line hides the container and its contents */
 }
     </style>
 </head>
@@ -140,7 +140,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // ======================================================
-    // =========== AUTOMATED REPLAY ENGINE ==================
+    // =========== AUTOMATED REPLAY ENGINE V5 ===============
+    // ===========  (Optimized with Point Caching)  =========
     // ======================================================
 
     // --- DOM ELEMENTS ---
@@ -148,14 +149,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const ctx = canvas.getContext('2d');
     const expressionListContainer = document.getElementById('expressionListContainer');
     const toggleAngleModeBtn = document.getElementById('toggleAngleModeBtn');
+    const progressBarContainer = document.getElementById('progressBarContainer');
     const progressBar = document.getElementById('progressBar');
-
+    
     // --- LIBRARIES & CONSTANTS ---
     const MQ = MathQuill.getInterface(2);
     const devicePixelRatio = window.devicePixelRatio || 1;
     const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
     const INEQUALITY_ALPHA = 0.2;
     const POI_RADIUS = 4 * devicePixelRatio;
+    const SEEK_AMOUNT_MS = 5000;
 
     // --- STATE MANAGEMENT ---
     let graphState = {
@@ -166,145 +169,185 @@ document.addEventListener('DOMContentLoaded', () => {
         angleMode: 'rad',
         definedVariables: {}
     };
-    let isReplaying = false;
 
-    // --- INITIALIZATION ---
+    // --- PLAYBACK CONTROL STATE ---
+    let timeline = [];
+    let totalDuration = 0;
+    let playbackTime = 0;
+    let isPlaying = false;
+    let animationFrameId = null;
+    let lastTimestamp = 0;
+    let lastProcessedEventIndex = -1;
+
+    // --- INITIALIZATION & EVENT LISTENERS ---
     function initialize() {
-        resizeCanvas();
+        resizeCanvases();
         setupMessageListener();
+        setupKeyListeners();
         renderAll();
     }
 
-    /**
-     * Listens for a 'message' event from the parent window (thelo app).
-     * When valid replay data is received, it triggers the playback.
-     */
     function setupMessageListener() {
         window.addEventListener('message', (event) => {
-            // Security: In a production environment, you should check the origin
-            // if (event.origin !== 'https://thelo.space') return;
-
             const receivedData = event.data;
             if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-                console.log("Replay data received from parent window.");
                 startReplay(receivedData.actions);
-            } else {
-                console.warn("Received invalid message format from parent:", receivedData);
+            } else if (receivedData && receivedData.command === 'seek') {
+                seek(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
             }
         });
     }
     
+    function setupKeyListeners() {
+        window.addEventListener('keydown', (e) => {
+            if (timeline.length === 0) return;
+            if (e.key === 'ArrowRight') seek(SEEK_AMOUNT_MS);
+            else if (e.key === 'ArrowLeft') seek(-SEEK_AMOUNT_MS);
+            else if (e.key === ' ') {
+                e.preventDefault();
+                togglePlayPause();
+            }
+        });
+    }
+    
+    function buildTimeline(actions) {
+        let currentTime = 0;
+        timeline = [];
+        actions.forEach(action => {
+            if (action.action === 'delay') {
+                currentTime += action.ms;
+            } else {
+                timeline.push({ time: currentTime, ...action });
+            }
+        });
+        totalDuration = currentTime;
+    }
+
+    function startReplay(actions) {
+        if (isPlaying) pause();
+        buildTimeline(actions);
+        playbackTime = 0;
+        lastProcessedEventIndex = -1;
+        renderStateAtTime(0); // Build state for time 0
+        play();
+    }
+
+    // --- PLAYBACK CONTROLS ---
+
+    function play() {
+        if (isPlaying) return;
+        isPlaying = true;
+        //progressBarContainer.style.display = 'block';
+        lastTimestamp = performance.now();
+        animationFrameId = requestAnimationFrame(animationLoop);
+    }
+
+    function pause() {
+        if (!isPlaying) return;
+        isPlaying = false;
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+
+    function togglePlayPause() {
+        if (isPlaying) {
+            pause();
+        } else {
+            if (playbackTime >= totalDuration) {
+                playbackTime = 0;
+                lastProcessedEventIndex = -1;
+                 renderStateAtTime(0);
+            }
+            play();
+        }
+    }
+
+    function seek(amountMs) {
+        const wasAtEnd = playbackTime >= totalDuration;
+        const wasPlaying = isPlaying;
+        if (wasPlaying) pause();
+
+        playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
+        
+        // Seeking always requires a full state reconstruction for accuracy
+        renderStateAtTime(playbackTime);
+
+        if (wasPlaying || (wasAtEnd && amountMs < 0)) {
+            play();
+        }
+    }
+
+    // --- CORE RENDERING & PLAYBACK LOGIC ---
+
+    function animationLoop(currentDOMTime) {
+        if (!isPlaying) return;
+
+        const deltaTime = currentDOMTime - lastTimestamp;
+        lastTimestamp = currentDOMTime;
+        playbackTime = Math.min(playbackTime + deltaTime, totalDuration);
+
+        let needsFullReevaluation = false;
+        let nextEventIndex = lastProcessedEventIndex + 1;
+
+        while (nextEventIndex < timeline.length && timeline[nextEventIndex].time <= playbackTime) {
+            const command = timeline[nextEventIndex];
+            executeReplayCommand(command);
+
+            // Any action that could change the math requires re-evaluation
+            if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView'].includes(command.action)) {
+                needsFullReevaluation = true;
+            }
+
+            lastProcessedEventIndex = nextEventIndex;
+            nextEventIndex++;
+        }
+        
+        if (needsFullReevaluation) {
+            // Heavy path: Re-parse, re-calculate points, find intersections.
+            evaluateAndCacheAll();
+        }
+        
+        // Always render the current state. This is now always a fast operation.
+        renderAll();
+
+        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
+
+        if (playbackTime >= totalDuration) {
+            pause();
+        } else {
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+    }
+
     /**
-     * Starts the replay process by setting the initial state and kicking off the animation loop.
-     * @param {Array} actions - The array of actions from the recording.
-     */
-    function startReplay(actions) {
-        if (isReplaying || !actions || actions.length === 0) return;
-        isReplaying = true;
-
-        // Set the absolute initial state before starting the animation.
-        executeReplayCommand(actions[0]);
-
-        // Pass the rest of the actions to the animation loop.
-        animationLoop(actions.slice(1));
-    }
-    /**
-     * The core animation engine that uses requestAnimationFrame for smooth playback.
-     * @param {Array} actions - The sequence of actions to execute.
-     */
-    function animationLoop(actions) {
-        let actionIndex = 0;
-        let lastTime = performance.now();
-        let timeSinceLastAction = 0;
-
-        // Store start and end states for smooth view transitions (panning/zooming).
-        let viewAnimation = {
-            active: false,
-            duration: 0,
-            elapsed: 0,
-            start: {},
-            end: {}
-        };
-
-        function loop(currentTime) {
-            if (!isReplaying) return;
-
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
-            timeSinceLastAction += deltaTime;
-
-            // Process all actions that are due to happen in this frame.
-            while (actionIndex < actions.length) {
-                const command = actions[actionIndex];
-                
-                if (command.action === 'delay' && timeSinceLastAction < command.ms) {
-                    break; // Wait until the delay has passed.
-                }
-
-                // If we are here, the action is ready to be executed.
-                timeSinceLastAction = 0; // Reset timer for the next delay.
-
-                if (command.action === 'liveUpdateView') {
-                    // This is a high-frequency event; prepare to animate towards it.
-                    viewAnimation.active = true;
-                    viewAnimation.duration = actions[actionIndex+1]?.ms || 16.67; // Animate over the time until the next frame.
-                    viewAnimation.elapsed = 0;
-                    viewAnimation.start = { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale };
-                    viewAnimation.end = command.payload;
-                } else {
-                    // For all other actions, execute them instantly.
-                    viewAnimation.active = false;
-                    executeReplayCommand(command);
-                }
-                actionIndex++;
-            }
-
-            // If a view animation is active, interpolate the state for this frame.
-            if (viewAnimation.active) {
-                viewAnimation.elapsed += deltaTime;
-                let progress = Math.min(viewAnimation.elapsed / viewAnimation.duration, 1);
-                
-                // Linear interpolation (lerp) for smooth movement.
-                const lerp = (start, end, t) => start + (end - start) * t;
-                graphState.originX = lerp(viewAnimation.start.originX, viewAnimation.end.originX, progress);
-                graphState.originY = lerp(viewAnimation.start.originY, viewAnimation.end.originY, progress);
-                graphState.scale = lerp(viewAnimation.start.scale, viewAnimation.end.scale, progress);
-                
-                evaluateAndPlotAll();
-                
-                if (progress >= 1) {
-                    viewAnimation.active = false;
-                }
-            }
-
-            // Update progress bar
-            const progressPercentage = (actionIndex / actions.length) * 100;
-            progressBar.style.width = `${progressPercentage}%`;
-            
-            // Continue the loop if there are more actions.
-            if (actionIndex < actions.length) {
-                requestAnimationFrame(loop);
-            } else {
-                isReplaying = false;
-                console.log("Replay finished.");
-                setTimeout(() => { progressBar.style.width = '0%'; }, 1000);
-            }
-        }
-        
-        // Start the animation loop.
-        requestAnimationFrame(loop);
-    }
-
-    /**
-     * Executes a single command from the replay sequence to update the calculator's state.
-     * @param {object} command - The command object { action, payload }.
+     * The "Cold Path": Reconstructs the entire calculator state for a specific time.
+     * Used for seeking or initializing the replay.
      */
+    function renderStateAtTime(time) {
+        // Reset to initial state
+        executeReplayCommand(timeline[0]); 
+        
+        let newLastIndex = 0; // Start from 1 because 0 is initial state
+        for (let i = 1; i < timeline.length; i++) {
+            if (timeline[i].time <= time) {
+                executeReplayCommand(timeline[i]);
+                newLastIndex = i;
+            } else {
+                break;
+            }
+        }
+        lastProcessedEventIndex = newLastIndex;
+        
+        // After setting the state, do a full, accurate evaluation and render.
+        evaluateAndCacheAll();
+        renderAll(); 
+        progressBar.style.width = `${(time / totalDuration) * 100}%`;
+    }
+    
     function executeReplayCommand(command) {
         if (!command || !command.action) return;
-
         const { action, payload } = command;
         let expr, mathField, item;
-
         switch (action) {
             case 'initialState':
                 expressionListContainer.innerHTML = '';
@@ -313,26 +356,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 graphState.angleMode = payload.angleMode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
-                
                 payload.expressions.forEach(initialExpr => {
                     const completeExpr = { sliders: {}, ...initialExpr };
                     addExpressionUI(completeExpr);
                 });
                 break;
-            
             case 'addExpression':
                 const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
                 const newExprData = { id: payload.id, latex: '', visible: true, color: color, sliders: {} };
                 addExpressionUI(newExprData);
                 break;
-
             case 'removeExpression':
                 item = document.getElementById(payload.id);
                 if (item) item.remove();
                 graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
                 updateExpressionNumbers();
                 break;
-
             case 'focusExpression':
                 document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
                 item = document.getElementById(payload.id);
@@ -340,7 +379,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     item.querySelector('.math-input-field').classList.add('mq-focused');
                 }
                 break;
-
             case 'setLatex':
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if (expr) {
@@ -351,27 +389,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 break;
-
             case 'liveUpdateView':
             case 'setViewState':
                 Object.assign(graphState, payload);
                 break;
-
             case 'lockPoint':
                 graphState.lockedPoint = { visible: true, ...payload };
                 break;
-            
             case 'unlockPoint':
                 graphState.lockedPoint.visible = false;
                 break;
-
             case 'setSlider':
                 expr = graphState.expressions.find(e => e.id === payload.exprId);
                 if (expr && expr.sliders[payload.name]) {
                     expr.sliders[payload.name].val = payload.value;
                 }
                 break;
-
             case 'toggleVisibility':
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if(expr) {
@@ -379,577 +412,176 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
                 }
                 break;
-                
             case 'resetView':
                 resetView(false);
                 break;
-            
             case 'setAngleMode':
                 graphState.angleMode = payload.mode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
                 break;
         }
-
-        evaluateAndPlotAll();
     }
 
     function addExpressionUI(exprData) {
-        graphState.expressions.push(exprData);
+        // Add a plotPoints property for our cache
+        const newExpr = { plotPoints: [], ...exprData };
+        graphState.expressions.push(newExpr);
+
         const item = document.createElement('div');
         item.className = 'expression-item';
-        item.id = exprData.id;
+        item.id = newExpr.id;
         const exprIndex = graphState.expressions.length;
         item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
         expressionListContainer.appendChild(item);
-        
         const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
-        if (exprData.latex) {
-            mathField.latex(exprData.latex);
+        if (newExpr.latex) {
+            mathField.latex(newExpr.latex);
         }
-        item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !exprData.visible);
+        item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !newExpr.visible);
         updateExpressionNumbers();
     }
-
     function updateExpressionNumbers() {
         expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
             item.querySelector('.expression-number').textContent = index + 1;
         });
     }
-
-    // --- CORE GRAPHING LOGIC (Complete Implementation) ---
-    function evaluateAndPlotAll() {
+    
+    /**
+     * Heavy evaluation path. Parses expressions, calculates plot points, and finds intersections.
+     */
+    function evaluateAndCacheAll() {
         graphState.definedVariables = {};
         graphState.expressions.forEach(parseSingleExpression);
+        graphState.expressions.forEach(calculatePlotPoints); // NEW: Cache points after parsing
         findAndStoreIntersections();
         graphState.expressions.forEach(updateExpressionUI);
-        requestAnimationFrame(renderAll);
     }
     
-    function parseSingleExpression(expr) {
-        Object.assign(expr, { type: 'empty', compiled: null, error: null, result: null, node: null, inequalityType: null, isImplicit: false });
-        let cleanStr = preprocessInputString(latexToMathJs(expr.latex.trim()));
-        if (!cleanStr) return;
-        try {
-            const node = math.parse(cleanStr);
-            expr.node = node;
-            const scope = getEvaluationScope(expr);
-            if (node.isAssignmentNode) {
-                const varName = node.object.name;
-                if (node.toString().match(/[xy]/)) {
-                    expr.error = "Cannot assign expression with x or y.";
-                    return;
-                }
-                expr.type = 'assignment';
-                const result = node.evaluate(scope);
-                expr.result = result;
-                graphState.definedVariables[varName] = result;
-            } else if (cleanStr.includes('x') || cleanStr.includes('y')) {
-                expr.type = 'function';
-                let parseableNode = node;
-                if (node.isOperatorNode && node.op === '=') {
-                    const [left, right] = node.args;
-                    if (left.isSymbolNode && left.name === 'y') {
-                        parseableNode = right;
-                    } else if (right.isSymbolNode && right.name === 'y') {
-                        parseableNode = left;
-                    } else if (left.isSymbolNode && left.name === 'x') {
-                        expr.type = 'vertical_line';
-                        expr.x_value = right.evaluate(scope);
-                    } else if (right.isSymbolNode && right.name === 'x') {
-                        expr.type = 'vertical_line';
-                        expr.x_value = left.evaluate(scope);
-                    } else {
-                        expr.error = "Implicit functions not supported yet.";
-                    }
-                }
-                if (expr.type === 'function') {
-                    expr.node = parseableNode;
-                    expr.compiled = parseableNode.compile();
-                }
-            } else if (node.isOperatorNode && ['<', '>', '<=', '>='].includes(node.op)) {
-                expr.inequalityType = node.op;
-                const [left, right] = node.args;
-                if (left.isSymbolNode && left.name === 'y') {
-                    expr.type = 'inequality';
-                    expr.compiled = right.compile();
-                } else if (right.isSymbolNode && right.name === 'y') {
-                    expr.type = 'inequality';
-                    expr.compiled = left.compile();
-                    expr.inequalityType = { '>': '<', '>=': '<=', '<': '>', '<=': '>=' }[node.op];
-                } else if (left.isSymbolNode && left.name === 'x') {
-                    expr.type = 'vertical_inequality';
-                    expr.x_value = right.evaluate(scope);
-                } else if (right.isSymbolNode && right.name === 'x') {
-                    expr.type = 'vertical_inequality';
-                    expr.x_value = left.evaluate(scope);
-                    expr.inequalityType = { '>': '<', '>=': '<=', '<': '>', '<=': '>=' }[node.op];
-                } else {
-                    expr.type = 'calculation';
-                    expr.result = node.evaluate(scope);
-                }
-            } else {
-                expr.type = 'calculation';
-                expr.result = node.evaluate(scope);
-            }
-            if (expr.type === 'function' || expr.type === 'inequality') {
-                const knownSymbols = ['x', 'y', 'e', 'pi', 'i', 'true', 'false', 'theta', ...Object.keys(math)];
-                const foundSymbols = new Set();
-                expr.node.traverse(n => {
-                    if (n.isSymbolNode && !knownSymbols.includes(n.name) && !graphState.definedVariables.hasOwnProperty(n.name)) {
-                        foundSymbols.add(n.name);
-                    }
-                });
-                foundSymbols.forEach(name => {
-                    if (!expr.sliders[name]) expr.sliders[name] = { val: 1, min: -5, max: 5, step: 0.1 };
-                });
-                Object.keys(expr.sliders).forEach(name => {
-                    if (!foundSymbols.has(name)) delete expr.sliders[name];
-                });
-            } else {
-                expr.sliders = {};
-            }
-            if (expr.type === 'function') findPointsOfInterest(expr);
-        } catch (err) {
-            expr.error = err.message.length > 50 ? err.message.substring(0, 50) + '...' : err.message;
+    /**
+     * NEW: Calculates a high-density set of points for a function and caches them.
+     */
+    function calculatePlotPoints(expr) {
+        if (!expr.compiled || expr.type !== 'function' && expr.type !== 'inequality') {
+            expr.plotPoints = [];
+            return;
         }
-    }
 
-    function updateExpressionUI(expr) {
-        const item = document.getElementById(expr.id);
-        if (!item) return;
-        const resultEl = item.querySelector('.expression-result');
-        const extrasEl = item.querySelector('.expression-extras');
-        const colorBar = item.querySelector('.expression-color-bar');
-        resultEl.textContent = '';
-        extrasEl.innerHTML = '';
-        colorBar.style.backgroundColor = expr.error ? 'var(--error-red)' : (expr.visible ? expr.color : '#ccc');
-        colorBar.style.borderColor = expr.error ? 'var(--error-red)' : expr.color;
-        if (expr.error) {
-            resultEl.textContent = 'Error';
-        } else if (expr.result !== null && expr.result !== undefined) {
+        const scope = getEvaluationScope(expr);
+        const points = [];
+        // Define a view-independent range for high-quality data
+        const xMin = -100;
+        const xMax = 100;
+        const numPoints = 10000; // High number for smooth curves even when zoomed in
+        const dx = (xMax - xMin) / numPoints;
+
+        for (let i = 0; i <= numPoints; i++) {
+            const x = xMin + i * dx;
+            scope.x = x;
             try {
-                if (Array.isArray(expr.result)) {
-                    resultEl.textContent = `= [${expr.result.map(v => math.format(v, { precision: 3 })).join(', ')}]`;
-                } else if (typeof expr.result === 'function') {
-                    resultEl.textContent = 'f(x)';
+                const y = expr.compiled.evaluate(scope);
+                if (Number.isFinite(y)) {
+                    points.push({ x, y });
                 } else {
-                    resultEl.textContent = `= ${math.format(expr.result, { precision: 5 })}`;
+                    points.push(null); // Represents a break in the graph
                 }
-            } catch {
-                resultEl.textContent = `= ${expr.result.toString()}`;
+            } catch (e) {
+                points.push(null);
             }
         }
-        Object.keys(expr.sliders).forEach(name => {
-            const slider = expr.sliders[name];
-            const sliderDiv = document.createElement('div');
-            sliderDiv.className = 'slider-container';
-            sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}">`;
-            extrasEl.appendChild(sliderDiv);
-        });
+        expr.plotPoints = points;
     }
 
-    function renderAll() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    /**
+     * Fast rendering path. Draws grid, cached points, and overlays. Always fast.
+     */
+    function renderAll(){
+        ctx.clearRect(0,0,canvas.width,canvas.height);
         drawGraphGrid();
-        graphState.expressions.forEach(expr => {
-            if (!expr.visible || expr.error) return;
-            if (expr.type === 'inequality') plotInequality(expr);
-            else if (expr.type === 'vertical_inequality') plotVerticalInequality(expr);
-            else if (expr.type === 'function') {
-                plotFunction(expr);
-                drawPointsOfInterest(expr);
-            } else if (expr.type === 'vertical_line') plotVerticalLine(expr);
+        graphState.expressions.forEach(expr=>{
+            if(!expr.visible||expr.error)return;
+            // The plot functions are now fast because they use the cache
+            if(expr.type==="inequality")plotInequality(expr);
+            else if(expr.type==="vertical_inequality")plotVerticalInequality(expr);
+            else if(expr.type==="function"){plotFunction(expr); drawPointsOfInterest(expr); }
+            else if(expr.type==="vertical_line")plotVerticalLine(expr);
         });
         drawAllIntersectionPoints();
-        if (graphState.lockedPoint.visible) drawLockedPoint();
+        if(graphState.lockedPoint.visible)drawLockedPoint()
     }
 
-    function plotFunction(expr) {
-        if (!expr.compiled) return;
-        const scope = getEvaluationScope(expr);
+    /**
+     * NEW: High-performance plot function that uses the point cache.
+     */
+    function plotFunction(expr){
+        if (!expr.plotPoints || expr.plotPoints.length === 0) return;
+
         ctx.strokeStyle = expr.color;
         ctx.lineWidth = 2.5 * devicePixelRatio;
         ctx.beginPath();
         let firstPoint = true;
-        for (let px = 0; px < canvas.width; px++) {
-            const x = (px - graphState.originX) / graphState.scale;
-            scope.x = x;
-            try {
-                const y = expr.compiled.evaluate(scope);
-                if (!Number.isFinite(y)) {
-                    firstPoint = true;
-                    continue;
-                }
-                const py = graphState.originY - (y * graphState.scale);
-                if (firstPoint) {
-                    ctx.moveTo(px, py);
-                    firstPoint = false;
-                } else {
-                    ctx.lineTo(px, py);
-                }
-            } catch (e) {
+
+        for (const point of expr.plotPoints) {
+            if (point === null) {
                 firstPoint = true;
+                continue;
             }
-        }
-        ctx.stroke();
-    }
-
-    function plotInequality(expr) {
-        if (!expr.compiled) return;
-        const scope = getEvaluationScope(expr);
-        ctx.fillStyle = expr.color;
-        ctx.globalAlpha = INEQUALITY_ALPHA;
-        ctx.beginPath();
-        let firstPoint = true;
-        for (let px = 0; px <= canvas.width; px++) {
-            const x = (px - graphState.originX) / graphState.scale;
-            scope.x = x;
-            try {
-                const y = expr.compiled.evaluate(scope);
-                if (!Number.isFinite(y)) continue;
-                const py = graphState.originY - (y * graphState.scale);
-                if (firstPoint) {
-                    ctx.moveTo(px, py);
-                    firstPoint = false;
-                } else {
-                    ctx.lineTo(px, py);
-                }
-            } catch (e) {}
-        }
-        const op = expr.inequalityType;
-        if (op.includes('>')) {
-            ctx.lineTo(canvas.width, 0);
-            ctx.lineTo(0, 0);
-        } else {
-            ctx.lineTo(canvas.width, canvas.height);
-            ctx.lineTo(0, canvas.height);
-        }
-        ctx.closePath();
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
-        if (op === '<' || op === '>') {
-            ctx.setLineDash([8 * devicePixelRatio, 8 * devicePixelRatio]);
-        }
-        plotFunction(expr);
-        ctx.setLineDash([]);
-    }
-
-    function plotVerticalLine(expr) {
-        ctx.strokeStyle = expr.color;
-        ctx.lineWidth = 2.5 * devicePixelRatio;
-        const boundaryPx = graphState.originX + expr.x_value * graphState.scale;
-        ctx.beginPath();
-        ctx.moveTo(boundaryPx, 0);
-        ctx.lineTo(boundaryPx, canvas.height);
-        ctx.stroke();
-    }
-
-    function plotVerticalInequality(expr) {
-        ctx.fillStyle = expr.color;
-        ctx.globalAlpha = INEQUALITY_ALPHA;
-        const boundaryPx = graphState.originX + expr.x_value * graphState.scale;
-        const op = expr.inequalityType;
-        if (op.includes('<')) {
-            ctx.fillRect(0, 0, boundaryPx, canvas.height);
-        }
-        if (op.includes('>')) {
-            ctx.fillRect(boundaryPx, 0, canvas.width - boundaryPx, canvas.height);
-        }
-        ctx.globalAlpha = 1.0;
-        if (!op.includes('=')) {
-            ctx.setLineDash([8 * devicePixelRatio, 8 * devicePixelRatio]);
-        }
-        plotVerticalLine(expr);
-        ctx.setLineDash([]);
-    }
-
-    function findPointsOfInterest(expr) {
-        expr.poi = { roots: [], y_intercept: null, extrema: [] };
-        if (!expr.compiled) return;
-        const scope = getEvaluationScope(expr);
-        try {
-            const y_intercept = expr.compiled.evaluate({ ...scope, x: 0 });
-            if (Number.isFinite(y_intercept)) expr.poi.y_intercept = { x: 0, y: y_intercept };
-        } catch (e) {}
-        let prev_y, prev_slope_sign;
-        const step = 1 / graphState.scale;
-        for (let px = 0; px < canvas.width; px++) {
-            const x = (px - graphState.originX) / graphState.scale;
-            try {
-                const y = expr.compiled.evaluate({ ...scope, x: x });
-                if (prev_y !== undefined && Number.isFinite(y) && Number.isFinite(prev_y)) {
-                    if (Math.sign(y) !== Math.sign(prev_y)) {
-                        expr.poi.roots.push({ x: (x - step / 2), y: 0 });
-                    }
-                    const next_y = expr.compiled.evaluate({ ...scope, x: x + step });
-                    if (Number.isFinite(next_y)) {
-                        const slope_sign = Math.sign(next_y - y);
-                        if (prev_slope_sign !== undefined && slope_sign !== prev_slope_sign && slope_sign !== 0) {
-                            expr.poi.extrema.push({ x: x, y: y });
-                        }
-                        prev_slope_sign = slope_sign;
-                    }
-                }
-                prev_y = y;
-            } catch (e) {
-                prev_y = undefined;
-                prev_slope_sign = undefined;
-            }
-        }
-    }
-
-    function drawPointsOfInterest(expr) {
-        ctx.fillStyle = expr.color;
-        const all_pois = [...expr.poi.roots, ...expr.poi.extrema];
-        if (expr.poi.y_intercept) all_pois.push(expr.poi.y_intercept);
-        all_pois.forEach(point => {
-            if (!point) return;
             const px = graphState.originX + point.x * graphState.scale;
+            // Optimization: If the point is way off-screen, don't try to draw it.
+            if (px < -10 || px > canvas.width + 10) {
+                firstPoint = true;
+                continue;
+            }
             const py = graphState.originY - point.y * graphState.scale;
-            ctx.beginPath();
-            ctx.arc(px, py, POI_RADIUS, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }
 
-    function bisectionSolve(f1_expr, f2_expr, a, b, tolerance = 1e-7, maxIterations = 50) {
-        const f1_scope = getEvaluationScope(f1_expr);
-        const f2_scope = getEvaluationScope(f2_expr);
-        let fa, fb;
-        try {
-            fa = f1_expr.compiled.evaluate({ ...f1_scope, x: a }) - f2_expr.compiled.evaluate({ ...f2_scope, x: a });
-            fb = f1_expr.compiled.evaluate({ ...f1_scope, x: b }) - f2_expr.compiled.evaluate({ ...f2_scope, x: b });
-        } catch (e) {
-            return null;
-        }
-        if (isNaN(fa) || isNaN(fb) || Math.sign(fa) === Math.sign(fb)) return null;
-        let c = a;
-        for (let i = 0; i < maxIterations; i++) {
-            c = (a + b) / 2;
-            let fc = f1_expr.compiled.evaluate({ ...f1_scope, x: c }) - f2_expr.compiled.evaluate({ ...f2_scope, x: c });
-            if (Math.abs(fc) < tolerance || (b - a) / 2 < tolerance) return c;
-            if (Math.sign(fc) === Math.sign(fa)) {
-                a = c;
-                fa = fc;
+            if (firstPoint) {
+                ctx.moveTo(px, py);
+                firstPoint = false;
             } else {
-                b = c;
+                ctx.lineTo(px, py);
             }
         }
-        return c;
-    }
-
-    function findAndStoreIntersections() {
-        graphState.intersections = [];
-        const plottableFuncs = graphState.expressions.filter(e => e.visible && e.compiled && (e.type === 'function' || e.type === 'inequality'));
-        if (plottableFuncs.length < 2) return;
-        for (let i = 0; i < plottableFuncs.length; i++) {
-            for (let j = i + 1; j < plottableFuncs.length; j++) {
-                const f1_expr = plottableFuncs[i],
-                    f2_expr = plottableFuncs[j];
-                let prev_diff;
-                for (let px = 0; px < canvas.width; px++) {
-                    const x = (px - graphState.originX) / graphState.scale;
-                    try {
-                        const y1 = f1_expr.compiled.evaluate({ ...getEvaluationScope(f1_expr), x: x });
-                        const y2 = f2_expr.compiled.evaluate({ ...getEvaluationScope(f2_expr), x: x });
-                        const diff = y1 - y2;
-                        if (prev_diff !== undefined && Math.sign(diff) !== Math.sign(prev_diff)) {
-                            const intersectionX = bisectionSolve(f1_expr, f2_expr, x - (1 / graphState.scale), x);
-                            if (intersectionX !== null) {
-                                const intersectionY = f1_expr.compiled.evaluate({ ...getEvaluationScope(f1_expr), x: intersectionX });
-                                if (Number.isFinite(intersectionY)) graphState.intersections.push({ x: intersectionX, y: intersectionY });
-                            }
-                        }
-                        prev_diff = diff;
-                    } catch (e) {
-                        prev_diff = undefined;
-                    }
-                }
-            }
-        }
-    }
-
-    function drawAllIntersectionPoints() {
-        ctx.fillStyle = '#333';
-        graphState.intersections.forEach(point => {
-            const pixelX = graphState.originX + point.x * graphState.scale;
-            const pixelY = graphState.originY - point.y * graphState.scale;
-            ctx.beginPath();
-            ctx.arc(pixelX, pixelY, POI_RADIUS, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }
-
-    function drawLockedPoint() {
-        const { x, y } = graphState.lockedPoint;
-        const pixelX = graphState.originX + x * graphState.scale;
-        const pixelY = graphState.originY - y * graphState.scale;
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.arc(pixelX, pixelY, POI_RADIUS * 1.2, 0, Math.PI * 2);
-        ctx.fill();
-        const displayX = snapToZero(x);
-        const displayY = snapToZero(y);
-        const coordText = `(${displayX.toFixed(3)}, ${displayY.toFixed(3)})`;
-        const FONT_SIZE = 12 * devicePixelRatio;
-        ctx.font = `bold ${FONT_SIZE}px 'Manrope'`;
-        const textMetrics = ctx.measureText(coordText);
-        const boxWidth = textMetrics.width + 16 * devicePixelRatio;
-        const boxHeight = FONT_SIZE + 12 * devicePixelRatio;
-        let boxX = pixelX + 15 * devicePixelRatio;
-        let boxY = pixelY - (boxHeight / 2);
-        if (boxX + boxWidth > canvas.width) boxX = pixelX - boxWidth - 15 * devicePixelRatio;
-        if (boxY < 0) boxY = 5 * devicePixelRatio;
-        if (boxY + boxHeight > canvas.height) boxY = canvas.height - boxHeight - 5 * devicePixelRatio;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.shadowColor = 'rgba(0,0,0,0.2)';
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5 * devicePixelRatio);
-        ctx.fill();
-        ctx.shadowColor = 'transparent';
-        ctx.fillStyle = '#000';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(coordText, boxX + boxWidth / 2, boxY + boxHeight / 2);
-    }
-
-    function resizeCanvas() {
-        const rect = canvas.parentElement.getBoundingClientRect();
-        canvas.width = rect.width * devicePixelRatio;
-        canvas.height = rect.height * devicePixelRatio;
-        canvas.style.width = `${rect.width}px`;
-        canvas.style.height = `${rect.height}px`;
-        resetView(false);
-    }
-
-    function resetView(redraw = true) {
-        graphState.originX = canvas.width / 2;
-        graphState.originY = canvas.height / 2;
-        graphState.scale = 40;
-        if (redraw) {
-            evaluateAndPlotAll();
-        }
-    }
-
-    function drawGraphGrid() {
-        const computedStyles = getComputedStyle(document.documentElement);
-        const THELO_BORDER_COLOR = computedStyles.getPropertyValue('--thelo-border').trim();
-        const THELO_TEXT_LIGHT_COLOR = computedStyles.getPropertyValue('--thelo-text-light').trim();
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.restore();
-        let dynamicGrid = 1;
-        while (dynamicGrid * graphState.scale < 50 * devicePixelRatio) {
-            dynamicGrid *= (dynamicGrid * graphState.scale < 25 * devicePixelRatio) ? 2 : 2.5;
-        }
-        while (dynamicGrid * graphState.scale > 100 * devicePixelRatio) {
-            dynamicGrid /= (dynamicGrid * graphState.scale > 250 * devicePixelRatio) ? 2.5 : 2;
-        }
-        ctx.strokeStyle = THELO_BORDER_COLOR;
-        ctx.lineWidth = 1 * devicePixelRatio;
-        ctx.font = `${10 * devicePixelRatio}px 'Manrope'`;
-        ctx.fillStyle = THELO_TEXT_LIGHT_COLOR;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const startX = Math.floor(-graphState.originX / (graphState.scale * dynamicGrid)) * dynamicGrid;
-        for (let x = startX;
-            (x * graphState.scale + graphState.originX) < canvas.width; x += dynamicGrid) {
-            const px = x * graphState.scale + graphState.originX;
-            ctx.beginPath();
-            ctx.moveTo(px, 0);
-            ctx.lineTo(px, canvas.height);
-            ctx.stroke();
-            if (Math.abs(x) > 1e-9) {
-                ctx.fillText(Number(x.toPrecision(4)), px + 2 * devicePixelRatio, graphState.originY - 5 * devicePixelRatio);
-            }
-        }
-        const startY = Math.floor(graphState.originY / (graphState.scale * dynamicGrid)) * dynamicGrid;
-        for (let y = startY;
-            (graphState.originY - y * graphState.scale) < canvas.height; y -= dynamicGrid) {
-            const py = graphState.originY - y * graphState.scale;
-            ctx.beginPath();
-            ctx.moveTo(0, py);
-            ctx.lineTo(canvas.width, py);
-            ctx.stroke();
-            if (Math.abs(y) > 1e-9) {
-                ctx.save();
-                ctx.textAlign = 'right';
-                ctx.fillText(Number(y.toPrecision(4)), graphState.originX - 5 * devicePixelRatio, py + 2 * devicePixelRatio);
-                ctx.restore();
-            }
-        }
-        ctx.strokeStyle = THELO_TEXT_LIGHT_COLOR;
-        ctx.lineWidth = 1.5 * devicePixelRatio;
-        ctx.beginPath();
-        ctx.moveTo(0, graphState.originY);
-        ctx.lineTo(canvas.width, graphState.originY);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(graphState.originX, 0);
-        ctx.lineTo(graphState.originX, canvas.height);
         ctx.stroke();
     }
-    
-    function snapToZero(num, tolerance = 1e-6) {
-        return Math.abs(num) < tolerance ? 0 : num;
-    }
 
-    function latexToMathJs(latex) {
-        let processed = latex.replace(/\\left\|([\s\S]+?)\\right\|/g, 'abs($1)');
-        while (processed.includes('|')) {
-            processed = processed.replace(/\|([^|]*)\|/g, 'abs($1)');
-        }
-        return processed
-            .replace(/\\operatorname{([a-zA-Z]+)}/g, '$1')
-            .replace(/\\frac{d}{dx}\\left\(([\s\S]+?)\\right\)/g, "derivative('$1', 'x')")
-            .replace(/\\sin/g, 'sin').replace(/\\cos/g, 'cos').replace(/\\tan/g, 'tan')
-            .replace(/\\log/g, 'log10').replace(/\\ln/g, 'log')
-            .replace(/\\sqrt/g, 'sqrt').replace(/\\pi/g, 'pi').replace(/\\theta/g, 'theta')
-            .replace(/\\le/g, '<=').replace(/\\ge/g, '>=')
-            .replace(/\\left\(/g, '(').replace(/\\right\)/g, ')')
-            .replace(/\\left\[/g, '[').replace(/\\right\]/g, ']')
-            .replace(/\\cdot/g, '*').replace(/\\frac{([^}]+)}{([^}]+)}/g, '($1)/($2)')
-            .replace(/{/g, '(').replace(/}/g, ')');
-    }
+    // --- All other functions (parsers, helpers, drawers) remain largely the same ---
+    // Note: plotInequality will now also be faster because it calls the new plotFunction.
 
-    function preprocessInputString(str) {
-        const functionNames = 'sin|cos|tan|asin|acos|atan|log10|log|sqrt|abs|mean|median|stdev|min|max|total|quartile';
-        const funcArgRegex = new RegExp(`\\b(${functionNames})\\s+([a-zA-Z0-9πθ.\\[\\]]+)`, 'g');
-        return str.replace(funcArgRegex, '$1($2)');
-    }
+    function plotInequality(expr){if(!expr.plotPoints||expr.plotPoints.length===0)return;const scope=getEvaluationScope(expr);ctx.fillStyle=expr.color;ctx.globalAlpha=INEQUALITY_ALPHA;ctx.beginPath();let firstPoint=!0;for(const point of expr.plotPoints){if(point===null){firstPoint=!0;continue}const px=graphState.originX+point.x*graphState.scale;if(px<-10||px>canvas.width+10){firstPoint=!0;continue}const py=graphState.originY-point.y*graphState.scale;if(firstPoint){ctx.moveTo(px,py);firstPoint=!1}else{ctx.lineTo(px,py)}}const op=expr.inequalityType;if(op.includes(">")){ctx.lineTo(canvas.width,0);ctx.lineTo(0,0)}else{ctx.lineTo(canvas.width,canvas.height);ctx.lineTo(0,canvas.height)}
+    ctx.closePath();ctx.fill();ctx.globalAlpha=1;if(op==="<"||op===">"){ctx.setLineDash([8*devicePixelRatio,8*devicePixelRatio])}plotFunction(expr);ctx.setLineDash([])}
+    function parseSingleExpression(expr){Object.assign(expr,{type:"empty",compiled:null,error:null,result:null,node:null,inequalityType:null,isImplicit:!1});let cleanStr=preprocessInputString(latexToMathJs(expr.latex.trim()));if(!cleanStr)return;try{const node=math.parse(cleanStr);expr.node=node;const scope=getEvaluationScope(expr);if(node.isAssignmentNode){const varName=node.object.name;if(node.toString().match(/[xy]/)){expr.error="Cannot assign expression with x or y.";return}expr.type="assignment";const result=node.evaluate(scope);expr.result=result;graphState.definedVariables[varName]=result}else if(cleanStr.includes("x")||cleanStr.includes("y")){expr.type="function";let parseableNode=node;if(node.isOperatorNode&&node.op==="="){const[left,right]=node.args;if(left.isSymbolNode&&left.name==="y"){parseableNode=right}else if(right.isSymbolNode&&right.name==="y"){parseableNode=left}else if(left.isSymbolNode&&left.name==="x"){expr.type="vertical_line";expr.x_value=right.evaluate(scope)}else if(right.isSymbolNode&&right.name==="x"){expr.type="vertical_line";expr.x_value=left.evaluate(scope)}else{expr.error="Implicit functions not supported yet."}}if(expr.type==="function"){expr.node=parseableNode;expr.compiled=parseableNode.compile()}}else if(node.isOperatorNode&&["<",">","<=",">="].includes(node.op)){expr.inequalityType=node.op;const[left,right]=node.args;if(left.isSymbolNode&&left.name==="y"){expr.type="inequality";expr.compiled=right.compile()}else if(right.isSymbolNode&&right.name==="y"){expr.type="inequality";expr.compiled=left.compile();expr.inequalityType={">":"<",">=":"<=","<":">","<=":">="}[node.op]}else if(left.isSymbolNode&&left.name==="x"){expr.type="vertical_inequality";expr.x_value=right.evaluate(scope)}else if(right.isSymbolNode&&right.name==="x"){expr.type="vertical_inequality";expr.x_value=left.evaluate(scope);expr.inequalityType={">":"<",">=":"<=","<":">","<=":">="}[node.op]}else{expr.type="calculation";expr.result=node.evaluate(scope)}}else{expr.type="calculation";expr.result=node.evaluate(scope)}
+    if(expr.type==="function"||expr.type==="inequality"){const knownSymbols=["x","y","e","pi","i","true","false","theta",...Object.keys(math)];const foundSymbols=new Set;expr.node.traverse(n=>{if(n.isSymbolNode&&!knownSymbols.includes(n.name)&&!graphState.definedVariables.hasOwnProperty(n.name)){foundSymbols.add(n.name)}});foundSymbols.forEach(name=>{if(!expr.sliders[name])expr.sliders[name]={val:1,min:-5,max:5,step:.1}});Object.keys(expr.sliders).forEach(name=>{if(!foundSymbols.has(name))delete expr.sliders[name]})}else{expr.sliders={}}
+    if(expr.type==="function")findPointsOfInterest(expr)}catch(err){expr.error=err.message.length>50?err.message.substring(0,50)+"...":err.message}}
+    function updateExpressionUI(expr){const item=document.getElementById(expr.id);if(!item)return;const resultEl=item.querySelector(".expression-result");const extrasEl=item.querySelector(".expression-extras");const colorBar=item.querySelector(".expression-color-bar");resultEl.textContent="";extrasEl.innerHTML="";colorBar.style.backgroundColor=expr.error?"var(--error-red)":expr.visible?expr.color:"#ccc";colorBar.style.borderColor=expr.error?"var(--error-red)":expr.color;if(expr.error){resultEl.textContent="Error"}else if(expr.result!==null&&expr.result!==undefined){try{if(Array.isArray(expr.result)){resultEl.textContent`= [${expr.result.map(v=>math.format(v,{precision:3})).join(", ")}]`}else if(typeof expr.result==="function"){resultEl.textContent="f(x)"}else{resultEl.textContent=`= ${math.format(expr.result,{precision:5})}`}}catch{resultEl.textContent=`= ${expr.result.toString()}`}}
+    Object.keys(expr.sliders).forEach(name=>{const slider=expr.sliders[name];const sliderDiv=document.createElement("div");sliderDiv.className="slider-container";sliderDiv.innerHTML=`<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}">`;extrasEl.appendChild(sliderDiv)})}
+    function plotVerticalLine(expr){ctx.strokeStyle=expr.color;ctx.lineWidth=2.5*devicePixelRatio;const boundaryPx=graphState.originX+expr.x_value*graphState.scale;ctx.beginPath();ctx.moveTo(boundaryPx,0);ctx.lineTo(boundaryPx,canvas.height);ctx.stroke()}
+    function plotVerticalInequality(expr){ctx.fillStyle=expr.color;ctx.globalAlpha=INEQUALITY_ALPHA;const boundaryPx=graphState.originX+expr.x_value*graphState.scale;const op=expr.inequalityType;if(op.includes("<")){ctx.fillRect(0,0,boundaryPx,canvas.height)}if(op.includes(">")){ctx.fillRect(boundaryPx,0,canvas.width-boundaryPx,canvas.height)}
+    ctx.globalAlpha=1;if(!op.includes("=")){ctx.setLineDash([8*devicePixelRatio,8*devicePixelRatio])}plotVerticalLine(expr);ctx.setLineDash([])}
+    function findPointsOfInterest(expr){expr.poi={roots:[],y_intercept:null,extrema:[]};if(!expr.compiled)return;const scope=getEvaluationScope(expr);try{const y_intercept=expr.compiled.evaluate({...scope,x:0});if(Number.isFinite(y_intercept))expr.poi.y_intercept={x:0,y:y_intercept}}catch(e){}
+    let prev_y,prev_slope_sign;const step=1/graphState.scale;for(let px=0;px<canvas.width;px++){const x=(px-graphState.originX)/graphState.scale;try{const y=expr.compiled.evaluate({...scope,x:x});if(prev_y!==undefined&&Number.isFinite(y)&&Number.isFinite(prev_y)){if(Math.sign(y)!==Math.sign(prev_y)){expr.poi.roots.push({x:x-step/2,y:0})}const next_y=expr.compiled.evaluate({...scope,x:x+step});if(Number.isFinite(next_y)){const slope_sign=Math.sign(next_y-y);if(prev_slope_sign!==undefined&&slope_sign!==prev_slope_sign&&slope_sign!==0){expr.poi.extrema.push({x:x,y:y})}
+    prev_slope_sign=slope_sign}}prev_y=y}catch(e){prev_y=undefined;prev_slope_sign=undefined}}}
+    function drawPointsOfInterest(expr){ctx.fillStyle=expr.color;const all_pois=[...expr.poi.roots,...expr.poi.extrema];if(expr.poi.y_intercept)all_pois.push(expr.poi.y_intercept);all_pois.forEach(point=>{if(!point)return;const px=graphState.originX+point.x*graphState.scale;const py=graphState.originY-point.y*graphState.scale;ctx.beginPath();ctx.arc(px,py,POI_RADIUS,0,Math.PI*2);ctx.fill()})}
+    function bisectionSolve(f1_expr,f2_expr,a,b,tolerance=1e-7,maxIterations=50){const f1_scope=getEvaluationScope(f1_expr);const f2_scope=getEvaluationScope(f2_expr);let fa,fb;try{fa=f1_expr.compiled.evaluate({...f1_scope,x:a})-f2_expr.compiled.evaluate({...f2_scope,x:a});fb=f1_expr.compiled.evaluate({...f1_scope,x:b})-f2_expr.compiled.evaluate({...f2_scope,x:b})}catch(e){return null}if(isNaN(fa)||isNaN(fb)||Math.sign(fa)===Math.sign(fb))return null;let c=a;for(let i=0;i<maxIterations;i++){c=(a+b)/2;let fc=f1_expr.compiled.evaluate({...f1_scope,x:c})-f2_expr.compiled.evaluate({...f2_scope,x:c});if(Math.abs(fc)<tolerance||(b-a)/2<tolerance)return c;if(Math.sign(fc)===Math.sign(fa)){a=c;fa=fc}else{b=c}}return c}
+    function findAndStoreIntersections(){graphState.intersections=[];const plottableFuncs=graphState.expressions.filter(e=>e.visible&&e.compiled&&(e.type==="function"||e.type==="inequality"));if(plottableFuncs.length<2)return;for(let i=0;i<plottableFuncs.length;i++){for(let j=i+1;j<plottableFuncs.length;j++){const f1_expr=plottableFuncs[i],f2_expr=plottableFuncs[j];let prev_diff;for(let px=0;px<canvas.width;px++){const x=(px-graphState.originX)/graphState.scale;try{const y1=f1_expr.compiled.evaluate({...getEvaluationScope(f1_expr),x:x});const y2=f2_expr.compiled.evaluate({...getEvaluationScope(f2_expr),x:x});const diff=y1-y2;if(prev_diff!==undefined&&Math.sign(diff)!==Math.sign(prev_diff)){const intersectionX=bisectionSolve(f1_expr,f2_expr,x-1/graphState.scale,x);if(intersectionX!==null){const intersectionY=f1_expr.compiled.evaluate({...getEvaluationScope(f1_expr),x:intersectionX});if(Number.isFinite(intersectionY))graphState.intersections.push({x:intersectionX,y:intersectionY})}}
+    prev_diff=diff}catch(e){prev_diff=undefined}}}}}
+    function drawAllIntersectionPoints(){ctx.fillStyle="#333";graphState.intersections.forEach(point=>{const pixelX=graphState.originX+point.x*graphState.scale;const pixelY=graphState.originY-point.y*graphState.scale;ctx.beginPath();ctx.arc(pixelX,pixelY,POI_RADIUS,0,Math.PI*2);ctx.fill()})}
+    function drawLockedPoint(){const{x,y}=graphState.lockedPoint;const pixelX=graphState.originX+x*graphState.scale;const pixelY=graphState.originY-y*graphState.scale;ctx.fillStyle="#000";ctx.beginPath();ctx.arc(pixelX,pixelY,POI_RADIUS*1.2,0,Math.PI*2);ctx.fill();const displayX=snapToZero(x);const displayY=snapToZero(y);const coordText=`(${displayX.toFixed(3)}, ${displayY.toFixed(3)})`;const FONT_SIZE=12*devicePixelRatio;ctx.font=`bold ${FONT_SIZE}px 'Manrope'`;const textMetrics=ctx.measureText(coordText);const boxWidth=textMetrics.width+16*devicePixelRatio;const boxHeight=FONT_SIZE+12*devicePixelRatio;let boxX=pixelX+15*devicePixelRatio;let boxY=pixelY-boxHeight/2;if(boxX+boxWidth>canvas.width)boxX=pixelX-boxWidth-15*devicePixelRatio;if(boxY<0)boxY=5*devicePixelRatio;if(boxY+boxHeight>canvas.height)boxY=canvas.height-boxHeight-5*devicePixelRatio;ctx.fillStyle="rgba(255, 255, 255, 0.9)";ctx.shadowColor="rgba(0,0,0,0.2)";ctx.shadowBlur=10;ctx.beginPath();ctx.roundRect(boxX,boxY,boxWidth,boxHeight,5*devicePixelRatio);ctx.fill();ctx.shadowColor="transparent";ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(coordText,boxX+boxWidth/2,boxY+boxHeight/2)}
+    function resizeCanvases(){const rect=canvas.parentElement.getBoundingClientRect();canvas.width=rect.width*devicePixelRatio;canvas.height=rect.height*devicePixelRatio;canvas.style.width=`${rect.width}px`;canvas.style.height=`${rect.height}px`;resetView(!1)}
+    function resetView(redraw=!0){graphState.originX=canvas.width/2;graphState.originY=canvas.height/2;graphState.scale=40;if(redraw){evaluateAndCacheAll(); renderAll();}}
+    function drawGraphGrid(){const computedStyles=getComputedStyle(document.documentElement);const THELO_BORDER_COLOR=computedStyles.getPropertyValue("--thelo-border").trim();const THELO_TEXT_LIGHT_COLOR=computedStyles.getPropertyValue("--thelo-text-light").trim();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.restore();let dynamicGrid=1;while(dynamicGrid*graphState.scale<50*devicePixelRatio){dynamicGrid*=(dynamicGrid*graphState.scale<25*devicePixelRatio?2:2.5)}
+    while(dynamicGrid*graphState.scale>100*devicePixelRatio){dynamicGrid/=(dynamicGrid*graphState.scale>250*devicePixelRatio?2.5:2)}
+    ctx.strokeStyle=THELO_BORDER_COLOR;ctx.lineWidth=1*devicePixelRatio;ctx.font=`${10*devicePixelRatio}px 'Manrope'`;ctx.fillStyle=THELO_TEXT_LIGHT_COLOR;ctx.textAlign="center";ctx.textBaseline="middle";const startX=Math.floor(-graphState.originX/(graphState.scale*dynamicGrid))*dynamicGrid;for(let x=startX;x*graphState.scale+graphState.originX<canvas.width;x+=dynamicGrid){const px=x*graphState.scale+graphState.originX;ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,canvas.height);ctx.stroke();if(Math.abs(x)>1e-9){ctx.fillText(Number(x.toPrecision(4)),px+2*devicePixelRatio,graphState.originY-5*devicePixelRatio)}}
+    const startY=Math.floor(graphState.originY/(graphState.scale*dynamicGrid))*dynamicGrid;for(let y=startY;graphState.originY-y*graphState.scale<canvas.height;y-=dynamicGrid){const py=graphState.originY-y*graphState.scale;ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(canvas.width,py);ctx.stroke();if(Math.abs(y)>1e-9){ctx.save();ctx.textAlign="right";ctx.fillText(Number(y.toPrecision(4)),graphState.originX-5*devicePixelRatio,py+2*devicePixelRatio);ctx.restore()}}
+    ctx.strokeStyle=THELO_TEXT_LIGHT_COLOR;ctx.lineWidth=1.5*devicePixelRatio;ctx.beginPath();ctx.moveTo(0,graphState.originY);ctx.lineTo(canvas.width,graphState.originY);ctx.stroke();ctx.beginPath();ctx.moveTo(graphState.originX,0);ctx.lineTo(graphState.originX,canvas.height);ctx.stroke()}
+    function snapToZero(num,tolerance=1e-6){return Math.abs(num)<tolerance?0:num}
+    function latexToMathJs(latex){let processed=latex.replace(/\\left\|([\s\S]+?)\\right\|/g,"abs($1)");while(processed.includes("|")){processed=processed.replace(/\|([^|]*)\|/g,"abs($1)")}
+    return processed.replace(/\\operatorname{([a-zA-Z]+)}/g,"$1").replace(/\\frac{d}{dx}\\left\(([\s\S]+?)\\right\)/g,"derivative('$1', 'x')").replace(/\\sin/g,"sin").replace(/\\cos/g,"cos").replace(/\\tan/g,"tan").replace(/\\log/g,"log10").replace(/\\ln/g,"log").replace(/\\sqrt/g,"sqrt").replace(/\\pi/g,"pi").replace(/\\theta/g,"theta").replace(/\\le/g,"<=").replace(/\\ge/g,">=").replace(/\\left\(/g,"(").replace(/\\right\)/g,")").replace(/\\left\[/g,"[").replace(/\\right\]/g,"]").replace(/\\cdot/g,"*").replace(/\\frac{([^}]+)}{([^}]+)}/g,"($1)/($2)").replace(/{/g,"(").replace(/}/g,")")}
+    function preprocessInputString(str){const functionNames="sin|cos|tan|asin|acos|atan|log10|log|sqrt|abs|mean|median|stdev|min|max|total|quartile";const funcArgRegex=new RegExp(`\\b(${functionNames})\\s+([a-zA-Z0-9πθ.\\[\\]]+)`,"g");return str.replace(funcArgRegex,"$1($2)")}
+    function getEvaluationScope(expr){const scope={...graphState.definedVariables};Object.keys(expr.sliders).forEach(name=>{scope[name]=expr.sliders[name].val});scope.total=math.sum;scope.stdev=math.std;scope.mean=math.mean;scope.median=math.median;scope.min=math.min;scope.max=math.max;scope.quartile=math.quantileSeq;scope.nCr=math.combinations;scope.nPr=math.permutations;if(graphState.angleMode==="deg"){scope.sin=math.sind;scope.cos=math.cosd;scope.tan=math.tand;scope.asin=math.asind;scope.acos=math.acosd;scope.atan=math.atand;scope.atan2=math.atan2d}return scope}
 
-    function getEvaluationScope(expr) {
-        const scope = { ...graphState.definedVariables };
-        Object.keys(expr.sliders).forEach(name => {
-            scope[name] = expr.sliders[name].val;
-        });
-        scope.total = math.sum;
-        scope.stdev = math.std;
-        scope.mean = math.mean;
-        scope.median = math.median;
-        scope.min = math.min;
-        scope.max = math.max;
-        scope.quartile = math.quantileSeq;
-        scope.nCr = math.combinations;
-        scope.nPr = math.permutations;
-        if (graphState.angleMode === 'deg') {
-            scope.sin = math.sind;
-            scope.cos = math.cosd;
-            scope.tan = math.tand;
-            scope.asin = math.asind;
-            scope.acos = math.acosd;
-            scope.atan = math.atand;
-            scope.atan2 = math.atan2d;
-        }
-        return scope;
-    }
-    
-    // --- START THE APP ---
     initialize();
 });
-</script>
+
+</script>        
 </body>
 </html>
