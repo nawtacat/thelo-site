@@ -160,7 +160,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- STATE MANAGEMENT ---
     let graphState = {
         originX: 0, originY: 0, scale: 40,
-        let replayActions = []; // This will store the actions for seeking
         expressions: [],
         intersections: [],
         lockedPoint: { visible: false, x: 0, y: 0 },
@@ -180,49 +179,98 @@ document.addEventListener('DOMContentLoaded', () => {
      * Listens for a 'message' event from the parent window (thelo app).
      * When valid replay data is received, it triggers the playback.
      */
-    /**
- * Listens for messages from the parent window (thelo app).
- * Handles both the initial data load and 'seek' commands for scrubbing.
- */
+   // βρίσκω REPLACEMENT for setupMessageListener in replay1.html
+
 function setupMessageListener() {
+    let replayActions = []; // Store the actions once received
+
     window.addEventListener('message', (event) => {
-        // Security: In a production environment, you should check the origin
+        // Security check is good practice
         // if (event.origin !== 'https://thelo.space') return;
 
         const receivedData = event.data;
+        if (!receivedData || !receivedData.action) {
+             console.warn("Received invalid message format from parent:", receivedData);
+             return;
+        }
 
-        // Case 1: Initial data load to start a new replay
-        if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-            console.log("Replay data received, starting replay.");
-            replayActions = receivedData.actions; // Store the actions
-            startReplay(replayActions);
-        } 
-        // Case 2: A command to scrub the timeline
-        else if (receivedData && receivedData.command === 'seek') {
-            console.log(`Seek command received: ${receivedData.time}ms`);
-            // Use the stored actions to seek
-            if (replayActions.length > 0) {
-                seekToTime(replayActions, receivedData.time);
-            }
-        } else {
-            console.warn("Received invalid message format from parent:", receivedData);
+        switch(receivedData.action) {
+            case 'start':
+                if (Array.isArray(receivedData.actions) && receivedData.meta) {
+                    console.log("Replay data received, starting playback.");
+                    replayActions = receivedData.actions; // Save actions for seeking
+                    startReplay(replayActions);
+                }
+                break;
+            
+            case 'seek':
+                if (typeof receivedData.time === 'number') {
+                    console.log(`Seek command received: ${receivedData.time}ms`);
+                    seekToTime(receivedData.time, replayActions);
+                }
+                break;
         }
     });
 }
+    
+    /**
+     * Starts the replay process by setting the initial state and kicking off the animation loop.
+     * @param {Array} actions - The array of actions from the recording.
+     */
+    function startReplay(actions) {
+        if (isReplaying || !actions || actions.length === 0) return;
+        isReplaying = true;
+
+        // Set the absolute initial state before starting the animation.
+        executeReplayCommand(actions[0]);
+
+        // Pass the rest of the actions to the animation loop.
+        animationLoop(actions.slice(1));
+    }
+    // βρίσκω NEW function in replay1.html
 
 /**
- * Starts the replay process by setting the initial state and kicking off the animation loop.
- * @param {Array} actions - The array of actions from the recording.
+ * Jumps the replay to a specific time in the timeline.
+ * @param {number} timeInMs - The time to seek to, in milliseconds.
+ * @param {Array} allActions - The full list of recorded actions.
  */
-function startReplay(actions) {
-    if (isReplaying || !actions || actions.length === 0) return;
+function seekToTime(timeInMs, allActions) {
+    if (!allActions || allActions.length === 0) return;
+
+    isReplaying = false; // Temporarily stop any ongoing loop
+
+    let accumulatedTime = 0;
+    let seekActionIndex = 0;
+
+    // Instantly execute all actions up to the seek time
+    for (let i = 0; i < allActions.length; i++) {
+        const command = allActions[i];
+        if (accumulatedTime > timeInMs) {
+            seekActionIndex = i;
+            break;
+        }
+
+        // Don't execute the delay, just account for its time
+        if (command.action === 'delay') {
+            accumulatedTime += command.ms;
+        } else {
+            // For live view updates, we only apply the final state before the next delay
+            if(command.action !== 'liveUpdateView'){
+                 executeReplayCommand(command);
+            } else if (i + 1 < allActions.length && allActions[i+1].action !== 'liveUpdateView') {
+                 executeReplayCommand(command);
+            }
+        }
+        
+        if (i === allActions.length - 1) {
+            seekActionIndex = i + 1; // Seek to the end
+        }
+    }
+    
+    // Resume playback from the new point in the timeline
     isReplaying = true;
-
-    // Set the absolute initial state before starting the animation.
-    executeReplayCommand(actions[0]);
-
-    // Pass the rest of the actions to the animation loop.
-    animationLoop(actions.slice(1));
+    const remainingActions = allActions.slice(seekActionIndex);
+    animationLoop(remainingActions);
 }
     /**
      * The core animation engine that uses requestAnimationFrame for smooth playback.
@@ -409,44 +457,7 @@ function startReplay(actions) {
 
         evaluateAndPlotAll();
     }
-        /**
- * Jumps the replay to a specific time by executing all commands up to that point.
- * @param {Array} actions - The full array of replay actions.
- * @param {number} targetTime - The time to seek to, in milliseconds.
- */
-function seekToTime(actions, targetTime) {
-    if (!actions || actions.length === 0) return;
-    isReplaying = false; // Ensure any active animation loop stops
 
-    // Always start from the absolute initial state
-    executeReplayCommand(actions[0]);
-
-    let currentTime = 0;
-    for (let i = 1; i < actions.length; i++) {
-        const command = actions[i];
-
-        if (command.action === 'delay') {
-            // If the next delay goes past our target time, we stop.
-            if (currentTime + command.ms > targetTime) {
-                break;
-            }
-            currentTime += command.ms;
-        } else {
-            // Execute any non-delay command instantly.
-            executeReplayCommand(command);
-        }
-    }
-    
-    // Final render of the state we landed on.
-    evaluateAndPlotAll(); 
-    
-    // Update the progress bar to reflect the new position
-    const totalDuration = actions.filter(a => a.action === 'delay').reduce((sum, a) => sum + a.ms, 0);
-    if (totalDuration > 0) {
-        const progressPercentage = (targetTime / totalDuration) * 100;
-        progressBar.style.width = `${Math.min(100, progressPercentage)}%`;
-    }
-}
     function addExpressionUI(exprData) {
         graphState.expressions.push(exprData);
         const item = document.createElement('div');
