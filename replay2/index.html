@@ -154,11 +154,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LIBRARIES & CONSTANTS ---
     const MQ = MathQuill.getInterface(2);
-    // Use the devicePixelRatio from meta if provided, otherwise default
     let currentDevicePixelRatio = window.devicePixelRatio || 1;
     const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
     const INEQUALITY_ALPHA = 0.2;
-    let POI_RADIUS = 4 * currentDevicePixelRatio; // Scaled by devicePixelRatio
+    let POI_RADIUS = 4 * currentDevicePixelRatio;
 
     const SEEK_AMOUNT_MS = 5000;
 
@@ -170,8 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         lockedPoint: { visible: false, x: 0, y: 0 },
         angleMode: 'rad',
         definedVariables: {},
-        // New state for handling 'animateView' playback
-        activeAnimateView: null // { startTime: ms, duration: ms, startView: {x,y,s}, endView: {x,y,s} }
+        activeAnimateView: null
     };
 
     // --- PLAYBACK CONTROL STATE ---
@@ -188,26 +186,25 @@ document.addEventListener('DOMContentLoaded', () => {
         resizeCanvases();
         setupMessageListener();
         setupKeyListeners();
-        renderAll();
+        renderAll(); // Initial render to display empty grid/axes
     }
 
     function setupMessageListener() {
         window.addEventListener('message', (event) => {
             const receivedData = event.data;
             if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-                // Adjust devicePixelRatio based on recording meta data
                 if (receivedData.meta.devicePixelRatio) {
                     currentDevicePixelRatio = receivedData.meta.devicePixelRatio;
-                    POI_RADIUS = 4 * currentDevicePixelRatio; // Recalculate based on recorded ratio
-                    // Also adjust canvas size if needed based on recorded logical dimensions vs current physical
+                    POI_RADIUS = 4 * currentDevicePixelRatio;
                     resizeCanvases(receivedData.meta.canvasDimensions);
                 }
                 startReplay(receivedData.actions);
             } else if (receivedData && receivedData.command === 'seekToTime' && typeof receivedData.timeMs === 'number') {
-                // **UPDATED:** Handle the new 'seekToTime' command with an absolute timestamp
+                // This is the core fix: When 'seekToTime' is received, directly call seekToAbsoluteTime
                 seekToAbsoluteTime(receivedData.timeMs);
             } else if (receivedData && receivedData.command === 'seek') {
-                // Keep this for backward compatibility if needed, but the main app should now send 'seekToTime'
+                // This branch handles directional seeks (e.g., from internal keyboard).
+                // The main app should now send 'seekToTime' for absolute control.
                 seek(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
             }
         });
@@ -234,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 if (action.action === 'animateView') {
                     timeline.push({ time: currentTime, ...action });
-                    currentTime += action.payload.duration; // Advance time by animation duration
+                    currentTime += action.payload.duration;
                 } else {
                     timeline.push({ time: currentTime, ...action });
                 }
@@ -248,17 +245,15 @@ document.addEventListener('DOMContentLoaded', () => {
         buildTimeline(actions);
         playbackTime = 0;
         lastProcessedEventIndex = -1;
-        graphState.activeAnimateView = null; // Clear any active animation
-        renderStateAtTime(0); // Build state for time 0
+        graphState.activeAnimateView = null;
+        renderStateAtTime(0);
         play();
     }
-
-    // --- PLAYBACK CONTROLS ---
 
     function play() {
         if (isPlaying) return;
         isPlaying = true;
-        //progressBarContainer.style.display = 'block'; // Show progress bar
+        // progressBarContainer.style.display = 'block'; // Uncomment if you want to show the bar
         lastTimestamp = performance.now();
         animationFrameId = requestAnimationFrame(animationLoop);
     }
@@ -277,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (playbackTime >= totalDuration) {
                 playbackTime = 0;
                 lastProcessedEventIndex = -1;
-                graphState.activeAnimateView = null; // Reset animation state on restart
+                graphState.activeAnimateView = null;
                 renderStateAtTime(0);
             }
             play();
@@ -285,35 +280,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function seek(amountMs) {
-        // This function is still here for backward compatibility or internal directional seeks.
-        // For external seeks from the main app, 'seekToAbsoluteTime' is now preferred.
+        // This function is for internal directional seeks (e.g., keyboard arrow keys within iframe).
+        // It updates playbackTime relative to the current position.
         const wasAtEnd = playbackTime >= totalDuration;
         const wasPlaying = isPlaying;
         if (wasPlaying) pause();
 
         playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
 
-        graphState.activeAnimateView = null; // Clear active animation before seeking
-        renderStateAtTime(playbackTime);
+        graphState.activeAnimateView = null; // Clear any active animation
+        renderStateAtTime(playbackTime); // Fully reconstruct state at new time
 
         if (wasPlaying || (wasAtEnd && amountMs < 0)) {
-            play();
+            play(); // Resume if was playing, or if seeking backward from end
         }
     }
 
-    // **NEW FUNCTION:** Handles absolute time seeks, more robust for parent-iframe communication
+    /**
+     * **NEW/UPDATED:** Seeks to an absolute time in the replay.
+     * This is the function the parent window should call via postMessage.
+     * @param {number} targetTimeMs - The absolute time in milliseconds to seek to.
+     */
     function seekToAbsoluteTime(targetTimeMs) {
         const wasPlaying = isPlaying;
-        if (wasPlaying) pause();
+        if (wasPlaying) pause(); // Pause playback to prepare for seek
 
+        // Set playbackTime directly to the absolute target.
         playbackTime = Math.max(0, Math.min(targetTimeMs, totalDuration));
-        graphState.activeAnimateView = null; // Crucial: clear any ongoing animation
-        renderStateAtTime(playbackTime); // Reconstruct state for the exact target time
+
+        graphState.activeAnimateView = null; // Clear any active animation
+        // Crucially, call renderStateAtTime to fully reconstruct the graph state
+        // for this precise point in the timeline.
+        renderStateAtTime(playbackTime);
 
         if (wasPlaying) {
             play(); // Resume playback if it was playing before the seek
         }
-        // If it was paused, leave it paused, but the graph state is updated.
     }
 
     // --- CORE RENDERING & PLAYBACK LOGIC ---
@@ -334,15 +336,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const animationProgress = Math.min(1, (playbackTime - startTime) / duration);
 
             if (animationProgress < 1) {
-                // Interpolate the view properties
                 graphState.originX = startView.originX + (endView.originX - startView.originX) * animationProgress;
                 graphState.originY = startView.originY + (endView.originY - startView.originY) * animationProgress;
                 graphState.scale = startView.scale + (endView.scale - startView.scale) * animationProgress;
             } else {
-                // Animation finished, set to final state and clear activeAnimateView
                 Object.assign(graphState, endView);
                 graphState.activeAnimateView = null;
-                needsFullReevaluation = true; // Since an animation just finished, ensure we evaluate if any new static state applies
+                needsFullReevaluation = true;
             }
         }
 
@@ -351,20 +351,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const command = timeline[nextEventIndex];
 
             if (command.action === 'animateView') {
-                // If a new animateView command is encountered, set it active
                 graphState.activeAnimateView = {
                     startTime: command.time,
                     duration: command.payload.duration,
                     startView: command.payload.startView,
                     endView: command.payload.endView
                 };
-                // Immediately set to start state of animation
                 Object.assign(graphState, command.payload.startView);
                 needsFullReevaluation = true;
             } else {
-                // Execute other commands
                 executeReplayCommand(command);
-                // Any action that could change the math requires re-evaluation
                 if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView', 'lockPoint', 'unlockPoint'].includes(command.action)) {
                     needsFullReevaluation = true;
                 }
@@ -374,18 +370,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (needsFullReevaluation) {
-            // Heavy path: Re-parse, re-calculate points, find intersections.
             evaluateAndCacheAll();
         }
 
-        // Always render the current state. This is now always a fast operation.
         renderAll();
 
         progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
 
         if (playbackTime >= totalDuration) {
             pause();
-            progressBar.style.width = '100%'; // Ensure it reaches 100% at the end
+            progressBar.style.width = '100%';
         } else {
             animationFrameId = requestAnimationFrame(animationLoop);
         }
@@ -394,28 +388,25 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * The "Cold Path": Reconstructs the entire calculator state for a specific time.
      * Used for seeking or initializing the replay.
+     * @param {number} time - The target time in milliseconds to reconstruct the state for.
      */
     function renderStateAtTime(time) {
-        // Reset to initial state
         expressionListContainer.innerHTML = '';
         graphState.expressions = [];
-        graphState.activeAnimateView = null; // Ensure no animation is ongoing
-        graphState.lockedPoint.visible = false; // Reset locked point for clean state
-        graphState.intersections = []; // Clear intersections
+        graphState.activeAnimateView = null;
+        graphState.lockedPoint.visible = false;
+        graphState.intersections = [];
 
-        // **FIX:** Reset lastProcessedEventIndex to prepare for full state reconstruction
+        // **FIX:** Always reset lastProcessedEventIndex when doing a full state reconstruction.
+        // This ensures the animation loop correctly picks up from this reconstructed state.
         lastProcessedEventIndex = -1;
 
-        let currentEffectiveTime = 0;
-        let foundInitialState = false;
+        let foundInitialState = false; // Tracks if initialState has been processed
 
         for (let i = 0; i < timeline.length; i++) {
             const command = timeline[i];
 
-            // If the command's time is exactly equal to `time`, we process it.
-            // If the command's time is greater than `time`, we stop, as we've gone too far.
-            // Exception: if 'time' is inside an 'animateView' block.
-
+            // Only process commands that occur at or before the target 'time'.
             if (command.action === 'initialState') {
                 Object.assign(graphState, command.payload.view);
                 graphState.angleMode = command.payload.angleMode;
@@ -427,45 +418,47 @@ document.addEventListener('DOMContentLoaded', () => {
                     addExpressionUI(completeExpr);
                 });
                 foundInitialState = true;
-                currentEffectiveTime = command.time;
-            } else if (foundInitialState && command.time <= time) { // Only process if time is at or before target
+                // No need to set currentEffectiveTime, as timeline[i].time is used for comparison
+            } else if (foundInitialState && command.time <= time) {
                 if (command.action === 'animateView') {
                     const animationStartTime = command.time;
                     const animationDuration = command.payload.duration;
                     const animationEndTime = animationStartTime + animationDuration;
 
                     if (time >= animationStartTime && time < animationEndTime) {
-                        // We are seeking INTO this animation. Interpolate the view.
+                        // If the target 'time' falls within this animation, interpolate the view state.
                         const progress = (time - animationStartTime) / animationDuration;
                         graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
                         graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
                         graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
                         
-                        // Set activeAnimateView so animationLoop can continue from here
+                        // Mark this animation as active so animationLoop can continue it.
                         graphState.activeAnimateView = { ...command.payload, startTime: command.time };
-                        lastProcessedEventIndex = i; // This command (animation) is "active"
-                        break; // Stop, as we are now in an interpolated state
+                        lastProcessedEventIndex = i; // Mark this specific animation command as "active/processed up to"
+                        break; // Stop processing further commands, as we're now in an interpolated state.
                     } else if (time >= animationEndTime) {
-                        // We have sought PAST this animation. Apply its final state.
+                        // If the target 'time' is beyond this animation, apply its final state.
                         Object.assign(graphState, command.payload.endView);
-                        currentEffectiveTime = animationEndTime; // Time now is end of this animation
+                        // Don't modify currentEffectiveTime directly, rely on loop to advance.
                     }
-                } else if (command.action !== 'delay') {
-                    // Execute other discrete commands.
+                } else if (command.action !== 'delay') { // 'delay' actions don't change state, just advance time
+                    // Execute other discrete commands up to the target time.
                     executeReplayCommand(command);
-                    currentEffectiveTime = command.time;
+                    // Don't modify currentEffectiveTime directly.
                 }
-                lastProcessedEventIndex = i; // Mark this command as processed.
+                // Important: Update lastProcessedEventIndex for every command executed.
+                lastProcessedEventIndex = i;
             } else if (foundInitialState && command.time > time) {
-                // We've processed all commands up to or within the target time.
+                // We've gone past the target time; stop.
                 break;
             }
         }
+
+        // After all commands up to 'time' are processed, re-evaluate and render.
         evaluateAndCacheAll();
         renderAll();
         progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
     }
-
 
     function executeReplayCommand(command) {
         if (!command || !command.action) return;
@@ -473,25 +466,25 @@ document.addEventListener('DOMContentLoaded', () => {
         let expr, mathField, item;
         switch (action) {
             case 'initialState':
+                // This case should primarily be handled by renderStateAtTime for reconstruction.
+                // In executeReplayCommand, it implies a reset.
                 expressionListContainer.innerHTML = '';
                 graphState.expressions = [];
                 Object.assign(graphState, payload.view);
                 graphState.angleMode = payload.angleMode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
-
                 payload.expressions.forEach(initialExpr => {
                     const completeExpr = { sliders: {}, ...initialExpr };
-                    // Ensure sliders are deep-copied on initial state load
                     completeExpr.sliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
-                    addExpressionUI(completeExpr); // This function now handles setting initial LaTeX
+                    addExpressionUI(completeExpr);
                 });
                 break;
             case 'addExpression':
                 const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
                 const newExprData = {
                     id: payload.id,
-                    latex: payload.latex || '', // Use payload.latex if present, otherwise empty string
+                    latex: payload.latex || '',
                     visible: payload.visible !== undefined ? payload.visible : true,
                     color: payload.color || color,
                     sliders: payload.sliders || {}
@@ -522,12 +515,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'animateView':
-                // This command is primarily handled by the animationLoop or renderStateAtTime.
-                // If it's processed here directly, it means we're setting the *start* of an animation
-                // or the *final* state if we're seeking past it.
-                // For live playback, the animationLoop will handle the interpolation.
-                // For seeking, renderStateAtTime will handle it.
-                Object.assign(graphState, payload.startView); // Set to start of animation view initially
+                // For 'animateView', executeReplayCommand is generally only called if we are applying
+                // its START state as part of a cold path reconstruction, or if animationLoop is
+                // setting up a new animation. The actual interpolation happens in animationLoop.
+                Object.assign(graphState, payload.startView); // Set to start of animation view
                 break;
             case 'setSlider':
                 expr = graphState.expressions.find(e => e.id === payload.exprId);
@@ -544,7 +535,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 break;
                             }
                         }
-
                         if (targetSlider) {
                             targetSlider.value = payload.value;
                             const labelEl = targetSlider.previousElementSibling;
@@ -616,20 +606,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    /**
-     * Heavy evaluation path. Parses expressions, calculates plot points, and finds intersections.
-     */
     function evaluateAndCacheAll() {
         graphState.definedVariables = {};
         graphState.expressions.forEach(parseSingleExpression);
-        graphState.expressions.forEach(calculatePlotPoints); // Cache points after parsing
+        graphState.expressions.forEach(calculatePlotPoints);
         findAndStoreIntersections();
-        graphState.expressions.forEach(updateExpressionUI); // Update UI for results, sliders
+        graphState.expressions.forEach(updateExpressionUI);
     }
 
-    /**
-     * Calculates a high-density set of points for a function and caches them.
-     */
     function calculatePlotPoints(expr) {
         if (!expr.compiled || (expr.type !== 'function' && expr.type !== 'inequality')) {
             expr.plotPoints = [];
@@ -640,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const points = [];
         const xMin = -100;
         const xMax = 100;
-        const numPoints = 10000; // High number for smooth curves even when zoomed in
+        const numPoints = 10000;
         const dx = (xMax - xMin) / numPoints;
 
         for (let i = 0; i <= numPoints; i++) {
@@ -651,7 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (Number.isFinite(y)) {
                     points.push({ x, y });
                 } else {
-                    points.push(null); // Represents a break in the graph
+                    points.push(null);
                 }
             } catch (e) {
                 points.push(null);
@@ -660,9 +644,6 @@ document.addEventListener('DOMContentLoaded', () => {
         expr.plotPoints = points;
     }
 
-    /**
-     * Fast rendering path. Draws grid, cached points, and overlays. Always fast.
-     */
     function renderAll() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawGraphGrid();
@@ -677,9 +658,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (graphState.lockedPoint.visible) drawLockedPoint()
     }
 
-    /**
-     * High-performance plot function that uses the point cache.
-     */
     function plotFunction(expr) {
         if (!expr.plotPoints || expr.plotPoints.length === 0) return;
 
@@ -694,7 +672,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 continue;
             }
             const px = graphState.originX + point.x * graphState.scale;
-            if (px < -10 || px > canvas.width + 10) { // Optimization to skip drawing far off-screen points
+            if (px < -10 || px > canvas.width + 10) {
                 firstPoint = true;
                 continue;
             }
