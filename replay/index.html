@@ -88,11 +88,7 @@
         .expression-number { color: var(--thelo-text-light); font-weight: 500; width: 20px; text-align: center; }
         .expression-input-wrapper { display: flex; align-items: center; flex-grow: 1; min-width: 0; }
         .math-input-field { flex-grow: 1; min-width: 0; padding: 8px; font-size: 1.3rem; background-color: var(--sidebar-bg); border: none; }
-        .math-input-field.mq-focused {
-            outline: 2px solid var(--thelo-blue);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
-            border-radius: 4px;
-        }
+        
         .expression-result { padding: 0 0.75rem; font-size: 1rem; color: var(--thelo-text-light); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .expression-extras { padding: 0.75rem 0 0.5rem 52px; }
         .slider-container { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
@@ -104,53 +100,9 @@
         #graphCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         #homeBtn { position: absolute; bottom: 20px; right: 20px; width: 44px; height: 44px; background-color: var(--sidebar-bg); border: 1px solid var(--thelo-border); border-radius: 50%; box-shadow: 0 4px 8px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; z-index: 5; }
         #homeBtn svg { width: 24px; height: 24px; stroke: var(--thelo-text-light); }
-
-        /* --- Player Controls --- */
-        #playerControls {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            background-color: var(--sidebar-bg);
-            border: 1px solid var(--thelo-border);
-            border-radius: 12px;
-            box-shadow: var(--shadow-lg);
-            z-index: 100;
-            font-family: 'Manrope', sans-serif;
-            overflow: hidden;
-            width: 350px;
-        }
-        .player-header { padding: 10px 15px; background-color: var(--thelo-bg); border-bottom: 1px solid var(--thelo-border); }
-        .player-header h4 { margin: 0; font-size: 0.8rem; font-weight: 700; color: var(--thelo-text-light); text-transform: uppercase; letter-spacing: 0.5px; }
-        .player-body { padding: 15px; }
-        #file-input-label {
-            display: block;
-            padding: 12px;
-            background-color: var(--thelo-bg);
-            border: 2px dashed var(--thelo-border);
-            border-radius: 8px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        #file-input-label:hover { border-color: var(--thelo-blue); background-color: #eff6ff; }
-        #file-input { display: none; }
-        #status-text { margin-top: 10px; text-align: center; color: var(--thelo-text-light); font-size: 0.9rem; }
-        #playBtn {
-            width: 100%;
-            padding: 12px;
-            margin-top: 15px;
-            font-size: 1rem;
-            font-weight: 700;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            background-color: var(--thelo-blue);
-            color: white;
-            transition: background-color 0.2s ease;
-        }
-        #playBtn:disabled { background-color: #9ca3af; cursor: not-allowed; }
-        #playBtn:not(:disabled):hover { background-color: var(--thelo-blue-dark); }
-        #progressBarContainer { width: 100%; background-color: var(--thelo-border); border-radius: 4px; overflow: hidden; height: 8px; margin-top: 15px; display: none; }
+        
+        /* --- Progress Bar (Optional visual feedback) --- */
+        #progressBarContainer { position: fixed; bottom: 0; left: 0; width: 100%; height: 4px; background-color: transparent; z-index: 100; }
         #progressBar { width: 0%; height: 100%; background-color: var(--thelo-blue); transition: width 0.1s linear; }
 
         /* --- Responsive Design --- */
@@ -158,8 +110,10 @@
             body { flex-direction: column; }
             #sidebar { width: 100%; height: 45vh; min-height: 300px; resize: none; border-right: none; border-bottom: 1px solid var(--thelo-border); }
             #homeBtn { bottom: 15px; right: 15px; }
-            #playerControls { width: calc(100% - 40px); left: 20px; bottom: 20px; }
         }
+        #progressBarContainer {
+    display: none;
+}
     </style>
 </head>
 <body>
@@ -179,27 +133,14 @@
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h7.5" /></svg>
         </div>
     </div>
-
-    <!-- The player controls -->
-    <div id="playerControls">
-        <div class="player-header">
-            <h4>REPLAY CONTROLS</h4>
-        </div>
-        <div class="player-body">
-            <label for="file-input" id="file-input-label">Click to load recording.json</label>
-            <input type="file" id="file-input" accept=".json">
-            <div id="status-text">No recording loaded.</div>
-            <button id="playBtn" disabled>Play</button>
-            <div id="progressBarContainer">
-                <div id="progressBar"></div>
-            </div>
-        </div>
-    </div>
+    
+    <!-- Progress bar for visual feedback during playback -->
+    <div id="progressBarContainer"><div id="progressBar"></div></div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // ======================================================
-    // =========== REPLAY ENGINE & UI LOGIC =================
+    // =========== AUTOMATED REPLAY ENGINE ==================
     // ======================================================
 
     // --- DOM ELEMENTS ---
@@ -207,14 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ctx = canvas.getContext('2d');
     const expressionListContainer = document.getElementById('expressionListContainer');
     const toggleAngleModeBtn = document.getElementById('toggleAngleModeBtn');
-    
-    // Player controls
-    const fileInput = document.getElementById('file-input');
-    const fileInputLabel = document.getElementById('file-input-label');
-    const statusText = document.getElementById('status-text');
-    const playBtn = document.getElementById('playBtn');
     const progressBar = document.getElementById('progressBar');
-    const progressBarContainer = document.getElementById('progressBarContainer');
 
     // --- LIBRARIES & CONSTANTS ---
     const MQ = MathQuill.getInterface(2);
@@ -232,78 +166,128 @@ document.addEventListener('DOMContentLoaded', () => {
         angleMode: 'rad',
         definedVariables: {}
     };
-    let recordedData = null;
     let isReplaying = false;
 
     // --- INITIALIZATION ---
     function initialize() {
         resizeCanvas();
-        setupPlayerListeners();
+        setupMessageListener();
         renderAll();
     }
 
-    function setupPlayerListeners() {
-        fileInput.addEventListener('change', handleFileLoad);
-        playBtn.addEventListener('click', startReplay);
-    }
+    /**
+     * Listens for a 'message' event from the parent window (thelo app).
+     * When valid replay data is received, it triggers the playback.
+     */
+   // Keep these at a higher scope
+let replayActions = [];
 
-    function handleFileLoad(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+/**
+ * Listens for messages from the parent window (thelo app).
+ * It now handles two scenarios: receiving the initial data, and
+ * receiving 'seek' commands to update the visual state.
+ */
+// Add this variable at the top of your script, near the other state variables
+let replayActions = [];
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                recordedData = JSON.parse(e.target.result);
-                if (!recordedData.actions || !recordedData.meta) {
-                    throw new Error("Invalid recording format.");
-                }
-                statusText.textContent = `Loaded: ${file.name}`;
-                fileInputLabel.style.borderColor = '#22c55e';
-                playBtn.disabled = false;
-                // Reset to initial state from recording
-                executeReplayCommand(recordedData.actions[0], true);
-            } catch (err) {
-                statusText.textContent = "Error: Invalid JSON file.";
-                fileInputLabel.style.borderColor = 'var(--error-red)';
-                console.error("Failed to parse recording:", err);
-                recordedData = null;
-                playBtn.disabled = true;
-            }
-        };
-        reader.readAsText(file);
-    }
-    
-    async function startReplay() {
-        if (!recordedData || isReplaying) return;
-        isReplaying = true;
-        playBtn.disabled = true;
-        progressBarContainer.style.display = 'block';
-        progressBar.style.width = '0%';
+/**
+ * Listens for messages from the parent window (thelo app).
+ * It now handles two scenarios: 
+ * 1. Receiving the initial replay data.
+ * 2. Receiving 'seek' commands to update the visual state.
+ */
+function setupMessageListener() {
+    window.addEventListener('message', (event) => {
+        const receivedData = event.data;
 
-        // Reset to initial state before playing
-        executeReplayCommand(recordedData.actions[0], true);
-
-        for (let i = 0; i < recordedData.actions.length; i++) {
-            const command = recordedData.actions[i];
-            
-            if (command.action === 'delay') {
-                await new Promise(resolve => setTimeout(resolve, command.ms));
-            } else {
-                executeReplayCommand(command, false);
-            }
-            
-            // Update progress bar
-            const progress = ((i + 1) / recordedData.actions.length) * 100;
-            progressBar.style.width = `${progress}%`;
+        // If the message contains the main 'actions' array, it's the initial data load.
+        if (receivedData && Array.isArray(receivedData.actions)) {
+            console.log("Replay data received and stored.");
+            replayActions = receivedData.actions;
+            // Immediately render the very first frame (time = 0).
+            setStateAtTime(0, replayActions);
         }
 
-        isReplaying = false;
-        playBtn.disabled = false;
-        statusText.textContent = "Replay finished.";
-    }
+        // If the message is a 'seek' command, update the calculator to that specific time.
+        if (receivedData && receivedData.command === 'seek') {
+            setStateAtTime(receivedData.time, replayActions);
+        }
+    });
+}
+        function loop(currentTime) {
+            if (!isReplaying) return;
 
-    function executeReplayCommand(command, isInitialState) {
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+            timeSinceLastAction += deltaTime;
+
+            // Process all actions that are due to happen in this frame.
+            while (actionIndex < actions.length) {
+                const command = actions[actionIndex];
+                
+                if (command.action === 'delay' && timeSinceLastAction < command.ms) {
+                    break; // Wait until the delay has passed.
+                }
+
+                // If we are here, the action is ready to be executed.
+                timeSinceLastAction = 0; // Reset timer for the next delay.
+
+                if (command.action === 'liveUpdateView') {
+                    // This is a high-frequency event; prepare to animate towards it.
+                    viewAnimation.active = true;
+                    viewAnimation.duration = actions[actionIndex+1]?.ms || 16.67; // Animate over the time until the next frame.
+                    viewAnimation.elapsed = 0;
+                    viewAnimation.start = { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale };
+                    viewAnimation.end = command.payload;
+                } else {
+                    // For all other actions, execute them instantly.
+                    viewAnimation.active = false;
+                    executeReplayCommand(command);
+                }
+                actionIndex++;
+            }
+
+            // If a view animation is active, interpolate the state for this frame.
+            if (viewAnimation.active) {
+                viewAnimation.elapsed += deltaTime;
+                let progress = Math.min(viewAnimation.elapsed / viewAnimation.duration, 1);
+                
+                // Linear interpolation (lerp) for smooth movement.
+                const lerp = (start, end, t) => start + (end - start) * t;
+                graphState.originX = lerp(viewAnimation.start.originX, viewAnimation.end.originX, progress);
+                graphState.originY = lerp(viewAnimation.start.originY, viewAnimation.end.originY, progress);
+                graphState.scale = lerp(viewAnimation.start.scale, viewAnimation.end.scale, progress);
+                
+                evaluateAndPlotAll();
+                
+                if (progress >= 1) {
+                    viewAnimation.active = false;
+                }
+            }
+
+            // Update progress bar
+            const progressPercentage = (actionIndex / actions.length) * 100;
+            progressBar.style.width = `${progressPercentage}%`;
+            
+            // Continue the loop if there are more actions.
+            if (actionIndex < actions.length) {
+                requestAnimationFrame(loop);
+            } else {
+                isReplaying = false;
+                console.log("Replay finished.");
+                setTimeout(() => { progressBar.style.width = '0%'; }, 1000);
+            }
+        }
+        
+        // Start the animation loop.
+        requestAnimationFrame(loop);
+    }
+
+    /**
+     * Executes a single command from the replay sequence to update the calculator's state.
+     * @param {object} command - The command object { action, payload }.
+     */
+    function executeReplayCommand(command) {
         if (!command || !command.action) return;
 
         const { action, payload } = command;
@@ -319,7 +303,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
                 
                 payload.expressions.forEach(initialExpr => {
-                    // FIX: Ensure every expression object has a 'sliders' property to prevent errors.
                     const completeExpr = { sliders: {}, ...initialExpr };
                     addExpressionUI(completeExpr);
                 });
@@ -396,10 +379,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
         }
 
-        // Re-evaluate and render after every action for visual feedback
         evaluateAndPlotAll();
     }
+        /**
+ * Sets the entire calculator state based on a timeline and a specific time.
+ * This function is the new core of the replay logic, allowing for external control.
+ * @param {number} time - The time in milliseconds to seek to.
+ * @param {Array} actions - The array of actions from the recording.
+ */
+function setStateAtTime(time, actions) {
+    if (!actions || actions.length === 0) return;
 
+    // Always start from the absolute initial state
+    executeReplayCommand(actions[0]);
+
+    let cumulativeTime = 0;
+
+    // Apply all actions sequentially up to the target time
+    for (let i = 1; i < actions.length; i++) {
+        const command = actions[i];
+
+        if (command.action === 'delay') {
+            cumulativeTime += command.ms;
+        }
+
+        if (cumulativeTime > time) {
+            // We've gone past our target time, so we stop here.
+            break;
+        }
+
+        // Execute any non-delay command that falls within the target time
+        if (command.action !== 'delay') {
+            executeReplayCommand(command);
+        }
+    }
+
+    // After setting the state, perform a final render.
+    evaluateAndPlotAll();
+}
     function addExpressionUI(exprData) {
         graphState.expressions.push(exprData);
         const item = document.createElement('div');
