@@ -2356,13 +2356,10 @@ async function openReplayPlayer() {
 
     const sendDataToPlayer = (replayActions) => {
         if (replayFrame.contentWindow) {
-            // βρίσκω REPLACEMENT for postMessage call in openReplayPlayer
-
-replayFrame.contentWindow.postMessage({
-    action: 'start', // Add this action property
-    meta: { source: 'thelo-lesson' },
-    actions: replayActions
-}, '*');
+            replayFrame.contentWindow.postMessage({
+                meta: { source: 'thelo-lesson' },
+                actions: replayActions
+            }, '*');
             console.log("Replay data sent to player iframe.");
         }
     };
@@ -2448,42 +2445,17 @@ function renderStageUI(index, isResize = false) {
 
                 // NEW LOGIC BLOCK FOR REPLAY STAGES
                 // NEW LOGIC BLOCK FOR REPLAY STAGES
-            // βρίσκω REPLACEMENT for the 'calculator_replay' block in renderStageUI
-
-if (currentStageData.type === 'calculator_replay') {
-    openReplayPlayer();
-    if (clearBtn) clearBtn.style.display = 'none';
-    if (nextCheckBtn) {
-        nextCheckBtn.textContent = TXT.gotIt;
-        nextCheckBtn.disabled = false;
+            if (currentStageData.type === 'calculator_replay') {
+                openReplayPlayer();
+		    if (currentStageData.audioFile) {
+        playStageAudio(currentStageData.audioFile, () => {}, () => {}, isResize);
     }
-
-    // --- NEW LOGIC to activate and manage the progress bar ---
-    if (currentStageData.audioFile) {
-        if (!isResize) {
-            isMediaScrubbingActive = true; // Use the existing flag to run the update loop
-            lastFrameTimestampForManualAdvance = 0;
-            internalPlaybackTime = 0;
-        }
-
-        // Play the audio and use its duration to set up the progress bar
-        playStageAudio(currentStageData.audioFile,
-            (duration) => {
-                // This callback runs once the audio's duration is known
-                currentStageTotalDuration = duration || 0;
-                if (currentStageTotalDuration > 0) {
-                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
-
-                    // Start the existing animation loop which also updates the progress bar
-                    if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-                    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+                if (nextCheckBtn) {
+                    nextCheckBtn.textContent = TXT.gotIt;
+                    nextCheckBtn.disabled = false;
                 }
-            },
-            () => {}, // onEnded callback
-            isResize
-        );
-    }
-}
+                if (clearBtn) clearBtn.style.display = 'none';
+            }
                 // ORIGINAL LOGIC FOR QUESTION STAGES
                 else if (isQuestionStage) {
                     if (!isResize) isMediaScrubbingActive = false;
@@ -3637,23 +3609,38 @@ function closeCalculator() {
     resumeMediaState();
 }
 function handleKeyDown(event) {
-    // 1. PREVENT BROWSER ZOOMING
-    if ((event.ctrlKey || event.metaKey) && (event.key === '+' || event.key === '-' || event.key === '=')) {
-        event.preventDefault();
-        return;
+    // =================================================================
+    // ===== NEW: Forward Arrow Keys to the Replay Player Iframe =====
+    // =================================================================
+    if (isReplayActive && replayFrame && replayFrame.contentWindow) {
+        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+            // Prevent the main page from also trying to scrub its own media
+            event.preventDefault(); 
+            
+            // Send a specific seek command to the iframe
+            replayFrame.contentWindow.postMessage({
+                command: 'seek',
+                direction: event.key === 'ArrowRight' ? 'forward' : 'backward'
+            }, '*'); // Use a specific origin like 'https://thelo.space' in production
+            
+            // Stop further execution in this function to avoid conflicts
+            return; 
+        }
     }
+    // =================================================================
 
-    // Ignore key presses in inputs or with modifier keys
+    // --- Original function logic continues below ---
+
     if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
-    // Handle 'View Progress' button at the end of a lesson
+    /* ===== ADDED: Activate 'View Progress' on SPACE key at end of lesson ===== */
     if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
-        dashboardBtn.click();
-        event.preventDefault();
-        return;
+        dashboardBtn.click(); // Trigger the button's click event
+        event.preventDefault(); // Prevent default spacebar action (e.g., scrolling)
+        return; // Stop further execution
     }
+    /* ========================================================================= */
 
-    // Handle keyboard shortcuts when the page grid is visible
     if (isPageGridVisible) {
         switch (event.key.toLowerCase()) {
             case 'c':
@@ -3671,8 +3658,6 @@ function handleKeyDown(event) {
         }
         return;
     }
-
-    // Handle keyboard shortcuts when the calculator is active
     if (isCalculatorActive) {
         if (event.key.toLowerCase() === 'f' || event.key === 'Escape') {
             closeCalculator();
@@ -3680,11 +3665,12 @@ function handleKeyDown(event) {
         }
         return;
     }
-
-    // Handle keyboard shortcuts when the thelobook is active
     if (isThelobookActive) {
         switch (event.key.toLowerCase()) {
             case 'b':
+                closeThelobook(true);
+                event.preventDefault();
+                return;
             case 'escape':
                 closeThelobook(true);
                 event.preventDefault();
@@ -3700,20 +3686,24 @@ function handleKeyDown(event) {
         }
         return;
     }
-
-    // Handle spacebar to start the lesson
-    if (event.key === ' ' && currentStageIndex === -1 && !isLessonLoading && !isTransitioning && nextCheckBtn && !nextCheckBtn.disabled) {
-        handleNextCheckClick();
-        event.preventDefault();
-        return;
+    /* ── QUICK-START LESSON WITH SPACE ──────────────────────────────── */
+    if (
+        event.key === ' ' && // space-bar hit
+        currentStageIndex === -1 && // lesson not started yet
+        !isLessonLoading && !isTransitioning &&
+        !isThelobookActive && !isPageGridVisible &&
+        nextCheckBtn && !nextCheckBtn.disabled
+    ) {
+        handleNextCheckClick(); // same action as the “Start” button
+        event.preventDefault(); // stop page scrolling, etc.
+        return; // nothing else to do for this keypress
     }
+    /* ───────────────────────────────────────────────────────────────── */
 
     if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
-    
     const mcqDetails = currentStageData.optionsQuiz;
     const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
 
-    // Handle main keyboard shortcuts during a lesson stage
     switch (event.key.toLowerCase()) {
         case ' ':
             if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled) {
@@ -3744,51 +3734,32 @@ function handleKeyDown(event) {
             }
             break;
     }
+    const canScrub = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
+    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && canScrub && !isThelobookActive && !isPageGridVisible) {
+        const step = 5;
+        const diff = event.key === 'ArrowLeft' ? -step : step;
+        let newTime = internalPlaybackTime + diff;
+        newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
+        internalPlaybackTime = newTime;
 
-    // 2. HANDLE ARROW KEY SCRUBBING FOR BOTH DRAWING AND GRAPH STAGES
-    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-        const isReplayStage = currentStageData && currentStageData.type === 'calculator_replay';
-        const canScrubDrawing = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
-
-        if (isReplayStage || canScrubDrawing) {
-            event.preventDefault();
-            const step = 5; // 5-second jump
-            const diff = event.key === 'ArrowLeft' ? -step : step;
-
-            let totalDuration = currentStageTotalDuration;
-            if (currentStageAudio && currentStageAudio.duration) {
-                totalDuration = currentStageAudio.duration;
-            }
-
-            let currentTime = isReplayStage ? (currentStageAudio ? currentStageAudio.currentTime : 0) : internalPlaybackTime;
-
-            let newTime = currentTime + diff;
-            newTime = Math.max(0, Math.min(newTime, totalDuration));
-
-            if (currentStageAudio) {
-                currentStageAudio.currentTime = newTime;
-                if (window.userInteracted && currentStageAudio.paused && newTime < (totalDuration - 0.01)) {
-                    currentStageAudio.play().catch(() => {});
-                }
-            }
-
-            if (isReplayStage) {
-                if (replayFrame && replayFrame.contentWindow) {
-                    replayFrame.contentWindow.postMessage({ action: 'seek', time: newTime * 1000 }, '*');
-                }
-            } else {
-                internalPlaybackTime = newTime;
-                if (!isMediaScrubbingActive && currentStageTotalDuration > 0) {
-                    isMediaScrubbingActive = true;
-                    if (!currentReplayAnimationId) { requestAnimationFrame(mediaPlaybackLoop); }
-                }
-                if (currentStageDrawingData && replayCtx) {
-                    renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
-                }
-                updateMediaProgressBar(newTime, currentStageTotalDuration);
-                lastFrameTimestampForManualAdvance = performance.now();
+        if (currentStageAudio && currentStageData.audioFile) {
+            currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+            if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01) && currentStageAudio.src.includes(currentStageData.audioFile)) {
+                currentStageAudio.play().catch(() => {});
             }
         }
+        if (!isMediaScrubbingActive && currentStageTotalDuration > 0) {
+            isMediaScrubbingActive = true;
+            if (!currentReplayAnimationId) {
+                currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+            }
+        }
+        if (currentStageDrawingData && replayCtx && currentStageData.drawingRecord) {
+            renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+        }
+        updateMediaProgressBar(newTime, currentStageTotalDuration);
+        lastFrameTimestampForManualAdvance = performance.now();
+        event.preventDefault();
     }
 }
     // Prevent zooming via keyboard and mouse wheel
