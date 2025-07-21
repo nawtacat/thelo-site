@@ -140,8 +140,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // ======================================================
-    // =========== AUTOMATED REPLAY ENGINE V3 ===============
-    // ===========   (Hybrid for Speed & Accuracy)  =========
+    // =========== AUTOMATED REPLAY ENGINE V4 ===============
+    // ===========   (True High-Performance Hybrid) =========
     // ======================================================
 
     // --- DOM ELEMENTS (no changes) ---
@@ -170,16 +170,14 @@ document.addEventListener('DOMContentLoaded', () => {
         definedVariables: {}
     };
 
-    // --- PLAYBACK CONTROL STATE (with one new variable) ---
+    // --- PLAYBACK CONTROL STATE (no changes) ---
     let timeline = [];
     let totalDuration = 0;
     let playbackTime = 0;
     let isPlaying = false;
     let animationFrameId = null;
     let lastTimestamp = 0;
-    // NEW: Tracks our position in the timeline for fast, incremental playback
     let lastProcessedEventIndex = -1;
-
 
     // --- INITIALIZATION & EVENT LISTENERS (no changes) ---
     function initialize() {
@@ -230,12 +228,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isPlaying) pause();
         buildTimeline(actions);
         playbackTime = 0;
-        lastProcessedEventIndex = -1; // Reset tracker
+        lastProcessedEventIndex = -1;
         renderStateAtTime(0);
         play();
     }
 
-    // --- PLAYBACK CONTROLS (with updated seek function) ---
+    // --- PLAYBACK CONTROLS (no changes) ---
 
     function play() {
         if (isPlaying) return;
@@ -258,25 +256,35 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             if (playbackTime >= totalDuration) {
                 playbackTime = 0;
-                lastProcessedEventIndex = -1; // Reset tracker
+                lastProcessedEventIndex = -1;
             }
             play();
         }
     }
 
     function seek(amountMs) {
+        const wasAtEnd = playbackTime >= totalDuration;
         const wasPlaying = isPlaying;
         if (wasPlaying) pause();
 
         playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
         
-        // Use the "cold path": a full, accurate state reconstruction.
+        // Use the "cold path" for perfect accuracy on seek
         renderStateAtTime(playbackTime);
 
-        // Resume playback if it was playing, or if it was at the end and we're rewinding.
-        if (wasPlaying || (playbackTime < totalDuration && amountMs < 0)) {
+        // Resume playback if it was playing, or if it was at the end and rewinding
+        if (wasPlaying || (wasAtEnd && amountMs < 0)) {
             play();
         }
+    }
+
+    // =================================================================
+    // ===== NEW: LIGHTWEIGHT REDRAW FUNCTION ==========================
+    // =================================================================
+    // This function ONLY redraws the canvas without any re-calculation.
+    // This is the key to high-framerate panning and zooming.
+    function redrawCanvas() {
+        requestAnimationFrame(renderAll);
     }
 
     // =================================================================
@@ -289,17 +297,32 @@ document.addEventListener('DOMContentLoaded', () => {
         lastTimestamp = currentDOMTime;
         playbackTime = Math.min(playbackTime + deltaTime, totalDuration);
 
-        // --- INCREMENTAL UPDATE LOGIC ---
-        // Find the next event that needs to be processed
+        let needsFullReevaluation = false;
         let nextEventIndex = lastProcessedEventIndex + 1;
+
         while (nextEventIndex < timeline.length && timeline[nextEventIndex].time <= playbackTime) {
-            executeReplayCommand(timeline[nextEventIndex]);
+            const command = timeline[nextEventIndex];
+            executeReplayCommand(command);
+
+            // Check if the command was "heavy" (changed the math)
+            if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility'].includes(command.action)) {
+                needsFullReevaluation = true;
+            }
+
             lastProcessedEventIndex = nextEventIndex;
             nextEventIndex++;
         }
         
-        // This is much faster as it only re-evaluates if a command was just executed.
-        evaluateAndPlotAll(); 
+        // ===================================================================
+        // ===== THE CORE FIX: Smartly choose how to render the frame ======
+        // ===================================================================
+        if (needsFullReevaluation) {
+            // If the math changed, do the necessary (but slow) full update.
+            evaluateAndPlotAll();
+        } else {
+            // If only the view changed, do the lightning-fast redraw.
+            redrawCanvas();
+        }
 
         progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
 
@@ -314,10 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ===== FULL STATE RECONSTRUCTION (THE "COLD PATH") ===============
     // =================================================================
     function renderStateAtTime(time) {
-        // Reset to the absolute beginning
-        executeReplayCommand(timeline[0]); 
-        
-        // Find the last event that should have occurred by this time
+        executeReplayCommand(timeline[0]);
         let newLastIndex = -1;
         for (let i = 1; i < timeline.length; i++) {
             if (timeline[i].time <= time) {
@@ -327,17 +347,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             }
         }
-        
-        // Sync our incremental tracker to this new position
         lastProcessedEventIndex = newLastIndex;
         
+        // Seeking always requires a full, accurate re-evaluation.
         evaluateAndPlotAll();
         progressBar.style.width = `${(time / totalDuration) * 100}%`;
     }
     
     // --- The rest of the script (executeReplayCommand, graphing logic, etc.) remains unchanged ---
     // --- Paste all the functions from `executeReplayCommand` to the end of your original script here ---
-
     function executeReplayCommand(command) {
         if (!command || !command.action) return;
         const { action, payload } = command;
@@ -407,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'resetView':
-                resizeCanvases(false); // Assuming resizeCanvases handles the reset logic
+                resetView(false);
                 break;
             case 'setAngleMode':
                 graphState.angleMode = payload.mode;
@@ -437,7 +455,6 @@ document.addEventListener('DOMContentLoaded', () => {
             item.querySelector('.expression-number').textContent = index + 1;
         });
     }
-    // ... Paste the rest of your graphing logic functions (evaluateAndPlotAll, renderAll, etc.) here unchanged ...
     function evaluateAndPlotAll(){graphState.definedVariables={};graphState.expressions.forEach(parseSingleExpression);findAndStoreIntersections();graphState.expressions.forEach(updateExpressionUI);requestAnimationFrame(renderAll)}
     function parseSingleExpression(expr){Object.assign(expr,{type:"empty",compiled:null,error:null,result:null,node:null,inequalityType:null,isImplicit:!1});let cleanStr=preprocessInputString(latexToMathJs(expr.latex.trim()));if(!cleanStr)return;try{const node=math.parse(cleanStr);expr.node=node;const scope=getEvaluationScope(expr);if(node.isAssignmentNode){const varName=node.object.name;if(node.toString().match(/[xy]/)){expr.error="Cannot assign expression with x or y.";return}expr.type="assignment";const result=node.evaluate(scope);expr.result=result;graphState.definedVariables[varName]=result}else if(cleanStr.includes("x")||cleanStr.includes("y")){expr.type="function";let parseableNode=node;if(node.isOperatorNode&&node.op==="="){const[left,right]=node.args;if(left.isSymbolNode&&left.name==="y"){parseableNode=right}else if(right.isSymbolNode&&right.name==="y"){parseableNode=left}else if(left.isSymbolNode&&left.name==="x"){expr.type="vertical_line";expr.x_value=right.evaluate(scope)}else if(right.isSymbolNode&&right.name==="x"){expr.type="vertical_line";expr.x_value=left.evaluate(scope)}else{expr.error="Implicit functions not supported yet."}}if(expr.type==="function"){expr.node=parseableNode;expr.compiled=parseableNode.compile()}}else if(node.isOperatorNode&&["<",">","<=",">="].includes(node.op)){expr.inequalityType=node.op;const[left,right]=node.args;if(left.isSymbolNode&&left.name==="y"){expr.type="inequality";expr.compiled=right.compile()}else if(right.isSymbolNode&&right.name==="y"){expr.type="inequality";expr.compiled=left.compile();expr.inequalityType={">":"<",">=":"<=","<":">","<=":">="}[node.op]}else if(left.isSymbolNode&&left.name==="x"){expr.type="vertical_inequality";expr.x_value=right.evaluate(scope)}else if(right.isSymbolNode&&right.name==="x"){expr.type="vertical_inequality";expr.x_value=left.evaluate(scope);expr.inequalityType={">":"<",">=":"<=","<":">","<=":">="}[node.op]}else{expr.type="calculation";expr.result=node.evaluate(scope)}}else{expr.type="calculation";expr.result=node.evaluate(scope)}
     if(expr.type==="function"||expr.type==="inequality"){const knownSymbols=["x","y","e","pi","i","true","false","theta",...Object.keys(math)];const foundSymbols=new Set;expr.node.traverse(n=>{if(n.isSymbolNode&&!knownSymbols.includes(n.name)&&!graphState.definedVariables.hasOwnProperty(n.name)){foundSymbols.add(n.name)}});foundSymbols.forEach(name=>{if(!expr.sliders[name])expr.sliders[name]={val:1,min:-5,max:5,step:.1}});Object.keys(expr.sliders).forEach(name=>{if(!foundSymbols.has(name))delete expr.sliders[name]})}else{expr.sliders={}}
@@ -476,5 +493,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initialize();
 });
 </script>
+        
 </body>
 </html>
