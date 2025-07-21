@@ -558,39 +558,44 @@ document.addEventListener('DOMContentLoaded', () => {
 }
 
     function addExpressionUI(exprData) {
-        // Add a plotPoints property for our cache, and ensure sliders are properly re-initialized
-        const newExpr = { plotPoints: [], ...exprData };
-        // Deep copy sliders to prevent accidental shared references
-        newExpr.sliders = JSON.parse(JSON.stringify(exprData.sliders || {}));
-        graphState.expressions.push(newExpr);
+    // Add a plotPoints property for our cache, and ensure sliders are properly re-initialized
+    const newExpr = { plotPoints: [], ...exprData };
+    // Deep copy sliders to prevent accidental shared references
+    newExpr.sliders = JSON.parse(JSON.stringify(exprData.sliders || {}));
+    graphState.expressions.push(newExpr);
 
-        const item = document.createElement('div');
-        item.className = 'expression-item';
-        item.id = newExpr.id;
-        const exprIndex = graphState.expressions.length;
-        item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
-        expressionListContainer.appendChild(item);
-        const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
-        if (newExpr.latex) {
-            mathField.latex(newExpr.latex);
-        }
-        item.querySelector('.expression-color-bar').style.backgroundColor = newExpr.color;
-        item.querySelector('.expression-color-bar').style.borderColor = newExpr.color;
-        item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !newExpr.visible);
-
-        // Populate sliders UI based on initial data
-        const extrasEl = item.querySelector('.expression-extras');
-        Object.keys(newExpr.sliders).forEach(name => {
-            const slider = newExpr.sliders[name];
-            const sliderDiv = document.createElement('div');
-            sliderDiv.className = 'slider-container';
-            // Disable input interaction in replay mode
-            sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`;
-            extrasEl.appendChild(sliderDiv);
-        });
-
-        updateExpressionNumbers();
+    const item = document.createElement('div');
+    item.className = 'expression-item';
+    item.id = newExpr.id;
+    const exprIndex = graphState.expressions.length;
+    item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
+    expressionListContainer.appendChild(item);
+    const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
+    
+    // FIX: Set LaTeX directly from exprData when adding the UI element
+    // This ensures that initial expressions have their content displayed immediately.
+    if (newExpr.latex) {
+        mathField.latex(newExpr.latex);
     }
+    // END FIX
+
+    item.querySelector('.expression-color-bar').style.backgroundColor = newExpr.color;
+    item.querySelector('.expression-color-bar').style.borderColor = newExpr.color;
+    item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !newExpr.visible);
+
+    // Populate sliders UI based on initial data
+    const extrasEl = item.querySelector('.expression-extras');
+    Object.keys(newExpr.sliders).forEach(name => {
+        const slider = newExpr.sliders[name];
+        const sliderDiv = document.createElement('div');
+        sliderDiv.className = 'slider-container';
+        // Disable input interaction in replay mode
+        sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`;
+        extrasEl.appendChild(sliderDiv);
+    });
+
+    updateExpressionNumbers();
+}
     function updateExpressionNumbers() {
         expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
             item.querySelector('.expression-number').textContent = index + 1;
