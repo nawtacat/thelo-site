@@ -26,7 +26,6 @@
             --thelo-border: #e5e7eb;
             --error-red: #ef4444;
             --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-            --shadow-sm: 0 2px 4px -1px rgb(0 0 0 / 0.06), 0 2px 2px -1px rgb(0 0 0 / 0.04);
         }
         body {
             margin: 0;
@@ -88,7 +87,7 @@
         .expression-number { color: var(--thelo-text-light); font-weight: 500; width: 20px; text-align: center; }
         .expression-input-wrapper { display: flex; align-items: center; flex-grow: 1; min-width: 0; }
         .math-input-field { flex-grow: 1; min-width: 0; padding: 8px; font-size: 1.3rem; background-color: var(--sidebar-bg); border: none; }
-        
+        .math-input-field.mq-focused { outline: 1px solid var(--thelo-blue); }
         .expression-result { padding: 0 0.75rem; font-size: 1rem; color: var(--thelo-text-light); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .expression-extras { padding: 0.75rem 0 0.5rem 52px; }
         .slider-container { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
@@ -101,8 +100,8 @@
         #homeBtn { position: absolute; bottom: 20px; right: 20px; width: 44px; height: 44px; background-color: var(--sidebar-bg); border: 1px solid var(--thelo-border); border-radius: 50%; box-shadow: 0 4px 8px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; z-index: 5; }
         #homeBtn svg { width: 24px; height: 24px; stroke: var(--thelo-text-light); }
         
-        /* --- Progress Bar (Optional visual feedback) --- */
-        #progressBarContainer { position: fixed; bottom: 0; left: 0; width: 100%; height: 4px; background-color: transparent; z-index: 100; }
+        /* --- Progress Bar --- */
+        #progressBarContainer { position: fixed; bottom: 0; left: 0; width: 100%; height: 4px; background-color: #e5e7eb; z-index: 100; display: none; }
         #progressBar { width: 0%; height: 100%; background-color: var(--thelo-blue); transition: width 0.1s linear; }
 
         /* --- Responsive Design --- */
@@ -111,13 +110,9 @@
             #sidebar { width: 100%; height: 45vh; min-height: 300px; resize: none; border-right: none; border-bottom: 1px solid var(--thelo-border); }
             #homeBtn { bottom: 15px; right: 15px; }
         }
-        #progressBarContainer {
-    display: none;
-}
     </style>
 </head>
 <body>
-    <!-- The non-interactive calculator UI -->
     <div id="sidebar">
         <div class="sidebar-header">
             <h1>Replay</h1>
@@ -134,14 +129,12 @@
         </div>
     </div>
     
-    <!-- Progress bar for visual feedback during playback -->
     <div id="progressBarContainer"><div id="progressBar"></div></div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // ======================================================
-    // =========== AUTOMATED REPLAY ENGINE V2 ===============
-    // =========== (With Seeking & Playback Controls) =======
+    // =========== AUTOMATED REPLAY ENGINE ==================
     // ======================================================
 
     // --- DOM ELEMENTS ---
@@ -158,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
     const INEQUALITY_ALPHA = 0.2;
     const POI_RADIUS = 4 * devicePixelRatio;
-    const SEEK_AMOUNT_MS = 5000; // 5 seconds
+    const SEEK_AMOUNT_MS = 5000;
 
     // --- STATE MANAGEMENT ---
     let graphState = {
@@ -173,71 +166,52 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- PLAYBACK CONTROL STATE ---
     let timeline = [];
     let totalDuration = 0;
-    let playbackTime = 0; // Current time in ms
+    let playbackTime = 0;
     let isPlaying = false;
     let animationFrameId = null;
     let lastTimestamp = 0;
+    let lastProcessedEventIndex = -1;
 
-
-    // --- INITIALIZATION ---
+    // --- INITIALIZATION & EVENT LISTENERS ---
     function initialize() {
         resizeCanvas();
         setupMessageListener();
-        setupKeyListeners(); // Listen for arrow keys and spacebar
+        setupKeyListeners();
         renderAll();
     }
 
     function setupMessageListener() {
-    window.addEventListener('message', (event) => {
-        const receivedData = event.data;
-
-        // Case 1: Receiving the full replay data to start playback
-        if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-            console.log("Replay data received from parent window.");
-            startReplay(receivedData.actions);
-        } 
-        // Case 2: Receiving a seek command from the parent
-        else if (receivedData && receivedData.command === 'seek') {
-            if (receivedData.direction === 'forward') {
-                seek(SEEK_AMOUNT_MS);
-            } else if (receivedData.direction === 'backward') {
-                seek(-SEEK_AMOUNT_MS);
+        window.addEventListener('message', (event) => {
+            const receivedData = event.data;
+            if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
+                console.log("Replay data received.");
+                startReplay(receivedData.actions);
+            } else if (receivedData && receivedData.command) {
+                switch(receivedData.command) {
+                    case 'seek_forward': seek(SEEK_AMOUNT_MS); break;
+                    case 'seek_backward': seek(-SEEK_AMOUNT_MS); break;
+                    case 'play_pause': togglePlayPause(); break;
+                }
             }
-        }
-        else {
-            console.warn("Received invalid message format from parent:", receivedData);
-        }
-    });
-}
+        });
+    }
     
-    /**
-     * Listens for keyboard input to control playback.
-     * - Left/Right Arrows: Seek backward/forward
-     * - Spacebar: Toggle play/pause
-     */
     function setupKeyListeners() {
         window.addEventListener('keydown', (e) => {
-            if (timeline.length === 0) return; // Don't do anything if no recording is loaded
-
-            if (e.key === 'ArrowRight') {
-                seek(SEEK_AMOUNT_MS);
-            } else if (e.key === 'ArrowLeft') {
-                seek(-SEEK_AMOUNT_MS);
-            } else if (e.key === ' ') {
+            if (timeline.length === 0) return;
+            if (e.key === 'ArrowRight') seek(SEEK_AMOUNT_MS);
+            else if (e.key === 'ArrowLeft') seek(-SEEK_AMOUNT_MS);
+            else if (e.key === ' ') {
                 e.preventDefault();
                 togglePlayPause();
             }
         });
     }
     
-    /**
-     * Processes the raw actions with relative delays into a master timeline
-     * where each event has an absolute timestamp.
-     */
+    // --- TIMELINE & PLAYBACK LOGIC ---
     function buildTimeline(actions) {
         let currentTime = 0;
         timeline = [];
-        
         actions.forEach(action => {
             if (action.action === 'delay') {
                 currentTime += action.ms;
@@ -245,25 +219,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 timeline.push({ time: currentTime, ...action });
             }
         });
-        
         totalDuration = currentTime;
-        console.log(`Timeline built. Total duration: ${totalDuration / 1000}s`);
     }
 
     function startReplay(actions) {
         if (isPlaying) pause();
-        
         buildTimeline(actions);
         playbackTime = 0;
-        
-        renderStateAtTime(0); // Render the initial frame
-        play(); // Start playing automatically
+        lastProcessedEventIndex = -1;
+        renderStateAtTime(0); // "Cold path" for initial state
+        play();
     }
 
-    // --- PLAYBACK CONTROLS ---
-
     function play() {
-        if (isPlaying) return;
+        if (isPlaying || totalDuration === 0) return;
         isPlaying = true;
         progressBarContainer.style.display = 'block';
         lastTimestamp = performance.now();
@@ -281,88 +250,95 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isPlaying) {
             pause();
         } else {
-            // If at the end, restart from beginning
-            if (playbackTime >= totalDuration) {
+            if (playbackTime >= totalDuration && totalDuration > 0) {
+                // If at the end, restart from beginning
                 playbackTime = 0;
+                renderStateAtTime(0);
             }
             play();
         }
     }
 
     function seek(amountMs) {
-    // This new line checks if the replay was finished before seeking.
-    const wasAtEnd = playbackTime >= totalDuration;
-    const wasPlaying = isPlaying;
+        const wasPlaying = isPlaying;
+        if (wasPlaying) pause();
 
-    if (wasPlaying) pause();
+        playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
+        
+        // Use the "cold path" for perfect accuracy on seek
+        renderStateAtTime(playbackTime);
 
-    // Clamp the new time between 0 and the total duration
-    playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
-
-    renderStateAtTime(playbackTime);
-
-    // This is the fix: Resume playback if it was already playing,
-    // OR if it was at the end and the user is seeking backward.
-    if (wasPlaying || (wasAtEnd && amountMs < 0)) {
-        play();
+        if (wasPlaying) {
+            play();
+        }
     }
-}
 
-    /**
-     * The new, simplified animation loop. It only advances time.
-     * The actual rendering is handled by renderStateAtTime.
-     */
     function animationLoop(currentDOMTime) {
         if (!isPlaying) return;
 
         const deltaTime = currentDOMTime - lastTimestamp;
         lastTimestamp = currentDOMTime;
-
         playbackTime = Math.min(playbackTime + deltaTime, totalDuration);
 
-        renderStateAtTime(playbackTime);
+        let nextEventIndex = lastProcessedEventIndex + 1;
+        let needsFullReevaluation = false;
+
+        while (nextEventIndex < timeline.length && timeline[nextEventIndex].time <= playbackTime) {
+            const command = timeline[nextEventIndex];
+            executeReplayCommand(command);
+
+            // Flag if a command requires heavy recalculation
+            if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView'].includes(command.action)) {
+                needsFullReevaluation = true;
+            }
+
+            lastProcessedEventIndex = nextEventIndex;
+            nextEventIndex++;
+        }
+        
+        if (needsFullReevaluation) {
+            evaluateAndPlotAll();
+        } else {
+            // This is now the high-framerate path for pan/zoom
+            renderAll();
+        }
+
+        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
 
         if (playbackTime >= totalDuration) {
             pause();
-            console.log("Replay finished.");
         } else {
             animationFrameId = requestAnimationFrame(animationLoop);
         }
     }
+    
+    // --- STATE RECONSTRUCTION & COMMAND EXECUTION ---
 
-    /**
-     * The new core rendering engine. It computes and renders the state
-     * of the calculator at a specific millisecond in the timeline.
-     */
+    // "Cold Path": Reconstructs state from scratch. Used for seeking and initialization.
     function renderStateAtTime(time) {
-        // Find the last event that should have occurred by this time
-        let lastEventIndex = -1;
-        for (let i = 0; i < timeline.length; i++) {
+        // Find the index of the initial state
+        const initialStateIndex = timeline.findIndex(cmd => cmd.action === 'initialState');
+        if (initialStateIndex === -1) return; // Cannot proceed without initial state
+
+        // Always start from the initial state
+        executeReplayCommand(timeline[initialStateIndex]);
+        
+        let newLastIndex = initialStateIndex;
+        for (let i = initialStateIndex + 1; i < timeline.length; i++) {
             if (timeline[i].time <= time) {
-                lastEventIndex = i;
+                executeReplayCommand(timeline[i]);
+                newLastIndex = i;
             } else {
                 break;
             }
         }
+        lastProcessedEventIndex = newLastIndex;
         
-        // This is the initial state of the calculator
-        executeReplayCommand(timeline[0]); 
-        
-        // Apply all subsequent actions up to the target time
-        for (let i = 1; i <= lastEventIndex; i++) {
-            executeReplayCommand(timeline[i]);
-        }
-        
-        // Final render after all state changes are applied
+        // Seeking always requires a full, accurate re-evaluation and cache population.
         evaluateAndPlotAll();
-        
-        // Update the progress bar
         progressBar.style.width = `${(time / totalDuration) * 100}%`;
     }
     
-    // --- The rest of the script (executeReplayCommand, addExpressionUI, and all graphing logic) remains the same ---
-    // --- Paste all the functions from `executeReplayCommand` to the end of your original script here ---
-
     function executeReplayCommand(command) {
         if (!command || !command.action) return;
         const { action, payload } = command;
@@ -376,13 +352,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
                 payload.expressions.forEach(initialExpr => {
-                    const completeExpr = { sliders: {}, ...initialExpr };
+                    // NEW: Initialize with cache properties
+                    const completeExpr = { sliders: {}, pointCache: [], cacheBounds: null, ...initialExpr };
                     addExpressionUI(completeExpr);
                 });
                 break;
             case 'addExpression':
                 const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
-                const newExprData = { id: payload.id, latex: '', visible: true, color: color, sliders: {} };
+                const newExprData = { id: payload.id, latex: '', visible: true, color: color, sliders: {}, pointCache: [], cacheBounds: null };
                 addExpressionUI(newExprData);
                 break;
             case 'removeExpression':
@@ -399,13 +376,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'setLatex':
-                expr = graphState.expressions.find(e => e.id === payload.id);
+            case 'setSlider':
+            case 'toggleVisibility':
+            case 'setAngleMode':
+                expr = graphState.expressions.find(e => e.id === (payload.exprId || payload.id));
                 if (expr) {
-                    expr.latex = payload.latex;
-                    mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
-                    if (mathField) {
-                        mathField.latex(payload.latex);
+                    // MODIFIED: Clear the cache whenever the math might change
+                    expr.pointCache = [];
+                    expr.cacheBounds = null;
+                }
+                // Fall through to execute the specific command
+                if (action === 'setLatex') {
+                     expr = graphState.expressions.find(e => e.id === payload.id);
+                     if (expr) {
+                         expr.latex = payload.latex;
+                         mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
+                         if (mathField) mathField.latex(payload.latex);
+                     }
+                } else if (action === 'setSlider') {
+                    if (expr && expr.sliders[payload.name]) {
+                        expr.sliders[payload.name].val = payload.value;
                     }
+                } else if (action === 'toggleVisibility') {
+                     if(expr) {
+                         expr.visible = payload.visible;
+                         document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
+                     }
+                } else if (action === 'setAngleMode') {
+                    graphState.angleMode = payload.mode;
+                    toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
+                    toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+                    // Invalidate all caches on angle mode change
+                    graphState.expressions.forEach(e => { e.pointCache = []; e.cacheBounds = null; });
                 }
                 break;
             case 'liveUpdateView':
@@ -418,29 +420,13 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'unlockPoint':
                 graphState.lockedPoint.visible = false;
                 break;
-            case 'setSlider':
-                expr = graphState.expressions.find(e => e.id === payload.exprId);
-                if (expr && expr.sliders[payload.name]) {
-                    expr.sliders[payload.name].val = payload.value;
-                }
-                break;
-            case 'toggleVisibility':
-                expr = graphState.expressions.find(e => e.id === payload.id);
-                if(expr) {
-                    expr.visible = payload.visible;
-                    document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
-                }
-                break;
             case 'resetView':
-                resetView(false);
-                break;
-            case 'setAngleMode':
-                graphState.angleMode = payload.mode;
-                toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
-                toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+                resetView(false); // No redraw, will be handled by evaluateAndPlotAll
                 break;
         }
     }
+
+    // --- UI & CORE LOGIC (WITH CACHING) ---
 
     function addExpressionUI(exprData) {
         graphState.expressions.push(exprData);
@@ -457,46 +443,195 @@ document.addEventListener('DOMContentLoaded', () => {
         item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !exprData.visible);
         updateExpressionNumbers();
     }
-    function updateExpressionNumbers() {
-        expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
-            item.querySelector('.expression-number').textContent = index + 1;
-        });
+
+    function evaluateAndPlotAll() {
+        graphState.definedVariables = {};
+        graphState.expressions.forEach(parseSingleExpression);
+        findAndStoreIntersections();
+        graphState.expressions.forEach(updateExpressionUI);
+        renderAll();
     }
-    function evaluateAndPlotAll(){graphState.definedVariables={};graphState.expressions.forEach(parseSingleExpression);findAndStoreIntersections();graphState.expressions.forEach(updateExpressionUI);requestAnimationFrame(renderAll)}
+    
+    // NEW: Function to calculate and cache points for an expression
+    function calculateAndCachePoints(expr) {
+        if (!expr.compiled) return;
+        const scope = getEvaluationScope(expr);
+        expr.pointCache = [];
+        
+        const isInequality = expr.type === 'inequality';
+        
+        for (let px = 0; px <= canvas.width; px++) {
+            const x = (px - graphState.originX) / graphState.scale;
+            try {
+                const y = expr.compiled.evaluate({ ...scope, x });
+                if (Number.isFinite(y)) {
+                    expr.pointCache.push([x, y]);
+                } else {
+                    // Add a break in the line for non-finite points
+                    expr.pointCache.push(null); 
+                }
+            } catch (e) {
+                expr.pointCache.push(null);
+            }
+        }
+        
+        // Store the bounds for which this cache is valid
+        const margin = 50 / graphState.scale; // Add a margin to avoid frequent recalculations
+        expr.cacheBounds = {
+            minX: -graphState.originX / graphState.scale - margin,
+            maxX: (canvas.width - graphState.originX) / graphState.scale + margin
+        };
+        
+        // Also find POIs when recalculating
+        if (expr.type === 'function') findPointsOfInterest(expr);
+    }
+
+    // MODIFIED: This function now uses the cache
+    function plotFunction(expr, isBoundary = false) {
+        if (!expr.compiled || !expr.visible) return;
+
+        const currentMinX = -graphState.originX / graphState.scale;
+        const currentMaxX = (canvas.width - graphState.originX) / graphState.scale;
+
+        // If cache is invalid (doesn't exist or view is outside its bounds), recalculate it
+        if (!expr.cacheBounds || currentMinX < expr.cacheBounds.minX || currentMaxX > expr.cacheBounds.maxX) {
+            calculateAndCachePoints(expr);
+        }
+        
+        if (expr.pointCache.length === 0) return;
+
+        ctx.strokeStyle = expr.color;
+        ctx.lineWidth = 2.5 * devicePixelRatio;
+        ctx.beginPath();
+        let firstPoint = true;
+
+        for (const point of expr.pointCache) {
+            if (point === null) {
+                firstPoint = true; // This creates a break in the line
+                continue;
+            }
+            const [x, y] = point;
+            const px = graphState.originX + x * graphState.scale;
+            const py = graphState.originY - y * graphState.scale;
+
+            if (firstPoint) {
+                ctx.moveTo(px, py);
+                firstPoint = false;
+            } else {
+                ctx.lineTo(px, py);
+            }
+        }
+        ctx.stroke();
+    }
+    
+    // MODIFIED: This function now uses the cache
+    function plotInequality(expr) {
+        if (!expr.compiled || !expr.visible) return;
+        
+        const currentMinX = -graphState.originX / graphState.scale;
+        const currentMaxX = (canvas.width - graphState.originX) / graphState.scale;
+
+        if (!expr.cacheBounds || currentMinX < expr.cacheBounds.minX || currentMaxX > expr.cacheBounds.maxX) {
+            calculateAndCachePoints(expr);
+        }
+
+        if (expr.pointCache.length === 0) return;
+
+        ctx.fillStyle = expr.color;
+        ctx.globalAlpha = INEQUALITY_ALPHA;
+        ctx.beginPath();
+
+        // Start drawing from the first valid point
+        const firstValidPointIndex = expr.pointCache.findIndex(p => p !== null);
+        if(firstValidPointIndex === -1) return; // No points to draw
+
+        const [startX, startY] = expr.pointCache[firstValidPointIndex];
+        ctx.moveTo(graphState.originX + startX * graphState.scale, graphState.originY - startY * graphState.scale);
+
+        for (const point of expr.pointCache.slice(firstValidPointIndex)) {
+            if (point === null) continue; // Skip breaks
+            const [x, y] = point;
+            const px = graphState.originX + x * graphState.scale;
+            const py = graphState.originY - y * graphState.scale;
+            ctx.lineTo(px, py);
+        }
+        
+        const op = expr.inequalityType;
+        if (op.includes('>')) {
+            ctx.lineTo(canvas.width, 0);
+            ctx.lineTo(0, 0);
+        } else { // includes '<'
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        
+        // Draw the boundary line
+        if (op === '<' || op === '>') {
+            ctx.setLineDash([8 * devicePixelRatio, 8 * devicePixelRatio]);
+        }
+        plotFunction(expr, true); // Render boundary using the same cached points
+        ctx.setLineDash([]);
+    }
+
+    // --- Unchanged Helper and Drawing Functions ---
+    // (The following functions are largely the same as the original versions)
+    function renderAll() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGraphGrid();
+        graphState.expressions.forEach(expr => {
+            if (!expr.visible || expr.error) return;
+            switch(expr.type) {
+                case 'function':
+                    plotFunction(expr);
+                    drawPointsOfInterest(expr);
+                    break;
+                case 'inequality':
+                    plotInequality(expr);
+                    break;
+                case 'vertical_line':
+                    plotVerticalLine(expr);
+                    break;
+                case 'vertical_inequality':
+                    plotVerticalInequality(expr);
+                    break;
+            }
+        });
+        drawAllIntersectionPoints();
+        if (graphState.lockedPoint.visible) drawLockedPoint();
+    }
+    
+    function updateExpressionNumbers() { expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => { item.querySelector('.expression-number').textContent = index + 1; }); }
+    function latexToMathJs(latex){let processed=latex.replace(/\\left\|([\s\S]+?)\\right\|/g,"abs($1)");while(processed.includes("|")){processed=processed.replace(/\|([^|]*)\|/g,"abs($1)")} return processed.replace(/\\operatorname{([a-zA-Z]+)}/g,"$1").replace(/\\frac{d}{dx}\\left\(([\s\S]+?)\\right\)/g,"derivative('$1', 'x')").replace(/\\sin/g,"sin").replace(/\\cos/g,"cos").replace(/\\tan/g,"tan").replace(/\\log/g,"log10").replace(/\\ln/g,"log").replace(/\\sqrt/g,"sqrt").replace(/\\pi/g,"pi").replace(/\\theta/g,"theta").replace(/\\le/g,"<=").replace(/\\ge/g,">=").replace(/\\left\(/g,"(").replace(/\\right\)/g,")").replace(/\\left\[/g,"[").replace(/\\right\]/g,"]").replace(/\\cdot/g,"*").replace(/\\frac{([^}]+)}{([^}]+)}/g,"($1)/($2)").replace(/{/g,"(").replace(/}/g,")")}
+    function preprocessInputString(str){const functionNames="sin|cos|tan|asin|acos|atan|log10|log|sqrt|abs|mean|median|stdev|min|max|total|quartile";const funcArgRegex=new RegExp(`\\b(${functionNames})\\s+([a-zA-Z0-9πθ.\\[\\]]+)`,"g");return str.replace(funcArgRegex,"$1($2)")}
+    function getEvaluationScope(expr){const scope={...graphState.definedVariables};Object.keys(expr.sliders).forEach(name=>{scope[name]=expr.sliders[name].val});scope.total=math.sum;scope.stdev=math.std;scope.mean=math.mean;scope.median=math.median;scope.min=math.min;scope.max=math.max;scope.quartile=math.quantileSeq;scope.nCr=math.combinations;scope.nPr=math.permutations;if(graphState.angleMode==="deg"){scope.sin=math.sind;scope.cos=math.cosd;scope.tan=math.tand;scope.asin=math.asind;scope.acos=math.acosd;scope.atan=math.atand;scope.atan2=math.atan2d}return scope}
     function parseSingleExpression(expr){Object.assign(expr,{type:"empty",compiled:null,error:null,result:null,node:null,inequalityType:null,isImplicit:!1});let cleanStr=preprocessInputString(latexToMathJs(expr.latex.trim()));if(!cleanStr)return;try{const node=math.parse(cleanStr);expr.node=node;const scope=getEvaluationScope(expr);if(node.isAssignmentNode){const varName=node.object.name;if(node.toString().match(/[xy]/)){expr.error="Cannot assign expression with x or y.";return}expr.type="assignment";const result=node.evaluate(scope);expr.result=result;graphState.definedVariables[varName]=result}else if(cleanStr.includes("x")||cleanStr.includes("y")){expr.type="function";let parseableNode=node;if(node.isOperatorNode&&node.op==="="){const[left,right]=node.args;if(left.isSymbolNode&&left.name==="y"){parseableNode=right}else if(right.isSymbolNode&&right.name==="y"){parseableNode=left}else if(left.isSymbolNode&&left.name==="x"){expr.type="vertical_line";expr.x_value=right.evaluate(scope)}else if(right.isSymbolNode&&right.name==="x"){expr.type="vertical_line";expr.x_value=left.evaluate(scope)}else{expr.error="Implicit functions not supported yet."}}if(expr.type==="function"){expr.node=parseableNode;expr.compiled=parseableNode.compile()}}else if(node.isOperatorNode&&["<",">","<=",">="].includes(node.op)){expr.inequalityType=node.op;const[left,right]=node.args;if(left.isSymbolNode&&left.name==="y"){expr.type="inequality";expr.compiled=right.compile()}else if(right.isSymbolNode&&right.name==="y"){expr.type="inequality";expr.compiled=left.compile();expr.inequalityType={">":"<",">=":"<=","<":">","<=":">="}[node.op]}else if(left.isSymbolNode&&left.name==="x"){expr.type="vertical_inequality";expr.x_value=right.evaluate(scope)}else if(right.isSymbolNode&&right.name==="x"){expr.type="vertical_inequality";expr.x_value=left.evaluate(scope);expr.inequalityType={">":"<",">=":"<=","<":">","<=":">="}[node.op]}else{expr.type="calculation";expr.result=node.evaluate(scope)}}else{expr.type="calculation";expr.result=node.evaluate(scope)}
-    if(expr.type==="function"||expr.type==="inequality"){const knownSymbols=["x","y","e","pi","i","true","false","theta",...Object.keys(math)];const foundSymbols=new Set;expr.node.traverse(n=>{if(n.isSymbolNode&&!knownSymbols.includes(n.name)&&!graphState.definedVariables.hasOwnProperty(n.name)){foundSymbols.add(n.name)}});foundSymbols.forEach(name=>{if(!expr.sliders[name])expr.sliders[name]={val:1,min:-5,max:5,step:.1}});Object.keys(expr.sliders).forEach(name=>{if(!foundSymbols.has(name))delete expr.sliders[name]})}else{expr.sliders={}}
-    if(expr.type==="function")findPointsOfInterest(expr)}catch(err){expr.error=err.message.length>50?err.message.substring(0,50)+"...":err.message}}
+    if(expr.type==="function"||expr.type==="inequality"){const knownSymbols=["x","y","e","pi","i","true","false","theta",...Object.keys(math)];const foundSymbols=new Set;expr.node.traverse(n=>{if(n.isSymbolNode&&!knownSymbols.includes(n.name)&&!graphState.definedVariables.hasOwnProperty(n.name)){foundSymbols.add(n.name)}});foundSymbols.forEach(name=>{if(!expr.sliders[name])expr.sliders[name]={val:1,min:-5,max:5,step:.1}});Object.keys(expr.sliders).forEach(name=>{if(!foundSymbols.has(name))delete expr.sliders[name]})}else{expr.sliders={}}}catch(err){expr.error=err.message.length>50?err.message.substring(0,50)+"...":err.message}}
     function updateExpressionUI(expr){const item=document.getElementById(expr.id);if(!item)return;const resultEl=item.querySelector(".expression-result");const extrasEl=item.querySelector(".expression-extras");const colorBar=item.querySelector(".expression-color-bar");resultEl.textContent="";extrasEl.innerHTML="";colorBar.style.backgroundColor=expr.error?"var(--error-red)":expr.visible?expr.color:"#ccc";colorBar.style.borderColor=expr.error?"var(--error-red)":expr.color;if(expr.error){resultEl.textContent="Error"}else if(expr.result!==null&&expr.result!==undefined){try{if(Array.isArray(expr.result)){resultEl.textContent`= [${expr.result.map(v=>math.format(v,{precision:3})).join(", ")}]`}else if(typeof expr.result==="function"){resultEl.textContent="f(x)"}else{resultEl.textContent=`= ${math.format(expr.result,{precision:5})}`}}catch{resultEl.textContent=`= ${expr.result.toString()}`}}
     Object.keys(expr.sliders).forEach(name=>{const slider=expr.sliders[name];const sliderDiv=document.createElement("div");sliderDiv.className="slider-container";sliderDiv.innerHTML=`<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}">`;extrasEl.appendChild(sliderDiv)})}
-    function renderAll(){ctx.clearRect(0,0,canvas.width,canvas.height);drawGraphGrid();graphState.expressions.forEach(expr=>{if(!expr.visible||expr.error)return;if(expr.type==="inequality")plotInequality(expr);else if(expr.type==="vertical_inequality")plotVerticalInequality(expr);else if(expr.type==="function"){plotFunction(expr);drawPointsOfInterest(expr)}else if(expr.type==="vertical_line")plotVerticalLine(expr)});drawAllIntersectionPoints();if(graphState.lockedPoint.visible)drawLockedPoint()}
-    function plotFunction(expr){if(!expr.compiled)return;const scope=getEvaluationScope(expr);ctx.strokeStyle=expr.color;ctx.lineWidth=2.5*devicePixelRatio;ctx.beginPath();let firstPoint=!0;for(let px=0;px<canvas.width;px++){const x=(px-graphState.originX)/graphState.scale;scope.x=x;try{const y=expr.compiled.evaluate(scope);if(!Number.isFinite(y)){firstPoint=!0;continue}const py=graphState.originY-y*graphState.scale;if(firstPoint){ctx.moveTo(px,py);firstPoint=!1}else{ctx.lineTo(px,py)}}catch(e){firstPoint=!0}}ctx.stroke()}
-    function plotInequality(expr){if(!expr.compiled)return;const scope=getEvaluationScope(expr);ctx.fillStyle=expr.color;ctx.globalAlpha=INEQUALITY_ALPHA;ctx.beginPath();let firstPoint=!0;for(let px=0;px<=canvas.width;px++){const x=(px-graphState.originX)/graphState.scale;scope.x=x;try{const y=expr.compiled.evaluate(scope);if(!Number.isFinite(y))continue;const py=graphState.originY-y*graphState.scale;if(firstPoint){ctx.moveTo(px,py);firstPoint=!1}else{ctx.lineTo(px,py)}}catch(e){}}const op=expr.inequalityType;if(op.includes(">")){ctx.lineTo(canvas.width,0);ctx.lineTo(0,0)}else{ctx.lineTo(canvas.width,canvas.height);ctx.lineTo(0,canvas.height)}
-    ctx.closePath();ctx.fill();ctx.globalAlpha=1;if(op==="<"||op===">"){ctx.setLineDash([8*devicePixelRatio,8*devicePixelRatio])}plotFunction(expr);ctx.setLineDash([])}
     function plotVerticalLine(expr){ctx.strokeStyle=expr.color;ctx.lineWidth=2.5*devicePixelRatio;const boundaryPx=graphState.originX+expr.x_value*graphState.scale;ctx.beginPath();ctx.moveTo(boundaryPx,0);ctx.lineTo(boundaryPx,canvas.height);ctx.stroke()}
     function plotVerticalInequality(expr){ctx.fillStyle=expr.color;ctx.globalAlpha=INEQUALITY_ALPHA;const boundaryPx=graphState.originX+expr.x_value*graphState.scale;const op=expr.inequalityType;if(op.includes("<")){ctx.fillRect(0,0,boundaryPx,canvas.height)}if(op.includes(">")){ctx.fillRect(boundaryPx,0,canvas.width-boundaryPx,canvas.height)}
     ctx.globalAlpha=1;if(!op.includes("=")){ctx.setLineDash([8*devicePixelRatio,8*devicePixelRatio])}plotVerticalLine(expr);ctx.setLineDash([])}
     function findPointsOfInterest(expr){expr.poi={roots:[],y_intercept:null,extrema:[]};if(!expr.compiled)return;const scope=getEvaluationScope(expr);try{const y_intercept=expr.compiled.evaluate({...scope,x:0});if(Number.isFinite(y_intercept))expr.poi.y_intercept={x:0,y:y_intercept}}catch(e){}
     let prev_y,prev_slope_sign;const step=1/graphState.scale;for(let px=0;px<canvas.width;px++){const x=(px-graphState.originX)/graphState.scale;try{const y=expr.compiled.evaluate({...scope,x:x});if(prev_y!==undefined&&Number.isFinite(y)&&Number.isFinite(prev_y)){if(Math.sign(y)!==Math.sign(prev_y)){expr.poi.roots.push({x:x-step/2,y:0})}const next_y=expr.compiled.evaluate({...scope,x:x+step});if(Number.isFinite(next_y)){const slope_sign=Math.sign(next_y-y);if(prev_slope_sign!==undefined&&slope_sign!==prev_slope_sign&&slope_sign!==0){expr.poi.extrema.push({x:x,y:y})}
     prev_slope_sign=slope_sign}}prev_y=y}catch(e){prev_y=undefined;prev_slope_sign=undefined}}}
-    function drawPointsOfInterest(expr){ctx.fillStyle=expr.color;const all_pois=[...expr.poi.roots,...expr.poi.extrema];if(expr.poi.y_intercept)all_pois.push(expr.poi.y_intercept);all_pois.forEach(point=>{if(!point)return;const px=graphState.originX+point.x*graphState.scale;const py=graphState.originY-point.y*graphState.scale;ctx.beginPath();ctx.arc(px,py,POI_RADIUS,0,Math.PI*2);ctx.fill()})}
+    function drawPointsOfInterest(expr){if(!expr.poi) return; ctx.fillStyle=expr.color;const all_pois=[...expr.poi.roots,...expr.poi.extrema];if(expr.poi.y_intercept)all_pois.push(expr.poi.y_intercept);all_pois.forEach(point=>{if(!point)return;const px=graphState.originX+point.x*graphState.scale;const py=graphState.originY-point.y*graphState.scale;ctx.beginPath();ctx.arc(px,py,POI_RADIUS,0,Math.PI*2);ctx.fill()})}
     function bisectionSolve(f1_expr,f2_expr,a,b,tolerance=1e-7,maxIterations=50){const f1_scope=getEvaluationScope(f1_expr);const f2_scope=getEvaluationScope(f2_expr);let fa,fb;try{fa=f1_expr.compiled.evaluate({...f1_scope,x:a})-f2_expr.compiled.evaluate({...f2_scope,x:a});fb=f1_expr.compiled.evaluate({...f1_scope,x:b})-f2_expr.compiled.evaluate({...f2_scope,x:b})}catch(e){return null}if(isNaN(fa)||isNaN(fb)||Math.sign(fa)===Math.sign(fb))return null;let c=a;for(let i=0;i<maxIterations;i++){c=(a+b)/2;let fc=f1_expr.compiled.evaluate({...f1_scope,x:c})-f2_expr.compiled.evaluate({...f2_scope,x:c});if(Math.abs(fc)<tolerance||(b-a)/2<tolerance)return c;if(Math.sign(fc)===Math.sign(fa)){a=c;fa=fc}else{b=c}}return c}
     function findAndStoreIntersections(){graphState.intersections=[];const plottableFuncs=graphState.expressions.filter(e=>e.visible&&e.compiled&&(e.type==="function"||e.type==="inequality"));if(plottableFuncs.length<2)return;for(let i=0;i<plottableFuncs.length;i++){for(let j=i+1;j<plottableFuncs.length;j++){const f1_expr=plottableFuncs[i],f2_expr=plottableFuncs[j];let prev_diff;for(let px=0;px<canvas.width;px++){const x=(px-graphState.originX)/graphState.scale;try{const y1=f1_expr.compiled.evaluate({...getEvaluationScope(f1_expr),x:x});const y2=f2_expr.compiled.evaluate({...getEvaluationScope(f2_expr),x:x});const diff=y1-y2;if(prev_diff!==undefined&&Math.sign(diff)!==Math.sign(prev_diff)){const intersectionX=bisectionSolve(f1_expr,f2_expr,x-1/graphState.scale,x);if(intersectionX!==null){const intersectionY=f1_expr.compiled.evaluate({...getEvaluationScope(f1_expr),x:intersectionX});if(Number.isFinite(intersectionY))graphState.intersections.push({x:intersectionX,y:intersectionY})}}
     prev_diff=diff}catch(e){prev_diff=undefined}}}}}
     function drawAllIntersectionPoints(){ctx.fillStyle="#333";graphState.intersections.forEach(point=>{const pixelX=graphState.originX+point.x*graphState.scale;const pixelY=graphState.originY-point.y*graphState.scale;ctx.beginPath();ctx.arc(pixelX,pixelY,POI_RADIUS,0,Math.PI*2);ctx.fill()})}
-    function drawLockedPoint(){const{x,y}=graphState.lockedPoint;const pixelX=graphState.originX+x*graphState.scale;const pixelY=graphState.originY-y*graphState.scale;ctx.fillStyle="#000";ctx.beginPath();ctx.arc(pixelX,pixelY,POI_RADIUS*1.2,0,Math.PI*2);ctx.fill();const displayX=snapToZero(x);const displayY=snapToZero(y);const coordText=`(${displayX.toFixed(3)}, ${displayY.toFixed(3)})`;const FONT_SIZE=12*devicePixelRatio;ctx.font=`bold ${FONT_SIZE}px 'Manrope'`;const textMetrics=ctx.measureText(coordText);const boxWidth=textMetrics.width+16*devicePixelRatio;const boxHeight=FONT_SIZE+12*devicePixelRatio;let boxX=pixelX+15*devicePixelRatio;let boxY=pixelY-boxHeight/2;if(boxX+boxWidth>canvas.width)boxX=pixelX-boxWidth-15*devicePixelRatio;if(boxY<0)boxY=5*devicePixelRatio;if(boxY+boxHeight>canvas.height)boxY=canvas.height-boxHeight-5*devicePixelRatio;ctx.fillStyle="rgba(255, 255, 255, 0.9)";ctx.shadowColor="rgba(0,0,0,0.2)";ctx.shadowBlur=10;ctx.beginPath();ctx.roundRect(boxX,boxY,boxWidth,boxHeight,5*devicePixelRatio);ctx.fill();ctx.shadowColor="transparent";ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(coordText,boxX+boxWidth/2,boxY+boxHeight/2)}
-    function resizeCanvas(){const rect=canvas.parentElement.getBoundingClientRect();canvas.width=rect.width*devicePixelRatio;canvas.height=rect.height*devicePixelRatio;canvas.style.width=`${rect.width}px`;canvas.style.height=`${rect.height}px`;resetView(!1)}
-    function resetView(redraw=!0){graphState.originX=canvas.width/2;graphState.originY=canvas.height/2;graphState.scale=40;if(redraw){evaluateAndPlotAll()}}
+    function drawLockedPoint(){const{x,y}=graphState.lockedPoint;const pixelX=graphState.originX+x*graphState.scale;const pixelY=graphState.originY-y*graphState.scale;ctx.fillStyle="#000";ctx.beginPath();ctx.arc(pixelX,pixelY,POI_RADIUS*1.2,0,Math.PI*2);ctx.fill();const snapToZero=num=>Math.abs(num)<1e-9?0:num;const displayX=snapToZero(x);const displayY=snapToZero(y);const coordText=`(${displayX.toFixed(3)}, ${displayY.toFixed(3)})`;const FONT_SIZE=12*devicePixelRatio;ctx.font=`bold ${FONT_SIZE}px 'Manrope'`;const textMetrics=ctx.measureText(coordText);const boxWidth=textMetrics.width+16*devicePixelRatio;const boxHeight=FONT_SIZE+12*devicePixelRatio;let boxX=pixelX+15*devicePixelRatio;let boxY=pixelY-boxHeight/2;if(boxX+boxWidth>canvas.width)boxX=pixelX-boxWidth-15*devicePixelRatio;if(boxY<0)boxY=5*devicePixelRatio;if(boxY+boxHeight>canvas.height)boxY=canvas.height-boxHeight-5*devicePixelRatio;ctx.fillStyle="rgba(255, 255, 255, 0.9)";ctx.shadowColor="rgba(0,0,0,0.2)";ctx.shadowBlur=10;ctx.beginPath();ctx.roundRect(boxX,boxY,boxWidth,boxHeight,5*devicePixelRatio);ctx.fill();ctx.shadowColor="transparent";ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(coordText,boxX+boxWidth/2,boxY+boxHeight/2)}
+    function resizeCanvas(){const rect=canvas.parentElement.getBoundingClientRect();canvas.width=rect.width*devicePixelRatio;canvas.height=rect.height*devicePixelRatio;canvas.style.width=`${rect.width}px`;canvas.style.height=`${rect.height}px`;resetView(true);}
+    function resetView(redraw=!0){graphState.originX=canvas.width/2;graphState.originY=canvas.height/2;graphState.scale=40;graphState.expressions.forEach(e => {e.pointCache = []; e.cacheBounds = null; }); if(redraw) evaluateAndPlotAll();}
     function drawGraphGrid(){const computedStyles=getComputedStyle(document.documentElement);const THELO_BORDER_COLOR=computedStyles.getPropertyValue("--thelo-border").trim();const THELO_TEXT_LIGHT_COLOR=computedStyles.getPropertyValue("--thelo-text-light").trim();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.restore();let dynamicGrid=1;while(dynamicGrid*graphState.scale<50*devicePixelRatio){dynamicGrid*=(dynamicGrid*graphState.scale<25*devicePixelRatio?2:2.5)}
     while(dynamicGrid*graphState.scale>100*devicePixelRatio){dynamicGrid/=(dynamicGrid*graphState.scale>250*devicePixelRatio?2.5:2)}
     ctx.strokeStyle=THELO_BORDER_COLOR;ctx.lineWidth=1*devicePixelRatio;ctx.font=`${10*devicePixelRatio}px 'Manrope'`;ctx.fillStyle=THELO_TEXT_LIGHT_COLOR;ctx.textAlign="center";ctx.textBaseline="middle";const startX=Math.floor(-graphState.originX/(graphState.scale*dynamicGrid))*dynamicGrid;for(let x=startX;x*graphState.scale+graphState.originX<canvas.width;x+=dynamicGrid){const px=x*graphState.scale+graphState.originX;ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,canvas.height);ctx.stroke();if(Math.abs(x)>1e-9){ctx.fillText(Number(x.toPrecision(4)),px+2*devicePixelRatio,graphState.originY-5*devicePixelRatio)}}
     const startY=Math.floor(graphState.originY/(graphState.scale*dynamicGrid))*dynamicGrid;for(let y=startY;graphState.originY-y*graphState.scale<canvas.height;y-=dynamicGrid){const py=graphState.originY-y*graphState.scale;ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(canvas.width,py);ctx.stroke();if(Math.abs(y)>1e-9){ctx.save();ctx.textAlign="right";ctx.fillText(Number(y.toPrecision(4)),graphState.originX-5*devicePixelRatio,py+2*devicePixelRatio);ctx.restore()}}
     ctx.strokeStyle=THELO_TEXT_LIGHT_COLOR;ctx.lineWidth=1.5*devicePixelRatio;ctx.beginPath();ctx.moveTo(0,graphState.originY);ctx.lineTo(canvas.width,graphState.originY);ctx.stroke();ctx.beginPath();ctx.moveTo(graphState.originX,0);ctx.lineTo(graphState.originX,canvas.height);ctx.stroke()}
-    function snapToZero(num,tolerance=1e-6){return Math.abs(num)<tolerance?0:num}
-    function latexToMathJs(latex){let processed=latex.replace(/\\left\|([\s\S]+?)\\right\|/g,"abs($1)");while(processed.includes("|")){processed=processed.replace(/\|([^|]*)\|/g,"abs($1)")}
-    return processed.replace(/\\operatorname{([a-zA-Z]+)}/g,"$1").replace(/\\frac{d}{dx}\\left\(([\s\S]+?)\\right\)/g,"derivative('$1', 'x')").replace(/\\sin/g,"sin").replace(/\\cos/g,"cos").replace(/\\tan/g,"tan").replace(/\\log/g,"log10").replace(/\\ln/g,"log").replace(/\\sqrt/g,"sqrt").replace(/\\pi/g,"pi").replace(/\\theta/g,"theta").replace(/\\le/g,"<=").replace(/\\ge/g,">=").replace(/\\left\(/g,"(").replace(/\\right\)/g,")").replace(/\\left\[/g,"[").replace(/\\right\]/g,"]").replace(/\\cdot/g,"*").replace(/\\frac{([^}]+)}{([^}]+)}/g,"($1)/($2)").replace(/{/g,"(").replace(/}/g,")")}
-    function preprocessInputString(str){const functionNames="sin|cos|tan|asin|acos|atan|log10|log|sqrt|abs|mean|median|stdev|min|max|total|quartile";const funcArgRegex=new RegExp(`\\b(${functionNames})\\s+([a-zA-Z0-9πθ.\\[\\]]+)`,"g");return str.replace(funcArgRegex,"$1($2)")}
-    function getEvaluationScope(expr){const scope={...graphState.definedVariables};Object.keys(expr.sliders).forEach(name=>{scope[name]=expr.sliders[name].val});scope.total=math.sum;scope.stdev=math.std;scope.mean=math.mean;scope.median=math.median;scope.min=math.min;scope.max=math.max;scope.quartile=math.quantileSeq;scope.nCr=math.combinations;scope.nPr=math.permutations;if(graphState.angleMode==="deg"){scope.sin=math.sind;scope.cos=math.cosd;scope.tan=math.tand;scope.asin=math.asind;scope.acos=math.acosd;scope.atan=math.atand;scope.atan2=math.atan2d}return scope}
-
+    
+    // --- START THE APP ---
     initialize();
 });
 </script>
