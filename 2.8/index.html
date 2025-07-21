@@ -2448,17 +2448,42 @@ function renderStageUI(index, isResize = false) {
 
                 // NEW LOGIC BLOCK FOR REPLAY STAGES
                 // NEW LOGIC BLOCK FOR REPLAY STAGES
-            if (currentStageData.type === 'calculator_replay') {
-                openReplayPlayer();
-		    if (currentStageData.audioFile) {
-        playStageAudio(currentStageData.audioFile, () => {}, () => {}, isResize);
+            // βρίσκω REPLACEMENT for the 'calculator_replay' block in renderStageUI
+
+if (currentStageData.type === 'calculator_replay') {
+    openReplayPlayer();
+    if (clearBtn) clearBtn.style.display = 'none';
+    if (nextCheckBtn) {
+        nextCheckBtn.textContent = TXT.gotIt;
+        nextCheckBtn.disabled = false;
     }
-                if (nextCheckBtn) {
-                    nextCheckBtn.textContent = TXT.gotIt;
-                    nextCheckBtn.disabled = false;
+
+    // --- NEW LOGIC to activate and manage the progress bar ---
+    if (currentStageData.audioFile) {
+        if (!isResize) {
+            isMediaScrubbingActive = true; // Use the existing flag to run the update loop
+            lastFrameTimestampForManualAdvance = 0;
+            internalPlaybackTime = 0;
+        }
+
+        // Play the audio and use its duration to set up the progress bar
+        playStageAudio(currentStageData.audioFile,
+            (duration) => {
+                // This callback runs once the audio's duration is known
+                currentStageTotalDuration = duration || 0;
+                if (currentStageTotalDuration > 0) {
+                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+
+                    // Start the existing animation loop which also updates the progress bar
+                    if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+                    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
                 }
-                if (clearBtn) clearBtn.style.display = 'none';
-            }
+            },
+            () => {}, // onEnded callback
+            isResize
+        );
+    }
+}
                 // ORIGINAL LOGIC FOR QUESTION STAGES
                 else if (isQuestionStage) {
                     if (!isResize) isMediaScrubbingActive = false;
