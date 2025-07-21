@@ -457,84 +457,105 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     function executeReplayCommand(command) {
-        if (!command || !command.action) return;
-        const { action, payload } = command;
-        let expr, mathField, item;
-        switch (action) {
-            case 'initialState':
-                // This is specifically for renderStateAtTime and startReplay; handled there for full reset
-                break;
-            case 'addExpression':
-                // Reuse the same color logic as the recorder
-                const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
-                const newExprData = { id: payload.id, latex: payload.latex || '', visible: payload.visible !== undefined ? payload.visible : true, color: payload.color || color, sliders: payload.sliders || {} };
-                addExpressionUI(newExprData);
-                break;
-            case 'removeExpression':
-                item = document.getElementById(payload.id);
-                if (item) item.remove();
-                graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
-                updateExpressionNumbers();
-                break;
-            case 'focusExpression':
-                document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
-                item = document.getElementById(payload.id);
-                if (item) {
-                    item.querySelector('.math-input-field').classList.add('mq-focused');
+    if (!command || !command.action) return;
+    const { action, payload } = command;
+    let expr, mathField, item;
+    switch (action) {
+        case 'initialState':
+            expressionListContainer.innerHTML = '';
+            graphState.expressions = [];
+            Object.assign(graphState, payload.view);
+            graphState.angleMode = payload.angleMode;
+            toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
+            toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+            payload.expressions.forEach(initialExpr => {
+                const completeExpr = { sliders: {}, ...initialExpr };
+                // Ensure sliders are deep-copied on initial state load
+                completeExpr.sliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
+                addExpressionUI(completeExpr);
+            });
+            break;
+        case 'addExpression':
+            const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
+            const newExprData = { id: payload.id, latex: '', visible: true, color: color, sliders: {} };
+            addExpressionUI(newExprData);
+            break;
+        case 'removeExpression':
+            item = document.getElementById(payload.id);
+            if (item) item.remove();
+            graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
+            updateExpressionNumbers();
+            break;
+        case 'focusExpression':
+            document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
+            item = document.getElementById(payload.id);
+            if (item) {
+                item.querySelector('.math-input-field').classList.add('mq-focused');
+            }
+            break;
+        case 'setLatex':
+            expr = graphState.expressions.find(e => e.id === payload.id);
+            if (expr) {
+                expr.latex = payload.latex;
+                mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
+                if (mathField) {
+                    // This line ensures MathQuill updates its displayed content
+                    mathField.latex(payload.latex);
                 }
-                break;
-            case 'setLatex':
-                expr = graphState.expressions.find(e => e.id === payload.id);
-                if (expr) {
-                    expr.latex = payload.latex;
-                    mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
-                    if (mathField) {
-                        mathField.latex(payload.latex);
+            }
+            break;
+        case 'animateView':
+            // This command is primarily handled by the animationLoop or renderStateAtTime.
+            // If it's processed here directly, it means we're setting the *start* of an animation
+            // or the *final* state if we're seeking past it.
+            // For live playback, the animationLoop will handle the interpolation.
+            // For seeking, renderStateAtTime will handle it.
+            Object.assign(graphState, payload.startView); // Set to start of animation view initially
+            break;
+        case 'setSlider':
+            expr = graphState.expressions.find(e => e.id === payload.exprId);
+            if (expr && expr.sliders[payload.name]) {
+                expr.sliders[payload.name].val = payload.value;
+                // Also update the UI slider element for visual feedback
+                const itemElement = document.getElementById(payload.exprId);
+                if (itemElement) {
+                    const sliderInput = itemElement.querySelector(`.slider-container input[type=range]`);
+                    // Ensure you're updating the correct slider if there are multiple
+                    // A 'name' attribute on the slider input would make this more robust.
+                    // For now, assuming only one slider or that order is sufficient.
+                    if (sliderInput) {
+                        sliderInput.value = payload.value;
+                    }
+                    const sliderLabel = itemElement.querySelector(`.slider-container label`);
+                    if (sliderLabel) {
+                        sliderLabel.textContent = `${payload.name} = ${payload.value}`;
                     }
                 }
-                break;
-            case 'animateView':
-                // This command is primarily handled by the animationLoop or renderStateAtTime
-                // If it's processed here directly, it means we're setting the *start* of an animation
-                // or the *final* state if we're seeking past it.
-                // For live playback, the animationLoop will handle the interpolation.
-                // For seeking, renderStateAtTime will handle it.
-                Object.assign(graphState, payload.startView); // Set to start of animation view initially
-                break;
-            case 'setSlider':
-                expr = graphState.expressions.find(e => e.id === payload.exprId);
-                if (expr && expr.sliders[payload.name]) {
-                    expr.sliders[payload.name].val = payload.value;
-                    // Also update the UI slider element
-                    const sliderEl = document.getElementById(payload.exprId).querySelector(`.slider-container input[type=range][value="${payload.value}"]`); // More precise selector needed
-                    if(sliderEl) sliderEl.value = payload.value;
-                    const labelEl = document.getElementById(payload.exprId).querySelector(`.slider-container label`);
-                    if(labelEl) labelEl.textContent = `${payload.name} = ${payload.value}`;
-                }
-                break;
-            case 'toggleVisibility':
-                expr = graphState.expressions.find(e => e.id === payload.id);
-                if (expr) {
-                    expr.visible = payload.visible;
-                    document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
-                }
-                break;
-            case 'resetView':
-                resetView(false);
-                break;
-            case 'setAngleMode':
-                graphState.angleMode = payload.mode;
-                toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
-                toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
-                break;
-            case 'lockPoint':
-                graphState.lockedPoint = { visible: true, ...payload };
-                break;
-            case 'unlockPoint':
-                graphState.lockedPoint.visible = false;
-                break;
-        }
+            }
+            break;
+        case 'toggleVisibility':
+            expr = graphState.expressions.find(e => e.id === payload.id);
+            if (expr) {
+                expr.visible = payload.visible;
+                document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
+            }
+            break;
+        case 'resetView':
+            resetView(false);
+            break;
+        case 'setAngleMode':
+            graphState.angleMode = payload.mode;
+            toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
+            toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+            break;
+        case 'lockPoint':
+            graphState.lockedPoint = { visible: true, ...payload };
+            break;
+        case 'unlockPoint':
+            graphState.lockedPoint.visible = false;
+            break;
     }
+}
 
     function addExpressionUI(exprData) {
         // Add a plotPoints property for our cache, and ensure sliders are properly re-initialized
