@@ -232,142 +232,138 @@ function setupMessageListener() {
 // βρίσκω REPLACEMENT for the seekToTime function in replay1.html
 
 /**
- * Jumps the replay to a specific time in the timeline.
+ * Jumps the replay to a specific time in the timeline by rebuilding the state from scratch.
  * @param {number} timeInMs - The time to seek to, in milliseconds.
  * @param {Array} allActions - The full list of recorded actions.
  */
 function seekToTime(timeInMs, allActions) {
     if (!allActions || allActions.length === 0) return;
 
-    // Stop any ongoing playback
-    isReplaying = false; 
+    // 1. Stop any ongoing playback loop completely.
+    isReplaying = false;
+    if (window.replayAnimationRequest) {
+        cancelAnimationFrame(window.replayAnimationRequest);
+    }
 
-    // 1. Reset the calculator to the absolute initial state
+    // 2. Reset the calculator to its absolute initial state.
+    // This command clears expressions and sets the starting view.
     executeReplayCommand(allActions[0]);
 
     let accumulatedTime = 0;
-    let seekActionIndex = 1; // Start applying actions from the second one
+    let seekActionIndex = 1; // We start applying actions after the initial state.
 
-    // 2. Loop through actions to rebuild the state up to the seek time
+    // 3. Loop through all actions to rebuild the state up to the seek time.
     for (let i = 1; i < allActions.length; i++) {
         const command = allActions[i];
-        
+
         if (command.action === 'delay') {
             accumulatedTime += command.ms;
         }
         
-        // Stop if we have passed the target time
+        // If we have passed our target time, we've found our resume point.
         if (accumulatedTime > timeInMs) {
             seekActionIndex = i;
             break;
         }
 
-        // Apply the action instantly (without its delay) to build the state
+        // Apply the action instantly to build the state. This is the crucial part.
+        // We execute EVERY command, including 'liveUpdateView', to ensure the
+        // final pan/zoom/latex state is accurate.
         if (command.action !== 'delay') {
             executeReplayCommand(command);
         }
 
-        // If this is the last action, set the index to the end
+        // If this is the last action, set the index to the end.
         if (i === allActions.length - 1) {
             seekActionIndex = i + 1;
         }
     }
-
-    // 3. Force a final evaluation and render of the rebuilt state
-    evaluateAndPlotAll();
     
-    // 4. Resume animated playback from the new point
+    // 4. Force a final complete re-evaluation and render of the rebuilt state.
+    evaluateAndPlotAll();
+
+    // 5. Resume animated playback from the new point in the timeline.
     isReplaying = true;
     const remainingActions = allActions.slice(seekActionIndex);
     animationLoop(remainingActions);
 }
-    /**
-     * The core animation engine that uses requestAnimationFrame for smooth playback.
-     * @param {Array} actions - The sequence of actions to execute.
-     */
-    function animationLoop(actions) {
-        let actionIndex = 0;
-        let lastTime = performance.now();
-        let timeSinceLastAction = 0;
 
-        // Store start and end states for smooth view transitions (panning/zooming).
-        let viewAnimation = {
-            active: false,
-            duration: 0,
-            elapsed: 0,
-            start: {},
-            end: {}
-        };
+/**
+ * The core animation engine that uses requestAnimationFrame for smooth playback.
+ * @param {Array} actions - The sequence of actions to execute.
+ */
+function animationLoop(actions) {
+    let actionIndex = 0;
+    let lastTime = performance.now();
+    let timeSinceLastAction = 0;
 
-        function loop(currentTime) {
-            if (!isReplaying) return;
+    let viewAnimation = {
+        active: false,
+        duration: 0,
+        elapsed: 0,
+        start: {},
+        end: {}
+    };
 
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
-            timeSinceLastAction += deltaTime;
+    function loop(currentTime) {
+        if (!isReplaying) return;
 
-            // Process all actions that are due to happen in this frame.
-            while (actionIndex < actions.length) {
-                const command = actions[actionIndex];
-                
-                if (command.action === 'delay' && timeSinceLastAction < command.ms) {
-                    break; // Wait until the delay has passed.
-                }
+        const deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+        timeSinceLastAction += deltaTime;
 
-                // If we are here, the action is ready to be executed.
-                timeSinceLastAction = 0; // Reset timer for the next delay.
+        while (actionIndex < actions.length) {
+            const command = actions[actionIndex];
+            
+            if (command.action === 'delay' && timeSinceLastAction < command.ms) {
+                break; 
+            }
 
-                if (command.action === 'liveUpdateView') {
-                    // This is a high-frequency event; prepare to animate towards it.
-                    viewAnimation.active = true;
-                    viewAnimation.duration = actions[actionIndex+1]?.ms || 16.67; // Animate over the time until the next frame.
-                    viewAnimation.elapsed = 0;
-                    viewAnimation.start = { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale };
-                    viewAnimation.end = command.payload;
-                } else {
-                    // For all other actions, execute them instantly.
-                    viewAnimation.active = false;
-                    executeReplayCommand(command);
-                }
-                actionIndex++;
-            }
+            timeSinceLastAction = 0;
 
-            // If a view animation is active, interpolate the state for this frame.
-            if (viewAnimation.active) {
-                viewAnimation.elapsed += deltaTime;
-                let progress = Math.min(viewAnimation.elapsed / viewAnimation.duration, 1);
-                
-                // Linear interpolation (lerp) for smooth movement.
-                const lerp = (start, end, t) => start + (end - start) * t;
-                graphState.originX = lerp(viewAnimation.start.originX, viewAnimation.end.originX, progress);
-                graphState.originY = lerp(viewAnimation.start.originY, viewAnimation.end.originY, progress);
-                graphState.scale = lerp(viewAnimation.start.scale, viewAnimation.end.scale, progress);
-                
-                evaluateAndPlotAll();
-                
-                if (progress >= 1) {
-                    viewAnimation.active = false;
-                }
-            }
+            if (command.action === 'liveUpdateView') {
+                viewAnimation.active = true;
+                viewAnimation.duration = (actionIndex + 1 < actions.length && actions[actionIndex + 1].action === 'delay') ? actions[actionIndex + 1].ms : 16.67;
+                viewAnimation.elapsed = 0;
+                viewAnimation.start = { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale };
+                viewAnimation.end = command.payload;
+            } else {
+                viewAnimation.active = false;
+                executeReplayCommand(command);
+            }
+            actionIndex++;
+        }
 
-            // Update progress bar
-            const progressPercentage = (actionIndex / actions.length) * 100;
-            progressBar.style.width = `${progressPercentage}%`;
-            
-            // Continue the loop if there are more actions.
-            if (actionIndex < actions.length) {
-                requestAnimationFrame(loop);
-            } else {
-                isReplaying = false;
-                console.log("Replay finished.");
-                setTimeout(() => { progressBar.style.width = '0%'; }, 1000);
-            }
-        }
-        
-        // Start the animation loop.
-        requestAnimationFrame(loop);
-    }
+        if (viewAnimation.active) {
+            viewAnimation.elapsed += deltaTime;
+            let progress = Math.min(viewAnimation.elapsed / viewAnimation.duration, 1);
+            
+            const lerp = (start, end, t) => start + (end - start) * t;
+            graphState.originX = lerp(viewAnimation.start.originX, viewAnimation.end.originX, progress);
+            graphState.originY = lerp(viewAnimation.start.originY, viewAnimation.end.originY, progress);
+            graphState.scale = lerp(viewAnimation.start.scale, viewAnimation.end.scale, progress);
+            
+            evaluateAndPlotAll();
+            
+            if (progress >= 1) {
+                viewAnimation.active = false;
+            }
+        }
 
+        const progressPercentage = (actionIndex / actions.length) * 100;
+        progressBar.style.width = `${progressPercentage}%`;
+        
+        if (actionIndex < actions.length) {
+            window.replayAnimationRequest = requestAnimationFrame(loop);
+        } else {
+            isReplaying = false;
+            console.log("Replay finished.");
+            setTimeout(() => { progressBar.style.width = '0%'; }, 1000);
+        }
+    }
+    
+    window.replayAnimationRequest = requestAnimationFrame(loop);
+}
     /**
      * Executes a single command from the replay sequence to update the calculator's state.
      * @param {object} command - The command object { action, payload }.
