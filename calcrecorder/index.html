@@ -763,6 +763,78 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+    /**
+     * Sets the entire calculator state based on a timeline and a specific time.
+     * @param {number} time - The time in milliseconds to seek to.
+     * @param {Array} timeline - The processed event timeline.
+     */
+    function setStateAtTime(time, timeline) {
+        if (!timeline || timeline.length === 0) return;
+
+        let lastEventIndex = -1;
+        for (let i = 0; i < timeline.length; i++) {
+            if (timeline[i].time <= time) {
+                lastEventIndex = i;
+            } else {
+                break;
+            }
+        }
+        
+        if (lastEventIndex === -1) return;
+
+        // Reset to the initial state first
+        const initialStateEvent = timeline[0];
+        if (initialStateEvent.type === 'initialState') {
+            const { view, expressions, angleMode } = initialStateEvent.payload;
+            
+            graphState.originX = view.originX;
+            graphState.originY = view.originY;
+            graphState.scale = view.scale;
+            
+            expressionListContainer.innerHTML = '';
+            graphState.expressions = [];
+            expressions.forEach(exprData => {
+                addExpressionUI(exprData);
+            });
+            
+            graphState.angleMode = angleMode;
+            toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
+            toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+        }
+
+        // Apply all actions from the beginning up to the target time
+        for (let i = 1; i <= lastEventIndex; i++) {
+            const { type, payload } = timeline[i];
+            
+            let expr;
+            switch (type) {
+                case 'setLatex': {
+                    expr = graphState.expressions.find(e => e.id === payload.id);
+                    if (expr) {
+                        expr.latex = payload.latex;
+                        const mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
+                        if (mathField.latex() !== payload.latex) {
+                           mathField.latex(payload.latex);
+                        }
+                    }
+                    break;
+                }
+                case 'setViewState':
+                case 'liveUpdateView':
+                    graphState.originX = payload.originX;
+                    graphState.originY = payload.originY;
+                    graphState.scale = payload.scale;
+                    break;
+                case 'lockPoint':
+                    graphState.lockedPoint = { visible: true, x: payload.x, y: payload.y };
+                    break;
+                case 'unlockPoint':
+                    graphState.lockedPoint.visible = false;
+                    break;
+            }
+        }
+        evaluateAndPlotAll();
+    }
     
     function renderAll() { ctx.clearRect(0, 0, canvas.width, canvas.height); drawGraphGrid(); graphState.expressions.forEach(expr => { if (!expr.visible || expr.error) return; if (expr.type === 'inequality') plotInequality(expr); else if (expr.type === 'vertical_inequality') plotVerticalInequality(expr); else if (expr.type === 'function') { plotFunction(expr); drawPointsOfInterest(expr); } else if (expr.type === 'vertical_line') plotVerticalLine(expr); }); drawAllIntersectionPoints(); if (graphState.hoverPoint.visible) drawHoverPoint(); if (graphState.lockedPoint.visible) drawLockedPoint(); }
     function plotFunction(expr) { if (!expr.compiled) return; const scope = getEvaluationScope(expr); ctx.strokeStyle = expr.color; ctx.lineWidth = 2.5 * devicePixelRatio; ctx.beginPath(); let firstPoint = true; for (let px = 0; px < canvas.width; px++) { const x = (px - graphState.originX) / graphState.scale; scope.x = x; try { const y = expr.compiled.evaluate(scope); if (!Number.isFinite(y)) { firstPoint = true; continue; } const py = graphState.originY - (y * graphState.scale); if (firstPoint) { ctx.moveTo(px, py); firstPoint = false; } else { ctx.lineTo(px, py); } } catch (e) { firstPoint = true; } } ctx.stroke(); }
