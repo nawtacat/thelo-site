@@ -391,23 +391,61 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {number} time - The target time in milliseconds to reconstruct the state for.
      */
     function renderStateAtTime(time) {
+        // --- STEP 1: Full Reset of UI and Internal State ---
+        // Clear all existing expressions from the UI
         expressionListContainer.innerHTML = '';
-        graphState.expressions = [];
-        graphState.activeAnimateView = null;
-        graphState.lockedPoint.visible = false;
-        graphState.intersections = [];
+        // Reset graphState to its initial, default values
+        graphState = {
+            originX: canvas.width / 2, // Default view
+            originY: canvas.height / 2, // Default view
+            scale: 40,                  // Default view
+            expressions: [],
+            intersections: [],
+            lockedPoint: { visible: false, x: 0, y: 0 },
+            angleMode: 'rad', // Default angle mode
+            definedVariables: {},
+            activeAnimateView: null
+        };
+        // Reset angle mode button to default visual state
+        toggleAngleModeBtn.textContent = 'RAD';
+        toggleAngleModeBtn.classList.add('active'); // Assuming RAD is default active
 
-        // **FIX:** Always reset lastProcessedEventIndex when doing a full state reconstruction.
-        // This ensures the animation loop correctly picks up from this reconstructed state.
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Reset the index for future forward playback
         lastProcessedEventIndex = -1;
 
-        let foundInitialState = false; // Tracks if initialState has been processed
-
+        // --- STEP 2: Iterate through the timeline up to the target time ---
+        // Process commands to build the state step-by-step
         for (let i = 0; i < timeline.length; i++) {
             const command = timeline[i];
 
-            // Only process commands that occur at or before the target 'time'.
+            // If the command is *after* the target time, we stop.
+            // Exception: an animateView that started before 'time' but ends after 'time'.
+            if (command.time > time) {
+                // If the command is an animateView that started *before* 'time'
+                // but extends *beyond* 'time', we need to interpolate.
+                if (command.action === 'animateView' && command.time < time) {
+                    const animationEndTime = command.time + command.payload.duration;
+                    if (time < animationEndTime) { // 'time' is within this animation
+                        const progress = (time - command.time) / command.payload.duration;
+                        graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
+                        graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
+                        graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
+                        
+                        // Mark this as the active animation for the animationLoop to continue
+                        graphState.activeAnimateView = { ...command.payload, startTime: command.time };
+                        lastProcessedEventIndex = i; // This command is now "active"
+                        break; // Stop, as we've landed in an interpolated state
+                    }
+                }
+                break; // Stop processing if command time is after target time
+            }
+
+            // --- Apply the command's effect ---
             if (command.action === 'initialState') {
+                // InitialState command is special, it sets the base state
                 Object.assign(graphState, command.payload.view);
                 graphState.angleMode = command.payload.angleMode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
@@ -415,48 +453,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 command.payload.expressions.forEach(initialExpr => {
                     const clonedSliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
                     const completeExpr = { plotPoints: [], ...initialExpr, sliders: clonedSliders };
-                    addExpressionUI(completeExpr);
+                    addExpressionUI(completeExpr); // Re-adds UI elements and sets LaTeX
                 });
-                foundInitialState = true;
-                // No need to set currentEffectiveTime, as timeline[i].time is used for comparison
-            } else if (foundInitialState && command.time <= time) {
-                if (command.action === 'animateView') {
-                    const animationStartTime = command.time;
-                    const animationDuration = command.payload.duration;
-                    const animationEndTime = animationStartTime + animationDuration;
-
-                    if (time >= animationStartTime && time < animationEndTime) {
-                        // If the target 'time' falls within this animation, interpolate the view state.
-                        const progress = (time - animationStartTime) / animationDuration;
-                        graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
-                        graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
-                        graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
-                        
-                        // Mark this animation as active so animationLoop can continue it.
-                        graphState.activeAnimateView = { ...command.payload, startTime: command.time };
-                        lastProcessedEventIndex = i; // Mark this specific animation command as "active/processed up to"
-                        break; // Stop processing further commands, as we're now in an interpolated state.
-                    } else if (time >= animationEndTime) {
-                        // If the target 'time' is beyond this animation, apply its final state.
-                        Object.assign(graphState, command.payload.endView);
-                        // Don't modify currentEffectiveTime directly, rely on loop to advance.
-                    }
-                } else if (command.action !== 'delay') { // 'delay' actions don't change state, just advance time
-                    // Execute other discrete commands up to the target time.
-                    executeReplayCommand(command);
-                    // Don't modify currentEffectiveTime directly.
-                }
-                // Important: Update lastProcessedEventIndex for every command executed.
-                lastProcessedEventIndex = i;
-            } else if (foundInitialState && command.time > time) {
-                // We've gone past the target time; stop.
-                break;
+            } else if (command.action === 'animateView') {
+                // If we are strictly past this animation, apply its final state
+                // (Interpolation for "within" is handled above at the 'break' condition)
+                Object.assign(graphState, command.payload.endView);
+            } else if (command.action !== 'delay') { // 'delay' commands just affect timeline time, not state
+                // Execute all other discrete commands
+                executeReplayCommand(command);
             }
+
+            // Update the lastProcessedEventIndex to this command's index
+            // This is crucial for the animationLoop to pick up correctly.
+            lastProcessedEventIndex = i;
         }
 
-        // After all commands up to 'time' are processed, re-evaluate and render.
+        // --- STEP 3: Finalize State and Render ---
+        // Recalculate all mathematical properties (plot points, intersections) based on the reconstructed state
         evaluateAndCacheAll();
+        // Redraw the canvas with the fully reconstructed state
         renderAll();
+        // Update the progress bar visual
         progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
     }
 
