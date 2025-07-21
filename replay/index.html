@@ -160,15 +160,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- STATE MANAGEMENT ---
     let graphState = {
         originX: 0, originY: 0, scale: 40,
+        let replayActions = []; // This will store the actions for seeking
         expressions: [],
         intersections: [],
         lockedPoint: { visible: false, x: 0, y: 0 },
         angleMode: 'rad',
         definedVariables: {}
     };
-    
-    // CORRECT: Only declare this variable once
-    let replayActions = [];
+    let isReplaying = false;
 
     // --- INITIALIZATION ---
     function initialize() {
@@ -177,57 +176,148 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAll();
     }
 
-    // --- NEW CONTROLLABLE REPLAY LOGIC ---
-
     /**
-     * Listens for messages from the parent window (thelo app).
-     * Handles the initial data load and subsequent 'seek' commands.
+     * Listens for a 'message' event from the parent window (thelo app).
+     * When valid replay data is received, it triggers the playback.
      */
-    function setupMessageListener() {
-        window.addEventListener('message', (event) => {
-            const receivedData = event.data;
-
-            if (receivedData && Array.isArray(receivedData.actions)) {
-                console.log("Replay data received and stored.");
-                replayActions = receivedData.actions;
-                setStateAtTime(0, replayActions);
-            }
-
-            if (receivedData && receivedData.command === 'seek') {
-                setStateAtTime(receivedData.time, replayActions);
-            }
-        });
-    }
-
     /**
-     * Sets the entire calculator state based on a timeline and a specific time.
-     */
-    function setStateAtTime(time, actions) {
-        if (!actions || actions.length === 0) return;
+ * Listens for messages from the parent window (thelo app).
+ * Handles both the initial data load and 'seek' commands for scrubbing.
+ */
+function setupMessageListener() {
+    window.addEventListener('message', (event) => {
+        // Security: In a production environment, you should check the origin
+        // if (event.origin !== 'https://thelo.space') return;
 
-        executeReplayCommand(actions[0]); // Reset to initial state
+        const receivedData = event.data;
 
-        let cumulativeTime = 0;
-        for (let i = 1; i < actions.length; i++) {
-            const command = actions[i];
-            if (command.action === 'delay') {
-                cumulativeTime += command.ms;
+        // Case 1: Initial data load to start a new replay
+        if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
+            console.log("Replay data received, starting replay.");
+            replayActions = receivedData.actions; // Store the actions
+            startReplay(replayActions);
+        } 
+        // Case 2: A command to scrub the timeline
+        else if (receivedData && receivedData.command === 'seek') {
+            console.log(`Seek command received: ${receivedData.time}ms`);
+            // Use the stored actions to seek
+            if (replayActions.length > 0) {
+                seekToTime(replayActions, receivedData.time);
             }
-            if (cumulativeTime > time) {
-                break;
-            }
-            if (command.action !== 'delay') {
-                executeReplayCommand(command);
-            }
+        } else {
+            console.warn("Received invalid message format from parent:", receivedData);
         }
-        evaluateAndPlotAll();
-    }
-    
+    });
+}
+
+/**
+ * Starts the replay process by setting the initial state and kicking off the animation loop.
+ * @param {Array} actions - The array of actions from the recording.
+ */
+function startReplay(actions) {
+    if (isReplaying || !actions || actions.length === 0) return;
+    isReplaying = true;
+
+    // Set the absolute initial state before starting the animation.
+    executeReplayCommand(actions[0]);
+
+    // Pass the rest of the actions to the animation loop.
+    animationLoop(actions.slice(1));
+}
     /**
-     * Executes a single command from the replay sequence.
+     * The core animation engine that uses requestAnimationFrame for smooth playback.
+     * @param {Array} actions - The sequence of actions to execute.
+     */
+    function animationLoop(actions) {
+        let actionIndex = 0;
+        let lastTime = performance.now();
+        let timeSinceLastAction = 0;
+
+        // Store start and end states for smooth view transitions (panning/zooming).
+        let viewAnimation = {
+            active: false,
+            duration: 0,
+            elapsed: 0,
+            start: {},
+            end: {}
+        };
+
+        function loop(currentTime) {
+            if (!isReplaying) return;
+
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+            timeSinceLastAction += deltaTime;
+
+            // Process all actions that are due to happen in this frame.
+            while (actionIndex < actions.length) {
+                const command = actions[actionIndex];
+                
+                if (command.action === 'delay' && timeSinceLastAction < command.ms) {
+                    break; // Wait until the delay has passed.
+                }
+
+                // If we are here, the action is ready to be executed.
+                timeSinceLastAction = 0; // Reset timer for the next delay.
+
+                if (command.action === 'liveUpdateView') {
+                    // This is a high-frequency event; prepare to animate towards it.
+                    viewAnimation.active = true;
+                    viewAnimation.duration = actions[actionIndex+1]?.ms || 16.67; // Animate over the time until the next frame.
+                    viewAnimation.elapsed = 0;
+                    viewAnimation.start = { originX: graphState.originX, originY: graphState.originY, scale: graphState.scale };
+                    viewAnimation.end = command.payload;
+                } else {
+                    // For all other actions, execute them instantly.
+                    viewAnimation.active = false;
+                    executeReplayCommand(command);
+                }
+                actionIndex++;
+            }
+
+            // If a view animation is active, interpolate the state for this frame.
+            if (viewAnimation.active) {
+                viewAnimation.elapsed += deltaTime;
+                let progress = Math.min(viewAnimation.elapsed / viewAnimation.duration, 1);
+                
+                // Linear interpolation (lerp) for smooth movement.
+                const lerp = (start, end, t) => start + (end - start) * t;
+                graphState.originX = lerp(viewAnimation.start.originX, viewAnimation.end.originX, progress);
+                graphState.originY = lerp(viewAnimation.start.originY, viewAnimation.end.originY, progress);
+                graphState.scale = lerp(viewAnimation.start.scale, viewAnimation.end.scale, progress);
+                
+                evaluateAndPlotAll();
+                
+                if (progress >= 1) {
+                    viewAnimation.active = false;
+                }
+            }
+
+            // Update progress bar
+            const progressPercentage = (actionIndex / actions.length) * 100;
+            progressBar.style.width = `${progressPercentage}%`;
+            
+            // Continue the loop if there are more actions.
+            if (actionIndex < actions.length) {
+                requestAnimationFrame(loop);
+            } else {
+                isReplaying = false;
+                console.log("Replay finished.");
+                setTimeout(() => { progressBar.style.width = '0%'; }, 1000);
+            }
+        }
+        
+        // Start the animation loop.
+        requestAnimationFrame(loop);
+    }
+
+    /**
+     * Executes a single command from the replay sequence to update the calculator's state.
+     * @param {object} command - The command object { action, payload }.
      */
     function executeReplayCommand(command) {
         if (!command || !command.action) return;
+
         const { action, payload } = command;
         let expr, mathField, item;
 
@@ -239,22 +329,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 graphState.angleMode = payload.angleMode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+                
                 payload.expressions.forEach(initialExpr => {
                     const completeExpr = { sliders: {}, ...initialExpr };
                     addExpressionUI(completeExpr);
                 });
                 break;
+            
             case 'addExpression':
                 const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
                 const newExprData = { id: payload.id, latex: '', visible: true, color: color, sliders: {} };
                 addExpressionUI(newExprData);
                 break;
+
             case 'removeExpression':
                 item = document.getElementById(payload.id);
                 if (item) item.remove();
                 graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
                 updateExpressionNumbers();
                 break;
+
             case 'focusExpression':
                 document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
                 item = document.getElementById(payload.id);
@@ -262,6 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     item.querySelector('.math-input-field').classList.add('mq-focused');
                 }
                 break;
+
             case 'setLatex':
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if (expr) {
@@ -272,22 +367,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 break;
+
             case 'liveUpdateView':
             case 'setViewState':
                 Object.assign(graphState, payload);
                 break;
+
             case 'lockPoint':
                 graphState.lockedPoint = { visible: true, ...payload };
                 break;
+            
             case 'unlockPoint':
                 graphState.lockedPoint.visible = false;
                 break;
+
             case 'setSlider':
                 expr = graphState.expressions.find(e => e.id === payload.exprId);
                 if (expr && expr.sliders[payload.name]) {
                     expr.sliders[payload.name].val = payload.value;
                 }
                 break;
+
             case 'toggleVisibility':
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if(expr) {
@@ -295,18 +395,58 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
                 }
                 break;
+                
             case 'resetView':
                 resetView(false);
                 break;
+            
             case 'setAngleMode':
                 graphState.angleMode = payload.mode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
                 break;
         }
-        // NOTE: We don't call evaluateAndPlotAll() here anymore; setStateAtTime handles it once at the end.
-    }
 
+        evaluateAndPlotAll();
+    }
+        /**
+ * Jumps the replay to a specific time by executing all commands up to that point.
+ * @param {Array} actions - The full array of replay actions.
+ * @param {number} targetTime - The time to seek to, in milliseconds.
+ */
+function seekToTime(actions, targetTime) {
+    if (!actions || actions.length === 0) return;
+    isReplaying = false; // Ensure any active animation loop stops
+
+    // Always start from the absolute initial state
+    executeReplayCommand(actions[0]);
+
+    let currentTime = 0;
+    for (let i = 1; i < actions.length; i++) {
+        const command = actions[i];
+
+        if (command.action === 'delay') {
+            // If the next delay goes past our target time, we stop.
+            if (currentTime + command.ms > targetTime) {
+                break;
+            }
+            currentTime += command.ms;
+        } else {
+            // Execute any non-delay command instantly.
+            executeReplayCommand(command);
+        }
+    }
+    
+    // Final render of the state we landed on.
+    evaluateAndPlotAll(); 
+    
+    // Update the progress bar to reflect the new position
+    const totalDuration = actions.filter(a => a.action === 'delay').reduce((sum, a) => sum + a.ms, 0);
+    if (totalDuration > 0) {
+        const progressPercentage = (targetTime / totalDuration) * 100;
+        progressBar.style.width = `${Math.min(100, progressPercentage)}%`;
+    }
+}
     function addExpressionUI(exprData) {
         graphState.expressions.push(exprData);
         const item = document.createElement('div');
@@ -315,6 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const exprIndex = graphState.expressions.length;
         item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
         expressionListContainer.appendChild(item);
+        
         const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
         if (exprData.latex) {
             mathField.latex(exprData.latex);
@@ -329,9 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- CORE GRAPHING LOGIC (All these functions are necessary for rendering) ---
-    // (evaluateAndPlotAll, parseSingleExpression, updateExpressionUI, renderAll, all plotting functions, etc.)
-    // These functions remain exactly the same as in your original file.
+    // --- CORE GRAPHING LOGIC (Complete Implementation) ---
     function evaluateAndPlotAll() {
         graphState.definedVariables = {};
         graphState.expressions.forEach(parseSingleExpression);
@@ -865,7 +1004,5 @@ document.addEventListener('DOMContentLoaded', () => {
     initialize();
 });
 </script>
-</body>
-</html>
 </body>
 </html>
