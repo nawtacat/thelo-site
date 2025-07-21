@@ -3611,128 +3611,158 @@ function closeCalculator() {
     // Resume lesson state
     resumeMediaState();
 }
-function handleKeyDown(event){
-        if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT','TEXTAREA','BUTTON'].includes(event.target.tagName.toUpperCase())) return;
-
-        /* ===== ADDED: Activate 'View Progress' on SPACE key at end of lesson ===== */
-        if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
-            dashboardBtn.click(); // Trigger the button's click event
-            event.preventDefault(); // Prevent default spacebar action (e.g., scrolling)
-            return; // Stop further execution
-        }
-        /* ========================================================================= */
-
-        if (isPageGridVisible) {
-            switch(event.key.toLowerCase()) {
-                case 'c': changePageGridBatch(1); event.preventDefault(); return;
-                case 'x': changePageGridBatch(-1); event.preventDefault(); return;
-                case 'escape': closePageGridView(); event.preventDefault(); return;
-            }
-            return;
-        }
-	if (isCalculatorActive) {
-            if (event.key.toLowerCase() === 'f' || event.key === 'Escape') {
-                closeCalculator();
-                event.preventDefault();
-            }
-            return;
-        }
-        if (isThelobookActive) {
-            switch(event.key.toLowerCase()) {
-                case 'b': closeThelobook(true); event.preventDefault(); return;
-                case 'escape': closeThelobook(true); event.preventDefault(); return;
-                case 'e': toggleThelobookEraser(); event.preventDefault(); return;
-                case 'c': clearUserCanvas(); event.preventDefault(); return;
-            }
-            return;
-        }
-        /* ── QUICK-START LESSON WITH SPACE ──────────────────────────────── */
-        if (
-        event.key === ' ' &&             // space-bar hit
-        currentStageIndex === -1 &&       // lesson not started yet
-        !isLessonLoading && !isTransitioning &&
-        !isThelobookActive && !isPageGridVisible &&
-        nextCheckBtn && !nextCheckBtn.disabled
-        ) {
-        handleNextCheckClick();           // same action as the “Start” button
-        event.preventDefault();           // stop page scrolling, etc.
-        return;                           // nothing else to do for this keypress
-        }
-        /* ───────────────────────────────────────────────────────────────── */
-
-        if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
-        const mcqDetails = currentStageData.optionsQuiz;
-        const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
-
-        switch (event.key.toLowerCase()){
-            case ' ':
-                if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled){ handleNextCheckClick(); event.preventDefault(); }
-                break;
-            case 'a':
-                if (isStudentInputAllowed && !isMcqActive) { toggleColor(); event.preventDefault(); }
-                break;
-            case 'b':
-                if (currentStageIndex >=0 && currentStageData) { openThelobook(); event.preventDefault(); }
-                break;
-	    case 'f':
-                openCalculator();
-                event.preventDefault();
-                break;
-            case 'c':
-                if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled){
-                    clearUserCanvas(); event.preventDefault();
-                }
-                break;
-        }
-        const canScrub = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
-        //  βρίσκω REPLACEMENT for arrow key logic in handleKeyDown function
-
-if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !isThelobookActive && !isPageGridVisible) {
-    const isReplayStage = currentStageData && currentStageData.type === 'calculator_replay';
-    const canScrubDrawing = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
-
-    if (isReplayStage || canScrubDrawing) {
+function handleKeyDown(event) {
+    // 1. PREVENT BROWSER ZOOMING
+    if ((event.ctrlKey || event.metaKey) && (event.key === '+' || event.key === '-' || event.key === '=')) {
         event.preventDefault();
-        const step = 5; // 5-second jump
-        const diff = event.key === 'ArrowLeft' ? -step : step;
-        
-        // Determine total duration, prioritizing audio length
-        let totalDuration = currentStageTotalDuration;
-        if (currentStageAudio && currentStageAudio.duration) {
-            totalDuration = currentStageAudio.duration;
-        }
+        return;
+    }
 
-        // Determine current time
-        let currentTime = isReplayStage ? (currentStageAudio ? currentStageAudio.currentTime : 0) : internalPlaybackTime;
-        
-        let newTime = currentTime + diff;
-        newTime = Math.max(0, Math.min(newTime, totalDuration));
+    // Ignore key presses in inputs or with modifier keys
+    if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
-        // Sync audio playback
-        if (currentStageAudio) {
-            currentStageAudio.currentTime = newTime;
-            if (window.userInteracted && currentStageAudio.paused && newTime < (totalDuration - 0.01)) {
-                currentStageAudio.play().catch(() => {});
-            }
+    // Handle 'View Progress' button at the end of a lesson
+    if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
+        dashboardBtn.click();
+        event.preventDefault();
+        return;
+    }
+
+    // Handle keyboard shortcuts when the page grid is visible
+    if (isPageGridVisible) {
+        switch (event.key.toLowerCase()) {
+            case 'c':
+                changePageGridBatch(1);
+                event.preventDefault();
+                return;
+            case 'x':
+                changePageGridBatch(-1);
+                event.preventDefault();
+                return;
+            case 'escape':
+                closePageGridView();
+                event.preventDefault();
+                return;
         }
-        
-        if (isReplayStage) {
-            // NEW: Send seek command to the replay iframe
-            if (replayFrame && replayFrame.contentWindow) {
-                replayFrame.contentWindow.postMessage({ action: 'seek', time: newTime * 1000 }, '*'); // Send time in ms
+        return;
+    }
+
+    // Handle keyboard shortcuts when the calculator is active
+    if (isCalculatorActive) {
+        if (event.key.toLowerCase() === 'f' || event.key === 'Escape') {
+            closeCalculator();
+            event.preventDefault();
+        }
+        return;
+    }
+
+    // Handle keyboard shortcuts when the thelobook is active
+    if (isThelobookActive) {
+        switch (event.key.toLowerCase()) {
+            case 'b':
+            case 'escape':
+                closeThelobook(true);
+                event.preventDefault();
+                return;
+            case 'e':
+                toggleThelobookEraser();
+                event.preventDefault();
+                return;
+            case 'c':
+                clearUserCanvas();
+                event.preventDefault();
+                return;
+        }
+        return;
+    }
+
+    // Handle spacebar to start the lesson
+    if (event.key === ' ' && currentStageIndex === -1 && !isLessonLoading && !isTransitioning && nextCheckBtn && !nextCheckBtn.disabled) {
+        handleNextCheckClick();
+        event.preventDefault();
+        return;
+    }
+
+    if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
+    
+    const mcqDetails = currentStageData.optionsQuiz;
+    const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
+
+    // Handle main keyboard shortcuts during a lesson stage
+    switch (event.key.toLowerCase()) {
+        case ' ':
+            if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled) {
+                handleNextCheckClick();
+                event.preventDefault();
             }
-        } else {
-            // Original logic for drawing stages
-            internalPlaybackTime = newTime;
-            if (!isMediaScrubbingActive && currentStageTotalDuration > 0) {
-                isMediaScrubbingActive = true;
-                if (!currentReplayAnimationId) { currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop); }
+            break;
+        case 'a':
+            if (isStudentInputAllowed && !isMcqActive) {
+                toggleColor();
+                event.preventDefault();
             }
-            if (currentStageDrawingData && replayCtx) {
-                renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+            break;
+        case 'b':
+            if (currentStageIndex >= 0 && currentStageData) {
+                openThelobook();
+                event.preventDefault();
             }
-            updateMediaProgressBar(newTime, currentStageTotalDuration);
-            lastFrameTimestampForManualAdvance = performance.now();
+            break;
+        case 'f':
+            openCalculator();
+            event.preventDefault();
+            break;
+        case 'c':
+            if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled) {
+                clearUserCanvas();
+                event.preventDefault();
+            }
+            break;
+    }
+
+    // 2. HANDLE ARROW KEY SCRUBBING FOR BOTH DRAWING AND GRAPH STAGES
+    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        const isReplayStage = currentStageData && currentStageData.type === 'calculator_replay';
+        const canScrubDrawing = currentStageTotalDuration > 0 && (isMediaScrubbingActive || (currentStageAudio && currentStageData.audioFile) || (currentStageDrawingData && currentStageData.drawingRecord));
+
+        if (isReplayStage || canScrubDrawing) {
+            event.preventDefault();
+            const step = 5; // 5-second jump
+            const diff = event.key === 'ArrowLeft' ? -step : step;
+
+            let totalDuration = currentStageTotalDuration;
+            if (currentStageAudio && currentStageAudio.duration) {
+                totalDuration = currentStageAudio.duration;
+            }
+
+            let currentTime = isReplayStage ? (currentStageAudio ? currentStageAudio.currentTime : 0) : internalPlaybackTime;
+
+            let newTime = currentTime + diff;
+            newTime = Math.max(0, Math.min(newTime, totalDuration));
+
+            if (currentStageAudio) {
+                currentStageAudio.currentTime = newTime;
+                if (window.userInteracted && currentStageAudio.paused && newTime < (totalDuration - 0.01)) {
+                    currentStageAudio.play().catch(() => {});
+                }
+            }
+
+            if (isReplayStage) {
+                if (replayFrame && replayFrame.contentWindow) {
+                    replayFrame.contentWindow.postMessage({ action: 'seek', time: newTime * 1000 }, '*');
+                }
+            } else {
+                internalPlaybackTime = newTime;
+                if (!isMediaScrubbingActive && currentStageTotalDuration > 0) {
+                    isMediaScrubbingActive = true;
+                    if (!currentReplayAnimationId) { requestAnimationFrame(mediaPlaybackLoop); }
+                }
+                if (currentStageDrawingData && replayCtx) {
+                    renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+                }
+                updateMediaProgressBar(newTime, currentStageTotalDuration);
+                lastFrameTimestampForManualAdvance = performance.now();
+            }
         }
     }
 }
