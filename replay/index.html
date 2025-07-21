@@ -140,11 +140,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // ======================================================
-    // =========== AUTOMATED REPLAY ENGINE V4 ===============
-    // ===========   (True High-Performance Hybrid) =========
+    // =========== AUTOMATED REPLAY ENGINE V5 ===============
+    // ===========  (Optimized with Point Caching)  =========
     // ======================================================
 
-    // --- DOM ELEMENTS (no changes) ---
+    // --- DOM ELEMENTS ---
     const canvas = document.getElementById('graphCanvas');
     const ctx = canvas.getContext('2d');
     const expressionListContainer = document.getElementById('expressionListContainer');
@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressBarContainer = document.getElementById('progressBarContainer');
     const progressBar = document.getElementById('progressBar');
     
-    // --- LIBRARIES & CONSTANTS (no changes) ---
+    // --- LIBRARIES & CONSTANTS ---
     const MQ = MathQuill.getInterface(2);
     const devicePixelRatio = window.devicePixelRatio || 1;
     const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const POI_RADIUS = 4 * devicePixelRatio;
     const SEEK_AMOUNT_MS = 5000;
 
-    // --- STATE MANAGEMENT (no changes) ---
+    // --- STATE MANAGEMENT ---
     let graphState = {
         originX: 0, originY: 0, scale: 40,
         expressions: [],
@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
         definedVariables: {}
     };
 
-    // --- PLAYBACK CONTROL STATE (no changes) ---
+    // --- PLAYBACK CONTROL STATE ---
     let timeline = [];
     let totalDuration = 0;
     let playbackTime = 0;
@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastTimestamp = 0;
     let lastProcessedEventIndex = -1;
 
-    // --- INITIALIZATION & EVENT LISTENERS (no changes) ---
+    // --- INITIALIZATION & EVENT LISTENERS ---
     function initialize() {
         resizeCanvases();
         setupMessageListener();
@@ -191,7 +191,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('message', (event) => {
             const receivedData = event.data;
             if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-                console.log("Replay data received.");
                 startReplay(receivedData.actions);
             } else if (receivedData && receivedData.command === 'seek') {
                 seek(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
@@ -229,11 +228,11 @@ document.addEventListener('DOMContentLoaded', () => {
         buildTimeline(actions);
         playbackTime = 0;
         lastProcessedEventIndex = -1;
-        renderStateAtTime(0);
+        renderStateAtTime(0); // Build state for time 0
         play();
     }
 
-    // --- PLAYBACK CONTROLS (no changes) ---
+    // --- PLAYBACK CONTROLS ---
 
     function play() {
         if (isPlaying) return;
@@ -257,6 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (playbackTime >= totalDuration) {
                 playbackTime = 0;
                 lastProcessedEventIndex = -1;
+                 renderStateAtTime(0);
             }
             play();
         }
@@ -269,27 +269,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
         
-        // Use the "cold path" for perfect accuracy on seek
+        // Seeking always requires a full state reconstruction for accuracy
         renderStateAtTime(playbackTime);
 
-        // Resume playback if it was playing, or if it was at the end and rewinding
         if (wasPlaying || (wasAtEnd && amountMs < 0)) {
             play();
         }
     }
 
-    // =================================================================
-    // ===== NEW: LIGHTWEIGHT REDRAW FUNCTION ==========================
-    // =================================================================
-    // This function ONLY redraws the canvas without any re-calculation.
-    // This is the key to high-framerate panning and zooming.
-    function redrawCanvas() {
-        requestAnimationFrame(renderAll);
-    }
+    // --- CORE RENDERING & PLAYBACK LOGIC ---
 
-    // =================================================================
-    // ===== UPDATED ANIMATION LOOP (THE "HOT PATH") ===================
-    // =================================================================
     function animationLoop(currentDOMTime) {
         if (!isPlaying) return;
 
@@ -304,8 +293,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const command = timeline[nextEventIndex];
             executeReplayCommand(command);
 
-            // Check if the command was "heavy" (changed the math)
-            if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility'].includes(command.action)) {
+            // Any action that could change the math requires re-evaluation
+            if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView'].includes(command.action)) {
                 needsFullReevaluation = true;
             }
 
@@ -313,16 +302,13 @@ document.addEventListener('DOMContentLoaded', () => {
             nextEventIndex++;
         }
         
-        // ===================================================================
-        // ===== THE CORE FIX: Smartly choose how to render the frame ======
-        // ===================================================================
         if (needsFullReevaluation) {
-            // If the math changed, do the necessary (but slow) full update.
-            evaluateAndPlotAll();
-        } else {
-            // If only the view changed, do the lightning-fast redraw.
-            redrawCanvas();
+            // Heavy path: Re-parse, re-calculate points, find intersections.
+            evaluateAndCacheAll();
         }
+        
+        // Always render the current state. This is now always a fast operation.
+        renderAll();
 
         progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
 
@@ -333,12 +319,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // =================================================================
-    // ===== FULL STATE RECONSTRUCTION (THE "COLD PATH") ===============
-    // =================================================================
+    /**
+     * The "Cold Path": Reconstructs the entire calculator state for a specific time.
+     * Used for seeking or initializing the replay.
+     */
     function renderStateAtTime(time) {
-        executeReplayCommand(timeline[0]);
-        let newLastIndex = -1;
+        // Reset to initial state
+        executeReplayCommand(timeline[0]); 
+        
+        let newLastIndex = 0; // Start from 1 because 0 is initial state
         for (let i = 1; i < timeline.length; i++) {
             if (timeline[i].time <= time) {
                 executeReplayCommand(timeline[i]);
@@ -349,13 +338,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         lastProcessedEventIndex = newLastIndex;
         
-        // Seeking always requires a full, accurate re-evaluation.
-        evaluateAndPlotAll();
+        // After setting the state, do a full, accurate evaluation and render.
+        evaluateAndCacheAll();
+        renderAll(); 
         progressBar.style.width = `${(time / totalDuration) * 100}%`;
     }
     
-    // --- The rest of the script (executeReplayCommand, graphing logic, etc.) remains unchanged ---
-    // --- Paste all the functions from `executeReplayCommand` to the end of your original script here ---
     function executeReplayCommand(command) {
         if (!command || !command.action) return;
         const { action, payload } = command;
@@ -436,18 +424,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addExpressionUI(exprData) {
-        graphState.expressions.push(exprData);
+        // Add a plotPoints property for our cache
+        const newExpr = { plotPoints: [], ...exprData };
+        graphState.expressions.push(newExpr);
+
         const item = document.createElement('div');
         item.className = 'expression-item';
-        item.id = exprData.id;
+        item.id = newExpr.id;
         const exprIndex = graphState.expressions.length;
         item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
         expressionListContainer.appendChild(item);
         const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
-        if (exprData.latex) {
-            mathField.latex(exprData.latex);
+        if (newExpr.latex) {
+            mathField.latex(newExpr.latex);
         }
-        item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !exprData.visible);
+        item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !newExpr.visible);
         updateExpressionNumbers();
     }
     function updateExpressionNumbers() {
@@ -455,79 +446,114 @@ document.addEventListener('DOMContentLoaded', () => {
             item.querySelector('.expression-number').textContent = index + 1;
         });
     }
-    function calculatePlotPoints(expr) {
-    if (!expr.compiled || !expr.visible) {
-        expr.plotPoints = []; // Clear points if not plottable
-        return;
-    }
-
-    const scope = getEvaluationScope(expr);
-    const points = [];
-    const step = 1 / graphState.scale; // Use current scale for appropriate detail
-
-    // Define the range of x-values to calculate based on the current view
-    const xMin = (0 - graphState.originX) / graphState.scale;
-    const xMax = (canvas.width - graphState.originX) / graphState.scale;
     
-    // Increase the density of points for more accuracy
-    const numPoints = canvas.width * 2; 
-    const dx = (xMax - xMin) / numPoints;
+    /**
+     * Heavy evaluation path. Parses expressions, calculates plot points, and finds intersections.
+     */
+    function evaluateAndCacheAll() {
+        graphState.definedVariables = {};
+        graphState.expressions.forEach(parseSingleExpression);
+        graphState.expressions.forEach(calculatePlotPoints); // NEW: Cache points after parsing
+        findAndStoreIntersections();
+        graphState.expressions.forEach(updateExpressionUI);
+    }
+    
+    /**
+     * NEW: Calculates a high-density set of points for a function and caches them.
+     */
+    function calculatePlotPoints(expr) {
+        if (!expr.compiled || expr.type !== 'function' && expr.type !== 'inequality') {
+            expr.plotPoints = [];
+            return;
+        }
 
-    for (let i = 0; i <= numPoints; i++) {
-        const x = xMin + i * dx;
-        scope.x = x;
-        try {
-            const y = expr.compiled.evaluate(scope);
-            if (Number.isFinite(y)) {
-                points.push({ x, y });
-            } else {
+        const scope = getEvaluationScope(expr);
+        const points = [];
+        // Define a view-independent range for high-quality data
+        const xMin = -100;
+        const xMax = 100;
+        const numPoints = 10000; // High number for smooth curves even when zoomed in
+        const dx = (xMax - xMin) / numPoints;
+
+        for (let i = 0; i <= numPoints; i++) {
+            const x = xMin + i * dx;
+            scope.x = x;
+            try {
+                const y = expr.compiled.evaluate(scope);
+                if (Number.isFinite(y)) {
+                    points.push({ x, y });
+                } else {
+                    points.push(null); // Represents a break in the graph
+                }
+            } catch (e) {
                 points.push(null);
             }
-        } catch (e) {
-            points.push(null);
         }
+        expr.plotPoints = points;
     }
-    expr.plotPoints = points; // Cache the calculated points on the expression object
-}
-    function evaluateAndPlotAll(){graphState.definedVariables={};graphState.expressions.forEach(parseSingleExpression); graphState.expressions.forEach(calculatePlotPoints); findAndStoreIntersections();graphState.expressions.forEach(updateExpressionUI);requestAnimationFrame(renderAll)}
+
+    /**
+     * Fast rendering path. Draws grid, cached points, and overlays. Always fast.
+     */
+    function renderAll(){
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        drawGraphGrid();
+        graphState.expressions.forEach(expr=>{
+            if(!expr.visible||expr.error)return;
+            // The plot functions are now fast because they use the cache
+            if(expr.type==="inequality")plotInequality(expr);
+            else if(expr.type==="vertical_inequality")plotVerticalInequality(expr);
+            else if(expr.type==="function"){plotFunction(expr); drawPointsOfInterest(expr); }
+            else if(expr.type==="vertical_line")plotVerticalLine(expr);
+        });
+        drawAllIntersectionPoints();
+        if(graphState.lockedPoint.visible)drawLockedPoint()
+    }
+
+    /**
+     * NEW: High-performance plot function that uses the point cache.
+     */
+    function plotFunction(expr){
+        if (!expr.plotPoints || expr.plotPoints.length === 0) return;
+
+        ctx.strokeStyle = expr.color;
+        ctx.lineWidth = 2.5 * devicePixelRatio;
+        ctx.beginPath();
+        let firstPoint = true;
+
+        for (const point of expr.plotPoints) {
+            if (point === null) {
+                firstPoint = true;
+                continue;
+            }
+            const px = graphState.originX + point.x * graphState.scale;
+            // Optimization: If the point is way off-screen, don't try to draw it.
+            if (px < -10 || px > canvas.width + 10) {
+                firstPoint = true;
+                continue;
+            }
+            const py = graphState.originY - point.y * graphState.scale;
+
+            if (firstPoint) {
+                ctx.moveTo(px, py);
+                firstPoint = false;
+            } else {
+                ctx.lineTo(px, py);
+            }
+        }
+        ctx.stroke();
+    }
+
+    // --- All other functions (parsers, helpers, drawers) remain largely the same ---
+    // Note: plotInequality will now also be faster because it calls the new plotFunction.
+
+    function plotInequality(expr){if(!expr.plotPoints||expr.plotPoints.length===0)return;const scope=getEvaluationScope(expr);ctx.fillStyle=expr.color;ctx.globalAlpha=INEQUALITY_ALPHA;ctx.beginPath();let firstPoint=!0;for(const point of expr.plotPoints){if(point===null){firstPoint=!0;continue}const px=graphState.originX+point.x*graphState.scale;if(px<-10||px>canvas.width+10){firstPoint=!0;continue}const py=graphState.originY-point.y*graphState.scale;if(firstPoint){ctx.moveTo(px,py);firstPoint=!1}else{ctx.lineTo(px,py)}}const op=expr.inequalityType;if(op.includes(">")){ctx.lineTo(canvas.width,0);ctx.lineTo(0,0)}else{ctx.lineTo(canvas.width,canvas.height);ctx.lineTo(0,canvas.height)}
+    ctx.closePath();ctx.fill();ctx.globalAlpha=1;if(op==="<"||op===">"){ctx.setLineDash([8*devicePixelRatio,8*devicePixelRatio])}plotFunction(expr);ctx.setLineDash([])}
     function parseSingleExpression(expr){Object.assign(expr,{type:"empty",compiled:null,error:null,result:null,node:null,inequalityType:null,isImplicit:!1});let cleanStr=preprocessInputString(latexToMathJs(expr.latex.trim()));if(!cleanStr)return;try{const node=math.parse(cleanStr);expr.node=node;const scope=getEvaluationScope(expr);if(node.isAssignmentNode){const varName=node.object.name;if(node.toString().match(/[xy]/)){expr.error="Cannot assign expression with x or y.";return}expr.type="assignment";const result=node.evaluate(scope);expr.result=result;graphState.definedVariables[varName]=result}else if(cleanStr.includes("x")||cleanStr.includes("y")){expr.type="function";let parseableNode=node;if(node.isOperatorNode&&node.op==="="){const[left,right]=node.args;if(left.isSymbolNode&&left.name==="y"){parseableNode=right}else if(right.isSymbolNode&&right.name==="y"){parseableNode=left}else if(left.isSymbolNode&&left.name==="x"){expr.type="vertical_line";expr.x_value=right.evaluate(scope)}else if(right.isSymbolNode&&right.name==="x"){expr.type="vertical_line";expr.x_value=left.evaluate(scope)}else{expr.error="Implicit functions not supported yet."}}if(expr.type==="function"){expr.node=parseableNode;expr.compiled=parseableNode.compile()}}else if(node.isOperatorNode&&["<",">","<=",">="].includes(node.op)){expr.inequalityType=node.op;const[left,right]=node.args;if(left.isSymbolNode&&left.name==="y"){expr.type="inequality";expr.compiled=right.compile()}else if(right.isSymbolNode&&right.name==="y"){expr.type="inequality";expr.compiled=left.compile();expr.inequalityType={">":"<",">=":"<=","<":">","<=":">="}[node.op]}else if(left.isSymbolNode&&left.name==="x"){expr.type="vertical_inequality";expr.x_value=right.evaluate(scope)}else if(right.isSymbolNode&&right.name==="x"){expr.type="vertical_inequality";expr.x_value=left.evaluate(scope);expr.inequalityType={">":"<",">=":"<=","<":">","<=":">="}[node.op]}else{expr.type="calculation";expr.result=node.evaluate(scope)}}else{expr.type="calculation";expr.result=node.evaluate(scope)}
     if(expr.type==="function"||expr.type==="inequality"){const knownSymbols=["x","y","e","pi","i","true","false","theta",...Object.keys(math)];const foundSymbols=new Set;expr.node.traverse(n=>{if(n.isSymbolNode&&!knownSymbols.includes(n.name)&&!graphState.definedVariables.hasOwnProperty(n.name)){foundSymbols.add(n.name)}});foundSymbols.forEach(name=>{if(!expr.sliders[name])expr.sliders[name]={val:1,min:-5,max:5,step:.1}});Object.keys(expr.sliders).forEach(name=>{if(!foundSymbols.has(name))delete expr.sliders[name]})}else{expr.sliders={}}
     if(expr.type==="function")findPointsOfInterest(expr)}catch(err){expr.error=err.message.length>50?err.message.substring(0,50)+"...":err.message}}
     function updateExpressionUI(expr){const item=document.getElementById(expr.id);if(!item)return;const resultEl=item.querySelector(".expression-result");const extrasEl=item.querySelector(".expression-extras");const colorBar=item.querySelector(".expression-color-bar");resultEl.textContent="";extrasEl.innerHTML="";colorBar.style.backgroundColor=expr.error?"var(--error-red)":expr.visible?expr.color:"#ccc";colorBar.style.borderColor=expr.error?"var(--error-red)":expr.color;if(expr.error){resultEl.textContent="Error"}else if(expr.result!==null&&expr.result!==undefined){try{if(Array.isArray(expr.result)){resultEl.textContent`= [${expr.result.map(v=>math.format(v,{precision:3})).join(", ")}]`}else if(typeof expr.result==="function"){resultEl.textContent="f(x)"}else{resultEl.textContent=`= ${math.format(expr.result,{precision:5})}`}}catch{resultEl.textContent=`= ${expr.result.toString()}`}}
     Object.keys(expr.sliders).forEach(name=>{const slider=expr.sliders[name];const sliderDiv=document.createElement("div");sliderDiv.className="slider-container";sliderDiv.innerHTML=`<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}">`;extrasEl.appendChild(sliderDiv)})}
-    function renderAll(){ctx.clearRect(0,0,canvas.width,canvas.height);drawGraphGrid();graphState.expressions.forEach(expr=>{if(!expr.visible||expr.error)return;if(expr.type==="inequality")plotInequality(expr);else if(expr.type==="vertical_inequality")plotVerticalInequality(expr);else if(expr.type==="function"){plotFunction(expr);drawPointsOfInterest(expr)}else if(expr.type==="vertical_line")plotVerticalLine(expr)});drawAllIntersectionPoints();if(graphState.lockedPoint.visible)drawLockedPoint()}
-    // This is the new, high-performance plotFunction
-function plotFunction(expr) {
-    if (!expr.plotPoints || expr.plotPoints.length === 0) return;
-
-    ctx.strokeStyle = expr.color;
-    ctx.lineWidth = 2.5 * devicePixelRatio;
-    ctx.beginPath();
-
-    let firstPoint = true;
-
-    for (const point of expr.plotPoints) {
-        // If the point is null, it signifies a break in the line
-        if (point === null) {
-            firstPoint = true;
-            continue;
-        }
-
-        // Convert math coordinates to pixel coordinates using the current view state
-        const px = graphState.originX + point.x * graphState.scale;
-        const py = graphState.originY - point.y * graphState.scale;
-
-        if (firstPoint) {
-            ctx.moveTo(px, py);
-            firstPoint = false;
-        } else {
-            ctx.lineTo(px, py);
-        }
-    }
-    ctx.stroke();
-}
-    function plotInequality(expr){if(!expr.compiled)return;const scope=getEvaluationScope(expr);ctx.fillStyle=expr.color;ctx.globalAlpha=INEQUALITY_ALPHA;ctx.beginPath();let firstPoint=!0;for(let px=0;px<=canvas.width;px++){const x=(px-graphState.originX)/graphState.scale;scope.x=x;try{const y=expr.compiled.evaluate(scope);if(!Number.isFinite(y))continue;const py=graphState.originY-y*graphState.scale;if(firstPoint){ctx.moveTo(px,py);firstPoint=!1}else{ctx.lineTo(px,py)}}catch(e){}}const op=expr.inequalityType;if(op.includes(">")){ctx.lineTo(canvas.width,0);ctx.lineTo(0,0)}else{ctx.lineTo(canvas.width,canvas.height);ctx.lineTo(0,canvas.height)}
-    ctx.closePath();ctx.fill();ctx.globalAlpha=1;if(op==="<"||op===">"){ctx.setLineDash([8*devicePixelRatio,8*devicePixelRatio])}plotFunction(expr);ctx.setLineDash([])}
     function plotVerticalLine(expr){ctx.strokeStyle=expr.color;ctx.lineWidth=2.5*devicePixelRatio;const boundaryPx=graphState.originX+expr.x_value*graphState.scale;ctx.beginPath();ctx.moveTo(boundaryPx,0);ctx.lineTo(boundaryPx,canvas.height);ctx.stroke()}
     function plotVerticalInequality(expr){ctx.fillStyle=expr.color;ctx.globalAlpha=INEQUALITY_ALPHA;const boundaryPx=graphState.originX+expr.x_value*graphState.scale;const op=expr.inequalityType;if(op.includes("<")){ctx.fillRect(0,0,boundaryPx,canvas.height)}if(op.includes(">")){ctx.fillRect(boundaryPx,0,canvas.width-boundaryPx,canvas.height)}
     ctx.globalAlpha=1;if(!op.includes("=")){ctx.setLineDash([8*devicePixelRatio,8*devicePixelRatio])}plotVerticalLine(expr);ctx.setLineDash([])}
@@ -541,7 +567,7 @@ function plotFunction(expr) {
     function drawAllIntersectionPoints(){ctx.fillStyle="#333";graphState.intersections.forEach(point=>{const pixelX=graphState.originX+point.x*graphState.scale;const pixelY=graphState.originY-point.y*graphState.scale;ctx.beginPath();ctx.arc(pixelX,pixelY,POI_RADIUS,0,Math.PI*2);ctx.fill()})}
     function drawLockedPoint(){const{x,y}=graphState.lockedPoint;const pixelX=graphState.originX+x*graphState.scale;const pixelY=graphState.originY-y*graphState.scale;ctx.fillStyle="#000";ctx.beginPath();ctx.arc(pixelX,pixelY,POI_RADIUS*1.2,0,Math.PI*2);ctx.fill();const displayX=snapToZero(x);const displayY=snapToZero(y);const coordText=`(${displayX.toFixed(3)}, ${displayY.toFixed(3)})`;const FONT_SIZE=12*devicePixelRatio;ctx.font=`bold ${FONT_SIZE}px 'Manrope'`;const textMetrics=ctx.measureText(coordText);const boxWidth=textMetrics.width+16*devicePixelRatio;const boxHeight=FONT_SIZE+12*devicePixelRatio;let boxX=pixelX+15*devicePixelRatio;let boxY=pixelY-boxHeight/2;if(boxX+boxWidth>canvas.width)boxX=pixelX-boxWidth-15*devicePixelRatio;if(boxY<0)boxY=5*devicePixelRatio;if(boxY+boxHeight>canvas.height)boxY=canvas.height-boxHeight-5*devicePixelRatio;ctx.fillStyle="rgba(255, 255, 255, 0.9)";ctx.shadowColor="rgba(0,0,0,0.2)";ctx.shadowBlur=10;ctx.beginPath();ctx.roundRect(boxX,boxY,boxWidth,boxHeight,5*devicePixelRatio);ctx.fill();ctx.shadowColor="transparent";ctx.fillStyle="#000";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(coordText,boxX+boxWidth/2,boxY+boxHeight/2)}
     function resizeCanvases(){const rect=canvas.parentElement.getBoundingClientRect();canvas.width=rect.width*devicePixelRatio;canvas.height=rect.height*devicePixelRatio;canvas.style.width=`${rect.width}px`;canvas.style.height=`${rect.height}px`;resetView(!1)}
-    function resetView(redraw=!0){graphState.originX=canvas.width/2;graphState.originY=canvas.height/2;graphState.scale=40;if(redraw){evaluateAndPlotAll()}}
+    function resetView(redraw=!0){graphState.originX=canvas.width/2;graphState.originY=canvas.height/2;graphState.scale=40;if(redraw){evaluateAndCacheAll(); renderAll();}}
     function drawGraphGrid(){const computedStyles=getComputedStyle(document.documentElement);const THELO_BORDER_COLOR=computedStyles.getPropertyValue("--thelo-border").trim();const THELO_TEXT_LIGHT_COLOR=computedStyles.getPropertyValue("--thelo-text-light").trim();ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.restore();let dynamicGrid=1;while(dynamicGrid*graphState.scale<50*devicePixelRatio){dynamicGrid*=(dynamicGrid*graphState.scale<25*devicePixelRatio?2:2.5)}
     while(dynamicGrid*graphState.scale>100*devicePixelRatio){dynamicGrid/=(dynamicGrid*graphState.scale>250*devicePixelRatio?2.5:2)}
     ctx.strokeStyle=THELO_BORDER_COLOR;ctx.lineWidth=1*devicePixelRatio;ctx.font=`${10*devicePixelRatio}px 'Manrope'`;ctx.fillStyle=THELO_TEXT_LIGHT_COLOR;ctx.textAlign="center";ctx.textBaseline="middle";const startX=Math.floor(-graphState.originX/(graphState.scale*dynamicGrid))*dynamicGrid;for(let x=startX;x*graphState.scale+graphState.originX<canvas.width;x+=dynamicGrid){const px=x*graphState.scale+graphState.originX;ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,canvas.height);ctx.stroke();if(Math.abs(x)>1e-9){ctx.fillText(Number(x.toPrecision(4)),px+2*devicePixelRatio,graphState.originY-5*devicePixelRatio)}}
@@ -555,7 +581,7 @@ function plotFunction(expr) {
 
     initialize();
 });
-</script>
-        
+
+</script>        
 </body>
 </html>
