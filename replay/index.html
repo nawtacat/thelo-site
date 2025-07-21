@@ -229,6 +229,8 @@ function setupMessageListener() {
     }
     // βρίσκω NEW function in replay1.html
 
+// βρίσκω REPLACEMENT for the seekToTime function in replay1.html
+
 /**
  * Jumps the replay to a specific time in the timeline.
  * @param {number} timeInMs - The time to seek to, in milliseconds.
@@ -237,37 +239,44 @@ function setupMessageListener() {
 function seekToTime(timeInMs, allActions) {
     if (!allActions || allActions.length === 0) return;
 
-    isReplaying = false; // Temporarily stop any ongoing loop
+    // Stop any ongoing playback
+    isReplaying = false; 
+
+    // 1. Reset the calculator to the absolute initial state
+    executeReplayCommand(allActions[0]);
 
     let accumulatedTime = 0;
-    let seekActionIndex = 0;
+    let seekActionIndex = 1; // Start applying actions from the second one
 
-    // Instantly execute all actions up to the seek time
-    for (let i = 0; i < allActions.length; i++) {
+    // 2. Loop through actions to rebuild the state up to the seek time
+    for (let i = 1; i < allActions.length; i++) {
         const command = allActions[i];
+        
+        if (command.action === 'delay') {
+            accumulatedTime += command.ms;
+        }
+        
+        // Stop if we have passed the target time
         if (accumulatedTime > timeInMs) {
             seekActionIndex = i;
             break;
         }
 
-        // Don't execute the delay, just account for its time
-        if (command.action === 'delay') {
-            accumulatedTime += command.ms;
-        } else {
-            // For live view updates, we only apply the final state before the next delay
-            if(command.action !== 'liveUpdateView'){
-                 executeReplayCommand(command);
-            } else if (i + 1 < allActions.length && allActions[i+1].action !== 'liveUpdateView') {
-                 executeReplayCommand(command);
-            }
+        // Apply the action instantly (without its delay) to build the state
+        if (command.action !== 'delay') {
+            executeReplayCommand(command);
         }
-        
+
+        // If this is the last action, set the index to the end
         if (i === allActions.length - 1) {
-            seekActionIndex = i + 1; // Seek to the end
+            seekActionIndex = i + 1;
         }
     }
+
+    // 3. Force a final evaluation and render of the rebuilt state
+    evaluateAndPlotAll();
     
-    // Resume playback from the new point in the timeline
+    // 4. Resume animated playback from the new point
     isReplaying = true;
     const remainingActions = allActions.slice(seekActionIndex);
     animationLoop(remainingActions);
