@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- LIBRARIES & CONSTANTS ---
     const MQ = MathQuill.getInterface(2);
     // Use the devicePixelRatio from meta if provided, otherwise default
-    let currentDevicePixelRatio = window.devicePixelRatio || 1; 
+    let currentDevicePixelRatio = window.devicePixelRatio || 1;
     const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
     const INEQUALITY_ALPHA = 0.2;
     let POI_RADIUS = 4 * currentDevicePixelRatio; // Scaled by devicePixelRatio
@@ -200,10 +200,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentDevicePixelRatio = receivedData.meta.devicePixelRatio;
                     POI_RADIUS = 4 * currentDevicePixelRatio; // Recalculate based on recorded ratio
                     // Also adjust canvas size if needed based on recorded logical dimensions vs current physical
-                    resizeCanvases(receivedData.meta.canvasDimensions); 
+                    resizeCanvases(receivedData.meta.canvasDimensions);
                 }
                 startReplay(receivedData.actions);
+            } else if (receivedData && receivedData.command === 'seekToTime' && typeof receivedData.timeMs === 'number') {
+                // **UPDATED:** Handle the new 'seekToTime' command with an absolute timestamp
+                seekToAbsoluteTime(receivedData.timeMs);
             } else if (receivedData && receivedData.command === 'seek') {
+                // Keep this for backward compatibility if needed, but the main app should now send 'seekToTime'
                 seek(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
             }
         });
@@ -225,14 +229,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let currentTime = 0;
         timeline = [];
         actions.forEach(action => {
-            // AnimateView actions already contain their duration in payload.duration
-            // For other actions, 'delay' actions explicitly define timing.
             if (action.action === 'delay') {
                 currentTime += action.ms;
             } else {
-                // Ensure correct time for 'animateView' if it's the first in a sequence or after a delay
                 if (action.action === 'animateView') {
-                    // Start of animateView marks its 'time' in the timeline
                     timeline.push({ time: currentTime, ...action });
                     currentTime += action.payload.duration; // Advance time by animation duration
                 } else {
@@ -285,19 +285,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function seek(amountMs) {
+        // This function is still here for backward compatibility or internal directional seeks.
+        // For external seeks from the main app, 'seekToAbsoluteTime' is now preferred.
         const wasAtEnd = playbackTime >= totalDuration;
         const wasPlaying = isPlaying;
         if (wasPlaying) pause();
 
         playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
 
-        // Seeking always requires a full state reconstruction for accuracy
         graphState.activeAnimateView = null; // Clear active animation before seeking
         renderStateAtTime(playbackTime);
 
         if (wasPlaying || (wasAtEnd && amountMs < 0)) {
             play();
         }
+    }
+
+    // **NEW FUNCTION:** Handles absolute time seeks, more robust for parent-iframe communication
+    function seekToAbsoluteTime(targetTimeMs) {
+        const wasPlaying = isPlaying;
+        if (wasPlaying) pause();
+
+        playbackTime = Math.max(0, Math.min(targetTimeMs, totalDuration));
+        graphState.activeAnimateView = null; // Crucial: clear any ongoing animation
+        renderStateAtTime(playbackTime); // Reconstruct state for the exact target time
+
+        if (wasPlaying) {
+            play(); // Resume playback if it was playing before the seek
+        }
+        // If it was paused, leave it paused, but the graph state is updated.
     }
 
     // --- CORE RENDERING & PLAYBACK LOGIC ---
@@ -318,6 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const animationProgress = Math.min(1, (playbackTime - startTime) / duration);
 
             if (animationProgress < 1) {
+                // Interpolate the view properties
                 graphState.originX = startView.originX + (endView.originX - startView.originX) * animationProgress;
                 graphState.originY = startView.originY + (endView.originY - startView.originY) * animationProgress;
                 graphState.scale = startView.scale + (endView.scale - startView.scale) * animationProgress;
@@ -325,15 +342,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Animation finished, set to final state and clear activeAnimateView
                 Object.assign(graphState, endView);
                 graphState.activeAnimateView = null;
-                // Since an animation just finished, ensure we evaluate if any new static state applies
-                needsFullReevaluation = true;
+                needsFullReevaluation = true; // Since an animation just finished, ensure we evaluate if any new static state applies
             }
         }
 
         // Process discrete timeline events
         while (nextEventIndex < timeline.length && timeline[nextEventIndex].time <= playbackTime) {
             const command = timeline[nextEventIndex];
-            
+
             if (command.action === 'animateView') {
                 // If a new animateView command is encountered, set it active
                 graphState.activeAnimateView = {
@@ -344,8 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 // Immediately set to start state of animation
                 Object.assign(graphState, command.payload.startView);
-                // AnimateView implies a view change, so re-evaluation is needed
-                needsFullReevaluation = true; 
+                needsFullReevaluation = true;
             } else {
                 // Execute other commands
                 executeReplayCommand(command);
@@ -388,238 +403,213 @@ document.addEventListener('DOMContentLoaded', () => {
         graphState.lockedPoint.visible = false; // Reset locked point for clean state
         graphState.intersections = []; // Clear intersections
 
+        // **FIX:** Reset lastProcessedEventIndex to prepare for full state reconstruction
+        lastProcessedEventIndex = -1;
+
         let currentEffectiveTime = 0;
         let foundInitialState = false;
 
         for (let i = 0; i < timeline.length; i++) {
             const command = timeline[i];
-            
-            // Advance currentEffectiveTime to the start of the command
-            if (i > 0 && timeline[i-1].action === 'animateView') {
-                // If the previous command was an animateView, its duration already advanced time
-            } else if (command.action === 'delay') {
-                currentEffectiveTime += command.ms;
-            } else {
-                // Other commands implicitly take 0 time, but might follow a delay
-            }
+
+            // If the command's time is exactly equal to `time`, we process it.
+            // If the command's time is greater than `time`, we stop, as we've gone too far.
+            // Exception: if 'time' is inside an 'animateView' block.
 
             if (command.action === 'initialState') {
-                // Reconstruct initial state from the payload
                 Object.assign(graphState, command.payload.view);
                 graphState.angleMode = command.payload.angleMode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
-                // Re-add expressions with their saved properties
                 command.payload.expressions.forEach(initialExpr => {
-                    // Create a deep copy of sliders to avoid reference issues
                     const clonedSliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
                     const completeExpr = { plotPoints: [], ...initialExpr, sliders: clonedSliders };
                     addExpressionUI(completeExpr);
                 });
                 foundInitialState = true;
-                currentEffectiveTime = command.time; // Initial state defines time 0
-            } else if (foundInitialState && command.time <= time) {
+                currentEffectiveTime = command.time;
+            } else if (foundInitialState && command.time <= time) { // Only process if time is at or before target
                 if (command.action === 'animateView') {
                     const animationStartTime = command.time;
-                    const animationEndTime = command.time + command.payload.duration;
+                    const animationDuration = command.payload.duration;
+                    const animationEndTime = animationStartTime + animationDuration;
 
                     if (time >= animationStartTime && time < animationEndTime) {
-                        // Seeking into an active animation: calculate interpolated state
-                        const progress = (time - animationStartTime) / command.payload.duration;
+                        // We are seeking INTO this animation. Interpolate the view.
+                        const progress = (time - animationStartTime) / animationDuration;
                         graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
                         graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
                         graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
-                        graphState.activeAnimateView = { ...command.payload, startTime: command.time }; // Mark as active animation
-                        lastProcessedEventIndex = i; // Mark this animation as processed
-                        break; // Stop processing, we found our state
+                        
+                        // Set activeAnimateView so animationLoop can continue from here
+                        graphState.activeAnimateView = { ...command.payload, startTime: command.time };
+                        lastProcessedEventIndex = i; // This command (animation) is "active"
+                        break; // Stop, as we are now in an interpolated state
                     } else if (time >= animationEndTime) {
-                        // Seeking past an animation: apply its final state
+                        // We have sought PAST this animation. Apply its final state.
                         Object.assign(graphState, command.payload.endView);
-                        currentEffectiveTime = animationEndTime;
+                        currentEffectiveTime = animationEndTime; // Time now is end of this animation
                     }
-                } else if (command.action !== 'delay') { // Already handled delays by incrementing currentEffectiveTime
-                    // Execute other discrete commands up to the target time
+                } else if (command.action !== 'delay') {
+                    // Execute other discrete commands.
                     executeReplayCommand(command);
                     currentEffectiveTime = command.time;
                 }
-                lastProcessedEventIndex = i; // Mark all commands up to here as processed
+                lastProcessedEventIndex = i; // Mark this command as processed.
             } else if (foundInitialState && command.time > time) {
-                // We've gone past the target time, stop here.
+                // We've processed all commands up to or within the target time.
                 break;
             }
         }
-
-        // After setting the state, do a full, accurate evaluation and render.
         evaluateAndCacheAll();
         renderAll();
-        progressBar.style.width = `${(time / totalDuration) * 100}%`;
+        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
     }
 
 
     function executeReplayCommand(command) {
-    if (!command || !command.action) return;
-    const { action, payload } = command;
-    let expr, mathField, item;
-    switch (action) {
-        case 'initialState':
-            expressionListContainer.innerHTML = '';
-            graphState.expressions = [];
-            Object.assign(graphState, payload.view);
-            graphState.angleMode = payload.angleMode;
-            toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
-            toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+        if (!command || !command.action) return;
+        const { action, payload } = command;
+        let expr, mathField, item;
+        switch (action) {
+            case 'initialState':
+                expressionListContainer.innerHTML = '';
+                graphState.expressions = [];
+                Object.assign(graphState, payload.view);
+                graphState.angleMode = payload.angleMode;
+                toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
+                toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
 
-            payload.expressions.forEach(initialExpr => {
-                const completeExpr = { sliders: {}, ...initialExpr };
-                // Ensure sliders are deep-copied on initial state load
-                completeExpr.sliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
-                addExpressionUI(completeExpr); // This function now handles setting initial LaTeX
-            });
-
-            // No longer explicitly loop here. The `addExpressionUI` function itself
-            // now handles setting the initial LaTeX for each expression when it's added.
-            // This avoids potential timing issues by ensuring MathQuill is updated
-            // as soon as its DOM element is created and the initial LaTeX is known.
-
-            break;
-        case 'addExpression':
-            const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
-            // Ensure payload.latex is included, as the recorder provides it.
-            // This is crucial for `addExpressionUI` to correctly set the initial text.
-            const newExprData = {
-                id: payload.id,
-                latex: payload.latex || '', // Use payload.latex if present, otherwise empty string
-                visible: payload.visible !== undefined ? payload.visible : true,
-                color: payload.color || color,
-                sliders: payload.sliders || {}
-            };
-            addExpressionUI(newExprData);
-            break;
-        case 'removeExpression':
-            item = document.getElementById(payload.id);
-            if (item) item.remove();
-            graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
-            updateExpressionNumbers();
-            break;
-        case 'focusExpression':
-            document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
-            item = document.getElementById(payload.id);
-            if (item) {
-                item.querySelector('.math-input-field').classList.add('mq-focused');
-            }
-            break;
-        case 'setLatex':
-            expr = graphState.expressions.find(e => e.id === payload.id);
-            if (expr) {
-                expr.latex = payload.latex;
-                mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
-                if (mathField) {
-                    // This line ensures MathQuill updates its displayed content for subsequent edits
-                    mathField.latex(payload.latex);
+                payload.expressions.forEach(initialExpr => {
+                    const completeExpr = { sliders: {}, ...initialExpr };
+                    // Ensure sliders are deep-copied on initial state load
+                    completeExpr.sliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
+                    addExpressionUI(completeExpr); // This function now handles setting initial LaTeX
+                });
+                break;
+            case 'addExpression':
+                const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
+                const newExprData = {
+                    id: payload.id,
+                    latex: payload.latex || '', // Use payload.latex if present, otherwise empty string
+                    visible: payload.visible !== undefined ? payload.visible : true,
+                    color: payload.color || color,
+                    sliders: payload.sliders || {}
+                };
+                addExpressionUI(newExprData);
+                break;
+            case 'removeExpression':
+                item = document.getElementById(payload.id);
+                if (item) item.remove();
+                graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
+                updateExpressionNumbers();
+                break;
+            case 'focusExpression':
+                document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
+                item = document.getElementById(payload.id);
+                if (item) {
+                    item.querySelector('.math-input-field').classList.add('mq-focused');
                 }
-            }
-            break;
-        case 'animateView':
-            // This command is primarily handled by the animationLoop or renderStateAtTime.
-            // If it's processed here directly, it means we're setting the *start* of an animation
-            // or the *final* state if we're seeking past it.
-            // For live playback, the animationLoop will handle the interpolation.
-            // For seeking, renderStateAtTime will handle it.
-            Object.assign(graphState, payload.startView); // Set to start of animation view initially
-            break;
-        case 'setSlider':
-            expr = graphState.expressions.find(e => e.id === payload.exprId);
-            if (expr && expr.sliders[payload.name]) {
-                expr.sliders[payload.name].val = payload.value;
-                // Also update the UI slider element for visual feedback
-                const itemElement = document.getElementById(payload.exprId);
-                if (itemElement) {
-                    // Iterate through all sliders in the item to find the correct one by name
-                    const sliderInputs = itemElement.querySelectorAll(`.slider-container input[type=range]`);
-                    let targetSlider = null;
-                    for (const input of sliderInputs) {
-                        // Assuming you have a way to match the slider to its variable name,
-                        // perhaps by an attribute on the input itself or a data attribute on its parent.
-                        // For now, if the label contains the name, we'll try to match it.
-                        const label = input.previousElementSibling;
-                        if (label && label.textContent.startsWith(payload.name)) {
-                            targetSlider = input;
-                            break;
-                        }
+                break;
+            case 'setLatex':
+                expr = graphState.expressions.find(e => e.id === payload.id);
+                if (expr) {
+                    expr.latex = payload.latex;
+                    mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
+                    if (mathField) {
+                        mathField.latex(payload.latex);
                     }
+                }
+                break;
+            case 'animateView':
+                // This command is primarily handled by the animationLoop or renderStateAtTime.
+                // If it's processed here directly, it means we're setting the *start* of an animation
+                // or the *final* state if we're seeking past it.
+                // For live playback, the animationLoop will handle the interpolation.
+                // For seeking, renderStateAtTime will handle it.
+                Object.assign(graphState, payload.startView); // Set to start of animation view initially
+                break;
+            case 'setSlider':
+                expr = graphState.expressions.find(e => e.id === payload.exprId);
+                if (expr && expr.sliders[payload.name]) {
+                    expr.sliders[payload.name].val = payload.value;
+                    const itemElement = document.getElementById(payload.exprId);
+                    if (itemElement) {
+                        const sliderInputs = itemElement.querySelectorAll(`.slider-container input[type=range]`);
+                        let targetSlider = null;
+                        for (const input of sliderInputs) {
+                            const label = input.previousElementSibling;
+                            if (label && label.textContent.startsWith(payload.name)) {
+                                targetSlider = input;
+                                break;
+                            }
+                        }
 
-                    if (targetSlider) {
-                        targetSlider.value = payload.value;
-                        const labelEl = targetSlider.previousElementSibling; // Assuming label is sibling
-                        if (labelEl) {
-                            labelEl.textContent = `${payload.name} = ${payload.value}`;
+                        if (targetSlider) {
+                            targetSlider.value = payload.value;
+                            const labelEl = targetSlider.previousElementSibling;
+                            if (labelEl) {
+                                labelEl.textContent = `${payload.name} = ${payload.value}`;
+                            }
                         }
                     }
                 }
-            }
-            break;
-        case 'toggleVisibility':
-            expr = graphState.expressions.find(e => e.id === payload.id);
-            if (expr) {
-                expr.visible = payload.visible;
-                document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
-            }
-            break;
-        case 'resetView':
-            resetView(false);
-            break;
-        case 'setAngleMode':
-            graphState.angleMode = payload.mode;
-            toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
-            toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
-            break;
-        case 'lockPoint':
-            graphState.lockedPoint = { visible: true, ...payload };
-            break;
-        case 'unlockPoint':
-            graphState.lockedPoint.visible = false;
-            break;
+                break;
+            case 'toggleVisibility':
+                expr = graphState.expressions.find(e => e.id === payload.id);
+                if (expr) {
+                    expr.visible = payload.visible;
+                    document.getElementById(payload.id).querySelector('.expression-color-bar').classList.toggle('hidden-expr', !expr.visible);
+                }
+                break;
+            case 'resetView':
+                resetView(false);
+                break;
+            case 'setAngleMode':
+                graphState.angleMode = payload.mode;
+                toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
+                toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+                break;
+            case 'lockPoint':
+                graphState.lockedPoint = { visible: true, ...payload };
+                break;
+            case 'unlockPoint':
+                graphState.lockedPoint.visible = false;
+                break;
+        }
     }
-}
     function addExpressionUI(exprData) {
-    // Add a plotPoints property for our cache, and ensure sliders are properly re-initialized
-    const newExpr = { plotPoints: [], ...exprData };
-    // Deep copy sliders to prevent accidental shared references
-    newExpr.sliders = JSON.parse(JSON.stringify(exprData.sliders || {}));
-    graphState.expressions.push(newExpr);
+        const newExpr = { plotPoints: [], ...exprData };
+        newExpr.sliders = JSON.parse(JSON.stringify(exprData.sliders || {}));
+        graphState.expressions.push(newExpr);
 
-    const item = document.createElement('div');
-    item.className = 'expression-item';
-    item.id = newExpr.id;
-    const exprIndex = graphState.expressions.length;
-    item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
-    expressionListContainer.appendChild(item);
-    const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
-    
-    // FIX: Set LaTeX directly from exprData when adding the UI element
-    // This ensures that initial expressions have their content displayed immediately.
-    if (newExpr.latex) {
-        mathField.latex(newExpr.latex);
+        const item = document.createElement('div');
+        item.className = 'expression-item';
+        item.id = newExpr.id;
+        const exprIndex = graphState.expressions.length;
+        item.innerHTML = `<div class="expression-main"><span class="expression-number">${exprIndex}</span><div class="expression-color-bar"></div><div class="expression-input-wrapper"><span class="math-input-field"></span></div><span class="expression-result"></span></div><div class="expression-extras"></div>`;
+        expressionListContainer.appendChild(item);
+        const mathField = MQ.StaticMath(item.querySelector('.math-input-field'));
+
+        if (newExpr.latex) {
+            mathField.latex(newExpr.latex);
+        }
+
+        item.querySelector('.expression-color-bar').style.backgroundColor = newExpr.color;
+        item.querySelector('.expression-color-bar').style.borderColor = newExpr.color;
+        item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !newExpr.visible);
+
+        const extrasEl = item.querySelector('.expression-extras');
+        Object.keys(newExpr.sliders).forEach(name => {
+            const slider = newExpr.sliders[name];
+            const sliderDiv = document.createElement('div');
+            sliderDiv.className = 'slider-container';
+            sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`;
+            extrasEl.appendChild(sliderDiv);
+        });
+
+        updateExpressionNumbers();
     }
-    // END FIX
-
-    item.querySelector('.expression-color-bar').style.backgroundColor = newExpr.color;
-    item.querySelector('.expression-color-bar').style.borderColor = newExpr.color;
-    item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !newExpr.visible);
-
-    // Populate sliders UI based on initial data
-    const extrasEl = item.querySelector('.expression-extras');
-    Object.keys(newExpr.sliders).forEach(name => {
-        const slider = newExpr.sliders[name];
-        const sliderDiv = document.createElement('div');
-        sliderDiv.className = 'slider-container';
-        // Disable input interaction in replay mode
-        sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`;
-        extrasEl.appendChild(sliderDiv);
-    });
-
-    updateExpressionNumbers();
-}
     function updateExpressionNumbers() {
         expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
             item.querySelector('.expression-number').textContent = index + 1;
@@ -648,7 +638,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const scope = getEvaluationScope(expr);
         const points = [];
-        // Define a view-independent range for high-quality data
         const xMin = -100;
         const xMax = 100;
         const numPoints = 10000; // High number for smooth curves even when zoomed in
@@ -679,7 +668,6 @@ document.addEventListener('DOMContentLoaded', () => {
         drawGraphGrid();
         graphState.expressions.forEach(expr => {
             if (!expr.visible || expr.error) return;
-            // The plot functions are now fast because they use the cache
             if (expr.type === "inequality") plotInequality(expr);
             else if (expr.type === "vertical_inequality") plotVerticalInequality(expr);
             else if (expr.type === "function") { plotFunction(expr); drawPointsOfInterest(expr); }
@@ -696,7 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!expr.plotPoints || expr.plotPoints.length === 0) return;
 
         ctx.strokeStyle = expr.color;
-        ctx.lineWidth = 2.5 * currentDevicePixelRatio; // Use currentDevicePixelRatio
+        ctx.lineWidth = 2.5 * currentDevicePixelRatio;
         ctx.beginPath();
         let firstPoint = true;
 
@@ -706,8 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 continue;
             }
             const px = graphState.originX + point.x * graphState.scale;
-            // Optimization: If the point is way off-screen, don't try to draw it.
-            if (px < -10 || px > canvas.width + 10) {
+            if (px < -10 || px > canvas.width + 10) { // Optimization to skip drawing far off-screen points
                 firstPoint = true;
                 continue;
             }
@@ -722,9 +709,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         ctx.stroke();
     }
-
-    // --- All other functions (parsers, helpers, drawers) remain largely the same ---
-    // Note: plotInequality will now also be faster because it calls the new plotFunction.
 
     function plotInequality(expr) { if (!expr.plotPoints || expr.plotPoints.length === 0) return; const scope = getEvaluationScope(expr); ctx.fillStyle = expr.color; ctx.globalAlpha = INEQUALITY_ALPHA; ctx.beginPath(); let firstPoint = !0; for (const point of expr.plotPoints) { if (point === null) { firstPoint = !0; continue } const px = graphState.originX + point.x * graphState.scale; if (px < -10 || px > canvas.width + 10) { firstPoint = !0; continue } const py = graphState.originY - point.y * graphState.scale; if (firstPoint) { ctx.moveTo(px, py); firstPoint = !1 } else { ctx.lineTo(px, py) } } const op = expr.inequalityType; if (op.includes(">")) { ctx.lineTo(canvas.width, 0); ctx.lineTo(0, 0) } else { ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(0, canvas.height) } ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; if (op === "<" || op === ">") { ctx.setLineDash([8 * currentDevicePixelRatio, 8 * currentDevicePixelRatio]) } plotFunction(expr); ctx.setLineDash([]) }
     function parseSingleExpression(expr) { Object.assign(expr, { type: "empty", compiled: null, error: null, result: null, node: null, inequalityType: null, isImplicit: !1 }); let cleanStr = preprocessInputString(latexToMathJs(expr.latex.trim())); if (!cleanStr) return; try { const node = math.parse(cleanStr); expr.node = node; const scope = getEvaluationScope(expr); if (node.isAssignmentNode) { const varName = node.object.name; if (node.toString().match(/[xy]/)) { expr.error = "Cannot assign expression with x or y."; return } expr.type = "assignment"; const result = node.evaluate(scope); expr.result = result; graphState.definedVariables[varName] = result } else if (cleanStr.includes("x") || cleanStr.includes("y")) { expr.type = "function"; let parseableNode = node; if (node.isOperatorNode && node.op === "=") { const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { parseableNode = right } else if (right.isSymbolNode && right.name === "y") { parseableNode = left } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_line"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_line"; expr.x_value = left.evaluate(scope) } else { expr.error = "Implicit functions not supported yet." } } if (expr.type === "function") { expr.node = parseableNode; expr.compiled = parseableNode.compile() } } else if (node.isOperatorNode && ["<", ">", "<=", ">="].includes(node.op)) { expr.inequalityType = node.op; const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { expr.type = "inequality"; expr.compiled = right.compile() } else if (right.isSymbolNode && right.name === "y") { expr.type = "inequality"; expr.compiled = left.compile(); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_inequality"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_inequality"; expr.x_value = left.evaluate(scope); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } if (expr.type === "function" || expr.type === "inequality") { const knownSymbols = ["x", "y", "e", "pi", "i", "true", "false", "theta", ...Object.keys(math)]; const foundSymbols = new Set; expr.node.traverse(n => { if (n.isSymbolNode && !knownSymbols.includes(n.name) && !graphState.definedVariables.hasOwnProperty(n.name)) { foundSymbols.add(n.name) } }); foundSymbols.forEach(name => { if (!expr.sliders[name]) expr.sliders[name] = { val: 1, min: -5, max: 5, step: .1 } }); Object.keys(expr.sliders).forEach(name => { if (!foundSymbols.has(name)) delete expr.sliders[name] }) } else { expr.sliders = {} } if (expr.type === "function") findPointsOfInterest(expr) } catch (err) { expr.error = err.message.length > 50 ? err.message.substring(0, 50) + "..." : err.message } }
@@ -743,7 +727,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const slider = expr.sliders[name];
             const sliderDiv = document.createElement("div");
             sliderDiv.className = "slider-container";
-            // In replay, sliders are disabled
             sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`;
             extrasEl.appendChild(sliderDiv)
         })
@@ -794,23 +777,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function drawLockedPoint() {
         const { x, y } = graphState.lockedPoint; const pixelX = graphState.originX + x * graphState.scale; const pixelY = graphState.originY - y * graphState.scale; ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(pixelX, pixelY, POI_RADIUS * 1.2, 0, Math.PI * 2); ctx.fill(); const displayX = snapToZero(x); const displayY = snapToZero(y); const coordText = `(${displayX.toFixed(3)}, ${displayY.toFixed(3)})`; const FONT_SIZE = 12 * currentDevicePixelRatio; ctx.font = `bold ${FONT_SIZE}px 'Manrope'`; const textMetrics = ctx.measureText(coordText); const boxWidth = textMetrics.width + 16 * currentDevicePixelRatio; const boxHeight = FONT_SIZE + 12 * currentDevicePixelRatio; let boxX = pixelX + 15 * currentDevicePixelRatio; let boxY = pixelY - boxHeight / 2; if (boxX + boxWidth > canvas.width) boxX = pixelX - boxWidth - 15 * currentDevicePixelRatio; if (boxY < 0) boxY = 5 * currentDevicePixelRatio; if (boxY + boxHeight > canvas.height) boxY = canvas.height - boxHeight - 5 * currentDevicePixelRatio; ctx.fillStyle = "rgba(255, 255, 255, 0.9)"; ctx.shadowColor = "rgba(0,0,0,0.2)"; ctx.shadowBlur = 10; ctx.beginPath(); ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5 * currentDevicePixelRatio); ctx.fill(); ctx.shadowColor = "transparent"; ctx.fillStyle = "#000"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(coordText, boxX + boxWidth / 2, boxY + boxHeight / 2)
     }
-    // Updated resizeCanvases to potentially use recorded canvas dimensions
     function resizeCanvases(recordedCanvasDimensions = null) {
         const rect = canvas.parentElement.getBoundingClientRect();
-        // If recorded dimensions are available, try to match the aspect ratio
         if (recordedCanvasDimensions && recordedCanvasDimensions.width && recordedCanvasDimensions.height) {
             canvas.width = recordedCanvasDimensions.width * currentDevicePixelRatio;
             canvas.height = recordedCanvasDimensions.height * currentDevicePixelRatio;
             canvas.style.width = `${recordedCanvasDimensions.width}px`;
             canvas.style.height = `${recordedCanvasDimensions.height}px`;
         } else {
-            // Otherwise, use current window/parent size
             canvas.width = rect.width * currentDevicePixelRatio;
             canvas.height = rect.height * currentDevicePixelRatio;
             canvas.style.width = `${rect.width}px`;
             canvas.style.height = `${rect.height}px`;
         }
-        resetView(false); // Reset view without immediate redraw, evaluateAndPlotAll will handle it
+        resetView(false);
     }
     function resetView(redraw = !0) { graphState.originX = canvas.width / 2; graphState.originY = canvas.height / 2; graphState.scale = 40; if (redraw) { evaluateAndCacheAll(); renderAll(); } }
     function drawGraphGrid() {
@@ -832,7 +812,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initialize();
 });
-
 </script>
 </body>
 </html>
