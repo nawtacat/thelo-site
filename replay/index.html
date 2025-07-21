@@ -188,14 +188,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupMessageListener() {
-        window.addEventListener('message', (event) => {
-            const receivedData = event.data;
-            if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-                console.log("Replay data received.");
-                startReplay(receivedData.actions);
+    window.addEventListener('message', (event) => {
+        const receivedData = event.data;
+
+        // Case 1: Receiving the full replay data to start playback
+        if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
+            console.log("Replay data received from parent window.");
+            startReplay(receivedData.actions);
+        } 
+        // Case 2: Receiving a seek command from the parent
+        else if (receivedData && receivedData.command === 'seek') {
+            if (receivedData.direction === 'forward') {
+                seek(SEEK_AMOUNT_MS);
+            } else if (receivedData.direction === 'backward') {
+                seek(-SEEK_AMOUNT_MS);
             }
-        });
-    }
+        }
+        else {
+            console.warn("Received invalid message format from parent:", receivedData);
+        }
+    });
+}
     
     /**
      * Listens for keyboard input to control playback.
