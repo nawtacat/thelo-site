@@ -290,16 +290,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function seek(amountMs) {
-        const wasPlaying = isPlaying;
-        if (wasPlaying) pause();
+    // This new line checks if the replay was finished before seeking.
+    const wasAtEnd = playbackTime >= totalDuration;
+    const wasPlaying = isPlaying;
 
-        // Clamp the new time between 0 and the total duration
-        playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
+    if (wasPlaying) pause();
 
-        renderStateAtTime(playbackTime);
+    // Clamp the new time between 0 and the total duration
+    playbackTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
 
-        if (wasPlaying) play();
+    renderStateAtTime(playbackTime);
+
+    // This is the fix: Resume playback if it was already playing,
+    // OR if it was at the end and the user is seeking backward.
+    if (wasPlaying || (wasAtEnd && amountMs < 0)) {
+        play();
     }
+}
 
     /**
      * The new, simplified animation loop. It only advances time.
