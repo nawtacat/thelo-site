@@ -468,16 +468,31 @@ document.addEventListener('DOMContentLoaded', () => {
             graphState.angleMode = payload.angleMode;
             toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
             toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+
             payload.expressions.forEach(initialExpr => {
                 const completeExpr = { sliders: {}, ...initialExpr };
                 // Ensure sliders are deep-copied on initial state load
                 completeExpr.sliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
-                addExpressionUI(completeExpr);
+                addExpressionUI(completeExpr); // This function now handles setting initial LaTeX
             });
+
+            // No longer explicitly loop here. The `addExpressionUI` function itself
+            // now handles setting the initial LaTeX for each expression when it's added.
+            // This avoids potential timing issues by ensuring MathQuill is updated
+            // as soon as its DOM element is created and the initial LaTeX is known.
+
             break;
         case 'addExpression':
             const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
-            const newExprData = { id: payload.id, latex: '', visible: true, color: color, sliders: {} };
+            // Ensure payload.latex is included, as the recorder provides it.
+            // This is crucial for `addExpressionUI` to correctly set the initial text.
+            const newExprData = {
+                id: payload.id,
+                latex: payload.latex || '', // Use payload.latex if present, otherwise empty string
+                visible: payload.visible !== undefined ? payload.visible : true,
+                color: payload.color || color,
+                sliders: payload.sliders || {}
+            };
             addExpressionUI(newExprData);
             break;
         case 'removeExpression':
@@ -499,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 expr.latex = payload.latex;
                 mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
                 if (mathField) {
-                    // This line ensures MathQuill updates its displayed content
+                    // This line ensures MathQuill updates its displayed content for subsequent edits
                     mathField.latex(payload.latex);
                 }
             }
@@ -519,16 +534,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Also update the UI slider element for visual feedback
                 const itemElement = document.getElementById(payload.exprId);
                 if (itemElement) {
-                    const sliderInput = itemElement.querySelector(`.slider-container input[type=range]`);
-                    // Ensure you're updating the correct slider if there are multiple
-                    // A 'name' attribute on the slider input would make this more robust.
-                    // For now, assuming only one slider or that order is sufficient.
-                    if (sliderInput) {
-                        sliderInput.value = payload.value;
+                    // Iterate through all sliders in the item to find the correct one by name
+                    const sliderInputs = itemElement.querySelectorAll(`.slider-container input[type=range]`);
+                    let targetSlider = null;
+                    for (const input of sliderInputs) {
+                        // Assuming you have a way to match the slider to its variable name,
+                        // perhaps by an attribute on the input itself or a data attribute on its parent.
+                        // For now, if the label contains the name, we'll try to match it.
+                        const label = input.previousElementSibling;
+                        if (label && label.textContent.startsWith(payload.name)) {
+                            targetSlider = input;
+                            break;
+                        }
                     }
-                    const sliderLabel = itemElement.querySelector(`.slider-container label`);
-                    if (sliderLabel) {
-                        sliderLabel.textContent = `${payload.name} = ${payload.value}`;
+
+                    if (targetSlider) {
+                        targetSlider.value = payload.value;
+                        const labelEl = targetSlider.previousElementSibling; // Assuming label is sibling
+                        if (labelEl) {
+                            labelEl.textContent = `${payload.name} = ${payload.value}`;
+                        }
                     }
                 }
             }
@@ -556,7 +581,6 @@ document.addEventListener('DOMContentLoaded', () => {
             break;
     }
 }
-
     function addExpressionUI(exprData) {
     // Add a plotPoints property for our cache, and ensure sliders are properly re-initialized
     const newExpr = { plotPoints: [], ...exprData };
