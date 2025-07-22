@@ -139,10 +139,9 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // ======================================================
-    // =========== AUTOMATED REPLAY ENGINE V5.2 =============
-    // =========== (Improved Stability on Seek) =============
-    // ======================================================
+    // ========================================================================
+    // =========== RELIABLE REPLAY ENGINE V6.1 (FINAL) ========================
+    // ========================================================================
 
     // --- DOM ELEMENTS ---
     const canvas = document.getElementById('graphCanvas');
@@ -158,22 +157,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
     const INEQUALITY_ALPHA = 0.2;
     let POI_RADIUS = 4 * currentDevicePixelRatio;
-
-    const SEEK_AMOUNT_MS = 5000; // Time in milliseconds for seeking with arrow keys
+    const SEEK_AMOUNT_MS = 5000;
 
     // --- STATE MANAGEMENT ---
-    // Define initialGraphState to easily reset to default view settings
     const initialGraphView = { originX: 0, originY: 0, scale: 40 };
-
-    let graphState = {
-        ...initialGraphView,
-        expressions: [],
-        intersections: [],
-        lockedPoint: { visible: false, x: 0, y: 0 },
-        angleMode: 'rad',
-        definedVariables: {},
-        activeAnimateView: null // { startTime: ms, duration: ms, startView: {x,y,s}, endView: {x,y,s} }
-    };
+    let graphState = { ...initialGraphView, expressions: [], intersections: [], lockedPoint: { visible: false, x: 0, y: 0 }, angleMode: 'rad', definedVariables: {}, activeAnimateView: null };
 
     // --- PLAYBACK CONTROL STATE ---
     let timeline = [];
@@ -182,35 +170,31 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlaying = false;
     let animationFrameId = null;
     let lastTimestamp = 0;
-    let lastProcessedEventIndex = -1; // Index of the last command processed by renderStateAtTime or animationLoop
+    let lastProcessedEventIndex = -1;
 
     // --- INITIALIZATION & EVENT LISTENERS ---
     function initialize() {
-        // Set initial origin values correctly for the current canvas size
         graphState.originX = canvas.width / 2;
         graphState.originY = canvas.height / 2;
-
-        resizeCanvases(); // Initial resize and draw of empty grid
+        resizeCanvases();
         setupMessageListener();
         setupKeyListeners();
-        renderAll(); // Ensure an empty grid is drawn on load
+        renderAll();
     }
 
     function setupMessageListener() {
         window.addEventListener('message', (event) => {
             const receivedData = event.data;
             if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-                // Adjust devicePixelRatio and canvas size based on recorder metadata
                 if (receivedData.meta.devicePixelRatio) {
                     currentDevicePixelRatio = receivedData.meta.devicePixelRatio;
                     POI_RADIUS = 4 * currentDevicePixelRatio;
                 }
-                resizeCanvases(receivedData.meta.canvasDimensions); // Pass recorded dimensions
+                resizeCanvases(receivedData.meta.canvasDimensions);
                 startReplay(receivedData.actions);
             } else if (receivedData && receivedData.command === 'seekToTime' && typeof receivedData.timeMs === 'number') {
                 seekToAbsoluteTime(receivedData.timeMs);
             } else if (receivedData && receivedData.command === 'seek') {
-                // Internal directional seek (e.g., keyboard within iframe)
                 seekRelative(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
             }
         });
@@ -218,47 +202,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setupKeyListeners() {
         window.addEventListener('keydown', (e) => {
-            if (timeline.length === 0) return; // No replay loaded
+            if (timeline.length === 0) return;
             if (e.key === 'ArrowRight') seekRelative(SEEK_AMOUNT_MS);
             else if (e.key === 'ArrowLeft') seekRelative(-SEEK_AMOUNT_MS);
             else if (e.key === ' ') {
-                e.preventDefault(); // Prevent scrolling page
+                e.preventDefault();
                 togglePlayPause();
             }
         });
     }
 
-    /**
-     * Builds the timeline of all actions with absolute timestamps.
-     * @param {Array<Object>} actions - Array of raw replay actions.
-     */
     function buildTimeline(actions) {
         let currentTime = 0;
         timeline = [];
         actions.forEach(action => {
-            // Store action with its starting time
             timeline.push({ time: currentTime, ...action });
-
-            // Advance time based on action type
             if (action.action === 'delay') {
                 currentTime += action.ms;
             } else if (action.action === 'animateView') {
                 currentTime += action.payload.duration;
             }
-            // Other actions implicitly take 0 time for timeline progression
         });
         totalDuration = currentTime;
     }
 
-    /**
-     * Starts the replay from the beginning of the loaded actions.
-     * @param {Array<Object>} actions - The replay actions to play.
-     */
     function startReplay(actions) {
-        if (isPlaying) pause(); // Stop any ongoing playback
-        buildTimeline(actions); // Create the full timeline
-        seekToAbsoluteTime(0); // Jump to time 0 to initialize state and begin playback
-        play(); // Start playing
+        if (isPlaying) pause();
+        buildTimeline(actions);
+        seekToAbsoluteTime(0);
+        play();
     }
 
     // --- PLAYBACK CONTROLS ---
@@ -266,240 +238,151 @@ document.addEventListener('DOMContentLoaded', () => {
     function play() {
         if (isPlaying) return;
         isPlaying = true;
-        // progressBarContainer.style.display = 'block'; // Uncomment if you want to show the progress bar
-        lastTimestamp = performance.now(); // Initialize lastTimestamp for accurate deltaTime
+        lastTimestamp = performance.now();
         animationFrameId = requestAnimationFrame(animationLoop);
     }
 
-    // In the replay iframe's script
-function pause() {
-    if (!isPlaying) return;
-    isPlaying = false;
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
-}
+    function pause() {
+        if (!isPlaying) return;
+        isPlaying = false;
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
 
-    // In the replay iframe's script
-// In the replay iframe's script
-
-function togglePlayPause() {
-    if (isPlaying) {
-        pause();
-    } else {
-        // THIS IS THE KEY FIX FOR REWATCHING:
-        // If playback is at (or past) the end, always
-        // force a seek to the very beginning before playing.
-        if (playbackTime >= totalDuration) {
-            seekToAbsoluteTime(0);
+    function togglePlayPause() {
+        if (isPlaying) {
+            pause();
+        } else {
+            if (playbackTime >= totalDuration) {
+                seekToAbsoluteTime(0);
+            }
+            play();
         }
-        play();
-    }
-}
-/**
- * The master function for all seeking. Pauses playback, sets the new time,
- * and triggers a full, clean rebuild of the state.
- * @param {number} targetTimeMs - The absolute time in milliseconds to seek to.
- */
-function seekToAbsoluteTime(targetTimeMs) {
-    const wasPlaying = isPlaying;
-    if (wasPlaying) {
-        pause(); // Cleanly pause the current animation/loop
     }
 
-    // Clamp target time within valid duration
-    playbackTime = Math.max(0, Math.min(targetTimeMs, totalDuration));
-
-    // Fully reconstruct the state at the target time. This is the most critical step.
-    renderStateAtTime(playbackTime);
-
-    // Resume playback only if it was playing before the seek
-    if (wasPlaying) {
-        play();
-    }
-}
-
- /**
- * Seeks playback relative to the current playback time.
- * Used for internal keyboard controls.
- * @param {number} amountMs - Milliseconds to move forward (+) or backward (-).
- */
-function seekRelative(amountMs) {
-    let targetTime = playbackTime + amountMs;
-    const epsilon = 10; // A small tolerance of 10ms
-
-    if (targetTime < epsilon) {
-        targetTime = 0;
-    } else if (targetTime > totalDuration - epsilon) {
-        targetTime = totalDuration;
+    function seekToAbsoluteTime(targetTimeMs) {
+        const wasPlaying = isPlaying;
+        if (wasPlaying) {
+            pause();
+        }
+        playbackTime = Math.max(0, Math.min(targetTimeMs, totalDuration));
+        renderStateAtTime(playbackTime);
+        if (wasPlaying) {
+            play();
+        }
     }
 
-    seekToAbsoluteTime(targetTime);
-}
-    /**
-     * Seeks playback to an absolute time in the replay timeline.
-     * This is the robust method for jumps, especially from external controls.
-     * @param {number} targetTimeMs - The absolute time in milliseconds to seek to.
-     */
-    
+    function seekRelative(amountMs) {
+        let targetTime = playbackTime + amountMs;
+        const epsilon = 10;
+        if (targetTime < epsilon) {
+            targetTime = 0;
+        } else if (targetTime > totalDuration - epsilon) {
+            targetTime = totalDuration;
+        }
+        seekToAbsoluteTime(targetTime);
+    }
 
     // --- CORE RENDERING & PLAYBACK LOGIC ---
 
-    /**
- * The main animation loop, called repeatedly by requestAnimationFrame.
- * Manages time progression, continuous animations, and discrete event processing.
- * This version includes robust logic to cleanly handle the end of the replay.
- * @param {DOMHighResTimeStamp} currentDOMTime - Current time provided by requestAnimationFrame.
- */
-function animationLoop(currentDOMTime) {
-    if (!isPlaying) return;
+    function animationLoop(currentDOMTime) {
+        if (!isPlaying) return;
 
-    const deltaTime = currentDOMTime - lastTimestamp;
-    lastTimestamp = currentDOMTime;
+        const deltaTime = currentDOMTime - lastTimestamp;
+        lastTimestamp = currentDOMTime;
 
-    // --- NEW: Robustly handle the end of playback ---
-    // Check if this frame will cross the finish line.
-    if (playbackTime + deltaTime >= totalDuration) {
-        playbackTime = totalDuration;     // Clamp time to the exact end
-        renderStateAtTime(totalDuration); // Render the final state perfectly
-        pause();                          // Cleanly stop the animation loop
-        return;                           // Exit the function
-    }
-
-    // --- Default path: Advance time and process events ---
-    playbackTime += deltaTime;
-
-    let needsFullReevaluation = false;
-    let nextCommandIndex = lastProcessedEventIndex + 1;
-
-    // Handle interpolation for an active 'animateView' command
-    if (graphState.activeAnimateView) {
-        const { startTime, duration, startView, endView } = graphState.activeAnimateView;
-        const animationProgress = Math.min(1, (playbackTime - startTime) / duration);
-
-        if (animationProgress < 1) {
-            graphState.originX = startView.originX + (endView.originX - startView.originX) * animationProgress;
-            graphState.originY = startView.originY + (endView.originY - startView.originY) * animationProgress;
-            graphState.scale = startView.scale + (endView.scale - startView.scale) * animationProgress;
-        } else {
-            Object.assign(graphState, endView);
-            graphState.activeAnimateView = null;
-            needsFullReevaluation = true;
+        if (playbackTime + deltaTime >= totalDuration) {
+            playbackTime = totalDuration;
+            renderStateAtTime(totalDuration);
+            pause();
+            return;
         }
-    }
 
-    // Process discrete commands that have become due
-    while (nextCommandIndex < timeline.length && timeline[nextCommandIndex].time <= playbackTime) {
-        const command = timeline[nextCommandIndex];
+        playbackTime += deltaTime;
 
-        if (command.action === 'animateView') {
-            graphState.activeAnimateView = {
-                startTime: command.time,
-                duration: command.payload.duration,
-                startView: command.payload.startView,
-                endView: command.payload.endView
-            };
-            Object.assign(graphState, command.payload.startView);
-            needsFullReevaluation = true;
-        } else if (command.action !== 'delay') {
-            executeReplayCommand(command);
-            if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView', 'lockPoint', 'unlockPoint'].includes(command.action)) {
+        let needsFullReevaluation = false;
+        let nextCommandIndex = lastProcessedEventIndex + 1;
+
+        if (graphState.activeAnimateView) {
+            const { startTime, duration, startView, endView } = graphState.activeAnimateView;
+            const animationProgress = Math.min(1, (playbackTime - startTime) / duration);
+            if (animationProgress < 1) {
+                graphState.originX = startView.originX + (endView.originX - startView.originX) * animationProgress;
+                graphState.originY = startView.originY + (endView.originY - startView.originY) * animationProgress;
+                graphState.scale = startView.scale + (endView.scale - startView.scale) * animationProgress;
+            } else {
+                Object.assign(graphState, endView);
+                graphState.activeAnimateView = null;
                 needsFullReevaluation = true;
             }
         }
-        lastProcessedEventIndex = nextCommandIndex;
-        nextCommandIndex++;
-    }
 
-    if (needsFullReevaluation) {
-        evaluateAndCacheAll();
-    }
-
-    renderAll();
-
-    // --- Update UI and continue the loop ---
-    progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
-    animationFrameId = requestAnimationFrame(animationLoop);
-}
-
-    /**
- * The "Cold Path": Reconstructs the entire calculator state for a specific time.
- * This is the critical function for reliable seeking.
- * It ensures the `graphState` and UI are precisely as they would be if the replay played linearly to `time`.
- * @param {number} time - The target time in milliseconds to reconstruct the state for.
- */
-/**
- * The "Cold Path": Reconstructs the entire calculator state from a clean slate.
- * This is the definitive master reset and rebuild function.
- * @param {number} time - The target time in milliseconds to reconstruct the state for.
- */
-function renderStateAtTime(time) {
-    // --- STEP 1: PERFORM A COMPLETE AND TOTAL RESET OF THE STATE ---
-    expressionListContainer.innerHTML = ''; // Clear visual UI
-    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
-
-    // Reset the internal state object to its initial condition
-    graphState = {
-        ...initialGraphView,
-        expressions: [], // <<< The most critical reset for your bug
-        intersections: [],
-        lockedPoint: { visible: false, x: 0, y: 0 },
-        angleMode: 'rad',
-        definedVariables: {},
-        activeAnimateView: null
-    };
-
-    // Reset UI elements to their default state
-    toggleAngleModeBtn.textContent = 'RAD';
-    toggleAngleModeBtn.classList.add('active');
-
-    // Reset the playback progress tracker
-    lastProcessedEventIndex = -1;
-
-    // --- STEP 2: REBUILD THE STATE CHRONOLOGICALLY ---
-    for (let i = 0; i < timeline.length; i++) {
-        const command = timeline[i];
-        if (command.time > time) break; // We've processed all commands up to the target time
-
-        // Apply the command's effect to the now-clean state
-        if (command.action === 'animateView') {
-            // If the animation finished before our target time, apply its final state
-            if (time >= command.time + command.payload.duration) {
-                Object.assign(graphState, command.payload.endView);
-            } else {
-                // If we are seeking INTO an animation, calculate the interpolated state
-                const progress = (time - command.time) / command.payload.duration;
-                graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
-                graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
-                graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
-                graphState.activeAnimateView = { ...command.payload, startTime: command.time };
+        while (nextCommandIndex < timeline.length && timeline[nextCommandIndex].time <= playbackTime) {
+            const command = timeline[nextCommandIndex];
+            if (command.action === 'animateView') {
+                graphState.activeAnimateView = { startTime: command.time, ...command.payload };
+                Object.assign(graphState, command.payload.startView);
+                needsFullReevaluation = true;
+            } else if (command.action !== 'delay') {
+                executeReplayCommand(command);
+                if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView', 'lockPoint', 'unlockPoint'].includes(command.action)) {
+                    needsFullReevaluation = true;
+                }
             }
-        } else {
-            // Execute all other commands (addExpression, setLatex, etc.)
-            executeReplayCommand(command);
+            lastProcessedEventIndex = nextCommandIndex;
+            nextCommandIndex++;
         }
-        lastProcessedEventIndex = i;
+
+        if (needsFullReevaluation) evaluateAndCacheAll();
+        renderAll();
+        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
+        animationFrameId = requestAnimationFrame(animationLoop);
     }
 
-    // --- STEP 3: FINALIZE AND RENDER THE REBUILT FRAME ---
-    evaluateAndCacheAll();
-    renderAll();
-    progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
-}
-    /**
-     * Executes a single replay command, applying its effect to the graphState and UI.
-     * This function is used by both `renderStateAtTime` (cold path) and `animationLoop` (hot path).
-     * @param {Object} command - The command object from the timeline.
-     */
+    function renderStateAtTime(time) {
+        expressionListContainer.innerHTML = '';
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        graphState = {
+            ...initialGraphView, expressions: [], intersections: [],
+            lockedPoint: { visible: false, x: 0, y: 0 }, angleMode: 'rad',
+            definedVariables: {}, activeAnimateView: null
+        };
+        toggleAngleModeBtn.textContent = 'RAD';
+        toggleAngleModeBtn.classList.add('active');
+        lastProcessedEventIndex = -1;
+
+        for (let i = 0; i < timeline.length; i++) {
+            const command = timeline[i];
+            if (command.time > time) break;
+
+            if (command.action === 'animateView') {
+                if (time >= command.time + command.payload.duration) {
+                    Object.assign(graphState, command.payload.endView);
+                } else {
+                    const progress = (time - command.time) / command.payload.duration;
+                    graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
+                    graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
+                    graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
+                    graphState.activeAnimateView = { ...command.payload, startTime: command.time };
+                }
+            } else {
+                executeReplayCommand(command);
+            }
+            lastProcessedEventIndex = i;
+        }
+
+        evaluateAndCacheAll();
+        renderAll();
+        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
+    }
+
     function executeReplayCommand(command) {
-        if (!command || !command.action) return; // Basic validation
+        if (!command || !command.action) return;
         const { action, payload } = command;
         let expr, mathField, item;
 
         switch (action) {
             case 'initialState':
-                // `initialState` should primarily be handled by `renderStateAtTime`'s top-level reset and loop.
-                // If it somehow gets called here, it would trigger a reset.
-                // For robustness, ensure all relevant state is reset.
                 expressionListContainer.innerHTML = '';
                 graphState.expressions = [];
                 Object.assign(graphState, payload.view);
@@ -509,45 +392,35 @@ function renderStateAtTime(time) {
                 payload.expressions.forEach(initialExpr => {
                     const completeExpr = { sliders: {}, ...initialExpr };
                     completeExpr.sliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
-                    addExpressionUI(completeExpr); // This re-creates UI, vital!
+                    addExpressionUI(completeExpr);
                 });
                 break;
             case 'addExpression':
-                // When adding, ensure we generate a unique ID if not provided (should be provided by recorder)
-                // and assign a plot color.
                 const color = PLOT_COLORS[graphState.expressions.length % PLOT_COLORS.length];
                 const newExprData = {
-                    id: payload.id, // Use ID from payload for consistency
-                    latex: payload.latex || '',
+                    id: payload.id, latex: payload.latex || '',
                     visible: payload.visible !== undefined ? payload.visible : true,
-                    color: payload.color || color,
-                    sliders: payload.sliders || {}
+                    color: payload.color || color, sliders: payload.sliders || {}
                 };
-                addExpressionUI(newExprData); // Calls addExpressionUI to create the UI element
+                addExpressionUI(newExprData);
                 break;
             case 'removeExpression':
-                // Find and remove the expression's UI element
                 item = document.getElementById(payload.id);
                 if (item) item.remove();
-                // Filter the expression from the global state array
                 graphState.expressions = graphState.expressions.filter(e => e.id !== payload.id);
-                updateExpressionNumbers(); // Re-index expression numbers in UI
+                updateExpressionNumbers();
                 break;
             case 'focusExpression':
-                // Remove focus from any currently focused MathQuill fields
                 document.querySelectorAll('.math-input-field.mq-focused').forEach(el => el.classList.remove('mq-focused'));
-                // Add focus to the target expression's field
                 item = document.getElementById(payload.id);
                 if (item) {
                     item.querySelector('.math-input-field').classList.add('mq-focused');
                 }
                 break;
             case 'setLatex':
-                // Find the expression in state and update its latex
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if (expr) {
                     expr.latex = payload.latex;
-                    // Find the MathQuill field and update its displayed LaTeX
                     mathField = MQ(document.getElementById(payload.id).querySelector('.math-input-field'));
                     if (mathField) {
                         mathField.latex(payload.latex);
@@ -555,17 +428,12 @@ function renderStateAtTime(time) {
                 }
                 break;
             case 'animateView':
-                // `animateView` is largely handled by `renderStateAtTime` and `animationLoop`
-                // for interpolation. If `executeReplayCommand` is called with it, it means
-                // we should apply the *start* view as a discrete jump.
                 Object.assign(graphState, payload.startView);
                 break;
             case 'setSlider':
-                // Find the expression and its slider, then update the value
                 expr = graphState.expressions.find(e => e.id === payload.exprId);
                 if (expr && expr.sliders[payload.name]) {
                     expr.sliders[payload.name].val = payload.value;
-                    // Update the visible slider and its label in the UI
                     const itemElement = document.getElementById(payload.exprId);
                     if (itemElement) {
                         const sliderInputs = itemElement.querySelectorAll(`.slider-container input[type=range]`);
@@ -588,7 +456,6 @@ function renderStateAtTime(time) {
                 }
                 break;
             case 'toggleVisibility':
-                // Update expression's visibility in state and its UI indicator
                 expr = graphState.expressions.find(e => e.id === payload.id);
                 if (expr) {
                     expr.visible = payload.visible;
@@ -596,42 +463,31 @@ function renderStateAtTime(time) {
                 }
                 break;
             case 'resetView':
-                // Reset graph view to defaults (without immediately redrawing; renderAll will do that)
                 resetView(false);
                 break;
             case 'setAngleMode':
-                // Update angle mode in state and its UI button
                 graphState.angleMode = payload.mode;
                 toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
                 toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
                 break;
             case 'lockPoint':
-                // Set the locked point's properties
                 graphState.lockedPoint = { visible: true, ...payload };
                 break;
             case 'unlockPoint':
-                // Hide the locked point
                 graphState.lockedPoint.visible = false;
                 break;
         }
     }
 
-    /**
-     * Adds an expression's UI element to the sidebar and initializes its MathQuill field.
-     * Crucial for rebuilding the UI during `renderStateAtTime`.
-     * @param {Object} exprData - The expression data to add.
-     */
     function addExpressionUI(exprData) {
-        // Create a deep copy to ensure independence
         const newExpr = JSON.parse(JSON.stringify(exprData));
-        newExpr.plotPoints = []; // Initialize plotPoints cache
-
-        graphState.expressions.push(newExpr); // Add to the state
+        newExpr.plotPoints = [];
+        graphState.expressions.push(newExpr);
 
         const item = document.createElement('div');
         item.className = 'expression-item';
-        item.id = newExpr.id; // Set the ID from data
-        const exprIndex = graphState.expressions.length; // Use current length for display number
+        item.id = newExpr.id;
+        const exprIndex = graphState.expressions.length;
         item.innerHTML = `
             <div class="expression-main">
                 <span class="expression-number">${exprIndex}</span>
@@ -645,22 +501,17 @@ function renderStateAtTime(time) {
         `;
         expressionListContainer.appendChild(item);
 
-        // Initialize MathQuill StaticMath for the new field
         const mathFieldElement = item.querySelector('.math-input-field');
         const mathField = MQ.StaticMath(mathFieldElement);
 
-        // **IMPORTANT:** Set the LaTeX for the MathQuill field immediately after initialization.
-        // This ensures the content is displayed correctly from the start.
         if (newExpr.latex) {
             mathField.latex(newExpr.latex);
         }
 
-        // Apply initial styling for color and visibility
         item.querySelector('.expression-color-bar').style.backgroundColor = newExpr.color;
         item.querySelector('.expression-color-bar').style.borderColor = newExpr.color;
         item.querySelector('.expression-color-bar').classList.toggle('hidden-expr', !newExpr.visible);
 
-        // Populate sliders UI (non-interactive in replay)
         const extrasEl = item.querySelector('.expression-extras');
         if (newExpr.sliders) {
             Object.keys(newExpr.sliders).forEach(name => {
@@ -671,8 +522,7 @@ function renderStateAtTime(time) {
                 extrasEl.appendChild(sliderDiv);
             });
         }
-
-        updateExpressionNumbers(); // Update numbers for all expressions
+        updateExpressionNumbers();
     }
 
     function updateExpressionNumbers() {
@@ -681,38 +531,24 @@ function renderStateAtTime(time) {
         });
     }
 
-    /**
-     * Heavy evaluation path. Parses expressions, calculates plot points, and finds intersections.
-     * Called after any state change that affects the graph's mathematical rendering.
-     */
     function evaluateAndCacheAll() {
-        // Reset defined variables for a clean re-evaluation
         graphState.definedVariables = {};
-        // Parse and compile each expression, also identifying sliders
         graphState.expressions.forEach(parseSingleExpression);
-        // Calculate and cache plot points for all visible functions/inequalities
         graphState.expressions.forEach(calculatePlotPoints);
-        // Find and store intersection points
         findAndStoreIntersections();
-        // Update the UI elements (results, slider values) based on current state
         graphState.expressions.forEach(updateExpressionUI);
     }
 
-    /**
-     * Calculates a high-density set of points for a function and caches them.
-     * This pre-computation makes `plotFunction` very fast.
-     */
     function calculatePlotPoints(expr) {
         if (!expr.compiled || (expr.type !== 'function' && expr.type !== 'inequality')) {
             expr.plotPoints = [];
             return;
         }
-
         const scope = getEvaluationScope(expr);
         const points = [];
-        const xMin = -100; // Wide range for data, regardless of current zoom
+        const xMin = -100;
         const xMax = 100;
-        const numPoints = 10000; // High density for smooth curves
+        const numPoints = 10000;
         const dx = (xMax - xMin) / numPoints;
 
         for (let i = 0; i <= numPoints; i++) {
@@ -723,59 +559,47 @@ function renderStateAtTime(time) {
                 if (Number.isFinite(y)) {
                     points.push({ x, y });
                 } else {
-                    points.push(null); // Indicates a break or discontinuity
+                    points.push(null);
                 }
             } catch (e) {
-                points.push(null); // Error in evaluation
+                points.push(null);
             }
         }
         expr.plotPoints = points;
     }
 
-    /**
-     * Fast rendering path. Draws grid, cached points, and overlays. Always fast.
-     * This function should only *draw* based on the current `graphState` and `plotPoints` cache.
-     */
     function renderAll() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the entire canvas
-        drawGraphGrid(); // Draw the background grid and axes
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGraphGrid();
         graphState.expressions.forEach(expr => {
-            if (!expr.visible || expr.error) return; // Skip hidden or erroring expressions
+            if (!expr.visible || expr.error) return;
             if (expr.type === "inequality") plotInequality(expr);
             else if (expr.type === "vertical_inequality") plotVerticalInequality(expr);
             else if (expr.type === "function") { plotFunction(expr); drawPointsOfInterest(expr); }
             else if (expr.type === "vertical_line") plotVerticalLine(expr);
         });
-        drawAllIntersectionPoints(); // Draw intersection points
-        if (graphState.lockedPoint.visible) drawLockedPoint(); // Draw the locked point if visible
+        drawAllIntersectionPoints();
+        if (graphState.lockedPoint.visible) drawLockedPoint();
     }
 
-    /**
-     * High-performance plot function that uses the pre-calculated point cache.
-     */
     function plotFunction(expr) {
         if (!expr.plotPoints || expr.plotPoints.length === 0) return;
-
         ctx.strokeStyle = expr.color;
         ctx.lineWidth = 2.5 * currentDevicePixelRatio;
         ctx.beginPath();
-        let firstPoint = true; // Flag to handle discontinuities (moveTo vs lineTo)
+        let firstPoint = true;
 
         for (const point of expr.plotPoints) {
             if (point === null) {
-                firstPoint = true; // Start a new segment after a discontinuity
+                firstPoint = true;
                 continue;
             }
-            // Transform graph coordinates to pixel coordinates
             const px = graphState.originX + point.x * graphState.scale;
-            const py = graphState.originY - point.y * graphState.scale; // Y-axis inverted for canvas
-
-            // Basic culling: skip drawing points far off-screen to save performance
+            const py = graphState.originY - point.y * graphState.scale;
             if (px < -10 || px > canvas.width + 10 || py < -10 || py > canvas.height + 10) {
-                 firstPoint = true; // Treat as discontinuity if off-screen
-                 continue;
+                firstPoint = true;
+                continue;
             }
-
             if (firstPoint) {
                 ctx.moveTo(px, py);
                 firstPoint = false;
@@ -783,131 +607,32 @@ function renderStateAtTime(time) {
                 ctx.lineTo(px, py);
             }
         }
-        ctx.stroke(); // Draw the path
+        ctx.stroke();
     }
-
-    // --- Graphing Helpers (Remaining functions largely unchanged, but included for completeness) ---
 
     function plotInequality(expr) { if (!expr.plotPoints || expr.plotPoints.length === 0) return; const scope = getEvaluationScope(expr); ctx.fillStyle = expr.color; ctx.globalAlpha = INEQUALITY_ALPHA; ctx.beginPath(); let firstPoint = !0; for (const point of expr.plotPoints) { if (point === null) { firstPoint = !0; continue } const px = graphState.originX + point.x * graphState.scale; if (px < -10 || px > canvas.width + 10) { firstPoint = !0; continue } const py = graphState.originY - point.y * graphState.scale; if (firstPoint) { ctx.moveTo(px, py); firstPoint = !1 } else { ctx.lineTo(px, py) } } const op = expr.inequalityType; if (op.includes(">")) { ctx.lineTo(canvas.width, 0); ctx.lineTo(0, 0) } else { ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(0, canvas.height) } ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; if (op === "<" || op === ">") { ctx.setLineDash([8 * currentDevicePixelRatio, 8 * currentDevicePixelRatio]) } plotFunction(expr); ctx.setLineDash([]) }
     function parseSingleExpression(expr) { Object.assign(expr, { type: "empty", compiled: null, error: null, result: null, node: null, inequalityType: null, isImplicit: !1 }); let cleanStr = preprocessInputString(latexToMathJs(expr.latex.trim())); if (!cleanStr) return; try { const node = math.parse(cleanStr); expr.node = node; const scope = getEvaluationScope(expr); if (node.isAssignmentNode) { const varName = node.object.name; if (node.toString().match(/[xy]/)) { expr.error = "Cannot assign expression with x or y."; return } expr.type = "assignment"; const result = node.evaluate(scope); expr.result = result; graphState.definedVariables[varName] = result } else if (cleanStr.includes("x") || cleanStr.includes("y")) { expr.type = "function"; let parseableNode = node; if (node.isOperatorNode && node.op === "=") { const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { parseableNode = right } else if (right.isSymbolNode && right.name === "y") { parseableNode = left } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_line"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_line"; expr.x_value = left.evaluate(scope) } else { expr.error = "Implicit functions not supported yet." } } if (expr.type === "function") { expr.node = parseableNode; expr.compiled = parseableNode.compile() } } else if (node.isOperatorNode && ["<", ">", "<=", ">="].includes(node.op)) { expr.inequalityType = node.op; const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { expr.type = "inequality"; expr.compiled = right.compile() } else if (right.isSymbolNode && right.name === "y") { expr.type = "inequality"; expr.compiled = left.compile(); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_inequality"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_inequality"; expr.x_value = left.evaluate(scope); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } if (expr.type === "function" || expr.type === "inequality") { const knownSymbols = ["x", "y", "e", "pi", "i", "true", "false", "theta", ...Object.keys(math)]; const foundSymbols = new Set; expr.node.traverse(n => { if (n.isSymbolNode && !knownSymbols.includes(n.name) && !graphState.definedVariables.hasOwnProperty(n.name)) { foundSymbols.add(n.name) } }); foundSymbols.forEach(name => { if (!expr.sliders[name]) expr.sliders[name] = { val: 1, min: -5, max: 5, step: .1 } }); Object.keys(expr.sliders).forEach(name => { if (!foundSymbols.has(name)) delete expr.sliders[name] }) } else { expr.sliders = {} } if (expr.type === "function") findPointsOfInterest(expr) } catch (err) { expr.error = err.message.length > 50 ? err.message.substring(0, 50) + "..." : err.message } }
-    function updateExpressionUI(expr) {
-        const item = document.getElementById(expr.id);
-        if (!item) return;
-        const resultEl = item.querySelector(".expression-result");
-        const extrasEl = item.querySelector(".expression-extras");
-        const colorBar = item.querySelector(".expression-color-bar");
-        resultEl.textContent = "";
-        extrasEl.innerHTML = "";
-        colorBar.style.backgroundColor = expr.error ? "var(--error-red)" : expr.visible ? expr.color : "#ccc";
-        colorBar.style.borderColor = expr.error ? "var(--error-red)" : expr.color;
-        if (expr.error) { resultEl.textContent = "Error" } else if (expr.result !== null && expr.result !== undefined) { try { if (Array.isArray(expr.result)) { resultEl.textContent = `= [${expr.result.map(v => math.format(v, { precision: 3 })).join(", ")}]` } else if (typeof expr.result === "function") { resultEl.textContent = "f(x)" } else { resultEl.textContent = `= ${math.format(expr.result, { precision: 5 })}` } } catch { resultEl.textContent = `= ${expr.result.toString()}` } }
-        Object.keys(expr.sliders).forEach(name => {
-            const slider = expr.sliders[name];
-            const sliderDiv = document.createElement("div");
-            sliderDiv.className = "slider-container";
-            sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`;
-            extrasEl.appendChild(sliderDiv)
-        })
-    }
+    function updateExpressionUI(expr) { const item = document.getElementById(expr.id); if (!item) return; const resultEl = item.querySelector(".expression-result"); const extrasEl = item.querySelector(".expression-extras"); const colorBar = item.querySelector(".expression-color-bar"); resultEl.textContent = ""; extrasEl.innerHTML = ""; colorBar.style.backgroundColor = expr.error ? "var(--error-red)" : expr.visible ? expr.color : "#ccc"; colorBar.style.borderColor = expr.error ? "var(--error-red)" : expr.color; if (expr.error) { resultEl.textContent = "Error" } else if (expr.result !== null && expr.result !== undefined) { try { if (Array.isArray(expr.result)) { resultEl.textContent = `= [${expr.result.map(v => math.format(v, { precision: 3 })).join(", ")}]` } else if (typeof expr.result === "function") { resultEl.textContent = "f(x)" } else { resultEl.textContent = `= ${math.format(expr.result, { precision: 5 })}` } } catch { resultEl.textContent = `= ${expr.result.toString()}` } } Object.keys(expr.sliders).forEach(name => { const slider = expr.sliders[name]; const sliderDiv = document.createElement("div"); sliderDiv.className = "slider-container"; sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`; extrasEl.appendChild(sliderDiv) }) }
     function plotVerticalLine(expr) { ctx.strokeStyle = expr.color; ctx.lineWidth = 2.5 * currentDevicePixelRatio; const boundaryPx = graphState.originX + expr.x_value * graphState.scale; ctx.beginPath(); ctx.moveTo(boundaryPx, 0); ctx.lineTo(boundaryPx, canvas.height); ctx.stroke() }
     function plotVerticalInequality(expr) { ctx.fillStyle = expr.color; ctx.globalAlpha = INEQUALITY_ALPHA; const boundaryPx = graphState.originX + expr.x_value * graphState.scale; const op = expr.inequalityType; if (op.includes("<")) { ctx.fillRect(0, 0, boundaryPx, canvas.height) } if (op.includes(">")) { ctx.fillRect(boundaryPx, 0, canvas.width - boundaryPx, canvas.height) } ctx.globalAlpha = 1; if (!op.includes("=")) { ctx.setLineDash([8 * currentDevicePixelRatio, 8 * currentDevicePixelRatio]) } plotVerticalLine(expr); ctx.setLineDash([]) }
-    function findPointsOfInterest(expr) {
-        expr.poi = { roots: [], y_intercept: null, extrema: [] }; if (!expr.compiled) return; const scope = getEvaluationScope(expr); try { const y_intercept = expr.compiled.evaluate({ ...scope, x: 0 }); if (Number.isFinite(y_intercept)) expr.poi.y_intercept = { x: 0, y: y_intercept } } catch (e) { }
-        let prev_y, prev_slope_sign; const step = 1 / graphState.scale; for (let px = 0; px < canvas.width; px++) {
-            const x = (px - graphState.originX) / graphState.scale; try {
-                const y = expr.compiled.evaluate({ ...scope, x: x }); if (prev_y !== undefined && Number.isFinite(y) && Number.isFinite(prev_y)) {
-                    if (Math.sign(y) !== Math.sign(prev_y)) { expr.poi.roots.push({ x: x - step / 2, y: 0 }) } const next_y = expr.compiled.evaluate({ ...scope, x: x + step }); if (Number.isFinite(next_y)) {
-                        const slope_sign = Math.sign(next_y - y); if (prev_slope_sign !== undefined && slope_sign !== prev_slope_sign && slope_sign !== 0) { expr.poi.extrema.push({ x: x, y: y }) }
-                        prev_slope_sign = slope_sign
-                    }
-                } prev_y = y
-            } catch (e) { prev_y = undefined; prev_slope_sign = undefined }
-        }
-    }
-    function drawPointsOfInterest(expr) {
-        ctx.fillStyle = expr.color; const all_pois = [...expr.poi.roots, ...expr.poi.extrema]; if (expr.poi.y_intercept) all_pois.push(expr.poi.y_intercept); all_pois.forEach(point => {
-            if (!point) return; const px = graphState.originX + point.x * graphState.scale; const py = graphState.originY - point.y * graphState.scale; ctx.beginPath(); ctx.arc(px, py, POI_RADIUS, 0, Math.PI * 2); ctx.fill()
-        })
-    }
-    function bisectionSolve(f1_expr, f2_expr, a, b, tolerance = 1e-7, maxIterations = 50) {
-        const f1_scope = getEvaluationScope(f1_expr); const f2_scope = getEvaluationScope(f2_expr); let fa, fb; try { fa = f1_expr.compiled.evaluate({ ...f1_scope, x: a }) - f2_expr.compiled.evaluate({ ...f2_scope, x: a }); fb = f1_expr.compiled.evaluate({ ...f1_scope, x: b }) - f2_expr.compiled.evaluate({ ...f2_scope, x: b }) } catch (e) { return null } if (isNaN(fa) || isNaN(fb) || Math.sign(fa) === Math.sign(fb)) return null; let c = a; for (let i = 0; i < maxIterations; i++) { c = (a + b) / 2; let fc = f1_expr.compiled.evaluate({ ...f1_scope, x: c }) - f2_expr.compiled.evaluate({ ...f2_scope, x: c }); if (Math.abs(fc) < tolerance || (b - a) / 2 < tolerance) return c; if (Math.sign(fc) === Math.sign(fa)) { a = c; fa = fc } else { b = c } } return c
-    }
-    function findAndStoreIntersections() {
-        graphState.intersections = []; const plottableFuncs = graphState.expressions.filter(e => e.visible && e.compiled && (e.type === "function" || e.type === "inequality")); if (plottableFuncs.length < 2) return; for (let i = 0; i < plottableFuncs.length; i++) {
-            for (let j = i + 1; j < plottableFuncs.length; j++) {
-                const f1_expr = plottableFuncs[i], f2_expr = plottableFuncs[j]; let prev_diff; for (let px = 0; px < canvas.width; px++) {
-                    const x = (px - graphState.originX) / graphState.scale; try {
-                        const y1 = f1_expr.compiled.evaluate({ ...getEvaluationScope(f1_expr), x: x }); const y2 = f2_expr.compiled.evaluate({ ...getEvaluationScope(f2_expr), x: x }); const diff = y1 - y2; if (prev_diff !== undefined && Math.sign(diff) !== Math.sign(prev_diff)) {
-                            const intersectionX = bisectionSolve(f1_expr, f2_expr, x - (1 / graphState.scale), x); if (intersectionX !== null) {
-                                const intersectionY = f1_expr.compiled.evaluate({ ...getEvaluationScope(f1_expr), x: intersectionX }); if (Number.isFinite(intersectionY)) graphState.intersections.push({ x: intersectionX, y: intersectionY })
-                            }
-                        } prev_diff = diff
-                    } catch (e) { prev_diff = undefined }
-                }
-            }
-        }
-    }
-    function drawAllIntersectionPoints() {
-        ctx.fillStyle = "#333"; graphState.intersections.forEach(point => {
-            const pixelX = graphState.originX + point.x * graphState.scale; const pixelY = graphState.originY - point.y * graphState.scale; ctx.beginPath(); ctx.arc(pixelX, pixelY, POI_RADIUS, 0, Math.PI * 2); ctx.fill()
-        })
-    }
-    function drawLockedPoint() {
-        const { x, y } = graphState.lockedPoint; const pixelX = graphState.originX + x * graphState.scale; const pixelY = graphState.originY - y * graphState.scale; ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(pixelX, pixelY, POI_RADIUS * 1.2, 0, Math.PI * 2); ctx.fill(); const displayX = snapToZero(x); const displayY = snapToZero(y); const coordText = `(${displayX.toFixed(3)}, ${displayY.toFixed(3)})`; const FONT_SIZE = 12 * currentDevicePixelRatio; ctx.font = `bold ${FONT_SIZE}px 'Manrope'`; const textMetrics = ctx.measureText(coordText); const boxWidth = textMetrics.width + 16 * currentDevicePixelRatio; const boxHeight = FONT_SIZE + 12 * currentDevicePixelRatio; let boxX = pixelX + 15 * currentDevicePixelRatio; let boxY = pixelY - boxHeight / 2; if (boxX + boxWidth > canvas.width) boxX = pixelX - boxWidth - 15 * currentDevicePixelRatio; if (boxY < 0) boxY = 5 * currentDevicePixelRatio; if (boxY + boxHeight > canvas.height) boxY = canvas.height - boxHeight - 5 * currentDevicePixelRatio; ctx.fillStyle = "rgba(255, 255, 255, 0.9)"; ctx.shadowColor = "rgba(0,0,0,0.2)"; ctx.shadowBlur = 10; ctx.beginPath(); ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5 * currentDevicePixelRatio); ctx.fill(); ctx.shadowColor = "transparent"; ctx.fillStyle = "#000"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(coordText, boxX + boxWidth / 2, boxY + boxHeight / 2)
-    }
-    function resizeCanvases(recordedCanvasDimensions = null) {
-        const rect = canvas.parentElement.getBoundingClientRect();
-        if (recordedCanvasDimensions && recordedCanvasDimensions.width && recordedCanvasDimensions.height) {
-            canvas.width = recordedCanvasDimensions.width * currentDevicePixelRatio;
-            canvas.height = recordedCanvasDimensions.height * currentDevicePixelRatio;
-            canvas.style.width = `${recordedCanvasDimensions.width}px`;
-            canvas.style.height = `${recordedCanvasDimensions.height}px`;
-        } else {
-            canvas.width = rect.width * currentDevicePixelRatio;
-            canvas.height = rect.height * currentDevicePixelRatio;
-            canvas.style.width = `${rect.width}px`;
-            canvas.style.height = `${rect.height}px`;
-        }
-        // When resizing, we must reset the view based on the new dimensions
-        // and trigger a full state re-evaluation and render.
-        graphState.originX = canvas.width / 2;
-        graphState.originY = canvas.height / 2;
-        // Don't reset scale, as it should persist across resizes unless explicitly reset by command
-        
-        // No need to call evaluateAndCacheAll() or renderAll() here directly,
-        // because initialize() or startReplay() will call renderStateAtTime(0)
-        // or a subsequent seekToAbsoluteTime() will trigger it, which covers all drawing.
-    }
-    // Updated resetView to use initialGraphView constants
-    function resetView(redraw = true) {
-        Object.assign(graphState, initialGraphView); // Reset to predefined initial view
-        // Adjust origin based on current canvas size, which might have changed since initialGraphView was defined
-        graphState.originX = canvas.width / 2;
-        graphState.originY = canvas.height / 2;
-        if (redraw) {
-            evaluateAndCacheAll();
-            renderAll();
-        }
-    }
-    function drawGraphGrid() {
-        const computedStyles = getComputedStyle(document.documentElement); const THELO_BORDER_COLOR = computedStyles.getPropertyValue("--thelo-border").trim(); const THELO_TEXT_LIGHT_COLOR = computedStyles.getPropertyValue("--thelo-text-light").trim(); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); let dynamicGrid = 1; while (dynamicGrid * graphState.scale < 50 * currentDevicePixelRatio) { dynamicGrid *= (dynamicGrid * graphState.scale < 25 * currentDevicePixelRatio ? 2 : 2.5) }
-        while (dynamicGrid * graphState.scale > 100 * currentDevicePixelRatio) { dynamicGrid /= (dynamicGrid * graphState.scale > 250 * currentDevicePixelRatio ? 2.5 : 2) }
-        ctx.strokeStyle = THELO_BORDER_COLOR; ctx.lineWidth = 1 * currentDevicePixelRatio; ctx.font = `${10 * currentDevicePixelRatio}px 'Manrope'`; ctx.fillStyle = THELO_TEXT_LIGHT_COLOR; ctx.textAlign = "center"; ctx.textBaseline = "middle"; const startX = Math.floor(-graphState.originX / (graphState.scale * dynamicGrid)) * dynamicGrid; for (let x = startX; x * graphState.scale + graphState.originX < canvas.width; x += dynamicGrid) { const px = x * graphState.scale + graphState.originX; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height); ctx.stroke(); if (Math.abs(x) > 1e-9) { ctx.fillText(Number(x.toPrecision(4)), px + 2 * currentDevicePixelRatio, graphState.originY - 5 * currentDevicePixelRatio) } }
-        const startY = Math.floor(graphState.originY / (graphState.scale * dynamicGrid)) * dynamicGrid; for (let y = startY; graphState.originY - y * graphState.scale < canvas.height; y -= dynamicGrid) { const py = graphState.originY - y * graphState.scale; ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(canvas.width, py); ctx.stroke(); if (Math.abs(y) > 1e-9) { ctx.save(); ctx.textAlign = "right"; ctx.fillText(Number(y.toPrecision(4)), graphState.originX - 5 * currentDevicePixelRatio, py + 2 * currentDevicePixelRatio); ctx.restore() } }
-        ctx.strokeStyle = THELO_TEXT_LIGHT_COLOR; ctx.lineWidth = 1.5 * currentDevicePixelRatio; ctx.beginPath(); ctx.moveTo(0, graphState.originY); ctx.lineTo(canvas.width, graphState.originY); ctx.stroke(); ctx.beginPath(); ctx.moveTo(graphState.originX, 0); ctx.lineTo(graphState.originX, canvas.height); ctx.stroke()
-    }
+    function findPointsOfInterest(expr) { expr.poi = { roots: [], y_intercept: null, extrema: [] }; if (!expr.compiled) return; const scope = getEvaluationScope(expr); try { const y_intercept = expr.compiled.evaluate({ ...scope, x: 0 }); if (Number.isFinite(y_intercept)) expr.poi.y_intercept = { x: 0, y: y_intercept } } catch (e) { } let prev_y, prev_slope_sign; const step = 1 / graphState.scale; for (let px = 0; px < canvas.width; px++) { const x = (px - graphState.originX) / graphState.scale; try { const y = expr.compiled.evaluate({ ...scope, x: x }); if (prev_y !== undefined && Number.isFinite(y) && Number.isFinite(prev_y)) { if (Math.sign(y) !== Math.sign(prev_y)) { expr.poi.roots.push({ x: x - step / 2, y: 0 }) } const next_y = expr.compiled.evaluate({ ...scope, x: x + step }); if (Number.isFinite(next_y)) { const slope_sign = Math.sign(next_y - y); if (prev_slope_sign !== undefined && slope_sign !== prev_slope_sign && slope_sign !== 0) { expr.poi.extrema.push({ x: x, y: y }) } prev_slope_sign = slope_sign } } prev_y = y } catch (e) { prev_y = undefined; prev_slope_sign = undefined } } }
+    function drawPointsOfInterest(expr) { ctx.fillStyle = expr.color; const all_pois = [...expr.poi.roots, ...expr.poi.extrema]; if (expr.poi.y_intercept) all_pois.push(expr.poi.y_intercept); all_pois.forEach(point => { if (!point) return; const px = graphState.originX + point.x * graphState.scale; const py = graphState.originY - point.y * graphState.scale; ctx.beginPath(); ctx.arc(px, py, POI_RADIUS, 0, Math.PI * 2); ctx.fill() }) }
+    function bisectionSolve(f1_expr, f2_expr, a, b, tolerance = 1e-7, maxIterations = 50) { const f1_scope = getEvaluationScope(f1_expr); const f2_scope = getEvaluationScope(f2_expr); let fa, fb; try { fa = f1_expr.compiled.evaluate({ ...f1_scope, x: a }) - f2_expr.compiled.evaluate({ ...f2_scope, x: a }); fb = f1_expr.compiled.evaluate({ ...f1_scope, x: b }) - f2_expr.compiled.evaluate({ ...f2_scope, x: b }) } catch (e) { return null } if (isNaN(fa) || isNaN(fb) || Math.sign(fa) === Math.sign(fb)) return null; let c = a; for (let i = 0; i < maxIterations; i++) { c = (a + b) / 2; let fc = f1_expr.compiled.evaluate({ ...f1_scope, x: c }) - f2_expr.compiled.evaluate({ ...f2_scope, x: c }); if (Math.abs(fc) < tolerance || (b - a) / 2 < tolerance) return c; if (Math.sign(fc) === Math.sign(fa)) { a = c; fa = fc } else { b = c } } return c }
+    function findAndStoreIntersections() { graphState.intersections = []; const plottableFuncs = graphState.expressions.filter(e => e.visible && e.compiled && (e.type === "function" || e.type === "inequality")); if (plottableFuncs.length < 2) return; for (let i = 0; i < plottableFuncs.length; i++) { for (let j = i + 1; j < plottableFuncs.length; j++) { const f1_expr = plottableFuncs[i], f2_expr = plottableFuncs[j]; let prev_diff; for (let px = 0; px < canvas.width; px++) { const x = (px - graphState.originX) / graphState.scale; try { const y1 = f1_expr.compiled.evaluate({ ...getEvaluationScope(f1_expr), x: x }); const y2 = f2_expr.compiled.evaluate({ ...getEvaluationScope(f2_expr), x: x }); const diff = y1 - y2; if (prev_diff !== undefined && Math.sign(diff) !== Math.sign(prev_diff)) { const intersectionX = bisectionSolve(f1_expr, f2_expr, x - (1 / graphState.scale), x); if (intersectionX !== null) { const intersectionY = f1_expr.compiled.evaluate({ ...getEvaluationScope(f1_expr), x: intersectionX }); if (Number.isFinite(intersectionY)) graphState.intersections.push({ x: intersectionX, y: intersectionY }) } } prev_diff = diff } catch (e) { prev_diff = undefined } } } } }
+    function drawAllIntersectionPoints() { ctx.fillStyle = "#333"; graphState.intersections.forEach(point => { const pixelX = graphState.originX + point.x * graphState.scale; const pixelY = graphState.originY - point.y * graphState.scale; ctx.beginPath(); ctx.arc(pixelX, pixelY, POI_RADIUS, 0, Math.PI * 2); ctx.fill() }) }
+    function drawLockedPoint() { const { x, y } = graphState.lockedPoint; const pixelX = graphState.originX + x * graphState.scale; const pixelY = graphState.originY - y * graphState.scale; ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(pixelX, pixelY, POI_RADIUS * 1.2, 0, Math.PI * 2); ctx.fill(); const displayX = snapToZero(x); const displayY = snapToZero(y); const coordText = `(${displayX.toFixed(3)}, ${displayY.toFixed(3)})`; const FONT_SIZE = 12 * currentDevicePixelRatio; ctx.font = `bold ${FONT_SIZE}px 'Manrope'`; const textMetrics = ctx.measureText(coordText); const boxWidth = textMetrics.width + 16 * currentDevicePixelRatio; const boxHeight = FONT_SIZE + 12 * currentDevicePixelRatio; let boxX = pixelX + 15 * currentDevicePixelRatio; let boxY = pixelY - boxHeight / 2; if (boxX + boxWidth > canvas.width) boxX = pixelX - boxWidth - 15 * currentDevicePixelRatio; if (boxY < 0) boxY = 5 * currentDevicePixelRatio; if (boxY + boxHeight > canvas.height) boxY = canvas.height - boxHeight - 5 * currentDevicePixelRatio; ctx.fillStyle = "rgba(255, 255, 255, 0.9)"; ctx.shadowColor = "rgba(0,0,0,0.2)"; ctx.shadowBlur = 10; ctx.beginPath(); ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5 * currentDevicePixelRatio); ctx.fill(); ctx.shadowColor = "transparent"; ctx.fillStyle = "#000"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(coordText, boxX + boxWidth / 2, boxY + boxHeight / 2) }
+    function resizeCanvases(recordedCanvasDimensions = null) { const rect = canvas.parentElement.getBoundingClientRect(); if (recordedCanvasDimensions && recordedCanvasDimensions.width && recordedCanvasDimensions.height) { canvas.width = recordedCanvasDimensions.width * currentDevicePixelRatio; canvas.height = recordedCanvasDimensions.height * currentDevicePixelRatio; canvas.style.width = `${recordedCanvasDimensions.width}px`; canvas.style.height = `${recordedCanvasDimensions.height}px`; } else { canvas.width = rect.width * currentDevicePixelRatio; canvas.height = rect.height * currentDevicePixelRatio; canvas.style.width = `${rect.width}px`; canvas.style.height = `${rect.height}px`; } graphState.originX = canvas.width / 2; graphState.originY = canvas.height / 2; }
+    function resetView(redraw = true) { Object.assign(graphState, initialGraphView); graphState.originX = canvas.width / 2; graphState.originY = canvas.height / 2; if (redraw) { evaluateAndCacheAll(); renderAll(); } }
+    function drawGraphGrid() { const computedStyles = getComputedStyle(document.documentElement); const THELO_BORDER_COLOR = computedStyles.getPropertyValue("--thelo-border").trim(); const THELO_TEXT_LIGHT_COLOR = computedStyles.getPropertyValue("--thelo-text-light").trim(); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); let dynamicGrid = 1; while (dynamicGrid * graphState.scale < 50 * currentDevicePixelRatio) { dynamicGrid *= (dynamicGrid * graphState.scale < 25 * currentDevicePixelRatio ? 2 : 2.5) } while (dynamicGrid * graphState.scale > 100 * currentDevicePixelRatio) { dynamicGrid /= (dynamicGrid * graphState.scale > 250 * currentDevicePixelRatio ? 2.5 : 2) } ctx.strokeStyle = THELO_BORDER_COLOR; ctx.lineWidth = 1 * currentDevicePixelRatio; ctx.font = `${10 * currentDevicePixelRatio}px 'Manrope'`; ctx.fillStyle = THELO_TEXT_LIGHT_COLOR; ctx.textAlign = "center"; ctx.textBaseline = "middle"; const startX = Math.floor(-graphState.originX / (graphState.scale * dynamicGrid)) * dynamicGrid; for (let x = startX; x * graphState.scale + graphState.originX < canvas.width; x += dynamicGrid) { const px = x * graphState.scale + graphState.originX; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height); ctx.stroke(); if (Math.abs(x) > 1e-9) { ctx.fillText(Number(x.toPrecision(4)), px + 2 * currentDevicePixelRatio, graphState.originY - 5 * currentDevicePixelRatio) } } const startY = Math.floor(graphState.originY / (graphState.scale * dynamicGrid)) * dynamicGrid; for (let y = startY; graphState.originY - y * graphState.scale < canvas.height; y -= dynamicGrid) { const py = graphState.originY - y * graphState.scale; ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(canvas.width, py); ctx.stroke(); if (Math.abs(y) > 1e-9) { ctx.save(); ctx.textAlign = "right"; ctx.fillText(Number(y.toPrecision(4)), graphState.originX - 5 * currentDevicePixelRatio, py + 2 * currentDevicePixelRatio); ctx.restore() } } ctx.strokeStyle = THELO_TEXT_LIGHT_COLOR; ctx.lineWidth = 1.5 * currentDevicePixelRatio; ctx.beginPath(); ctx.moveTo(0, graphState.originY); ctx.lineTo(canvas.width, graphState.originY); ctx.stroke(); ctx.beginPath(); ctx.moveTo(graphState.originX, 0); ctx.lineTo(graphState.originX, canvas.height); ctx.stroke() }
     function snapToZero(num, tolerance = 1e-6) { return Math.abs(num) < tolerance ? 0 : num }
-    function latexToMathJs(latex) {
-        let processed = latex.replace(/\\left\|([\s\S]+?)\\right\|/g, "abs($1)"); while (processed.includes("|")) { processed = processed.replace(/\|([^|]*)\|/g, "abs($1)") }
-        return processed.replace(/\\operatorname{([a-zA-Z]+)}/g, "$1").replace(/\\frac{d}{dx}\\left\(([\s\S]+?)\\right\)/g, "derivative('$1', 'x')").replace(/\\sin/g, "sin").replace(/\\cos/g, "cos").replace(/\\tan/g, "tan").replace(/\\log/g, "log10").replace(/\\ln/g, "log").replace(/\\sqrt/g, "sqrt").replace(/\\pi/g, "pi").replace(/\\theta/g, "theta").replace(/\\le/g, "<=").replace(/\\ge/g, ">=").replace(/\\left\(/g, "(").replace(/\\right\)/g, ")").replace(/\\left\[/g, "[").replace(/\\right\]/g, "]").replace(/\\cdot/g, "*").replace(/\\frac{([^}]+)}{([^}]+)}/g, "($1)/($2)").replace(/{/g, "(").replace(/}/g, ")")
-    }
+    function latexToMathJs(latex) { let processed = latex.replace(/\\left\|([\s\S]+?)\\right\|/g, "abs($1)"); while (processed.includes("|")) { processed = processed.replace(/\|([^|]*)\|/g, "abs($1)") } return processed.replace(/\\operatorname{([a-zA-Z]+)}/g, "$1").replace(/\\frac{d}{dx}\\left\(([\s\S]+?)\\right\)/g, "derivative('$1', 'x')").replace(/\\sin/g, "sin").replace(/\\cos/g, "cos").replace(/\\tan/g, "tan").replace(/\\log/g, "log10").replace(/\\ln/g, "log").replace(/\\sqrt/g, "sqrt").replace(/\\pi/g, "pi").replace(/\\theta/g, "theta").replace(/\\le/g, "<=").replace(/\\ge/g, ">=").replace(/\\left\(/g, "(").replace(/\\right\)/g, ")").replace(/\\left\[/g, "[").replace(/\\right\]/g, "]").replace(/\\cdot/g, "*").replace(/\\frac{([^}]+)}{([^}]+)}/g, "($1)/($2)").replace(/{/g, "(").replace(/}/g, ")") }
     function preprocessInputString(str) { const functionNames = "sin|cos|tan|asin|acos|atan|log10|log|sqrt|abs|mean|median|stdev|min|max|total|quartile"; const funcArgRegex = new RegExp(`\\b(${functionNames})\\s+([a-zA-Z0-9πθ.\\[\\]]+)`, "g"); return str.replace(funcArgRegex, "$1($2)") }
-    function getEvaluationScope(expr) {
-        const scope = { ...graphState.definedVariables }; Object.keys(expr.sliders).forEach(name => { scope[name] = expr.sliders[name].val }); scope.total = math.sum; scope.stdev = math.std; scope.mean = math.median; scope.median = math.median; scope.min = math.min; scope.max = math.max; scope.quartile = math.quantileSeq; scope.nCr = math.combinations; scope.nPr = math.permutations; if (graphState.angleMode === "deg") { scope.sin = math.sind; scope.cos = math.cosd; scope.tan = math.tand; scope.asin = math.asind; scope.acos = math.acosd; scope.atan = math.atand; scope.atan2 = math.atan2d } return scope
-    }
+    function getEvaluationScope(expr) { const scope = { ...graphState.definedVariables }; Object.keys(expr.sliders).forEach(name => { scope[name] = expr.sliders[name].val }); scope.total = math.sum; scope.stdev = math.std; scope.mean = math.median; scope.median = math.median; scope.min = math.min; scope.max = math.max; scope.quartile = math.quantileSeq; scope.nCr = math.combinations; scope.nPr = math.permutations; if (graphState.angleMode === "deg") { scope.sin = math.sind; scope.cos = math.cosd; scope.tan = math.tand; scope.asin = math.asind; scope.acos = math.acosd; scope.atan = math.atand; scope.atan2 = math.atan2d } return scope }
 
     initialize();
 });
 </script>
+</body>
+</html>
 </body>
 </html>
