@@ -305,15 +305,27 @@ function togglePlayPause() {
 }
 
     /**
-     * Seeks playback relative to the current playback time.
-     * Used for internal keyboard controls.
-     * @param {number} amountMs - Milliseconds to move forward (+) or backward (-).
-     */
-    function seekRelative(amountMs) {
-        const targetTime = Math.max(0, Math.min(playbackTime + amountMs, totalDuration));
-        seekToAbsoluteTime(targetTime);
+ * Seeks playback relative to the current playback time.
+ * Used for internal keyboard controls.
+ * @param {number} amountMs - Milliseconds to move forward (+) or backward (-).
+ */
+function seekRelative(amountMs) {
+    let targetTime = playbackTime + amountMs;
+
+    // THIS IS THE KEY CHANGE for boundary handling
+    const epsilon = 10; // A small tolerance of 10ms
+
+    // If seeking backwards past the start, snap cleanly to 0.
+    if (targetTime < epsilon) {
+        targetTime = 0;
+    }
+    // If seeking forwards past the end, snap cleanly to the end.
+    else if (targetTime > totalDuration - epsilon) {
+        targetTime = totalDuration;
     }
 
+    seekToAbsoluteTime(targetTime);
+}
     /**
      * Seeks playback to an absolute time in the replay timeline.
      * This is the robust method for jumps, especially from external controls.
@@ -338,82 +350,81 @@ function togglePlayPause() {
     // --- CORE RENDERING & PLAYBACK LOGIC ---
 
     /**
-     * The main animation loop, called repeatedly by requestAnimationFrame.
-     * Manages time progression, continuous animations, and discrete event processing.
-     * @param {DOMHighResTimeStamp} currentDOMTime - Current time provided by requestAnimationFrame.
-     */
-    function animationLoop(currentDOMTime) {
-        if (!isPlaying) return;
+ * The main animation loop, called repeatedly by requestAnimationFrame.
+ * Manages time progression, continuous animations, and discrete event processing.
+ * This version includes robust logic to cleanly handle the end of the replay.
+ * @param {DOMHighResTimeStamp} currentDOMTime - Current time provided by requestAnimationFrame.
+ */
+function animationLoop(currentDOMTime) {
+    if (!isPlaying) return;
 
-        const deltaTime = currentDOMTime - lastTimestamp;
-        lastTimestamp = currentDOMTime;
-        playbackTime = Math.min(playbackTime + deltaTime, totalDuration); // Advance time
+    const deltaTime = currentDOMTime - lastTimestamp;
+    lastTimestamp = currentDOMTime;
 
-        let needsFullReevaluation = false;
-        // Start processing from the command immediately after the last one handled by renderStateAtTime or previous loop iteration
-        let nextCommandIndex = lastProcessedEventIndex + 1;
+    // --- NEW: Robustly handle the end of playback ---
+    // Check if this frame will cross the finish line.
+    if (playbackTime + deltaTime >= totalDuration) {
+        playbackTime = totalDuration;     // Clamp time to the exact end
+        renderStateAtTime(totalDuration); // Render the final state perfectly
+        pause();                          // Cleanly stop the animation loop
+        return;                           // Exit the function
+    }
 
-        // Handle interpolation for an active 'animateView' command
-        if (graphState.activeAnimateView) {
-            const { startTime, duration, startView, endView } = graphState.activeAnimateView;
-            const animationProgress = Math.min(1, (playbackTime - startTime) / duration);
+    // --- Default path: Advance time and process events ---
+    playbackTime += deltaTime;
 
-            if (animationProgress < 1) {
-                // Interpolate current view properties
-                graphState.originX = startView.originX + (endView.originX - startView.originX) * animationProgress;
-                graphState.originY = startView.originY + (endView.originY - startView.originY) * animationProgress;
-                graphState.scale = startView.scale + (endView.scale - startView.scale) * animationProgress;
-            } else {
-                // Animation finished: snap to end state and clear active animation
-                Object.assign(graphState, endView);
-                graphState.activeAnimateView = null;
-                needsFullReevaluation = true; // State changed discretely, re-evaluate
-            }
-        }
+    let needsFullReevaluation = false;
+    let nextCommandIndex = lastProcessedEventIndex + 1;
 
-        // Process discrete commands that have become due
-        while (nextCommandIndex < timeline.length && timeline[nextCommandIndex].time <= playbackTime) {
-            const command = timeline[nextCommandIndex];
+    // Handle interpolation for an active 'animateView' command
+    if (graphState.activeAnimateView) {
+        const { startTime, duration, startView, endView } = graphState.activeAnimateView;
+        const animationProgress = Math.min(1, (playbackTime - startTime) / duration);
 
-            // If a new 'animateView' command is encountered, set it as active
-            if (command.action === 'animateView') {
-                graphState.activeAnimateView = {
-                    startTime: command.time,
-                    duration: command.payload.duration,
-                    startView: command.payload.startView,
-                    endView: command.payload.endView
-                };
-                Object.assign(graphState, command.payload.startView); // Immediately apply start state
-                needsFullReevaluation = true;
-            } else if (command.action !== 'delay') { // Skip 'delay' as it only advances time, not state
-                executeReplayCommand(command); // Apply the command's effect
-                // Mark for re-evaluation if command changes graph math/visibility
-                if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView', 'lockPoint', 'unlockPoint'].includes(command.action)) {
-                    needsFullReevaluation = true;
-                }
-            }
-            lastProcessedEventIndex = nextCommandIndex; // Mark as processed
-            nextCommandIndex++; // Move to next command
-        }
-
-        // Only perform heavy re-evaluation if a state-changing command was processed
-        if (needsFullReevaluation) {
-            evaluateAndCacheAll();
-        }
-
-        renderAll(); // Always render the current graphical state
-
-        // Update progress bar
-        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
-
-        // If replay finished, pause
-        if (playbackTime >= totalDuration) {
-            pause();
-            progressBar.style.width = '100%';
+        if (animationProgress < 1) {
+            graphState.originX = startView.originX + (endView.originX - startView.originX) * animationProgress;
+            graphState.originY = startView.originY + (endView.originY - startView.originY) * animationProgress;
+            graphState.scale = startView.scale + (endView.scale - startView.scale) * animationProgress;
         } else {
-            animationFrameId = requestAnimationFrame(animationLoop); // Continue loop
+            Object.assign(graphState, endView);
+            graphState.activeAnimateView = null;
+            needsFullReevaluation = true;
         }
     }
+
+    // Process discrete commands that have become due
+    while (nextCommandIndex < timeline.length && timeline[nextCommandIndex].time <= playbackTime) {
+        const command = timeline[nextCommandIndex];
+
+        if (command.action === 'animateView') {
+            graphState.activeAnimateView = {
+                startTime: command.time,
+                duration: command.payload.duration,
+                startView: command.payload.startView,
+                endView: command.payload.endView
+            };
+            Object.assign(graphState, command.payload.startView);
+            needsFullReevaluation = true;
+        } else if (command.action !== 'delay') {
+            executeReplayCommand(command);
+            if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView', 'lockPoint', 'unlockPoint'].includes(command.action)) {
+                needsFullReevaluation = true;
+            }
+        }
+        lastProcessedEventIndex = nextCommandIndex;
+        nextCommandIndex++;
+    }
+
+    if (needsFullReevaluation) {
+        evaluateAndCacheAll();
+    }
+
+    renderAll();
+
+    // --- Update UI and continue the loop ---
+    progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
+    animationFrameId = requestAnimationFrame(animationLoop);
+}
 
     /**
  * The "Cold Path": Reconstructs the entire calculator state for a specific time.
