@@ -295,24 +295,41 @@ function togglePlayPause() {
         play();
     }
 }
+/**
+ * The master function for all seeking. Pauses playback, sets the new time,
+ * and triggers a full, clean rebuild of the state.
+ * @param {number} targetTimeMs - The absolute time in milliseconds to seek to.
+ */
+function seekToAbsoluteTime(targetTimeMs) {
+    const wasPlaying = isPlaying;
+    if (wasPlaying) {
+        pause(); // Cleanly pause the current animation/loop
+    }
 
-    /**
+    // Clamp target time within valid duration
+    playbackTime = Math.max(0, Math.min(targetTimeMs, totalDuration));
+
+    // Fully reconstruct the state at the target time. This is the most critical step.
+    renderStateAtTime(playbackTime);
+
+    // Resume playback only if it was playing before the seek
+    if (wasPlaying) {
+        play();
+    }
+}
+
+ /**
  * Seeks playback relative to the current playback time.
  * Used for internal keyboard controls.
  * @param {number} amountMs - Milliseconds to move forward (+) or backward (-).
  */
 function seekRelative(amountMs) {
     let targetTime = playbackTime + amountMs;
-
-    // THIS IS THE KEY CHANGE for boundary handling
     const epsilon = 10; // A small tolerance of 10ms
 
-    // If seeking backwards past the start, snap cleanly to 0.
     if (targetTime < epsilon) {
         targetTime = 0;
-    }
-    // If seeking forwards past the end, snap cleanly to the end.
-    else if (targetTime > totalDuration - epsilon) {
+    } else if (targetTime > totalDuration - epsilon) {
         targetTime = totalDuration;
     }
 
@@ -323,21 +340,7 @@ function seekRelative(amountMs) {
      * This is the robust method for jumps, especially from external controls.
      * @param {number} targetTimeMs - The absolute time in milliseconds to seek to.
      */
-    function seekToAbsoluteTime(targetTimeMs) {
-        const wasPlaying = isPlaying;
-        if (wasPlaying) pause(); // Pause current animation/loop
-
-        // Clamp target time within valid duration
-        playbackTime = Math.max(0, Math.min(targetTimeMs, totalDuration));
-
-        // Fully reconstruct the state at the target time
-        renderStateAtTime(playbackTime);
-
-        // Resume playback if it was playing before the seek
-        if (wasPlaying) {
-            play();
-        }
-    }
+    
 
     // --- CORE RENDERING & PLAYBACK LOGIC ---
 
@@ -424,77 +427,60 @@ function animationLoop(currentDOMTime) {
  * It ensures the `graphState` and UI are precisely as they would be if the replay played linearly to `time`.
  * @param {number} time - The target time in milliseconds to reconstruct the state for.
  */
+/**
+ * The "Cold Path": Reconstructs the entire calculator state from a clean slate.
+ * This is the definitive master reset and rebuild function.
+ * @param {number} time - The target time in milliseconds to reconstruct the state for.
+ */
 function renderStateAtTime(time) {
-    // --- STEP 1: Perform a complete reset of the replay player's UI and internal state.
-    expressionListContainer.innerHTML = ''; // Clear all expression UI elements
-    
-    // THE FIX IS HERE: Reset the expressions array to prevent duplicates on rebuild.
-    graphState.expressions = []; 
+    // --- STEP 1: PERFORM A COMPLETE AND TOTAL RESET OF THE STATE ---
+    expressionListContainer.innerHTML = ''; // Clear visual UI
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
 
-    // Reset other main graphState properties to their defaults (or initial state)
-    Object.assign(graphState, {
+    // Reset the internal state object to its initial condition
+    graphState = {
         ...initialGraphView,
+        expressions: [], // <<< The most critical reset for your bug
         intersections: [],
         lockedPoint: { visible: false, x: 0, y: 0 },
         angleMode: 'rad',
         definedVariables: {},
         activeAnimateView: null
-    });
+    };
 
-    // Reset angle mode button to default visual state
+    // Reset UI elements to their default state
     toggleAngleModeBtn.textContent = 'RAD';
     toggleAngleModeBtn.classList.add('active');
 
-    // Clear the canvas to remove any previous drawing
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Reset the last processed event index.
+    // Reset the playback progress tracker
     lastProcessedEventIndex = -1;
 
-    // --- STEP 2: Iterate through the timeline from the beginning up to the target time. ---
+    // --- STEP 2: REBUILD THE STATE CHRONOLOGICALLY ---
     for (let i = 0; i < timeline.length; i++) {
         const command = timeline[i];
+        if (command.time > time) break; // We've processed all commands up to the target time
 
-        if (command.time > time) {
-             // Special handling for seeking *into* an 'animateView' command
-            if (command.action === 'animateView' && command.time < time) {
-                const animationEndTime = command.time + command.payload.duration;
-                if (time < animationEndTime) {
-                    const progress = (time - command.time) / command.payload.duration;
-                    graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
-                    graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
-                    graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
-                    
-                    graphState.activeAnimateView = { ...command.payload, startTime: command.time };
-                    lastProcessedEventIndex = i;
-                    break;
-                }
+        // Apply the command's effect to the now-clean state
+        if (command.action === 'animateView') {
+            // If the animation finished before our target time, apply its final state
+            if (time >= command.time + command.payload.duration) {
+                Object.assign(graphState, command.payload.endView);
+            } else {
+                // If we are seeking INTO an animation, calculate the interpolated state
+                const progress = (time - command.time) / command.payload.duration;
+                graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
+                graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
+                graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
+                graphState.activeAnimateView = { ...command.payload, startTime: command.time };
             }
-            break; // Stop, no more commands to process up to 'time'
-        }
-
-        // --- Apply the command's effect to the state ---
-        if (command.action === 'initialState') {
-            Object.assign(graphState, command.payload.view);
-            graphState.angleMode = command.payload.angleMode;
-            toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
-            toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
-            command.payload.expressions.forEach(initialExpr => {
-                const clonedSliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
-                const completeExpr = { plotPoints: [], ...initialExpr, sliders: clonedSliders };
-                addExpressionUI(completeExpr);
-            });
-        } else if (command.action === 'animateView') {
-            // Apply the final state of any animation that completed before 'time'
-            Object.assign(graphState, command.payload.endView);
-        } else if (command.action !== 'delay') {
+        } else {
+            // Execute all other commands (addExpression, setLatex, etc.)
             executeReplayCommand(command);
         }
-
         lastProcessedEventIndex = i;
     }
 
-    // --- STEP 3: Finalize state and perform initial render. ---
+    // --- STEP 3: FINALIZE AND RENDER THE REBUILT FRAME ---
     evaluateAndCacheAll();
     renderAll();
     progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
