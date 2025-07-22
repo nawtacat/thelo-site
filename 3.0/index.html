@@ -1851,32 +1851,81 @@ function resizeCanvases() {
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
-   
+    function handleDrawingStart(e) {
+    // For tablets, we ONLY allow drawing to start if a stylus is the input.
+    if (isTabletMode && e.type.startsWith('touch')) {
+        const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
 
-      function handleDrawingStart(e) {
-    const isMouseEvent = e.type.startsWith('mouse');
+        if (!isStylusPresent) {
+            e.preventDefault();
+            return;
+        }
 
-    // Logic from the FIRST set: Tablet and Stylus detection
-    if (isTabletMode && !isMouseEvent) { // Touch events on tablet
+        // If a stylus is drawing, cancel any pending timer to show the bar.
+        if (buttonVanishTimer) {
+            clearTimeout(buttonVanishTimer);
+        }
+        // Immediately hide the bottom bar.
+        if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
+    }
+
+    // This part of the code is now only reachable by a stylus on a tablet, or a mouse on desktop.
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+    if (!isStudentInputAllowed && !isThelobookActive) return;
+
+    const pos = getPos(e, currentTargetCanvas);
+    if (!pos) return;
+    if (e.touches) e.preventDefault();
+    drawing = true;
+    if (!isThelobookActive) userDrawingOccurred = true;
+    lastPos = pos;
+
+    if (isThelobookActive) {
+        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+        if (!isThelobookActive) activeCtx.strokeStyle = INK_COLORS.black;
+    } else {
+        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = 'source-over';
+    }
+
+    activeCtx.beginPath();
+    activeCtx.moveTo(pos.x, pos.y);
+    if (!isThelobookActive && currentColor === 'blue') {
+        finalCtx.strokeStyle = INK_COLORS.blue;
+        finalCtx.beginPath();
+        finalCtx.moveTo(pos.x, pos.y);
+    }
+}
+   function handleDrawingStart(e) {
+    // This logic now ONLY applies the smoothing for mouse events on non-tablets.
+    // The 'touch' events for the iPad will bypass this completely.
+    if (!isTabletMode && e.type.startsWith('mouse')) {
+        mousePoints = []; // Reset the points buffer for a new line
+    }
+
+    // For tablets, we ONLY allow drawing to start if a stylus is the input.
+    if (isTabletMode && e.type.startsWith('touch')) {
         const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
         if (!isStylusPresent) {
             e.preventDefault();
-            return; // Ignore finger touches on tablet
+            return;
         }
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
         if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
     }
 
-    // Logic from the SECOND set: Mouse smoothing init
-    if (!isTabletMode && isMouseEvent) {
-        mousePoints = []; // Reset points buffer for new line
-    }
-
-    // Universal logic for all valid inputs
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-    if (!activeCtx || (!isStudentInputAllowed && !isThelobookActive)) return;
-    
+    if (!activeCtx) return;
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+    if (!isStudentInputAllowed && !isThelobookActive) return;
+
     const pos = getPos(e, currentTargetCanvas);
     if (!pos) return;
     if (e.touches) e.preventDefault();
@@ -1884,13 +1933,22 @@ function resizeCanvases() {
     drawing = true;
     if (!isThelobookActive) userDrawingOccurred = true;
     lastPos = pos;
-    if (!isTabletMode && isMouseEvent) {
+
+    // Add the first point to our mouse buffer if using a mouse
+    if (!isTabletMode && e.type.startsWith('mouse')) {
         mousePoints.push(pos);
     }
     
-    activeCtx.lineWidth = isThelobookActive ? (isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH) : THELOBOOK_PEN_LINEWIDTH;
-    activeCtx.globalCompositeOperation = (isThelobookActive && isThelobookEraserActive) ? 'destination-out' : 'source-over';
-    
+    if (isThelobookActive) {
+        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
+    } else {
+        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = 'source-over';
+    }
+
+    // The rest of your original logic for starting a path can be simplified
+    // as the new handleDrawingMove will take care of drawing.
     activeCtx.beginPath();
     activeCtx.moveTo(pos.x, pos.y);
     if (!isThelobookActive && currentColor === 'blue') {
@@ -1903,92 +1961,110 @@ function resizeCanvases() {
 function handleDrawingMove(e) {
     if (!drawing) return;
 
-    const pos = getPos(e, e.currentTarget);
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+    if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
+    if (!isThelobookActive && currentTargetCanvas !== canvas) return;
+    if (!isStudentInputAllowed && !isThelobookActive) return;
+
+    const pos = getPos(e, currentTargetCanvas);
     if (!pos) return;
     if (e.touches) e.preventDefault();
 
-    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     const isMouseEvent = e.type.startsWith('mouse');
 
     if (!isTabletMode && isMouseEvent) {
-        // --- Desktop Mouse Smoothing Logic ---
+        // --- NEW & CORRECTED DESKTOP SMOOTHING LOGIC ---
+        
+        // Add the new point to our buffer
         mousePoints.push(pos);
+        
+        // Not enough points for a curve yet, so just connect with a line
         if (mousePoints.length < 3) {
-             // Not enough points for a curve, draw a line
             activeCtx.lineTo(pos.x, pos.y);
-            activeCtx.stroke();
-            activeCtx.beginPath();
-            activeCtx.moveTo(pos.x, pos.y);
-        } else {
-            const p1 = mousePoints[mousePoints.length - 2];
-            const midPoint = { x: (p1.x + pos.x) / 2, y: (p1.y + pos.y) / 2 };
-            activeCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
-            activeCtx.stroke();
-            activeCtx.beginPath();
-            activeCtx.moveTo(midPoint.x, midPoint.y);
-        }
-        if (!isThelobookActive && currentColor === 'blue') {
-            // Mirror the logic for the finalAnswerCanvas
-            if (mousePoints.length < 3) {
-                 finalCtx.lineTo(pos.x, pos.y);
-                 finalCtx.stroke();
-                 finalCtx.beginPath();
-                 finalCtx.moveTo(pos.x, pos.y);
-            } else {
-                const p1 = mousePoints[mousePoints.length - 2];
-                const midPoint = { x: (p1.x + pos.x) / 2, y: (p1.y + pos.y) / 2 };
-                finalCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
+            activeCtx.stroke(); // Stroke the segment
+            activeCtx.beginPath(); // Begin a new path
+            activeCtx.moveTo(pos.x, pos.y); // Move to the new position
+            
+            if (!isThelobookActive && currentColor === 'blue') {
+                finalCtx.lineTo(pos.x, pos.y);
                 finalCtx.stroke();
                 finalCtx.beginPath();
-                finalCtx.moveTo(midPoint.x, midPoint.y);
+                finalCtx.moveTo(pos.x, pos.y);
             }
+            return;
         }
+
+        // Calculate the start and end points for the curve segment
+        const p1 = mousePoints[mousePoints.length - 2];
+        const p2 = mousePoints[mousePoints.length - 1];
+        const midPoint = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+        // Draw a quadratic curve from the last midpoint to the new midpoint
+        // The actual mouse point (p1) becomes the control point, "pulling" the curve.
+        activeCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
+        activeCtx.stroke();
+        activeCtx.beginPath();
+        activeCtx.moveTo(midPoint.x, midPoint.y);
+
+        if (!isThelobookActive && currentColor === 'blue') {
+            finalCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
+            finalCtx.stroke();
+            finalCtx.beginPath();
+            finalCtx.moveTo(midPoint.x, midPoint.y);
+        }
+
     } else {
-        // --- Tablet/Stylus (or non-smoothed) Logic ---
+        // --- ORIGINAL IPAD/TOUCH/STYLUS LOGIC (UNCHANGED) ---
         activeCtx.lineTo(pos.x, pos.y);
         activeCtx.stroke();
         activeCtx.beginPath();
         activeCtx.moveTo(pos.x, pos.y);
+
         if (!isThelobookActive && currentColor === 'blue') {
-            finalCtx.lineTo(pos.x, pos.y);
-            finalCtx.stroke();
-            finalCtx.beginPath();
-            finalCtx.moveTo(pos.x, pos.y);
+             if (finalCtx.strokeStyle.toLowerCase() !== INK_COLORS.blue.toLowerCase()) finalCtx.strokeStyle = INK_COLORS.blue;
+             finalCtx.lineTo(pos.x, pos.y);
+             finalCtx.stroke();
+             finalCtx.beginPath();
+             finalCtx.moveTo(pos.x, pos.y);
         }
     }
-    lastPos = pos;
+
+    lastPos = pos; // Update last known position
 }
 
 function handleDrawingEnd(e) {
-    if (!drawing) return;
-    const isMouseEvent = e.type.startsWith('mouse');
-    
-    // Logic from the FIRST set: Un-hide the bottom bar on tablets
-    if (isTabletMode && !isMouseEvent) {
+    if (isTabletMode) {
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
         buttonVanishTimer = setTimeout(() => {
             if (bottomBar) bottomBar.classList.remove('bar-hidden-by-stylus');
         }, 500);
     }
     
-    // Universal logic
+    if (!drawing) return;
+
+    const isMouseEvent = e.type.startsWith('mouse');
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+
+    // --- Draw the final line segment to the mouse's last position ---
     activeCtx.lineTo(lastPos.x, lastPos.y);
     activeCtx.stroke();
-    activeCtx.beginPath();
 
     if (!isThelobookActive && currentColor === 'blue') {
         finalCtx.lineTo(lastPos.x, lastPos.y);
         finalCtx.stroke();
-        finalCtx.beginPath();
     }
-    
+
     drawing = false;
-    if (!isTabletMode && isMouseEvent) {
-        mousePoints = []; // Clear points buffer
+    activeCtx.beginPath(); // Reset for the next stroke
+
+     // Clear the points buffer
+     if (!isTabletMode && isMouseEvent) {
+        mousePoints = [];
     }
-}
-    function addBoardDrawListeners() {
+}    function addBoardDrawListeners() {
         canvas.addEventListener('mousedown', handleDrawingStart);
         canvas.addEventListener('mousemove', handleDrawingMove);
         canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
@@ -3546,47 +3622,60 @@ function closeCalculator() {
 }
 function handleKeyDown(event) {
     // =================================================================
-    // ===== 1. FORWARD KEYS TO THE REPLAY IFRAME (PRIORITY LOGIC) =====
+    // ===== REPLAY SEEK LOGIC (WITH CORE APP STATE RESET) =========
     // =================================================================
-    // This block runs first. If the replay iframe is active, it captures
-    // the arrow keys, sends an absolute time command to the iframe, and
-    // then stops all further execution of this function with `return`.
-    // PASTE THIS NEW BLOCK IN ITS PLACE
-if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-    event.preventDefault(); // Prevent default browser actions like scrolling
-    const step = 5; // Amount to seek in seconds
-    const diff = event.key === 'ArrowLeft' ? -step : step;
-    let newTime = internalPlaybackTime + diff;
-    newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
-    internalPlaybackTime = newTime;
+    // This block runs first. If the replay iframe is active, it handles arrow keys.
+    if (isReplayActive && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault(); // Prevent default browser action (e.g., scrolling)
 
-    // --- FIX: Separated logic for iframe vs. on-page replay ---
-    if (isReplayActive && replayFrame && replayFrame.contentWindow) {
-        // If the iframe player is active, ONLY send it the command
-        replayFrame.contentWindow.postMessage({
-            command: 'seekToTime',
-            timeMs: newTime * 1000
-        }, '*');
-    } else {
-        // Otherwise, control the on-page audio and drawing replay
-        if (currentStageAudio) {
-            currentStageAudio.currentTime = newTime;
+        // --- THE CRITICAL FIX: STOP THE CORE APP'S PLAYBACK LOOP ---
+        // This stops the parent app's timer from running in the background with old data,
+        // which was the source of the state corruption bug.
+        if (currentReplayAnimationId) {
+            cancelAnimationFrame(currentReplayAnimationId);
+            currentReplayAnimationId = null;
         }
-        if (!isMediaScrubbingActive && currentStageTotalDuration > 0) {
-            isMediaScrubbingActive = true;
-            if (!currentReplayAnimationId) {
-                currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+        isMediaScrubbingActive = false;
+        // --------------------------------------------------------------------
+
+        const step = 5; // Amount to seek in seconds
+        const diff = event.key === 'ArrowLeft' ? -step : step;
+
+        // Calculate the new absolute playback time, clamped to the valid range.
+        let newTime = internalPlaybackTime + diff;
+        newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
+
+        // Update the main app's internal playback time state.
+        internalPlaybackTime = newTime;
+
+        // 1. Seek the <audio> element to the new absolute time.
+        if (currentStageAudio) {
+            currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+            if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01)) {
+                currentStageAudio.play().catch(() => { /* Autoplay prevented, ignore */ });
             }
         }
+
+        // 2. Send the absolute seek command to the replay iframe.
+        if (replayFrame && replayFrame.contentWindow) {
+            replayFrame.contentWindow.postMessage({
+                command: 'seekToTime',
+                timeMs: newTime * 1000
+            }, '*');
+        }
+
+        // 3. Restart the main app's media playback loop from the new, corrected state.
+        isMediaScrubbingActive = true;
+        lastFrameTimestampForManualAdvance = 0; // Reset timestamp for accurate timing
+        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+        
+        // 4. Immediately update the main app's progress bar to reflect the seek.
+        updateMediaProgressBar(newTime, currentStageTotalDuration);
+        
+        return; // Important: Stop further keydown processing.
     }
-    // -----------------------------------------------------------------
 
-    updateMediaProgressBar(newTime, currentStageTotalDuration);
-    lastFrameTimestampForManualAdvance = performance.now();
-    return; // Stop further keydown processing
-}
-
-    // --- Original function logic continues below (unchanged from your last provided code) ---
+    // --- Original function logic continues below for all other keys ---
 
     if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
