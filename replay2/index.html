@@ -140,82 +140,43 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // ========================================================================
-    // =========== RELIABLE REPLAY ENGINE V6.1 (FINAL) ========================
+    // =========== ROBUST REPLAY RENDERER V7.1 (STATELESS) ====================
     // ========================================================================
 
-    // --- DOM ELEMENTS ---
+    // --- DOM ELEMENTS & CONSTANTS ---
     const canvas = document.getElementById('graphCanvas');
     const ctx = canvas.getContext('2d');
     const expressionListContainer = document.getElementById('expressionListContainer');
     const toggleAngleModeBtn = document.getElementById('toggleAngleModeBtn');
-    const progressBarContainer = document.getElementById('progressBarContainer');
-    const progressBar = document.getElementById('progressBar');
-
-    // --- LIBRARIES & CONSTANTS ---
     const MQ = MathQuill.getInterface(2);
     let currentDevicePixelRatio = window.devicePixelRatio || 1;
     const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
     const INEQUALITY_ALPHA = 0.2;
     let POI_RADIUS = 4 * currentDevicePixelRatio;
-    const SEEK_AMOUNT_MS = 5000;
+    const initialGraphView = { originX: 0, originY: 0, scale: 40 };
 
     // --- STATE MANAGEMENT ---
-    const initialGraphView = { originX: 0, originY: 0, scale: 40 };
     let graphState = { ...initialGraphView, expressions: [], intersections: [], lockedPoint: { visible: false, x: 0, y: 0 }, angleMode: 'rad', definedVariables: {}, activeAnimateView: null };
-
-    // --- PLAYBACK CONTROL STATE ---
     let timeline = [];
-    let totalDuration = 0;
-    let playbackTime = 0;
-    let isPlaying = false;
-    let animationFrameId = null;
-    let lastTimestamp = 0;
-    let lastProcessedEventIndex = -1;
 
-    // --- INITIALIZATION & EVENT LISTENERS ---
-    // In your REPLAY IFRAME's <script> tag
-
-function initialize() {
-    // Set initial origin values correctly for the current canvas size
-    graphState.originX = canvas.width / 2;
-    graphState.originY = canvas.height / 2;
-
-    resizeCanvases(); // Initial resize and draw of empty grid
-    setupMessageListener();
-    setupKeyListeners();
-    renderAll(); // Ensure an empty grid is drawn on load
-
-    // --- ADD THIS LINE ---
-    // Send the "ready" signal to the parent window once initialization is complete.
-    window.parent.postMessage({ command: 'ready' }, '*');
-}
+    // --- INITIALIZATION ---
+    function initialize() {
+        resizeCanvases();
+        setupMessageListener();
+        renderAll(); // Draw initial empty grid
+        
+        // Announce readiness to the parent window
+        window.parent.postMessage({ command: 'ready' }, '*');
+    }
 
     function setupMessageListener() {
         window.addEventListener('message', (event) => {
             const receivedData = event.data;
-            if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-                if (receivedData.meta.devicePixelRatio) {
-                    currentDevicePixelRatio = receivedData.meta.devicePixelRatio;
-                    POI_RADIUS = 4 * currentDevicePixelRatio;
-                }
-                resizeCanvases(receivedData.meta.canvasDimensions);
-                startReplay(receivedData.actions);
-            } else if (receivedData && receivedData.command === 'seekToTime' && typeof receivedData.timeMs === 'number') {
-                seekToAbsoluteTime(receivedData.timeMs);
-            } else if (receivedData && receivedData.command === 'seek') {
-                seekRelative(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
-            }
-        });
-    }
-
-    function setupKeyListeners() {
-        window.addEventListener('keydown', (e) => {
-            if (timeline.length === 0) return;
-            if (e.key === 'ArrowRight') seekRelative(SEEK_AMOUNT_MS);
-            else if (e.key === 'ArrowLeft') seekRelative(-SEEK_AMOUNT_MS);
-            else if (e.key === ' ') {
-                e.preventDefault();
-                togglePlayPause();
+            if (receivedData.command === 'loadTimeline') {
+                buildTimeline(receivedData.actions);
+                renderStateAtTime(0); // Render the first frame immediately
+            } else if (receivedData.command === 'renderAtTime') {
+                renderStateAtTime(receivedData.timeMs);
             }
         });
     }
@@ -225,140 +186,32 @@ function initialize() {
         timeline = [];
         actions.forEach(action => {
             timeline.push({ time: currentTime, ...action });
-            if (action.action === 'delay') {
-                currentTime += action.ms;
-            } else if (action.action === 'animateView') {
-                currentTime += action.payload.duration;
-            }
+            if (action.action === 'delay') currentTime += action.ms;
+            else if (action.action === 'animateView') currentTime += action.payload.duration;
         });
-        totalDuration = currentTime;
     }
 
-    function startReplay(actions) {
-        if (isPlaying) pause();
-        buildTimeline(actions);
-        seekToAbsoluteTime(0);
-        play();
-    }
-
-    // --- PLAYBACK CONTROLS ---
-
-    function play() {
-        if (isPlaying) return;
-        isPlaying = true;
-        lastTimestamp = performance.now();
-        animationFrameId = requestAnimationFrame(animationLoop);
-    }
-
-    function pause() {
-        if (!isPlaying) return;
-        isPlaying = false;
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-    }
-
-    function togglePlayPause() {
-        if (isPlaying) {
-            pause();
-        } else {
-            if (playbackTime >= totalDuration) {
-                seekToAbsoluteTime(0);
-            }
-            play();
-        }
-    }
-
-    function seekToAbsoluteTime(targetTimeMs) {
-        const wasPlaying = isPlaying;
-        if (wasPlaying) {
-            pause();
-        }
-        playbackTime = Math.max(0, Math.min(targetTimeMs, totalDuration));
-        renderStateAtTime(playbackTime);
-        if (wasPlaying) {
-            play();
-        }
-    }
-
-    function seekRelative(amountMs) {
-        let targetTime = playbackTime + amountMs;
-        const epsilon = 10;
-        if (targetTime < epsilon) {
-            targetTime = 0;
-        } else if (targetTime > totalDuration - epsilon) {
-            targetTime = totalDuration;
-        }
-        seekToAbsoluteTime(targetTime);
-    }
-
-    // --- CORE RENDERING & PLAYBACK LOGIC ---
-
-    function animationLoop(currentDOMTime) {
-        if (!isPlaying) return;
-
-        const deltaTime = currentDOMTime - lastTimestamp;
-        lastTimestamp = currentDOMTime;
-
-        if (playbackTime + deltaTime >= totalDuration) {
-            playbackTime = totalDuration;
-            renderStateAtTime(totalDuration);
-            pause();
-            return;
-        }
-
-        playbackTime += deltaTime;
-
-        let needsFullReevaluation = false;
-        let nextCommandIndex = lastProcessedEventIndex + 1;
-
-        if (graphState.activeAnimateView) {
-            const { startTime, duration, startView, endView } = graphState.activeAnimateView;
-            const animationProgress = Math.min(1, (playbackTime - startTime) / duration);
-            if (animationProgress < 1) {
-                graphState.originX = startView.originX + (endView.originX - startView.originX) * animationProgress;
-                graphState.originY = startView.originY + (endView.originY - startView.originY) * animationProgress;
-                graphState.scale = startView.scale + (endView.scale - startView.scale) * animationProgress;
-            } else {
-                Object.assign(graphState, endView);
-                graphState.activeAnimateView = null;
-                needsFullReevaluation = true;
-            }
-        }
-
-        while (nextCommandIndex < timeline.length && timeline[nextCommandIndex].time <= playbackTime) {
-            const command = timeline[nextCommandIndex];
-            if (command.action === 'animateView') {
-                graphState.activeAnimateView = { startTime: command.time, ...command.payload };
-                Object.assign(graphState, command.payload.startView);
-                needsFullReevaluation = true;
-            } else if (command.action !== 'delay') {
-                executeReplayCommand(command);
-                if (['setLatex', 'addExpression', 'removeExpression', 'setSlider', 'setAngleMode', 'toggleVisibility', 'resetView', 'lockPoint', 'unlockPoint'].includes(command.action)) {
-                    needsFullReevaluation = true;
-                }
-            }
-            lastProcessedEventIndex = nextCommandIndex;
-            nextCommandIndex++;
-        }
-
-        if (needsFullReevaluation) evaluateAndCacheAll();
-        renderAll();
-        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
-        animationFrameId = requestAnimationFrame(animationLoop);
-    }
+    // --- CORE RENDERING LOGIC ---
 
     function renderStateAtTime(time) {
+        if (timeline.length === 0) return;
+
+        // STEP 1: A PERFECT, COMPLETE RESET
         expressionListContainer.innerHTML = '';
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         graphState = {
-            ...initialGraphView, expressions: [], intersections: [],
-            lockedPoint: { visible: false, x: 0, y: 0 }, angleMode: 'rad',
-            definedVariables: {}, activeAnimateView: null
+            ...initialGraphView,
+            expressions: [],
+            intersections: [],
+            lockedPoint: { visible: false, x: 0, y: 0 },
+            angleMode: 'rad',
+            definedVariables: {},
+            activeAnimateView: null
         };
         toggleAngleModeBtn.textContent = 'RAD';
         toggleAngleModeBtn.classList.add('active');
-        lastProcessedEventIndex = -1;
 
+        // STEP 2: REBUILD STATE CHRONOLOGICALLY
         for (let i = 0; i < timeline.length; i++) {
             const command = timeline[i];
             if (command.time > time) break;
@@ -371,19 +224,19 @@ function initialize() {
                     graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
                     graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
                     graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
-                    graphState.activeAnimateView = { ...command.payload, startTime: command.time };
                 }
             } else {
                 executeReplayCommand(command);
             }
-            lastProcessedEventIndex = i;
         }
 
+        // STEP 3: RENDER THE REBUILT FRAME
         evaluateAndCacheAll();
         renderAll();
-        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
     }
-
+    
+    // --- All other helper functions (executeReplayCommand, addExpressionUI, renderAll, etc.) ---
+    
     function executeReplayCommand(command) {
         if (!command || !command.action) return;
         const { action, payload } = command;
@@ -554,21 +407,14 @@ function initialize() {
         }
         const scope = getEvaluationScope(expr);
         const points = [];
-        const xMin = -100;
-        const xMax = 100;
-        const numPoints = 10000;
+        const xMin = -100, xMax = 100, numPoints = 10000;
         const dx = (xMax - xMin) / numPoints;
-
         for (let i = 0; i <= numPoints; i++) {
             const x = xMin + i * dx;
             scope.x = x;
             try {
                 const y = expr.compiled.evaluate(scope);
-                if (Number.isFinite(y)) {
-                    points.push({ x, y });
-                } else {
-                    points.push(null);
-                }
+                points.push(Number.isFinite(y) ? { x, y } : null);
             } catch (e) {
                 points.push(null);
             }
@@ -596,28 +442,21 @@ function initialize() {
         ctx.lineWidth = 2.5 * currentDevicePixelRatio;
         ctx.beginPath();
         let firstPoint = true;
-
         for (const point of expr.plotPoints) {
-            if (point === null) {
-                firstPoint = true;
-                continue;
-            }
+            if (point === null) { firstPoint = true; continue; }
             const px = graphState.originX + point.x * graphState.scale;
             const py = graphState.originY - point.y * graphState.scale;
             if (px < -10 || px > canvas.width + 10 || py < -10 || py > canvas.height + 10) {
-                firstPoint = true;
-                continue;
+                firstPoint = true; continue;
             }
-            if (firstPoint) {
-                ctx.moveTo(px, py);
-                firstPoint = false;
-            } else {
-                ctx.lineTo(px, py);
-            }
+            if (firstPoint) { ctx.moveTo(px, py); firstPoint = false; }
+            else { ctx.lineTo(px, py); }
         }
         ctx.stroke();
     }
-
+    
+    // (The rest of your graphing helper functions: plotInequality, parseSingleExpression, etc.)
+    // (Paste them here without any changes)
     function plotInequality(expr) { if (!expr.plotPoints || expr.plotPoints.length === 0) return; const scope = getEvaluationScope(expr); ctx.fillStyle = expr.color; ctx.globalAlpha = INEQUALITY_ALPHA; ctx.beginPath(); let firstPoint = !0; for (const point of expr.plotPoints) { if (point === null) { firstPoint = !0; continue } const px = graphState.originX + point.x * graphState.scale; if (px < -10 || px > canvas.width + 10) { firstPoint = !0; continue } const py = graphState.originY - point.y * graphState.scale; if (firstPoint) { ctx.moveTo(px, py); firstPoint = !1 } else { ctx.lineTo(px, py) } } const op = expr.inequalityType; if (op.includes(">")) { ctx.lineTo(canvas.width, 0); ctx.lineTo(0, 0) } else { ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(0, canvas.height) } ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; if (op === "<" || op === ">") { ctx.setLineDash([8 * currentDevicePixelRatio, 8 * currentDevicePixelRatio]) } plotFunction(expr); ctx.setLineDash([]) }
     function parseSingleExpression(expr) { Object.assign(expr, { type: "empty", compiled: null, error: null, result: null, node: null, inequalityType: null, isImplicit: !1 }); let cleanStr = preprocessInputString(latexToMathJs(expr.latex.trim())); if (!cleanStr) return; try { const node = math.parse(cleanStr); expr.node = node; const scope = getEvaluationScope(expr); if (node.isAssignmentNode) { const varName = node.object.name; if (node.toString().match(/[xy]/)) { expr.error = "Cannot assign expression with x or y."; return } expr.type = "assignment"; const result = node.evaluate(scope); expr.result = result; graphState.definedVariables[varName] = result } else if (cleanStr.includes("x") || cleanStr.includes("y")) { expr.type = "function"; let parseableNode = node; if (node.isOperatorNode && node.op === "=") { const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { parseableNode = right } else if (right.isSymbolNode && right.name === "y") { parseableNode = left } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_line"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_line"; expr.x_value = left.evaluate(scope) } else { expr.error = "Implicit functions not supported yet." } } if (expr.type === "function") { expr.node = parseableNode; expr.compiled = parseableNode.compile() } } else if (node.isOperatorNode && ["<", ">", "<=", ">="].includes(node.op)) { expr.inequalityType = node.op; const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { expr.type = "inequality"; expr.compiled = right.compile() } else if (right.isSymbolNode && right.name === "y") { expr.type = "inequality"; expr.compiled = left.compile(); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_inequality"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_inequality"; expr.x_value = left.evaluate(scope); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } if (expr.type === "function" || expr.type === "inequality") { const knownSymbols = ["x", "y", "e", "pi", "i", "true", "false", "theta", ...Object.keys(math)]; const foundSymbols = new Set; expr.node.traverse(n => { if (n.isSymbolNode && !knownSymbols.includes(n.name) && !graphState.definedVariables.hasOwnProperty(n.name)) { foundSymbols.add(n.name) } }); foundSymbols.forEach(name => { if (!expr.sliders[name]) expr.sliders[name] = { val: 1, min: -5, max: 5, step: .1 } }); Object.keys(expr.sliders).forEach(name => { if (!foundSymbols.has(name)) delete expr.sliders[name] }) } else { expr.sliders = {} } if (expr.type === "function") findPointsOfInterest(expr) } catch (err) { expr.error = err.message.length > 50 ? err.message.substring(0, 50) + "..." : err.message } }
     function updateExpressionUI(expr) { const item = document.getElementById(expr.id); if (!item) return; const resultEl = item.querySelector(".expression-result"); const extrasEl = item.querySelector(".expression-extras"); const colorBar = item.querySelector(".expression-color-bar"); resultEl.textContent = ""; extrasEl.innerHTML = ""; colorBar.style.backgroundColor = expr.error ? "var(--error-red)" : expr.visible ? expr.color : "#ccc"; colorBar.style.borderColor = expr.error ? "var(--error-red)" : expr.color; if (expr.error) { resultEl.textContent = "Error" } else if (expr.result !== null && expr.result !== undefined) { try { if (Array.isArray(expr.result)) { resultEl.textContent = `= [${expr.result.map(v => math.format(v, { precision: 3 })).join(", ")}]` } else if (typeof expr.result === "function") { resultEl.textContent = "f(x)" } else { resultEl.textContent = `= ${math.format(expr.result, { precision: 5 })}` } } catch { resultEl.textContent = `= ${expr.result.toString()}` } } Object.keys(expr.sliders).forEach(name => { const slider = expr.sliders[name]; const sliderDiv = document.createElement("div"); sliderDiv.className = "slider-container"; sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`; extrasEl.appendChild(sliderDiv) }) }
