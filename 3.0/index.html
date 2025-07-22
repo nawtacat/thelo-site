@@ -1742,40 +1742,61 @@ function resizeCanvases() {
    // In your MAIN app's <script> tag
 // In your MAIN app's <script> tag - REPLACE this function
 
+// In your MAIN app's <script> tag - REPLACE this function
+
 function mediaPlaybackLoop(timestamp) {
-    if (!isReplayActive || !currentStageAudio) {
+    // Exit if playback is no longer supposed to be active
+    if (!isMediaScrubbingActive) {
         if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
         currentReplayAnimationId = null;
         return;
     }
 
-    // THE FIX: The audio player is now the single source of truth for time.
-    internalPlaybackTime = currentStageAudio.currentTime;
+    // --- HYBRID TIME CALCULATION ---
+    const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
 
-    // If the audio has finished, stop the loop.
-    if (currentStageAudio.ended) {
+    if (audioIsPlaying) {
+        // USE AUDIO AS THE CLOCK: For stages with audio (prevents corruption)
+        internalPlaybackTime = currentStageAudio.currentTime;
+        lastFrameTimestampForManualAdvance = timestamp; // Keep this in sync for smooth transitions
+    } else {
+        // USE MANUAL FRAME TIMER: For stages without audio (drawing animations, etc.)
+        if (lastFrameTimestampForManualAdvance === 0) {
+            lastFrameTimestampForManualAdvance = timestamp;
+        }
+        const deltaTime = (timestamp - lastFrameTimestampForManualAdvance) / 1000.0;
+        internalPlaybackTime += deltaTime;
+        lastFrameTimestampForManualAdvance = timestamp;
+    }
+    // ------------------------------------
+
+    // Ensure playback stops precisely at the end
+    if (internalPlaybackTime >= currentStageTotalDuration) {
         internalPlaybackTime = currentStageTotalDuration;
-        isMediaScrubbingActive = false; // Stop playback
+        isMediaScrubbingActive = false; // This will stop the loop on the next frame
     }
 
-    // On every frame, tell the iframe what time to render based on the audio's time.
-    if (replayFrame.contentWindow) {
+    // --- UNIVERSAL UPDATES ---
+    // These updates now work for ALL stage types because internalPlaybackTime is always correct.
+
+    // Update the drawing replay on the main canvas (for drawing-only stages)
+    if (currentStageDrawingData && replayCtx) {
+        renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
+    }
+
+    // Update the iframe replay (for calculator stages)
+    if (isReplayActive && replayFrame.contentWindow) {
         replayFrame.contentWindow.postMessage({
             command: 'renderAtTime',
             timeMs: internalPlaybackTime * 1000
         }, '*');
     }
     
-    // Update the progress bar based on the audio's time.
+    // Update the progress bar (for ALL stages)
     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
 
-    // Continue the loop as long as the replay is active.
-    if (isReplayActive && !currentStageAudio.ended) {
-        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-    } else {
-        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-        currentReplayAnimationId = null;
-    }
+    // Continue the loop
+    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
 }
 function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         if (isMediaScrubbingActive) { if (typeof onFinished === 'function') onFinished(); return; }
