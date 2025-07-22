@@ -1739,52 +1739,43 @@ function resizeCanvases() {
         }
         }
     }
-    function mediaPlaybackLoop(timestamp){
-        if (!isMediaScrubbingActive) {
-            if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-            currentReplayAnimationId = null;
-            return;
-        }
-
-        let effectiveTime;
-        const audioIsActuallyPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
-
-        if (audioIsActuallyPlaying) {
-            effectiveTime = currentStageAudio.currentTime;
-            internalPlaybackTime = effectiveTime;
-            lastFrameTimestampForManualAdvance = timestamp || performance.now();
-        } else {
-            if (lastFrameTimestampForManualAdvance === 0) lastFrameTimestampForManualAdvance = timestamp || performance.now();
-            const deltaTime = ((timestamp || performance.now()) - lastFrameTimestampForManualAdvance) / 1000.0;
-
-            if (internalPlaybackTime < currentStageTotalDuration) {
-                internalPlaybackTime += deltaTime;
-            }
-            internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration);
-            effectiveTime = internalPlaybackTime;
-            lastFrameTimestampForManualAdvance = timestamp || performance.now();
-        }
-        effectiveTime = Math.max(0, Math.min(effectiveTime, currentStageTotalDuration));
-
-        if (currentStageDrawingData && replayCtx) {
-            renderDrawingAtTime(effectiveTime, currentStageDrawingData, replayCtx);
-        } else if (replayCtx) {
-            replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-        }
-        updateMediaProgressBar(effectiveTime, currentStageTotalDuration);
-
-        if (effectiveTime >= currentStageTotalDuration - 0.02 && currentStageTotalDuration > 0) {
-            if (currentStageDrawingData && replayCtx) {
-                renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx);
-            }
-            updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
-            isMediaScrubbingActive = false;
-            if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-            currentReplayAnimationId = null;
-            return;
-        }
-        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+   // In your MAIN app's <script> tag
+function mediaPlaybackLoop(timestamp) {
+    if (!isMediaScrubbingActive) {
+        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+        return;
     }
+
+    if (lastFrameTimestampForManualAdvance === 0) {
+        lastFrameTimestampForManualAdvance = timestamp;
+    }
+    const deltaTime = (timestamp - lastFrameTimestampForManualAdvance) / 1000.0;
+    lastFrameTimestampForManualAdvance = timestamp;
+
+    if (internalPlaybackTime < currentStageTotalDuration) {
+        internalPlaybackTime += deltaTime;
+    } else {
+        internalPlaybackTime = currentStageTotalDuration;
+        isMediaScrubbingActive = false; // Stop the loop
+    }
+    
+    // On every frame, tell the iframe what time to render
+    if (replayFrame.contentWindow) {
+        replayFrame.contentWindow.postMessage({
+            command: 'renderAtTime',
+            timeMs: internalPlaybackTime * 1000
+        }, '*');
+    }
+    
+    // Also update local elements like audio and progress bar
+    if (currentStageAudio) {
+        currentStageAudio.currentTime = internalPlaybackTime;
+    }
+    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+
+    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+}
     function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         if (isMediaScrubbingActive) { if (typeof onFinished === 'function') onFinished(); return; }
         if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
@@ -2347,64 +2338,57 @@ function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
  */
 // In your MAIN app's <script> tag
 
+// In your MAIN app's <script> tag
 async function openReplayPlayer() {
     if (isReplayActive || !currentStageData || !currentStageData.replayDataUrl) {
-        console.warn("No replay data URL found for this stage.");
         return;
     }
     isReplayActive = true;
 
-    const playerURL = 'https://thelo.space/replay2';
-
     try {
-        // Fetch the replay data first
         const response = await fetch(currentStageData.replayDataUrl);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const replayJson = await response.json();
         const replayActions = replayJson.actions;
-        if (!replayActions) throw new Error("Could not find 'actions' in replay JSON.");
 
-        // --- THIS IS THE NEW HANDSHAKE LOGIC ---
-        
-        // 1. Define a listener for the "ready" message from the iframe
         const onIframeReady = (event) => {
-            // Check if the message is from the correct iframe and is the ready signal
             if (event.source === replayFrame.contentWindow && event.data.command === 'ready') {
-                console.log("Replay iframe is ready. Sending data.");
-                
-                // 2. Once ready, send the replay data
                 replayFrame.contentWindow.postMessage({
-                    meta: { source: 'thelo-lesson' },
+                    command: 'loadTimeline',
                     actions: replayActions
                 }, '*');
 
-                // 3. Clean up the listener to avoid it firing multiple times
                 window.removeEventListener('message', onIframeReady);
+
+                // Start the main app's playback loop
+                isMediaScrubbingActive = true;
+                lastFrameTimestampForManualAdvance = 0;
+                internalPlaybackTime = 0;
+                currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
             }
         };
 
-        // 4. Start listening for the "ready" message
         window.addEventListener('message', onIframeReady);
-
-        // 5. Set the iframe's src. This will trigger it to load and eventually send the "ready" message.
-        replayFrame.src = playerURL;
-        
+        replayFrame.src = 'https://thelo.space/replay2'; // Or your replay URL
         replayPlayerContainer.classList.remove('replay-hidden');
 
     } catch (error) {
         console.error("Failed to load or send replay data:", error);
-        addChatMessage('AI', 'Error: Could not load the interactive replay.');
-        isReplayActive = false; // Reset on failure
+        isReplayActive = false;
     }
 }
-/**
- * Closes the replay player and clears its content.
- */
+		// In your MAIN app's <script> tag
 function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
+
+    // CRITICAL: Stop the main app's animation loop
+    if (currentReplayAnimationId) {
+        cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+    }
+    isMediaScrubbingActive = false;
+
     replayPlayerContainer.classList.add('replay-hidden');
-    // Reset the iframe src to stop playback and free up resources
     replayFrame.src = 'about:blank';
 }
 // REPLACE your entire renderStageUI function with this one
@@ -3784,7 +3768,8 @@ function handleKeyDown(event) {
             }
             break;
     }
-}    // Prevent zooming via keyboard and mouse wheel
+}
+		// Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
