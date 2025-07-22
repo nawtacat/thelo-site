@@ -416,101 +416,86 @@ function togglePlayPause() {
     }
 
     /**
-     * The "Cold Path": Reconstructs the entire calculator state for a specific time.
-     * This is the critical function for reliable seeking.
-     * It ensures the `graphState` and UI are precisely as they would be if the replay played linearly to `time`.
-     * @param {number} time - The target time in milliseconds to reconstruct the state for.
-     */
-    function renderStateAtTime(time) {
-        // --- STEP 1: Perform a complete reset of the replay player's UI and internal state.
-        // This is crucial for stability, especially when seeking backward.
-        expressionListContainer.innerHTML = ''; // Clear all expression UI elements
-        
-        // Reset main graphState properties to their defaults (or initial state)
-        graphState = {
-            ...initialGraphView, // Reset view to default
-            expressions: [],     // Clear all expressions
-            intersections: [],
-            lockedPoint: { visible: false, x: 0, y: 0 },
-            angleMode: 'rad',    // Reset angle mode
-            definedVariables: {},
-            activeAnimateView: null // No active animation when starting reconstruction
-        };
-        // Reset angle mode button to default visual state
-        toggleAngleModeBtn.textContent = 'RAD';
-        toggleAngleModeBtn.classList.add('active'); // Assuming RAD is default active
+ * The "Cold Path": Reconstructs the entire calculator state for a specific time.
+ * This is the critical function for reliable seeking.
+ * It ensures the `graphState` and UI are precisely as they would be if the replay played linearly to `time`.
+ * @param {number} time - The target time in milliseconds to reconstruct the state for.
+ */
+function renderStateAtTime(time) {
+    // --- STEP 1: Perform a complete reset of the replay player's UI and internal state.
+    expressionListContainer.innerHTML = ''; // Clear all expression UI elements
+    
+    // THE FIX IS HERE: Reset the expressions array to prevent duplicates on rebuild.
+    graphState.expressions = []; 
 
-        // Clear the canvas to remove any previous drawing
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Reset other main graphState properties to their defaults (or initial state)
+    Object.assign(graphState, {
+        ...initialGraphView,
+        intersections: [],
+        lockedPoint: { visible: false, x: 0, y: 0 },
+        angleMode: 'rad',
+        definedVariables: {},
+        activeAnimateView: null
+    });
 
-        // Reset the last processed event index.
-        // This tells the `animationLoop` to start processing from the beginning
-        // if it resumes playback after this reconstruction.
-        lastProcessedEventIndex = -1;
+    // Reset angle mode button to default visual state
+    toggleAngleModeBtn.textContent = 'RAD';
+    toggleAngleModeBtn.classList.add('active');
 
-        // --- STEP 2: Iterate through the entire timeline from the beginning up to the target time. ---
-        // Apply each command's effect to the `graphState` and UI chronologically.
-        for (let i = 0; i < timeline.length; i++) {
-            const command = timeline[i];
+    // Clear the canvas to remove any previous drawing
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // If the command's starting time is strictly after the target 'time',
-            // we've processed all relevant past commands. Break the loop.
-            // EXCEPTION: if the target 'time' falls *within* an 'animateView' command that has already started.
-            if (command.time > time) {
-                // Special handling for 'animateView' if we seek *into* it.
-                if (command.action === 'animateView' && command.time < time) {
-                    const animationEndTime = command.time + command.payload.duration;
-                    if (time < animationEndTime) { // Target 'time' is inside this specific animation
-                        // Calculate interpolated view properties for this exact moment
-                        const progress = (time - command.time) / command.payload.duration;
-                        graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
-                        graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
-                        graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
-                        
-                        // Mark this as the active animation for the `animationLoop` to continue from
-                        graphState.activeAnimateView = { ...command.payload, startTime: command.time };
-                        lastProcessedEventIndex = i; // This command is now the "last processed" for the animation loop
-                        break; // Stop reconstruction, as we are now in an interpolated state
-                    }
+    // Reset the last processed event index.
+    lastProcessedEventIndex = -1;
+
+    // --- STEP 2: Iterate through the timeline from the beginning up to the target time. ---
+    for (let i = 0; i < timeline.length; i++) {
+        const command = timeline[i];
+
+        if (command.time > time) {
+             // Special handling for seeking *into* an 'animateView' command
+            if (command.action === 'animateView' && command.time < time) {
+                const animationEndTime = command.time + command.payload.duration;
+                if (time < animationEndTime) {
+                    const progress = (time - command.time) / command.payload.duration;
+                    graphState.originX = command.payload.startView.originX + (command.payload.endView.originX - command.payload.startView.originX) * progress;
+                    graphState.originY = command.payload.startView.originY + (command.payload.endView.originY - command.payload.startView.originY) * progress;
+                    graphState.scale = command.payload.startView.scale + (command.payload.endView.scale - command.payload.startView.scale) * progress;
+                    
+                    graphState.activeAnimateView = { ...command.payload, startTime: command.time };
+                    lastProcessedEventIndex = i;
+                    break;
                 }
-                break; // Stop, no more commands to process up to 'time'
             }
-
-            // --- Apply the command's effect to the state ---
-            if (command.action === 'initialState') {
-                // Apply the initial view and expressions
-                Object.assign(graphState, command.payload.view);
-                graphState.angleMode = command.payload.angleMode;
-                toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
-                toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
-                command.payload.expressions.forEach(initialExpr => {
-                    const clonedSliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
-                    const completeExpr = { plotPoints: [], ...initialExpr, sliders: clonedSliders };
-                    addExpressionUI(completeExpr); // This function creates DOM elements and initializes MathQuill
-                });
-            } else if (command.action === 'animateView') {
-                // If we are rebuilding *past* an animateView (i.e., it completed before 'time'),
-                // apply its final state to graphState.
-                Object.assign(graphState, command.payload.endView);
-            } else if (command.action !== 'delay') { // 'delay' commands just advance timeline time, not graph state
-                // Execute all other discrete commands
-                executeReplayCommand(command);
-            }
-
-            // After processing each command, update `lastProcessedEventIndex`.
-            // This is crucial for the `animationLoop` to know where to start if it takes over.
-            lastProcessedEventIndex = i;
+            break; // Stop, no more commands to process up to 'time'
         }
 
-        // --- STEP 3: Finalize state and perform initial render for the reconstructed state. ---
-        // After all relevant commands are applied, re-evaluate all expressions (compiling, plotting points, finding intersections).
-        evaluateAndCacheAll();
-        // Redraw the canvas with the fully reconstructed graphical state.
-        renderAll();
-        // Update the visual progress bar to reflect the new playback position.
-        progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
+        // --- Apply the command's effect to the state ---
+        if (command.action === 'initialState') {
+            Object.assign(graphState, command.payload.view);
+            graphState.angleMode = command.payload.angleMode;
+            toggleAngleModeBtn.textContent = graphState.angleMode.toUpperCase();
+            toggleAngleModeBtn.classList.toggle('active', graphState.angleMode === 'rad');
+            command.payload.expressions.forEach(initialExpr => {
+                const clonedSliders = initialExpr.sliders ? JSON.parse(JSON.stringify(initialExpr.sliders)) : {};
+                const completeExpr = { plotPoints: [], ...initialExpr, sliders: clonedSliders };
+                addExpressionUI(completeExpr);
+            });
+        } else if (command.action === 'animateView') {
+            // Apply the final state of any animation that completed before 'time'
+            Object.assign(graphState, command.payload.endView);
+        } else if (command.action !== 'delay') {
+            executeReplayCommand(command);
+        }
+
+        lastProcessedEventIndex = i;
     }
 
+    // --- STEP 3: Finalize state and perform initial render. ---
+    evaluateAndCacheAll();
+    renderAll();
+    progressBar.style.width = `${(playbackTime / totalDuration) * 100}%`;
+}
     /**
      * Executes a single replay command, applying its effect to the graphState and UI.
      * This function is used by both `renderStateAtTime` (cold path) and `animationLoop` (hot path).
