@@ -1740,27 +1740,25 @@ function resizeCanvases() {
         }
     }
    // In your MAIN app's <script> tag
+// In your MAIN app's <script> tag - REPLACE this function
+
 function mediaPlaybackLoop(timestamp) {
-    if (!isMediaScrubbingActive) {
+    if (!isReplayActive || !currentStageAudio) {
         if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
         currentReplayAnimationId = null;
         return;
     }
 
-    if (lastFrameTimestampForManualAdvance === 0) {
-        lastFrameTimestampForManualAdvance = timestamp;
-    }
-    const deltaTime = (timestamp - lastFrameTimestampForManualAdvance) / 1000.0;
-    lastFrameTimestampForManualAdvance = timestamp;
+    // THE FIX: The audio player is now the single source of truth for time.
+    internalPlaybackTime = currentStageAudio.currentTime;
 
-    if (internalPlaybackTime < currentStageTotalDuration) {
-        internalPlaybackTime += deltaTime;
-    } else {
+    // If the audio has finished, stop the loop.
+    if (currentStageAudio.ended) {
         internalPlaybackTime = currentStageTotalDuration;
-        isMediaScrubbingActive = false; // Stop the loop
+        isMediaScrubbingActive = false; // Stop playback
     }
-    
-    // On every frame, tell the iframe what time to render
+
+    // On every frame, tell the iframe what time to render based on the audio's time.
     if (replayFrame.contentWindow) {
         replayFrame.contentWindow.postMessage({
             command: 'renderAtTime',
@@ -1768,15 +1766,18 @@ function mediaPlaybackLoop(timestamp) {
         }, '*');
     }
     
-    // Also update local elements like audio and progress bar
-    if (currentStageAudio) {
-        currentStageAudio.currentTime = internalPlaybackTime;
-    }
+    // Update the progress bar based on the audio's time.
     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
 
-    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+    // Continue the loop as long as the replay is active.
+    if (isReplayActive && !currentStageAudio.ended) {
+        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+    } else {
+        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+    }
 }
-    function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
+function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         if (isMediaScrubbingActive) { if (typeof onFinished === 'function') onFinished(); return; }
         if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
         if (!targetCtx || !strokeData || !strokeData.strokes || strokeData.strokes.length === 0) { if (typeof onFinished === 'function') onFinished(); return; }
