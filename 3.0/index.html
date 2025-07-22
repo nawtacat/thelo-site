@@ -2345,6 +2345,8 @@ function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
 /**
  * Opens the replay player, fetches the replay data, and sends it to the iframe.
  */
+// In your MAIN app's <script> tag
+
 async function openReplayPlayer() {
     if (isReplayActive || !currentStageData || !currentStageData.replayDataUrl) {
         console.warn("No replay data URL found for this stage.");
@@ -2352,32 +2354,41 @@ async function openReplayPlayer() {
     }
     isReplayActive = true;
 
-    const playerURL = 'https://thelo.space/replay2'; // The URL of your automated player
-
-    const sendDataToPlayer = (replayActions) => {
-        if (replayFrame.contentWindow) {
-            replayFrame.contentWindow.postMessage({
-                meta: { source: 'thelo-lesson' },
-                actions: replayActions
-            }, '*');
-            console.log("Replay data sent to player iframe.");
-        }
-    };
+    const playerURL = 'https://thelo.space/replay2';
 
     try {
-        // Fetch the external replay data file
+        // Fetch the replay data first
         const response = await fetch(currentStageData.replayDataUrl);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
         const replayJson = await response.json();
         const replayActions = replayJson.actions;
-
         if (!replayActions) throw new Error("Could not find 'actions' in replay JSON.");
 
-        // Load the iframe and send data once it's ready
-        replayFrame.src = playerURL;
-        replayFrame.onload = () => sendDataToPlayer(replayActions);
+        // --- THIS IS THE NEW HANDSHAKE LOGIC ---
+        
+        // 1. Define a listener for the "ready" message from the iframe
+        const onIframeReady = (event) => {
+            // Check if the message is from the correct iframe and is the ready signal
+            if (event.source === replayFrame.contentWindow && event.data.command === 'ready') {
+                console.log("Replay iframe is ready. Sending data.");
+                
+                // 2. Once ready, send the replay data
+                replayFrame.contentWindow.postMessage({
+                    meta: { source: 'thelo-lesson' },
+                    actions: replayActions
+                }, '*');
 
+                // 3. Clean up the listener to avoid it firing multiple times
+                window.removeEventListener('message', onIframeReady);
+            }
+        };
+
+        // 4. Start listening for the "ready" message
+        window.addEventListener('message', onIframeReady);
+
+        // 5. Set the iframe's src. This will trigger it to load and eventually send the "ready" message.
+        replayFrame.src = playerURL;
+        
         replayPlayerContainer.classList.remove('replay-hidden');
 
     } catch (error) {
@@ -2386,7 +2397,6 @@ async function openReplayPlayer() {
         isReplayActive = false; // Reset on failure
     }
 }
-
 /**
  * Closes the replay player and clears its content.
  */
