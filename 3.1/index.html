@@ -2495,19 +2495,29 @@ function renderStageUI(index, isResize = false) {
                         return totalReplayTime / 1000; // Convert to seconds
                     })
                     .catch(e => { console.error("Failed to load replay data for duration calculation:", e); return 0; });
+			// (Inside renderStageUI, within the 'calculator_replay' block)
 
-                // Combine promises to determine the overall stage duration
-                Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration, replayDuration]) => {
-                    currentStageTotalDuration = Math.max(audioDuration, replayDuration);
+Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration, replayDuration]) => {
+    currentStageTotalDuration = Math.max(audioDuration, replayDuration);
+    
+    // Check if playback is already at the end. `internalPlaybackTime` will have been
+    // correctly set to the end time by `resumeMediaState`.
+    const atEnd = currentStageTotalDuration > 0 && internalPlaybackTime >= currentStageTotalDuration - 0.05;
 
-                    isMediaScrubbingActive = true; // Mark as active for progress bar and loop
-                    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
-                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible'); // Ensure it's visible
+    // *** THE FIX ***
+    // Only start scrubbing if we are NOT already at the end of the playback.
+    isMediaScrubbingActive = !atEnd;
 
-                    if (!currentReplayAnimationId) { // Start media playback loop if not already running
-                        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-                    }
-                }).catch(e => console.error("Error setting up replay stage durations:", e));
+    // Always show the progress bar if the stage has a duration, and update it.
+    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+
+    // Only start the animation loop if we are actually supposed to be scrubbing.
+    if (isMediaScrubbingActive && !currentReplayAnimationId) {
+        lastFrameTimestampForManualAdvance = 0; // Reset timer for smooth resume
+        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+    }
+}).catch(e => console.error("Error setting up replay stage durations:", e));
 
                 if (nextCheckBtn) {
                     nextCheckBtn.textContent = TXT.gotIt;
