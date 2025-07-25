@@ -3638,54 +3638,56 @@ function closeCalculator() {
 }
 function handleKeyDown(event) {
     // =================================================================
-    // ===== UNIFIED SEEK LOGIC (FIX) ==================================
+    // ===== REPLAY SEEK LOGIC (NOW WORKS UNIVERSALLY) ==============
     // =================================================================
-    const isSeeking = (event.key === 'ArrowLeft' || event.key === 'ArrowRight');
-    const isSeekable = currentStageTotalDuration > 0 && !isThelobookActive && !isPageGridVisible && !isCalculatorActive;
-
-    if (isSeeking && isSeekable) {
+    // This block now runs if ANY media is playing, not just the iframe replay.
+    if (isMediaScrubbingActive && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         event.preventDefault();
 
-        // 1. Stop any active playback loop to prevent state corruption.
+        // Stop the current animation loop to prevent state corruption.
         if (currentReplayAnimationId) {
             cancelAnimationFrame(currentReplayAnimationId);
             currentReplayAnimationId = null;
         }
-        isMediaScrubbingActive = false; // Temporarily disable
 
-        // 2. Calculate the new time.
-        const step = 5; // Seek 5 seconds
+        const step = 5; // Amount to seek in seconds
         const diff = event.key === 'ArrowLeft' ? -step : step;
-        let newTime = internalPlaybackTime + diff;
-        newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration)); // Clamp to valid range
-        internalPlaybackTime = newTime; // Update the master time variable
 
-        // 3. Update the media elements to the new time.
+        // Calculate the new absolute playback time, clamped to the valid range.
+        let newTime = internalPlaybackTime + diff;
+        newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
+        internalPlaybackTime = newTime;
+
+        // 1. Seek the <audio> element if it exists for this stage.
         if (currentStageAudio) {
-            currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+            const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+            currentStageAudio.currentTime = audioTargetTime;
+            if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) {
+                currentStageAudio.play().catch(() => { /* Autoplay prevented, ignore */ });
+            }
         }
 
-        if (isReplayActive && replayFrame.contentWindow) {
-            // Update Graph Replay
-            replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*');
-        } else if (currentStageDrawingData && replayCtx) {
-            // Update Drawing Replay
+        // 2. Seek the iframe replay ONLY if it's the active type.
+        if (isReplayActive && replayFrame && replayFrame.contentWindow) {
+            replayFrame.contentWindow.postMessage({
+                command: 'seekToTime',
+                timeMs: newTime * 1000
+            }, '*');
+        }
+
+        // 3. Immediately redraw the main replay canvas for instant feedback.
+        if (currentStageDrawingData && replayCtx) {
             renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
         }
-
-        // 4. Immediately update the progress bar to the new position.
+        
+        // 4. Update the main app's progress bar to reflect the seek.
         updateMediaProgressBar(newTime, currentStageTotalDuration);
 
-        // 5. Restart the synchronized playback loop from the new position.
-        isMediaScrubbingActive = true;
-        lastFrameTimestampForManualAdvance = 0; // Reset for accurate timing
+        // 5. Restart the main app's media playback loop from the new state.
+        lastFrameTimestampForManualAdvance = 0;
         currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
         
-        if (currentStageAudio && currentStageAudio.paused && window.userInteracted && newTime < (currentStageAudio.duration - 0.1)) {
-            currentStageAudio.play().catch(e => console.warn("Seek-and-play failed:", e));
-        }
-        
-        return; // Exit after handling the seek.
+        return; // Stop further keydown processing.
     }
 
     // --- Original function logic continues below for all other keys ---
@@ -3727,6 +3729,9 @@ function handleKeyDown(event) {
     if (isThelobookActive) {
         switch (event.key.toLowerCase()) {
             case 'b':
+                closeThelobook(true);
+                event.preventDefault();
+                return;
             case 'escape':
                 closeThelobook(true);
                 event.preventDefault();
@@ -3785,7 +3790,7 @@ function handleKeyDown(event) {
             break;
     }
 }
-// Prevent zooming via keyboard and mouse wheel
+		// Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
