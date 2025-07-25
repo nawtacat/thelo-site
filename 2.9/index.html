@@ -3638,11 +3638,15 @@ function closeCalculator() {
 }
 function handleKeyDown(event) {
     // =================================================================
-    // ===== REPLAY SEEK LOGIC (NOW WORKS UNIVERSALLY) ==============
+    // ===== REPLAY SEEK LOGIC (WORKS UNIVERSALLY, EVEN AT END) ======
     // =================================================================
-    // This block now runs if ANY media is playing, not just the iframe replay.
-    if (isMediaScrubbingActive && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    
+    // CHANGE 1: Check if the stage has a timeline, not if it's currently scrubbing.
+    if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         event.preventDefault();
+
+        // CHANGE 2: Re-enable media scrubbing so the loop can resume after seeking.
+        isMediaScrubbingActive = true;
 
         // Stop the current animation loop to prevent state corruption.
         if (currentReplayAnimationId) {
@@ -3668,7 +3672,6 @@ function handleKeyDown(event) {
         }
 
         // 2. Seek the iframe replay ONLY if it's the active type.
-        // This check ensures we don't break the graphing stage logic.
         if (isReplayActive && replayFrame && replayFrame.contentWindow) {
             replayFrame.contentWindow.postMessage({
                 command: 'seekToTime',
@@ -3790,8 +3793,7 @@ function handleKeyDown(event) {
             }
             break;
     }
-}
-		// Prevent zooming via keyboard and mouse wheel
+}		// Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
