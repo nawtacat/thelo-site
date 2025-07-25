@@ -2403,9 +2403,10 @@ function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
 
-    // CRITICAL: Stop the main app's animation loop
+    // Stop the media playback loop (handles both timer types)
     if (currentReplayAnimationId) {
         cancelAnimationFrame(currentReplayAnimationId);
+        clearInterval(currentReplayAnimationId);
         currentReplayAnimationId = null;
     }
     isMediaScrubbingActive = false;
@@ -2635,13 +2636,25 @@ function renderStageUI(index, isResize = false) {
 }
           function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
-		  if (isReplayActive) closeReplayPlayer();
+    if (isReplayActive) closeReplayPlayer();
     if (isThelobookActive) closeThelobook(true);
     if (isPageGridVisible) closePageGridView();
 
-    if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-    if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
-    isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
+    if (currentReplayAnimationId) {
+        cancelAnimationFrame(currentReplayAnimationId);
+        clearInterval(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+    }
+    if (currentStageAudio && !currentStageAudio.paused) {
+        currentStageAudio.pause();
+        currentStageAudio.onloadedmetadata = null;
+        currentStageAudio.onended = null;
+    }
+    isMediaScrubbingActive = false;
+    currentStageDrawingData = null;
+    currentStageTotalDuration = 0;
+    internalPlaybackTime = 0;
+    lastFrameTimestampForManualAdvance = 0;
     if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
     if (stageProgressFill) stageProgressFill.style.width = '0%';
 
@@ -2656,19 +2669,16 @@ function renderStageUI(index, isResize = false) {
     if (replayCanvas) replayCanvas.classList.add('fade-out');
     if (mcqOptionsContainer) mcqOptionsContainer.style.opacity = 0;
 
-    // --- KEY CHANGE: Replace setTimeout with .then() ---
     const fadeDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000;
     
     setTimeout(() => {
         currentStageIndex = newIndex;
-        // renderStageUI now returns a promise. We wait for it to resolve.
         renderStageUI(currentStageIndex, false).then(() => {
-            // This code now runs ONLY AFTER the stage content (including images) is ready.
             backgroundCanvas.classList.remove('fade-out');
             if (replayCanvas) replayCanvas.classList.remove('fade-out');
             isTransitioning = false;
         });
-    }, fadeDuration); // We still wait for the fade-out to finish before preparing the new scene.
+    }, fadeDuration);
 }
     function nextStage() { transitionToStage(currentStageIndex + 1); }
     function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
@@ -3454,25 +3464,27 @@ if (detectedAnswer && parseFloat(detectedAnswer) === parseFloat(correctAnswer)) 
         updateColorIndicator();
     }
 
-    /* ---------------- helper: snapshot & pause media ---------------- */
     function captureMediaState() {
-        mediaPlaybackTimeBeforeThelobook = internalPlaybackTime;
-        audioTimeBeforeThelobook       = currentStageAudio ? currentStageAudio.currentTime : 0;
-        wasMediaPlayingBeforeThelobook  = false;
+    mediaPlaybackTimeBeforeThelobook = internalPlaybackTime;
+    audioTimeBeforeThelobook = currentStageAudio ? currentStageAudio.currentTime : 0;
+    wasMediaPlayingBeforeThelobook = false;
 
-        if (currentStageAudio && !currentStageAudio.paused) {
+    if (currentStageAudio && !currentStageAudio.paused) {
         currentStageAudio.pause();
         wasMediaPlayingBeforeThelobook = true;
-        }
-
-        if (isMediaScrubbingActive) {
-        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-        currentReplayAnimationId = null;
-        isMediaScrubbingActive  = false;
-        wasMediaPlayingBeforeThelobook = true;
-        }
-        stageProgressBarContainer?.classList.remove('visible');
     }
+
+    if (isMediaScrubbingActive) {
+        if (currentReplayAnimationId) {
+            cancelAnimationFrame(currentReplayAnimationId);
+            clearInterval(currentReplayAnimationId);
+            currentReplayAnimationId = null;
+        }
+        isMediaScrubbingActive = false;
+        wasMediaPlayingBeforeThelobook = true;
+    }
+    stageProgressBarContainer?.classList.remove('visible');
+}
     /* ---------------- helper: resume or freeze ---------------------- */
     function resumeMediaState() {
         const atEnd =
