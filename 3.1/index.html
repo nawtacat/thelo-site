@@ -190,9 +190,9 @@ body.lang-en {
     background-color: #000000;
     width: 0%;
     border-radius: 2px;
-    /* This short transition smooths out updates between animation frames */
-    transition: width 0.04s linear;
-}
+    transition: width 0.05s linear;
+  }
+
   #backgroundCanvas,
   #replayCanvas,
   #board,
@@ -1723,32 +1723,27 @@ function resizeCanvases() {
             if (movedToFirstPoint && points.length > 1) targetCtx.stroke();
         });
     }
-    function updateMediaProgressBar(effectiveTime, totalDuration) {
-    if (!stageProgressBarContainer || !stageProgressFill) return;
-
-    if (isMediaScrubbingActive && totalDuration > 0) {
-        if (!stageProgressBarContainer.classList.contains('visible')) {
-            stageProgressBarContainer.classList.add('visible');
+    function updateMediaProgressBar(effectiveTime, totalDuration){
+        if (!stageProgressBarContainer) return;
+        if (isMediaScrubbingActive && totalDuration > 0) {
+            if (!stageProgressBarContainer.classList.contains('visible')) {
+                stageProgressBarContainer.classList.add('visible');
+            }
+            const progress = (effectiveTime / totalDuration) * 100;
+            stageProgressFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+        } else {
+            // Keep progress bar visible if not scrubbing but playback is at the end (handled by new snippet in renderStageUI)
+        if (!(internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0)) {
+            stageProgressBarContainer.classList.remove('visible');
+            stageProgressFill.style.width = '0%';
         }
-
-        // --- NEW FIX LOGIC ---
-        // Check if the current stage should have a smooth progress bar.
-        const isSmoothUpdate = currentStageData && currentStageData.type === 'calculator_replay';
-        
-        // If it's a smooth update, remove the CSS transition. Otherwise, ensure it's there.
-        stageProgressFill.style.transition = isSmoothUpdate ? 'none' : 'width 0.04s linear';
-        // --- END OF NEW FIX ---
-
-        const progress = (effectiveTime / totalDuration) * 100;
-        stageProgressFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
-
-    } else {
-        // When not scrubbing, hide the bar and ensure the transition is reset for next time.
-        stageProgressBarContainer.classList.remove('visible');
-        stageProgressFill.style.width = '0%';
-        stageProgressFill.style.transition = 'width 0.04s linear';
+        }
     }
-}
+   // In your MAIN app's <script> tag
+// In your MAIN app's <script> tag - REPLACE this function
+
+// In your MAIN app's <script> tag - REPLACE this function
+
 function mediaPlaybackLoop(timestamp) {
     // Exit if playback is no longer supposed to be active
     if (!isMediaScrubbingActive) {
@@ -1760,14 +1755,12 @@ function mediaPlaybackLoop(timestamp) {
     // --- HYBRID TIME CALCULATION ---
     const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
 
-    // This condition now correctly forces the smooth manual timer for calculator replays,
-    // while still using the audio clock for other synchronized stages.
-    if (audioIsPlaying && currentStageData.type !== 'calculator_replay') {
-        // USE AUDIO AS THE CLOCK: For most stages with audio to prevent drift.
+    if (audioIsPlaying) {
+        // USE AUDIO AS THE CLOCK: For stages with audio (prevents corruption)
         internalPlaybackTime = currentStageAudio.currentTime;
         lastFrameTimestampForManualAdvance = timestamp; // Keep this in sync for smooth transitions
     } else {
-        // USE MANUAL FRAME TIMER: For drawing-only stages AND calculator_replay stages for a smooth bar.
+        // USE MANUAL FRAME TIMER: For stages without audio (drawing animations, etc.)
         if (lastFrameTimestampForManualAdvance === 0) {
             lastFrameTimestampForManualAdvance = timestamp;
         }
@@ -2410,10 +2403,9 @@ function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
 
-    // Stop the media playback loop (handles both timer types)
+    // CRITICAL: Stop the main app's animation loop
     if (currentReplayAnimationId) {
         cancelAnimationFrame(currentReplayAnimationId);
-        clearInterval(currentReplayAnimationId);
         currentReplayAnimationId = null;
     }
     isMediaScrubbingActive = false;
@@ -2643,25 +2635,13 @@ function renderStageUI(index, isResize = false) {
 }
           function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
-    if (isReplayActive) closeReplayPlayer();
+		  if (isReplayActive) closeReplayPlayer();
     if (isThelobookActive) closeThelobook(true);
     if (isPageGridVisible) closePageGridView();
 
-    if (currentReplayAnimationId) {
-        cancelAnimationFrame(currentReplayAnimationId);
-        clearInterval(currentReplayAnimationId);
-        currentReplayAnimationId = null;
-    }
-    if (currentStageAudio && !currentStageAudio.paused) {
-        currentStageAudio.pause();
-        currentStageAudio.onloadedmetadata = null;
-        currentStageAudio.onended = null;
-    }
-    isMediaScrubbingActive = false;
-    currentStageDrawingData = null;
-    currentStageTotalDuration = 0;
-    internalPlaybackTime = 0;
-    lastFrameTimestampForManualAdvance = 0;
+    if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+    if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+    isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
     if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
     if (stageProgressFill) stageProgressFill.style.width = '0%';
 
@@ -2676,16 +2656,19 @@ function renderStageUI(index, isResize = false) {
     if (replayCanvas) replayCanvas.classList.add('fade-out');
     if (mcqOptionsContainer) mcqOptionsContainer.style.opacity = 0;
 
+    // --- KEY CHANGE: Replace setTimeout with .then() ---
     const fadeDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000;
     
     setTimeout(() => {
         currentStageIndex = newIndex;
+        // renderStageUI now returns a promise. We wait for it to resolve.
         renderStageUI(currentStageIndex, false).then(() => {
+            // This code now runs ONLY AFTER the stage content (including images) is ready.
             backgroundCanvas.classList.remove('fade-out');
             if (replayCanvas) replayCanvas.classList.remove('fade-out');
             isTransitioning = false;
         });
-    }, fadeDuration);
+    }, fadeDuration); // We still wait for the fade-out to finish before preparing the new scene.
 }
     function nextStage() { transitionToStage(currentStageIndex + 1); }
     function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
@@ -3471,27 +3454,25 @@ if (detectedAnswer && parseFloat(detectedAnswer) === parseFloat(correctAnswer)) 
         updateColorIndicator();
     }
 
+    /* ---------------- helper: snapshot & pause media ---------------- */
     function captureMediaState() {
-    mediaPlaybackTimeBeforeThelobook = internalPlaybackTime;
-    audioTimeBeforeThelobook = currentStageAudio ? currentStageAudio.currentTime : 0;
-    wasMediaPlayingBeforeThelobook = false;
+        mediaPlaybackTimeBeforeThelobook = internalPlaybackTime;
+        audioTimeBeforeThelobook       = currentStageAudio ? currentStageAudio.currentTime : 0;
+        wasMediaPlayingBeforeThelobook  = false;
 
-    if (currentStageAudio && !currentStageAudio.paused) {
+        if (currentStageAudio && !currentStageAudio.paused) {
         currentStageAudio.pause();
         wasMediaPlayingBeforeThelobook = true;
-    }
-
-    if (isMediaScrubbingActive) {
-        if (currentReplayAnimationId) {
-            cancelAnimationFrame(currentReplayAnimationId);
-            clearInterval(currentReplayAnimationId);
-            currentReplayAnimationId = null;
         }
-        isMediaScrubbingActive = false;
+
+        if (isMediaScrubbingActive) {
+        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+        isMediaScrubbingActive  = false;
         wasMediaPlayingBeforeThelobook = true;
+        }
+        stageProgressBarContainer?.classList.remove('visible');
     }
-    stageProgressBarContainer?.classList.remove('visible');
-}
     /* ---------------- helper: resume or freeze ---------------------- */
     function resumeMediaState() {
         const atEnd =
@@ -3803,7 +3784,8 @@ function handleKeyDown(event) {
             }
             break;
     }
-}		// Prevent zooming via keyboard and mouse wheel
+}
+		// Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
