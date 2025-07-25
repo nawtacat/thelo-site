@@ -1723,27 +1723,36 @@ function resizeCanvases() {
             if (movedToFirstPoint && points.length > 1) targetCtx.stroke();
         });
     }
-    function updateMediaProgressBar(effectiveTime, totalDuration){
-        if (!stageProgressBarContainer) return;
-        if (isMediaScrubbingActive && totalDuration > 0) {
-            if (!stageProgressBarContainer.classList.contains('visible')) {
-                stageProgressBarContainer.classList.add('visible');
-            }
-            const progress = (effectiveTime / totalDuration) * 100;
-            stageProgressFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
-        } else {
-            // Keep progress bar visible if not scrubbing but playback is at the end (handled by new snippet in renderStageUI)
-        if (!(internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0)) {
-            stageProgressBarContainer.classList.remove('visible');
-            stageProgressFill.style.width = '0%';
+    function updateMediaProgressBar(effectiveTime, totalDuration) {
+    if (!stageProgressBarContainer || !stageProgressFill) return;
+
+    if (isMediaScrubbingActive && totalDuration > 0) {
+        if (!stageProgressBarContainer.classList.contains('visible')) {
+            stageProgressBarContainer.classList.add('visible');
         }
-        }
+
+        // --- FAKE THE SMOOTHNESS (THE FIX) ---
+        // We determine if we should let CSS smooth the bar.
+        // If audio is playing, we use CSS transitions.
+        // If there's no audio (manual timer), we update it raw on every frame.
+        const audioIsTheClock = currentStageAudio && !currentStageAudio.paused;
+        
+        // When audio is the clock, a transition smooths the visual jumps.
+        // When using the manual timer, 'none' is better for raw frame-by-frame updates.
+        stageProgressFill.style.transition = audioIsTheClock ? 'width 0.1s linear' : 'none';
+        // --- END OF FIX ---
+
+        const progress = (effectiveTime / totalDuration) * 100;
+        stageProgressFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+
+    } else {
+        // When not scrubbing, hide the bar and ensure the transition is reset for next time.
+        stageProgressBarContainer.classList.remove('visible');
+        stageProgressFill.style.width = '0%';
+        // Default back to a transition for a clean hide/show effect next time.
+        stageProgressFill.style.transition = 'width 0.1s linear';
     }
-   // In your MAIN app's <script> tag
-// In your MAIN app's <script> tag - REPLACE this function
-
-// In your MAIN app's <script> tag - REPLACE this function
-
+}
 function mediaPlaybackLoop(timestamp) {
     // Exit if playback is no longer supposed to be active
     if (!isMediaScrubbingActive) {
@@ -1752,15 +1761,15 @@ function mediaPlaybackLoop(timestamp) {
         return;
     }
 
-    // --- HYBRID TIME CALCULATION ---
+    // --- UNIFIED TIME CALCULATION (THE FIX) ---
+    // If audio is playing, it is ALWAYS the master clock. This guarantees sync.
     const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
 
     if (audioIsPlaying) {
-        // USE AUDIO AS THE CLOCK: For stages with audio (prevents corruption)
+        // USE AUDIO AS THE CLOCK: For ANY stage with audio to prevent drift.
         internalPlaybackTime = currentStageAudio.currentTime;
-        lastFrameTimestampForManualAdvance = timestamp; // Keep this in sync for smooth transitions
     } else {
-        // USE MANUAL FRAME TIMER: For stages without audio (drawing animations, etc.)
+        // USE MANUAL FRAME TIMER: ONLY for media stages without audio (e.g., drawing-only).
         if (lastFrameTimestampForManualAdvance === 0) {
             lastFrameTimestampForManualAdvance = timestamp;
         }
@@ -1777,15 +1786,16 @@ function mediaPlaybackLoop(timestamp) {
     }
 
     // --- UNIVERSAL UPDATES ---
-    // These updates now work for ALL stage types because internalPlaybackTime is always correct.
+    // These updates now work for ALL stage types.
 
     // Update the drawing replay on the main canvas (for drawing-only stages)
     if (currentStageDrawingData && replayCtx) {
         renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
     }
 
-    // Update the iframe replay (for calculator stages)
+    // Update the iframe replay (for calculator/graphing stages)
     if (isReplayActive && replayFrame.contentWindow) {
+        // Send a message to the iframe to render the state at the master time
         replayFrame.contentWindow.postMessage({
             command: 'renderAtTime',
             timeMs: internalPlaybackTime * 1000
