@@ -1238,8 +1238,8 @@ body.lang-en {
        en: {
   next: "Next",
   gotIt: "Got it",
-  check: "Check Answer",
-  checking: "Checking your answer...",
+  check: "Check",
+  checking: "Check",
   correct: "That's right!",
   incorrect: "Not quite.",
 
@@ -1739,53 +1739,66 @@ function resizeCanvases() {
         }
         }
     }
-    function mediaPlaybackLoop(timestamp){
-        if (!isMediaScrubbingActive) {
-            if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-            currentReplayAnimationId = null;
-            return;
-        }
+   // In your MAIN app's <script> tag
+// In your MAIN app's <script> tag - REPLACE this function
 
-        let effectiveTime;
-        const audioIsActuallyPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
+// In your MAIN app's <script> tag - REPLACE this function
 
-        if (audioIsActuallyPlaying) {
-            effectiveTime = currentStageAudio.currentTime;
-            internalPlaybackTime = effectiveTime;
-            lastFrameTimestampForManualAdvance = timestamp || performance.now();
-        } else {
-            if (lastFrameTimestampForManualAdvance === 0) lastFrameTimestampForManualAdvance = timestamp || performance.now();
-            const deltaTime = ((timestamp || performance.now()) - lastFrameTimestampForManualAdvance) / 1000.0;
-
-            if (internalPlaybackTime < currentStageTotalDuration) {
-                internalPlaybackTime += deltaTime;
-            }
-            internalPlaybackTime = Math.min(internalPlaybackTime, currentStageTotalDuration);
-            effectiveTime = internalPlaybackTime;
-            lastFrameTimestampForManualAdvance = timestamp || performance.now();
-        }
-        effectiveTime = Math.max(0, Math.min(effectiveTime, currentStageTotalDuration));
-
-        if (currentStageDrawingData && replayCtx) {
-            renderDrawingAtTime(effectiveTime, currentStageDrawingData, replayCtx);
-        } else if (replayCtx) {
-            replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-        }
-        updateMediaProgressBar(effectiveTime, currentStageTotalDuration);
-
-        if (effectiveTime >= currentStageTotalDuration - 0.02 && currentStageTotalDuration > 0) {
-            if (currentStageDrawingData && replayCtx) {
-                renderDrawingAtTime(currentStageTotalDuration, currentStageDrawingData, replayCtx);
-            }
-            updateMediaProgressBar(currentStageTotalDuration, currentStageTotalDuration);
-            isMediaScrubbingActive = false;
-            if(currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-            currentReplayAnimationId = null;
-            return;
-        }
-        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+function mediaPlaybackLoop(timestamp) {
+    // Exit if playback is no longer supposed to be active
+    if (!isMediaScrubbingActive) {
+        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+        return;
     }
-    function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
+
+    // --- HYBRID TIME CALCULATION ---
+    const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
+
+    if (audioIsPlaying) {
+        // USE AUDIO AS THE CLOCK: For stages with audio (prevents corruption)
+        internalPlaybackTime = currentStageAudio.currentTime;
+        lastFrameTimestampForManualAdvance = timestamp; // Keep this in sync for smooth transitions
+    } else {
+        // USE MANUAL FRAME TIMER: For stages without audio (drawing animations, etc.)
+        if (lastFrameTimestampForManualAdvance === 0) {
+            lastFrameTimestampForManualAdvance = timestamp;
+        }
+        const deltaTime = (timestamp - lastFrameTimestampForManualAdvance) / 1000.0;
+        internalPlaybackTime += deltaTime;
+        lastFrameTimestampForManualAdvance = timestamp;
+    }
+    // ------------------------------------
+
+    // Ensure playback stops precisely at the end
+    if (internalPlaybackTime >= currentStageTotalDuration) {
+        internalPlaybackTime = currentStageTotalDuration;
+        isMediaScrubbingActive = false; // This will stop the loop on the next frame
+    }
+
+    // --- UNIVERSAL UPDATES ---
+    // These updates now work for ALL stage types because internalPlaybackTime is always correct.
+
+    // Update the drawing replay on the main canvas (for drawing-only stages)
+    if (currentStageDrawingData && replayCtx) {
+        renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
+    }
+
+    // Update the iframe replay (for calculator stages)
+    if (isReplayActive && replayFrame.contentWindow) {
+        replayFrame.contentWindow.postMessage({
+            command: 'renderAtTime',
+            timeMs: internalPlaybackTime * 1000
+        }, '*');
+    }
+    
+    // Update the progress bar (for ALL stages)
+    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+
+    // Continue the loop
+    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+}
+function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         if (isMediaScrubbingActive) { if (typeof onFinished === 'function') onFinished(); return; }
         if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
         if (!targetCtx || !strokeData || !strokeData.strokes || strokeData.strokes.length === 0) { if (typeof onFinished === 'function') onFinished(); return; }
@@ -2345,56 +2358,59 @@ function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
 /**
  * Opens the replay player, fetches the replay data, and sends it to the iframe.
  */
+// In your MAIN app's <script> tag
+
+// In your MAIN app's <script> tag
 async function openReplayPlayer() {
     if (isReplayActive || !currentStageData || !currentStageData.replayDataUrl) {
-        console.warn("No replay data URL found for this stage.");
         return;
     }
     isReplayActive = true;
 
-    const playerURL = 'https://thelo.space/replay2'; // The URL of your automated player
-
-    const sendDataToPlayer = (replayActions) => {
-        if (replayFrame.contentWindow) {
-            replayFrame.contentWindow.postMessage({
-                meta: { source: 'thelo-lesson' },
-                actions: replayActions
-            }, '*');
-            console.log("Replay data sent to player iframe.");
-        }
-    };
-
     try {
-        // Fetch the external replay data file
         const response = await fetch(currentStageData.replayDataUrl);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
         const replayJson = await response.json();
         const replayActions = replayJson.actions;
 
-        if (!replayActions) throw new Error("Could not find 'actions' in replay JSON.");
+        const onIframeReady = (event) => {
+            if (event.source === replayFrame.contentWindow && event.data.command === 'ready') {
+                replayFrame.contentWindow.postMessage({
+                    command: 'loadTimeline',
+                    actions: replayActions
+                }, '*');
 
-        // Load the iframe and send data once it's ready
-        replayFrame.src = playerURL;
-        replayFrame.onload = () => sendDataToPlayer(replayActions);
+                window.removeEventListener('message', onIframeReady);
 
+                // Start the main app's playback loop
+                isMediaScrubbingActive = true;
+                lastFrameTimestampForManualAdvance = 0;
+                internalPlaybackTime = 0;
+                currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+            }
+        };
+
+        window.addEventListener('message', onIframeReady);
+        replayFrame.src = 'https://thelo.space/replay2'; // Or your replay URL
         replayPlayerContainer.classList.remove('replay-hidden');
 
     } catch (error) {
         console.error("Failed to load or send replay data:", error);
-        addChatMessage('AI', 'Error: Could not load the interactive replay.');
-        isReplayActive = false; // Reset on failure
+        isReplayActive = false;
     }
 }
-
-/**
- * Closes the replay player and clears its content.
- */
+		// In your MAIN app's <script> tag
 function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
+
+    // CRITICAL: Stop the main app's animation loop
+    if (currentReplayAnimationId) {
+        cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+    }
+    isMediaScrubbingActive = false;
+
     replayPlayerContainer.classList.add('replay-hidden');
-    // Reset the iframe src to stop playback and free up resources
     replayFrame.src = 'about:blank';
 }
 // REPLACE your entire renderStageUI function with this one
@@ -3622,60 +3638,59 @@ function closeCalculator() {
 }
 function handleKeyDown(event) {
     // =================================================================
-    // ===== 1. FORWARD KEYS TO THE REPLAY IFRAME (PRIORITY LOGIC) =====
+    // ===== REPLAY SEEK LOGIC (NOW WORKS UNIVERSALLY) ==============
     // =================================================================
-    // This block runs first. If the replay iframe is active, it captures
-    // the arrow keys, sends an absolute time command to the iframe, and
-    // then stops all further execution of this function with `return`.
-    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !isThelobookActive && !isPageGridVisible) {
+    // This block now runs if ANY media is playing, not just the iframe replay.
+    if (isMediaScrubbingActive && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault();
+
+        // Stop the current animation loop to prevent state corruption.
+        if (currentReplayAnimationId) {
+            cancelAnimationFrame(currentReplayAnimationId);
+            currentReplayAnimationId = null;
+        }
+
         const step = 5; // Amount to seek in seconds
         const diff = event.key === 'ArrowLeft' ? -step : step;
 
-        // Calculate the new absolute playback time for the current stage.
-        // Ensure it stays within the valid range [0, currentStageTotalDuration].
+        // Calculate the new absolute playback time, clamped to the valid range.
         let newTime = internalPlaybackTime + diff;
         newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
-
-        // Update the main app's internal playback time.
         internalPlaybackTime = newTime;
 
-        // 1. Update the main stage audio (if present and currently loaded).
-        // Set its currentTime to the calculated new absolute time.
-        if (currentStageAudio && currentStageAudio.src && currentStageAudio.src.includes(currentStageData.audioFile)) {
-            // Ensure currentTime doesn't exceed the audio's actual duration to prevent errors.
-            currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
-            // If the audio was paused but should be playing (due to user interaction and not at end), try to play it.
-            if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01)) {
+        // 1. Seek the <audio> element if it exists for this stage.
+        if (currentStageAudio) {
+            const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+            currentStageAudio.currentTime = audioTargetTime;
+            if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) {
                 currentStageAudio.play().catch(() => { /* Autoplay prevented, ignore */ });
             }
         }
 
-        // 2. Message the replay iframe.
-        // **This is the key change:** Send the absolute 'newTime' (converted to milliseconds)
-        // using a new, explicit command name like 'seekToTime'.
+        // 2. Seek the iframe replay ONLY if it's the active type.
         if (isReplayActive && replayFrame && replayFrame.contentWindow) {
             replayFrame.contentWindow.postMessage({
-                command: 'seekToTime', // New command for absolute seeking
-                timeMs: newTime * 1000 // Convert seconds to milliseconds
-            }, '*'); // Use '*' for development; specify the target origin in production for security.
+                command: 'seekToTime',
+                timeMs: newTime * 1000
+            }, '*');
         }
 
-        // 3. Ensure the main app's media playback loop continues/starts to update its own visuals (e.g., progress bar).
-        if (!isMediaScrubbingActive && currentStageTotalDuration > 0) {
-            isMediaScrubbingActive = true;
-            if (!currentReplayAnimationId) {
-                currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-            }
+        // 3. Immediately redraw the main replay canvas for instant feedback.
+        if (currentStageDrawingData && replayCtx) {
+            renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
         }
-        // Immediately update the main app's progress bar to reflect the new seek position.
+        
+        // 4. Update the main app's progress bar to reflect the seek.
         updateMediaProgressBar(newTime, currentStageTotalDuration);
-        // Reset the last timestamp for accurate delta time calculation in the next frame of mediaPlaybackLoop.
-        lastFrameTimestampForManualAdvance = performance.now();
-        event.preventDefault(); // Prevent default browser actions like scrolling.
-        return; // Important: Stop further keydown processing once this is handled.
+
+        // 5. Restart the main app's media playback loop from the new state.
+        lastFrameTimestampForManualAdvance = 0;
+        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+        
+        return; // Stop further keydown processing.
     }
 
-    // --- Original function logic continues below (unchanged from your last provided code) ---
+    // --- Original function logic continues below for all other keys ---
 
     if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) return;
 
@@ -3774,7 +3789,8 @@ function handleKeyDown(event) {
             }
             break;
     }
-}    // Prevent zooming via keyboard and mouse wheel
+}
+		// Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
