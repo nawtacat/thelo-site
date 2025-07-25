@@ -1723,27 +1723,32 @@ function resizeCanvases() {
             if (movedToFirstPoint && points.length > 1) targetCtx.stroke();
         });
     }
-    function updateMediaProgressBar(effectiveTime, totalDuration){
-        if (!stageProgressBarContainer) return;
-        if (isMediaScrubbingActive && totalDuration > 0) {
-            if (!stageProgressBarContainer.classList.contains('visible')) {
-                stageProgressBarContainer.classList.add('visible');
-            }
-            const progress = (effectiveTime / totalDuration) * 100;
-            stageProgressFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
-        } else {
-            // Keep progress bar visible if not scrubbing but playback is at the end (handled by new snippet in renderStageUI)
-        if (!(internalPlaybackTime >= currentStageTotalDuration - 0.05 && currentStageTotalDuration > 0)) {
-            stageProgressBarContainer.classList.remove('visible');
-            stageProgressFill.style.width = '0%';
+    function updateMediaProgressBar(effectiveTime, totalDuration) {
+    if (!stageProgressBarContainer || !stageProgressFill) return;
+
+    if (isMediaScrubbingActive && totalDuration > 0) {
+        if (!stageProgressBarContainer.classList.contains('visible')) {
+            stageProgressBarContainer.classList.add('visible');
         }
-        }
+
+        // --- NEW FIX LOGIC ---
+        // Check if the current stage should have a smooth progress bar.
+        const isSmoothUpdate = currentStageData && currentStageData.type === 'calculator_replay';
+        
+        // If it's a smooth update, remove the CSS transition. Otherwise, ensure it's there.
+        stageProgressFill.style.transition = isSmoothUpdate ? 'none' : 'width 0.04s linear';
+        // --- END OF NEW FIX ---
+
+        const progress = (effectiveTime / totalDuration) * 100;
+        stageProgressFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+
+    } else {
+        // When not scrubbing, hide the bar and ensure the transition is reset for next time.
+        stageProgressBarContainer.classList.remove('visible');
+        stageProgressFill.style.width = '0%';
+        stageProgressFill.style.transition = 'width 0.04s linear';
     }
-   // In your MAIN app's <script> tag
-// In your MAIN app's <script> tag - REPLACE this function
-
-// In your MAIN app's <script> tag - REPLACE this function
-
+}
 function mediaPlaybackLoop(timestamp) {
     // Exit if playback is no longer supposed to be active
     if (!isMediaScrubbingActive) {
@@ -1755,12 +1760,14 @@ function mediaPlaybackLoop(timestamp) {
     // --- HYBRID TIME CALCULATION ---
     const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
 
+    // This condition now correctly forces the smooth manual timer for calculator replays,
+    // while still using the audio clock for other synchronized stages.
     if (audioIsPlaying && currentStageData.type !== 'calculator_replay') {
-        // USE AUDIO AS THE CLOCK: For stages with audio (prevents corruption)
+        // USE AUDIO AS THE CLOCK: For most stages with audio to prevent drift.
         internalPlaybackTime = currentStageAudio.currentTime;
         lastFrameTimestampForManualAdvance = timestamp; // Keep this in sync for smooth transitions
     } else {
-        // USE MANUAL FRAME TIMER: For stages without audio (drawing animations, etc.)
+        // USE MANUAL FRAME TIMER: For drawing-only stages AND calculator_replay stages for a smooth bar.
         if (lastFrameTimestampForManualAdvance === 0) {
             lastFrameTimestampForManualAdvance = timestamp;
         }
