@@ -1744,6 +1744,8 @@ function resizeCanvases() {
 
 // In your MAIN app's <script> tag - REPLACE this function
 
+// REPLACE your old mediaPlaybackLoop function with this one
+
 function mediaPlaybackLoop(timestamp) {
     // Exit if playback is no longer supposed to be active
     if (!isMediaScrubbingActive) {
@@ -1752,23 +1754,18 @@ function mediaPlaybackLoop(timestamp) {
         return;
     }
 
-    // --- HYBRID TIME CALCULATION ---
-    const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
-
-    if (audioIsPlaying) {
-        // USE AUDIO AS THE CLOCK: For stages with audio (prevents corruption)
-        internalPlaybackTime = currentStageAudio.currentTime;
-        lastFrameTimestampForManualAdvance = timestamp; // Keep this in sync for smooth transitions
-    } else {
-        // USE MANUAL FRAME TIMER: For stages without audio (drawing animations, etc.)
-        if (lastFrameTimestampForManualAdvance === 0) {
-            lastFrameTimestampForManualAdvance = timestamp;
-        }
-        const deltaTime = (timestamp - lastFrameTimestampForManualAdvance) / 1000.0;
-        internalPlaybackTime += deltaTime;
+    // =========================================================================
+    // ===== THE FIX: Use a single, high-resolution timer for all stages =====
+    // =========================================================================
+    // This logic now drives playback for ALL stage types (audio, drawing, or graphing).
+    // It uses the high-precision timestamp from requestAnimationFrame for a smooth 60fps update.
+    if (lastFrameTimestampForManualAdvance === 0) {
         lastFrameTimestampForManualAdvance = timestamp;
     }
-    // ------------------------------------
+    const deltaTime = (timestamp - lastFrameTimestampForManualAdvance) / 1000.0;
+    internalPlaybackTime += deltaTime;
+    lastFrameTimestampForManualAdvance = timestamp;
+    // =========================================================================
 
     // Ensure playback stops precisely at the end
     if (internalPlaybackTime >= currentStageTotalDuration) {
@@ -1776,15 +1773,14 @@ function mediaPlaybackLoop(timestamp) {
         isMediaScrubbingActive = false; // This will stop the loop on the next frame
     }
 
-    // --- UNIVERSAL UPDATES ---
-    // These updates now work for ALL stage types because internalPlaybackTime is always correct.
+    // --- UNIVERSAL UPDATES (These work for all stage types) ---
 
     // Update the drawing replay on the main canvas (for drawing-only stages)
     if (currentStageDrawingData && replayCtx) {
         renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
     }
 
-    // Update the iframe replay (for calculator stages)
+    // Update the iframe replay (for calculator/graphing stages)
     if (isReplayActive && replayFrame.contentWindow) {
         replayFrame.contentWindow.postMessage({
             command: 'renderAtTime',
@@ -1792,7 +1788,7 @@ function mediaPlaybackLoop(timestamp) {
         }, '*');
     }
     
-    // Update the progress bar (for ALL stages)
+    // Update the progress bar (now smooth for all stages)
     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
 
     // Continue the loop
