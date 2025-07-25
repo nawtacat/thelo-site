@@ -397,12 +397,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function evaluateAndCacheAll() {
-        graphState.definedVariables = {};
-        graphState.expressions.forEach(parseSingleExpression);
-        graphState.expressions.forEach(calculatePlotPoints);
-        findAndStoreIntersections();
-        graphState.expressions.forEach(updateExpressionUI);
-    }
+    graphState.definedVariables = {};
+    graphState.expressions.forEach(parseSingleExpression);
+    // The call to calculatePlotPoints() is now removed.
+    findAndStoreIntersections();
+    graphState.expressions.forEach(updateExpressionUI);
+}
 
     function calculatePlotPoints(expr) {
         if (!expr.compiled || (expr.type !== 'function' && expr.type !== 'inequality')) {
@@ -440,27 +440,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (graphState.lockedPoint.visible) drawLockedPoint();
     }
 
-    function plotFunction(expr) {
-        if (!expr.plotPoints || expr.plotPoints.length === 0) return;
-        ctx.strokeStyle = expr.color;
-        ctx.lineWidth = 2.5 * currentDevicePixelRatio;
-        ctx.beginPath();
-        let firstPoint = true;
-        for (const point of expr.plotPoints) {
-            if (point === null) { firstPoint = true; continue; }
-            const px = graphState.originX + point.x * graphState.scale;
-            const py = graphState.originY - point.y * graphState.scale;
-            if (px < -10 || px > canvas.width + 10 || py < -10 || py > canvas.height + 10) {
-                firstPoint = true; continue;
+    // ADD THIS NEW, EFFICIENT FUNCTION
+function plotFunction(expr) {
+    if (!expr.compiled) return;
+    const scope = getEvaluationScope(expr);
+    ctx.strokeStyle = expr.color;
+    ctx.lineWidth = 2.5 * currentDevicePixelRatio;
+    ctx.beginPath();
+    let firstPoint = true;
+    for (let px = 0; px < canvas.width; px++) {
+        const x = (px - graphState.originX) / graphState.scale;
+        scope.x = x;
+        try {
+            const y = expr.compiled.evaluate(scope);
+            if (!Number.isFinite(y)) {
+                firstPoint = true;
+                continue;
             }
-            if (firstPoint) { ctx.moveTo(px, py); firstPoint = false; }
-            else { ctx.lineTo(px, py); }
+            const py = graphState.originY - (y * graphState.scale);
+            if (firstPoint) {
+                ctx.moveTo(px, py);
+                firstPoint = false;
+            } else {
+                ctx.lineTo(px, py);
+            }
+        } catch (e) {
+            firstPoint = true;
         }
-        ctx.stroke();
     }
-    
-    // (The rest of your graphing helper functions: plotInequality, parseSingleExpression, etc.)
-    // (Paste them here without any changes)
+    ctx.stroke();
+}
     function plotInequality(expr) { if (!expr.plotPoints || expr.plotPoints.length === 0) return; const scope = getEvaluationScope(expr); ctx.fillStyle = expr.color; ctx.globalAlpha = INEQUALITY_ALPHA; ctx.beginPath(); let firstPoint = !0; for (const point of expr.plotPoints) { if (point === null) { firstPoint = !0; continue } const px = graphState.originX + point.x * graphState.scale; if (px < -10 || px > canvas.width + 10) { firstPoint = !0; continue } const py = graphState.originY - point.y * graphState.scale; if (firstPoint) { ctx.moveTo(px, py); firstPoint = !1 } else { ctx.lineTo(px, py) } } const op = expr.inequalityType; if (op.includes(">")) { ctx.lineTo(canvas.width, 0); ctx.lineTo(0, 0) } else { ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(0, canvas.height) } ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; if (op === "<" || op === ">") { ctx.setLineDash([8 * currentDevicePixelRatio, 8 * currentDevicePixelRatio]) } plotFunction(expr); ctx.setLineDash([]) }
     function parseSingleExpression(expr) { Object.assign(expr, { type: "empty", compiled: null, error: null, result: null, node: null, inequalityType: null, isImplicit: !1 }); let cleanStr = preprocessInputString(latexToMathJs(expr.latex.trim())); if (!cleanStr) return; try { const node = math.parse(cleanStr); expr.node = node; const scope = getEvaluationScope(expr); if (node.isAssignmentNode) { const varName = node.object.name; if (node.toString().match(/[xy]/)) { expr.error = "Cannot assign expression with x or y."; return } expr.type = "assignment"; const result = node.evaluate(scope); expr.result = result; graphState.definedVariables[varName] = result } else if (cleanStr.includes("x") || cleanStr.includes("y")) { expr.type = "function"; let parseableNode = node; if (node.isOperatorNode && node.op === "=") { const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { parseableNode = right } else if (right.isSymbolNode && right.name === "y") { parseableNode = left } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_line"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_line"; expr.x_value = left.evaluate(scope) } else { expr.error = "Implicit functions not supported yet." } } if (expr.type === "function") { expr.node = parseableNode; expr.compiled = parseableNode.compile() } } else if (node.isOperatorNode && ["<", ">", "<=", ">="].includes(node.op)) { expr.inequalityType = node.op; const [left, right] = node.args; if (left.isSymbolNode && left.name === "y") { expr.type = "inequality"; expr.compiled = right.compile() } else if (right.isSymbolNode && right.name === "y") { expr.type = "inequality"; expr.compiled = left.compile(); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else if (left.isSymbolNode && left.name === "x") { expr.type = "vertical_inequality"; expr.x_value = right.evaluate(scope) } else if (right.isSymbolNode && right.name === "x") { expr.type = "vertical_inequality"; expr.x_value = left.evaluate(scope); expr.inequalityType = { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[node.op] } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } } else { expr.type = "calculation"; expr.result = node.evaluate(scope) } if (expr.type === "function" || expr.type === "inequality") { const knownSymbols = ["x", "y", "e", "pi", "i", "true", "false", "theta", ...Object.keys(math)]; const foundSymbols = new Set; expr.node.traverse(n => { if (n.isSymbolNode && !knownSymbols.includes(n.name) && !graphState.definedVariables.hasOwnProperty(n.name)) { foundSymbols.add(n.name) } }); foundSymbols.forEach(name => { if (!expr.sliders[name]) expr.sliders[name] = { val: 1, min: -5, max: 5, step: .1 } }); Object.keys(expr.sliders).forEach(name => { if (!foundSymbols.has(name)) delete expr.sliders[name] }) } else { expr.sliders = {} } if (expr.type === "function") findPointsOfInterest(expr) } catch (err) { expr.error = err.message.length > 50 ? err.message.substring(0, 50) + "..." : err.message } }
     function updateExpressionUI(expr) { const item = document.getElementById(expr.id); if (!item) return; const resultEl = item.querySelector(".expression-result"); const extrasEl = item.querySelector(".expression-extras"); const colorBar = item.querySelector(".expression-color-bar"); resultEl.textContent = ""; extrasEl.innerHTML = ""; colorBar.style.backgroundColor = expr.error ? "var(--error-red)" : expr.visible ? expr.color : "#ccc"; colorBar.style.borderColor = expr.error ? "var(--error-red)" : expr.color; if (expr.error) { resultEl.textContent = "Error" } else if (expr.result !== null && expr.result !== undefined) { try { if (Array.isArray(expr.result)) { resultEl.textContent = `= [${expr.result.map(v => math.format(v, { precision: 3 })).join(", ")}]` } else if (typeof expr.result === "function") { resultEl.textContent = "f(x)" } else { resultEl.textContent = `= ${math.format(expr.result, { precision: 5 })}` } } catch { resultEl.textContent = `= ${expr.result.toString()}` } } Object.keys(expr.sliders).forEach(name => { const slider = expr.sliders[name]; const sliderDiv = document.createElement("div"); sliderDiv.className = "slider-container"; sliderDiv.innerHTML = `<label>${name} = ${slider.val}</label><input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}" disabled>`; extrasEl.appendChild(sliderDiv) }) }
