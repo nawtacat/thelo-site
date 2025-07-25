@@ -2463,15 +2463,21 @@ function renderStageUI(index, isResize = false) {
             const isQuestionStage = currentStageData.type === 'question_handwriting' || isMCQDisplayStage;
 
             // NEW LOGIC BLOCK FOR REPLAY STAGES (SYNCHRONIZED)
-            if (currentStageData.type === 'calculator_replay') {
-                openReplayPlayer(); // Opens the iframe
+            // (Inside renderStageUI, within setupStageContent)
+// ...
+if (currentStageData.type === 'calculator_replay') {
+    openReplayPlayer(); // Opens the iframe
 
-                // Set initial internal times for replay (both audio and graph)
-                internalPlaybackTime = 0;
-                lastFrameTimestampForManualAdvance = 0;
+    // *** THE FIX ***
+    // ONLY reset the time if it's a fresh stage render, NOT a resume/resize.
+    if (!isResize) {
+        internalPlaybackTime = 0;
+        lastFrameTimestampForManualAdvance = 0;
+    }
 
-                // Promises to load all relevant media data and get their durations
-                const audioMetaPromise = new Promise((resolveAudio) => {
+    // Promises to load all relevant media data and get their durations
+    const audioMetaPromise = new Promise((resolveAudio) => {
+// ...
                     if (currentStageData.audioFile) {
                         playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { /* onEnded for audio */ }, isResize);
                     } else {
@@ -2496,29 +2502,20 @@ function renderStageUI(index, isResize = false) {
                     })
                     .catch(e => { console.error("Failed to load replay data for duration calculation:", e); return 0; });
 			// (Inside renderStageUI, within the 'calculator_replay' block)
+// (Inside renderStageUI, within the 'calculator_replay' block)
 
+// Make sure this block looks like this again:
 Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration, replayDuration]) => {
     currentStageTotalDuration = Math.max(audioDuration, replayDuration);
-    
-    // Check if playback is already at the end. `internalPlaybackTime` will have been
-    // correctly set to the end time by `resumeMediaState`.
-    const atEnd = currentStageTotalDuration > 0 && internalPlaybackTime >= currentStageTotalDuration - 0.05;
 
-    // *** THE FIX ***
-    // Only start scrubbing if we are NOT already at the end of the playback.
-    isMediaScrubbingActive = !atEnd;
-
-    // Always show the progress bar if the stage has a duration, and update it.
-    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+    isMediaScrubbingActive = true;
     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible'); 
 
-    // Only start the animation loop if we are actually supposed to be scrubbing.
-    if (isMediaScrubbingActive && !currentReplayAnimationId) {
-        lastFrameTimestampForManualAdvance = 0; // Reset timer for smooth resume
+    if (!currentReplayAnimationId) { 
         currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
     }
 }).catch(e => console.error("Error setting up replay stage durations:", e));
-
                 if (nextCheckBtn) {
                     nextCheckBtn.textContent = TXT.gotIt;
                     nextCheckBtn.disabled = false;
