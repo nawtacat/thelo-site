@@ -1401,6 +1401,9 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
           let isTabletMode = false;
 	let isCalculatorActive = false;
 	let isReplayActive = false;
+		let mousePoints = []; // <<< ADD THIS LINE
+const IFRAME_UPDATE_INTERVAL = 40; // ms, throttles updates to 25 FPS (1000 / 40 = 25)
+let lastIframeUpdateTime = 0;
 	let isPageGridVisible = false; 
         let lessonStartTime = null;
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
@@ -1744,8 +1747,7 @@ function resizeCanvases() {
 
 // In your MAIN app's <script> tag - REPLACE this function
 
-// REPLACE your old mediaPlaybackLoop function with this one
-
+// In your MAIN app's <script> tag - REPLACE this function
 function mediaPlaybackLoop(timestamp) {
     // Exit if playback is no longer supposed to be active
     if (!isMediaScrubbingActive) {
@@ -1754,41 +1756,46 @@ function mediaPlaybackLoop(timestamp) {
         return;
     }
 
-    // =========================================================================
-    // ===== THE FIX: Use a single, high-resolution timer for all stages =====
-    // =========================================================================
-    // This logic now drives playback for ALL stage types (audio, drawing, or graphing).
-    // It uses the high-precision timestamp from requestAnimationFrame for a smooth 60fps update.
-    if (lastFrameTimestampForManualAdvance === 0) {
+    // --- HYBRID TIME CALCULATION (Unchanged) ---
+    const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
+    if (audioIsPlaying) {
+        internalPlaybackTime = currentStageAudio.currentTime;
+        lastFrameTimestampForManualAdvance = timestamp; 
+    } else {
+        if (lastFrameTimestampForManualAdvance === 0) {
+            lastFrameTimestampForManualAdvance = timestamp;
+        }
+        const deltaTime = (timestamp - lastFrameTimestampForManualAdvance) / 1000.0;
+        internalPlaybackTime += deltaTime;
         lastFrameTimestampForManualAdvance = timestamp;
     }
-    const deltaTime = (timestamp - lastFrameTimestampForManualAdvance) / 1000.0;
-    internalPlaybackTime += deltaTime;
-    lastFrameTimestampForManualAdvance = timestamp;
-    // =========================================================================
-
-    // Ensure playback stops precisely at the end
+    
+    // Ensure playback stops precisely at the end (Unchanged)
     if (internalPlaybackTime >= currentStageTotalDuration) {
         internalPlaybackTime = currentStageTotalDuration;
-        isMediaScrubbingActive = false; // This will stop the loop on the next frame
+        isMediaScrubbingActive = false; 
     }
 
-    // --- UNIVERSAL UPDATES (These work for all stage types) ---
+    // --- UNIVERSAL UPDATES (Now with throttling) ---
 
-    // Update the drawing replay on the main canvas (for drawing-only stages)
+    // Update the drawing replay on the main canvas (cheap, runs every frame)
     if (currentStageDrawingData && replayCtx) {
         renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
     }
 
-    // Update the iframe replay (for calculator/graphing stages)
-    if (isReplayActive && replayFrame.contentWindow) {
+    // ======================== THE FIX ========================
+    // Only update the expensive iframe if enough time has passed.
+    if (isReplayActive && replayFrame.contentWindow && (timestamp - lastIframeUpdateTime > IFRAME_UPDATE_INTERVAL)) {
         replayFrame.contentWindow.postMessage({
             command: 'renderAtTime',
             timeMs: internalPlaybackTime * 1000
         }, '*');
+        // Update the timestamp of the last update
+        lastIframeUpdateTime = timestamp;
     }
+    // =========================================================
     
-    // Update the progress bar (now smooth for all stages)
+    // Update the progress bar (cheap, runs every frame for smoothness)
     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
 
     // Continue the loop
@@ -3634,11 +3641,15 @@ function closeCalculator() {
 }
 function handleKeyDown(event) {
     // =================================================================
-    // ===== REPLAY SEEK LOGIC (NOW WORKS UNIVERSALLY) ==============
+    // ===== REPLAY SEEK LOGIC (WORKS UNIVERSALLY, EVEN AT END) ======
     // =================================================================
-    // This block now runs if ANY media is playing, not just the iframe replay.
-    if (isMediaScrubbingActive && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    
+    // CHANGE 1: Check if the stage has a timeline, not if it's currently scrubbing.
+    if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         event.preventDefault();
+
+        // CHANGE 2: Re-enable media scrubbing so the loop can resume after seeking.
+        isMediaScrubbingActive = true;
 
         // Stop the current animation loop to prevent state corruption.
         if (currentReplayAnimationId) {
@@ -3785,8 +3796,7 @@ function handleKeyDown(event) {
             }
             break;
     }
-}
-		// Prevent zooming via keyboard and mouse wheel
+}		// Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
