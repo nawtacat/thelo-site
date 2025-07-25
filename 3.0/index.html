@@ -1401,6 +1401,9 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
           let isTabletMode = false;
 	let isCalculatorActive = false;
 	let isReplayActive = false;
+		let mousePoints = []; // <<< ADD THIS LINE
+const IFRAME_UPDATE_INTERVAL = 40; // ms, throttles updates to 25 FPS (1000 / 40 = 25)
+let lastIframeUpdateTime = 0;
 	let isPageGridVisible = false; 
         let lessonStartTime = null;
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
@@ -1426,7 +1429,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     let tempFullPageCanvasForThumbnails = null;
     let buttonVanishTimer = null;
     let stagesWithPointsAwarded = new Set();
-    let mousePoints = []; // <<< ADD THIS LINE
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
     function updateAllUITexts() {
@@ -1744,6 +1746,7 @@ function resizeCanvases() {
 
 // In your MAIN app's <script> tag - REPLACE this function
 
+// In your MAIN app's <script> tag - REPLACE this function
 function mediaPlaybackLoop(timestamp) {
     // Exit if playback is no longer supposed to be active
     if (!isMediaScrubbingActive) {
@@ -1752,15 +1755,12 @@ function mediaPlaybackLoop(timestamp) {
         return;
     }
 
-    // --- HYBRID TIME CALCULATION ---
+    // --- HYBRID TIME CALCULATION (Unchanged) ---
     const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
-
     if (audioIsPlaying) {
-        // USE AUDIO AS THE CLOCK: For stages with audio (prevents corruption)
         internalPlaybackTime = currentStageAudio.currentTime;
-        lastFrameTimestampForManualAdvance = timestamp; // Keep this in sync for smooth transitions
+        lastFrameTimestampForManualAdvance = timestamp; 
     } else {
-        // USE MANUAL FRAME TIMER: For stages without audio (drawing animations, etc.)
         if (lastFrameTimestampForManualAdvance === 0) {
             lastFrameTimestampForManualAdvance = timestamp;
         }
@@ -1768,31 +1768,33 @@ function mediaPlaybackLoop(timestamp) {
         internalPlaybackTime += deltaTime;
         lastFrameTimestampForManualAdvance = timestamp;
     }
-    // ------------------------------------
-
-    // Ensure playback stops precisely at the end
+    
+    // Ensure playback stops precisely at the end (Unchanged)
     if (internalPlaybackTime >= currentStageTotalDuration) {
         internalPlaybackTime = currentStageTotalDuration;
-        isMediaScrubbingActive = false; // This will stop the loop on the next frame
+        isMediaScrubbingActive = false; 
     }
 
-    // --- UNIVERSAL UPDATES ---
-    // These updates now work for ALL stage types because internalPlaybackTime is always correct.
+    // --- UNIVERSAL UPDATES (Now with throttling) ---
 
-    // Update the drawing replay on the main canvas (for drawing-only stages)
+    // Update the drawing replay on the main canvas (cheap, runs every frame)
     if (currentStageDrawingData && replayCtx) {
         renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
     }
 
-    // Update the iframe replay (for calculator stages)
-    if (isReplayActive && replayFrame.contentWindow) {
+    // ======================== THE FIX ========================
+    // Only update the expensive iframe if enough time has passed.
+    if (isReplayActive && replayFrame.contentWindow && (timestamp - lastIframeUpdateTime > IFRAME_UPDATE_INTERVAL)) {
         replayFrame.contentWindow.postMessage({
             command: 'renderAtTime',
             timeMs: internalPlaybackTime * 1000
         }, '*');
+        // Update the timestamp of the last update
+        lastIframeUpdateTime = timestamp;
     }
+    // =========================================================
     
-    // Update the progress bar (for ALL stages)
+    // Update the progress bar (cheap, runs every frame for smoothness)
     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
 
     // Continue the loop
@@ -3638,21 +3640,21 @@ function closeCalculator() {
 }
 function handleKeyDown(event) {
     // =================================================================
-    // ===== REPLAY SEEK LOGIC (WITH CORE APP STATE RESET) =========
+    // ===== REPLAY SEEK LOGIC (WORKS UNIVERSALLY, EVEN AT END) ======
     // =================================================================
-    // This block runs first. If the replay iframe is active, it handles arrow keys.
-    if (isReplayActive && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-        event.preventDefault(); // Prevent default browser action (e.g., scrolling)
+    
+    // CHANGE 1: Check if the stage has a timeline, not if it's currently scrubbing.
+    if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault();
 
-        // --- THE CRITICAL FIX: STOP THE CORE APP'S PLAYBACK LOOP ---
-        // This stops the parent app's timer from running in the background with old data,
-        // which was the source of the state corruption bug.
+        // CHANGE 2: Re-enable media scrubbing so the loop can resume after seeking.
+        isMediaScrubbingActive = true;
+
+        // Stop the current animation loop to prevent state corruption.
         if (currentReplayAnimationId) {
             cancelAnimationFrame(currentReplayAnimationId);
             currentReplayAnimationId = null;
         }
-        isMediaScrubbingActive = false;
-        // --------------------------------------------------------------------
 
         const step = 5; // Amount to seek in seconds
         const diff = event.key === 'ArrowLeft' ? -step : step;
@@ -3660,35 +3662,38 @@ function handleKeyDown(event) {
         // Calculate the new absolute playback time, clamped to the valid range.
         let newTime = internalPlaybackTime + diff;
         newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
-
-        // Update the main app's internal playback time state.
         internalPlaybackTime = newTime;
 
-        // 1. Seek the <audio> element to the new absolute time.
+        // 1. Seek the <audio> element if it exists for this stage.
         if (currentStageAudio) {
-            currentStageAudio.currentTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
-            if (window.userInteracted && currentStageAudio.paused && newTime < (currentStageAudio.duration - 0.01)) {
+            const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+            currentStageAudio.currentTime = audioTargetTime;
+            if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) {
                 currentStageAudio.play().catch(() => { /* Autoplay prevented, ignore */ });
             }
         }
 
-        // 2. Send the absolute seek command to the replay iframe.
-        if (replayFrame && replayFrame.contentWindow) {
+        // 2. Seek the iframe replay ONLY if it's the active type.
+        if (isReplayActive && replayFrame && replayFrame.contentWindow) {
             replayFrame.contentWindow.postMessage({
                 command: 'seekToTime',
                 timeMs: newTime * 1000
             }, '*');
         }
 
-        // 3. Restart the main app's media playback loop from the new, corrected state.
-        isMediaScrubbingActive = true;
-        lastFrameTimestampForManualAdvance = 0; // Reset timestamp for accurate timing
+        // 3. Immediately redraw the main replay canvas for instant feedback.
+        if (currentStageDrawingData && replayCtx) {
+            renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+        }
+        
+        // 4. Update the main app's progress bar to reflect the seek.
+        updateMediaProgressBar(newTime, currentStageTotalDuration);
+
+        // 5. Restart the main app's media playback loop from the new state.
+        lastFrameTimestampForManualAdvance = 0;
         currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
         
-        // 4. Immediately update the main app's progress bar to reflect the seek.
-        updateMediaProgressBar(newTime, currentStageTotalDuration);
-        
-        return; // Important: Stop further keydown processing.
+        return; // Stop further keydown processing.
     }
 
     // --- Original function logic continues below for all other keys ---
@@ -3790,8 +3795,7 @@ function handleKeyDown(event) {
             }
             break;
     }
-}
-		// Prevent zooming via keyboard and mouse wheel
+}		// Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
