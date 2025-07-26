@@ -1869,7 +1869,6 @@ function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
     // REPLACE your old drawing functions with these three new versions
 
 function handleDrawingStart(e) {
-    // For tablets, we ONLY allow drawing to start if a stylus is the input.
     if (isTabletMode && e.type.startsWith('touch')) {
         const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
         if (!isStylusPresent) {
@@ -1893,10 +1892,7 @@ function handleDrawingStart(e) {
 
     drawing = true;
     if (!isThelobookActive) userDrawingOccurred = true;
-    lastPos = pos;
-    mousePoints = [pos]; // Start the points buffer for both mouse and touch
-
-    // Set drawing styles
+    
     if (isThelobookActive) {
         activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
         activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
@@ -1905,7 +1901,7 @@ function handleDrawingStart(e) {
         activeCtx.globalCompositeOperation = 'source-over';
     }
 
-    // --- CHANGED: Start the path ONCE here ---
+    lastPos = pos;
     activeCtx.beginPath();
     activeCtx.moveTo(pos.x, pos.y);
 
@@ -1926,49 +1922,21 @@ function handleDrawingMove(e) {
     const pos = getPos(e, currentTargetCanvas);
     if (!pos) return;
     if (e.touches) e.preventDefault();
-
-    // --- CHANGED: This logic is now greatly simplified ---
-    // It just adds points to the path in memory without drawing them yet.
-
-    mousePoints.push(pos);
-
-    // For smoothing, we draw a curve to the midpoint of the last two points
-    if (mousePoints.length > 2) {
-        const p1 = mousePoints[mousePoints.length - 2];
-        const p2 = mousePoints[mousePoints.length - 1];
-        const midPoint = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-        
-        // Build the path with curves
-        activeCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
-
-        if (!isThelobookActive && currentColor === 'blue') {
-            finalCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
-        }
-    } else { // For the very first segment, just draw a straight line
-        activeCtx.lineTo(pos.x, pos.y);
-        if (!isThelobookActive && currentColor === 'blue') {
-            finalCtx.lineTo(pos.x, pos.y);
-        }
-    }
     
-    // --- ADDED: Immediately stroke the path to give real-time feedback ---
-    // This is the key to responsive drawing. We stroke the path built so far.
+    const midPoint = { x: (lastPos.x + pos.x) / 2, y: (lastPos.y + pos.y) / 2 };
+    
+    activeCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
     activeCtx.stroke();
+    activeCtx.moveTo(midPoint.x, midPoint.y);
     
-    // --- ADDED: We must begin a new path that starts from the end of the last one ---
-    // This prevents the entire line from being re-rendered on every move.
-    activeCtx.beginPath();
-    activeCtx.moveTo(mousePoints[mousePoints.length - 1].x, mousePoints[mousePoints.length - 1].y);
-
     if (!isThelobookActive && currentColor === 'blue') {
+        finalCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
         finalCtx.stroke();
-        finalCtx.beginPath();
-        finalCtx.moveTo(mousePoints[mousePoints.length - 1].x, mousePoints[mousePoints.length - 1].y);
+        finalCtx.moveTo(midPoint.x, midPoint.y);
     }
     
-    lastPos = pos; // Update last known position
+    lastPos = pos;
 }
-
 
 function handleDrawingEnd(e) {
     if (isTabletMode) {
@@ -1984,23 +1952,15 @@ function handleDrawingEnd(e) {
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
 
-    // --- CHANGED: The main stroke call is now here ---
-    
-    // Draw the final segment to the last known position
     activeCtx.lineTo(lastPos.x, lastPos.y);
-    activeCtx.stroke(); // Render the final segment
+    activeCtx.stroke();
+    activeCtx.closePath();
 
     if (!isThelobookActive && currentColor === 'blue') {
         finalCtx.lineTo(lastPos.x, lastPos.y);
         finalCtx.stroke();
+        finalCtx.closePath();
     }
-
-    // Reset for the next line
-    activeCtx.beginPath();
-    if (!isThelobookActive && currentColor === 'blue') {
-        finalCtx.beginPath();
-    }
-    mousePoints = [];
 }
 		function addBoardDrawListeners() {
         canvas.addEventListener('mousedown', handleDrawingStart);
