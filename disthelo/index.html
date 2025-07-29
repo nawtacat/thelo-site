@@ -1147,7 +1147,7 @@ body.lang-en {
     </div>
 </div>
 </body>
- <script>
+<script>
     const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
     firebase.initializeApp(firebaseConfig);
 
@@ -1159,7 +1159,6 @@ body.lang-en {
             console.error("Auth persistence error:", error.code, error.message);
         });
 
-    // UI Text with the missing keys restored
     const UI_TEXT = {
         hy: {
             next: "Հաջորդը", gotIt: "Հասկացա!", check: "Ստուգել",
@@ -1194,9 +1193,6 @@ body.lang-en {
 
     let currentLang = 'en';
 
-    /* ========================================================================= */
-    /* ===== Weekly Streak Calculation (Unchanged) ============================ */
-    /* ========================================================================= */
     function getISOWeekIdentifier(date) {
         const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
         d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
@@ -1416,6 +1412,25 @@ body.lang-en {
         const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
         bgCtx.font = `20px ${fontFamily}`; bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'top';
         if (replayCtx) { replayCtx.lineCap = 'round'; replayCtx.lineJoin = 'round'; }
+    }
+
+    //  ***** FIX: wrapText function is restored here *****
+    function wrapText(context, text, x, y, maxWidth, lineHeight){
+        const words = text.split(' '); let line = ''; let currentY = y;
+        for(let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' ';
+            const metrics = context.measureText(testLine);
+            const testWidth = metrics.width;
+            if (testWidth > maxWidth && n > 0) {
+                context.fillText(line, x, currentY);
+                line = words[n] + ' ';
+                currentY += lineHeight;
+            }
+            else {
+                line = testLine;
+            }
+        }
+        context.fillText(line, x, currentY);
     }
 
     function calculateDrawingDuration(drawingData){
@@ -1712,13 +1727,19 @@ body.lang-en {
                 if (prevBtn) prevBtn.disabled = (index === 0);
             }
 
+            // ***** FIX: Correctly defined drawHeadlineText function *****
             function drawHeadlineText() {
-                const padding = 27; const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
-                const maxWidth = cssWidthForText * 0.8; const textX = cssWidthForText / 2;
-                let headlineCurrentY = padding * 2; const lineHeight = 30;
+                const padding = 27;
+                const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
+                const maxWidth = cssWidthForText * 0.8;
+                const textX = cssWidthForText / 2;
+                let headlineCurrentY = padding * 2;
+                const lineHeight = 30;
                 let headlineText = currentStageData.headline || '';
-                if(headlineText && bgCtx && bgCtx.canvas.width > 0) {
-                     // wrapText logic here
+                
+                if (headlineText && bgCtx && bgCtx.canvas.width > 0) {
+                    const plainHeadlineText = headlineText.replace(/<strong>(.*?)<\/strong>/gi, '$1');
+                    wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
                 }
             }
 
