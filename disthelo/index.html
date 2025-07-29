@@ -1147,7 +1147,7 @@ body.lang-en {
     </div>
 </div>
 </body>
-  <script>
+ <script>
     const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
     firebase.initializeApp(firebaseConfig);
 
@@ -1159,7 +1159,7 @@ body.lang-en {
             console.error("Auth persistence error:", error.code, error.message);
         });
 
-    // UI Text is simplified, removing all handwriting-related messages.
+    // UI Text with the missing keys restored
     const UI_TEXT = {
         hy: {
             next: "Հաջորդը", gotIt: "Հասկացա!", check: "Ստուգել",
@@ -1169,6 +1169,7 @@ body.lang-en {
             imageDataError: `❌ Սխալ՝ չհաջողվեց ստանալ նկարը գրատախտակից։ ({errorMessage})`,
             apiErrorGeneral: `❌ Սխալ տեղի ունեցավ ստուգման ժամանակ։ ({errorMessage})`,
             lessonComplete: "Դասն ավարտված է։ Շատ լավ աշխատանք։",
+            lessonFileMissing: 'Սխալ։ Դասի ֆայլը նշված չէ URL-ում։',
             pointsGained: "+{points} միավոր ձեռք բերվեց։", error: "Սխալ", titleDefaultHy: "Thelo AI Platform",
             viewDashboard: "Տեսնել առաջընթացը",
             limitReached: "Դուք գերազանցել եք ձեր ամսական վերլուծությունների սահմանաչափը։ Խնդրում ենք փորձել կրկին հաջորդ ամիս։"
@@ -1182,6 +1183,7 @@ body.lang-en {
             imageDataError: `Couldn't get the image from the board. ({errorMessage})`,
             apiErrorGeneral: `Something went wrong during the process. ({errorMessage})`,
             lessonComplete: "Lesson complete! Nice work.",
+            lessonFileMissing: "Error: The lesson file is not specified in the URL.",
             pointsGained: "+{points} points earned!",
             error: "Error",
             titleDefaultEn: "Thelo AI Platform",
@@ -1850,13 +1852,26 @@ body.lang-en {
         nextStage();
     }
 
+    function formatAIMessage(key, replacements = {}){
+        const TXT = getCurrentUIText();
+        let message = TXT[key] || `Missing text for key: ${key}`;
+        for (const placeholder in replacements) {
+            message = message.replace(new RegExp(`{${placeholder}}`, 'g'), `<strong>${replacements[placeholder]}</strong>`);
+        }
+        return message;
+    }
+
     function addChatMessage(sender, rawMsg) {
+        if (!rawMsg) {
+            console.error("addChatMessage called with undefined message.");
+            return;
+        }
         if (isTabletMode) {
              if (typeof showToast === 'function') showToast(rawMsg);
              return;
         }
         const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
-        const emoji = '🫧'; // Simplified emoji logic
+        const emoji = '🫧';
         const bubble = document.createElement('div');
         bubble.className = 'ai-message';
         bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
@@ -1869,14 +1884,41 @@ body.lang-en {
         });
     }
 
-    async function updateStudentProgress(userId, topicId, progressData) { /* Unchanged */ }
-    function playRandomFeedback(soundType) { /* Unchanged */ }
-    function formatAIMessage(key, replacements = {}) { /* Unchanged */ }
-    function showToast(rawMsg, duration = 4000) { /* Unchanged */ }
-    function checkTabletMode() { /* Unchanged */ }
-    async function updateUserPointsInFirestore(pointsToAdd) { /* Unchanged */ }
+    function playRandomFeedback(soundType){
+        if (!window.userInteracted) return;
+        let soundArray = (currentLang === 'en')
+            ? (soundType === 'approve' ? approveSounds_en : disapproveSounds_en)
+            : (soundType === 'approve' ? approveSounds_hy : disapproveSounds_hy);
+        if (soundArray && soundArray.length > 0) {
+            const sound = soundArray[Math.floor(Math.random() * soundArray.length)];
+            if(sound) {
+                sound.currentTime = 0;
+                sound.play().catch(()=>{});
+            }
+        }
+    }
+    
+    function checkTabletMode() {
+        const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
+        const landscapeQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (min-height: 500px)');
+        isTabletMode = tabletQuery.matches || landscapeQuery.matches;
+    }
+
+    async function updateUserPointsInFirestore(pointsToAdd) {
+        const user = auth.currentUser;
+        if (!user) return;
+        const userDocRef = db.collection('thelo-students').doc(user.uid);
+        return userDocRef.update({
+            points: firebase.firestore.FieldValue.increment(pointsToAdd)
+        }).catch(error => {
+            console.error("Error updating points in Firestore: ", error);
+        });
+    }
+
     async function updateWeeklyStreak() { /* Unchanged */ }
     function showStreakCelebrationModal(streakCount, isNewRecord) { /* Unchanged */ }
+    function showToast(rawMsg, duration = 4000) { /* Unchanged */ }
+    async function updateStudentProgress(userId, topicId, progressData) { /* Unchanged */ }
     
     function handleKeyDown(event) {
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) return;
@@ -1915,7 +1957,6 @@ body.lang-en {
         audioIdsToLoad.forEach(id => {
             const audio = document.getElementById(id);
             if(audio) {
-                // Simplified audio loading
                 if (id.includes('approve_hy')) approveSounds_hy.push(audio);
                 if (id.includes('dis_hy')) disapproveSounds_hy.push(audio);
                 if (id.includes('approve_en')) approveSounds_en.push(audio);
@@ -1929,7 +1970,7 @@ body.lang-en {
         const lessonFileName = urlParams.get('lessonFile');
         if (lessonFileName) {
             const LESSONS_BASE_PATH = 'https://thelo.space/lessons/';
-            loadLesson(LESSONS_BASE_PATH + lessonFileName);
+            loadLesson(LESSONS_BASE_PATH + lessonFileName.replace(/\.\.+/g, ''));
         } else {
            addChatMessage('AI', formatAIMessage('lessonFileMissing'));
         }
@@ -1983,6 +2024,5 @@ body.lang-en {
             finishInitialization();
         }
     });
-
 </script>
 </html>
