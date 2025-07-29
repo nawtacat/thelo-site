@@ -3215,6 +3215,7 @@ if (detectedAnswer && parseFloat(detectedAnswer) === parseFloat(correctAnswer)) 
 }
 // Add this new function after your 'checkHandwritingAnswer' function
 // REPLACE your old 'checkGeometricDrawing' function with this new 'checkMathDrawing' function.
+// REPLACE your old 'checkMathDrawing' function with this FINAL version.
 async function checkMathDrawing() {
     if (nextCheckBtn.disabled || isTransitioning) return;
 
@@ -3223,48 +3224,53 @@ async function checkMathDrawing() {
     nextCheckBtn.textContent = TXT.checking;
     addChatMessage('AI', "Analyzing your solution... ⏳");
 
-    try {
-        // 1. Create a composite image of the background + user drawing
-        const compositeCanvas = document.createElement('canvas');
-        compositeCanvas.width = canvas.width;
-        compositeCanvas.height = canvas.height;
-        const compositeCtx = compositeCanvas.getContext('2d');
-        compositeCtx.drawImage(backgroundCanvas, 0, 0);
-        compositeCtx.drawImage(canvas, 0, 0);
-        const imageBase64 = compositeCanvas.toDataURL("image/png");
+    // This setTimeout is the key. It waits for the browser to finish drawing
+    // before we capture the canvas, solving the timing issue.
+    setTimeout(async () => {
+        try {
+            // 1. Create a composite image of the background + user drawing
+            const compositeCanvas = document.createElement('canvas');
+            compositeCanvas.width = canvas.width;
+            compositeCanvas.height = canvas.height;
+            const compositeCtx = compositeCanvas.getContext('2d');
+            compositeCtx.drawImage(backgroundCanvas, 0, 0);
+            compositeCtx.drawImage(canvas, 0, 0); // 'canvas' is your #board element
+            const imageBase64 = compositeCanvas.toDataURL("image/png");
 
-        // 2. Prepare the full payload with the new data fields
-        const payload = {
-            imageBase64: imageBase64,
-            problemText: currentStageData.problemText || "No problem text provided.",
-            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
-            solutionSteps: currentStageData.solutionSteps || "" // Send empty string if not present
-        };
+            // 2. Prepare the full payload
+            const payload = {
+                imageBase64: imageBase64,
+                problemText: currentStageData.problemText || "No problem text provided.",
+                correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
+                solutionSteps: currentStageData.solutionSteps || ""
+            };
 
-        // 3. Call the new Firebase Function
-        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-        const result = await analyzeMathDrawing(payload);
-        const feedback = result.data.feedback;
+            // 3. Call the Firebase Function
+            const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+            const result = await analyzeMathDrawing(payload);
+            const feedback = result.data.feedback;
 
-        // 4. Display the feedback from GPT-4o
-        addChatMessage('AI', `🔍 ${feedback}`);
-        playRandomFeedback('approve');
-        nextCheckBtn.classList.add('correct');
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.gotIt;
-
-    } catch (error) {
-        console.error("Math analysis failed:", error);
-        addChatMessage('AI', `⚠️ An error occurred: ${error.message}`);
-        playRandomFeedback('disapprove');
-        nextCheckBtn.classList.add('incorrect');
-        setTimeout(() => {
+            // 4. Display the feedback
+            addChatMessage('AI', `🔍 ${feedback}`);
+            playRandomFeedback('approve');
+            nextCheckBtn.classList.add('correct');
             nextCheckBtn.disabled = false;
-            nextCheckBtn.textContent = TXT.check;
-            nextCheckBtn.classList.remove('incorrect');
-        }, 2000);
-    }
-}function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
+            nextCheckBtn.textContent = TXT.gotIt;
+
+        } catch (error) {
+            console.error("Math analysis failed:", error);
+            addChatMessage('AI', `⚠️ An error occurred: ${error.message}`);
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+            setTimeout(() => {
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                nextCheckBtn.classList.remove('incorrect');
+            }, 2000);
+        }
+    }, 100); // A 100ms delay is enough for the browser to render.
+}
+function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
 
     /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
