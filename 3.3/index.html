@@ -2668,7 +2668,7 @@ async function displayLessonComplete() {
     if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
     const TXT = getCurrentUIText();
 
-    // Handle the initial "Start" button click
+    // Handle the initial "Start" button click (no changes here)
     if (currentStageIndex === -1 && lessonStages.length > 0) {
         lessonStartTime = Date.now();
         const user = auth.currentUser;
@@ -2683,26 +2683,6 @@ async function displayLessonComplete() {
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
         }
-
-        // =================================================================
-        // ✅ PRE-WARM THE CLOUD FUNCTION
-        // =================================================================
-        try {
-            console.log("Sending pre-warm request to analyzeHandwriting function...");
-            const analyzeHandwriting = firebase.functions().httpsCallable('analyzeHandwriting');
-            
-            // Send a placeholder payload. We don't need a valid result;
-            // we just need to wake the function up.
-            analyzeHandwriting({ imageBase64: 'prewarm' })
-                .catch(() => {
-                    // This is expected. The function is now ready for the first real request.
-                    console.log("Pre-warming request sent. Function is now warm.");
-                });
-        } catch (e) {
-            // Silently ignore any errors with the pre-warm call.
-        }
-        // =================================================================
-        
         transitionToStage(0);
         return;
     }
@@ -2711,8 +2691,10 @@ async function displayLessonComplete() {
     const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
     if (isMCQStage) return;
 
-    // Handle all "Got It" stages
+    // --- FIX: UNIFIED LOGIC FOR ALL "GOT IT" STAGES ---
     if (nextCheckBtn.textContent === TXT.gotIt) {
+        
+        // 1. Award points and play sound if this stage hasn't been rewarded yet.
         if (!stagesWithPointsAwarded.has(currentStageIndex)) {
             stagesWithPointsAwarded.add(currentStageIndex);
             stopCurrentStageAudio();
@@ -2724,21 +2706,24 @@ async function displayLessonComplete() {
             updatePointsDisplay();
             addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
             
+            // This restores the sound effect
             if (window.userInteracted && gotItSoundPlayer) {
                 gotItSoundPlayer.currentTime = 0;
                 gotItSoundPlayer.play().catch(e => {});
             }
         }
 
+        // 2. If an interactive replay was active, close it.
         if (isReplayActive) {
             closeReplayPlayer();
         }
 
+        // 3. Always advance to the next stage.
         nextStage();
         return;
     }
     
-    // Handle "Check" for handwriting questions
+    // Logic for 'Check' scenarios (handwriting question stages)
     if (currentStageData.type === 'question_handwriting') {
         checkHandwritingAnswer();
     } else {
