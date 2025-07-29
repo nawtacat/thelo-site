@@ -3213,9 +3213,8 @@ if (detectedAnswer && parseFloat(detectedAnswer) === parseFloat(correctAnswer)) 
         if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
     }
 }
-// Add this new function after your 'checkHandwritingAnswer' function
-// REPLACE your old 'checkGeometricDrawing' function with this new 'checkMathDrawing' function.
-// REPLACE your old 'checkMathDrawing' function with this FINAL version.
+// In your main HTML file, REPLACE the 'checkMathDrawing' function with this one.
+
 async function checkMathDrawing() {
     if (nextCheckBtn.disabled || isTransitioning) return;
 
@@ -3224,20 +3223,16 @@ async function checkMathDrawing() {
     nextCheckBtn.textContent = TXT.checking;
     addChatMessage('AI', "Analyzing your solution... ⏳");
 
-    // This setTimeout is the key. It waits for the browser to finish drawing
-    // before we capture the canvas, solving the timing issue.
     setTimeout(async () => {
         try {
-            // 1. Create a composite image of the background + user drawing
             const compositeCanvas = document.createElement('canvas');
             compositeCanvas.width = canvas.width;
             compositeCanvas.height = canvas.height;
             const compositeCtx = compositeCanvas.getContext('2d');
             compositeCtx.drawImage(backgroundCanvas, 0, 0);
-            compositeCtx.drawImage(canvas, 0, 0); // 'canvas' is your #board element
+            compositeCtx.drawImage(canvas, 0, 0);
             const imageBase64 = compositeCanvas.toDataURL("image/png");
 
-            // 2. Prepare the full payload
             const payload = {
                 imageBase64: imageBase64,
                 problemText: currentStageData.problemText || "No problem text provided.",
@@ -3245,30 +3240,39 @@ async function checkMathDrawing() {
                 solutionSteps: currentStageData.solutionSteps || ""
             };
 
-            // 3. Call the Firebase Function
             const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
             const result = await analyzeMathDrawing(payload);
-            const feedback = result.data.feedback;
 
-            // 4. Display the feedback
+            // ✅ NEW: Get both status and feedback from the response
+            const { status, feedback } = result.data;
+
             addChatMessage('AI', `🔍 ${feedback}`);
-            playRandomFeedback('approve');
-            nextCheckBtn.classList.add('correct');
-            nextCheckBtn.disabled = false;
-            nextCheckBtn.textContent = TXT.gotIt;
+
+            // ✅ NEW: Use the status to control the UI
+            if (status === 'correct') {
+                playRandomFeedback('approve');
+                nextCheckBtn.classList.add('correct');
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.gotIt;
+            } else { // Handles 'incorrect' and 'clarification_needed'
+                playRandomFeedback('disapprove');
+                nextCheckBtn.classList.add('incorrect');
+                // Let the user try again
+                setTimeout(() => {
+                    nextCheckBtn.disabled = false;
+                    nextCheckBtn.textContent = TXT.check;
+                    nextCheckBtn.classList.remove('incorrect');
+                }, 1000);
+            }
 
         } catch (error) {
             console.error("Math analysis failed:", error);
             addChatMessage('AI', `⚠️ An error occurred: ${error.message}`);
             playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-            setTimeout(() => {
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = TXT.check;
-                nextCheckBtn.classList.remove('incorrect');
-            }, 2000);
+            nextCheckBtn.disabled = false; // Make sure button is usable after an error
+            nextCheckBtn.textContent = TXT.check;
         }
-    }, 100); // A 100ms delay is enough for the browser to render.
+    }, 100);
 }
 function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
 
