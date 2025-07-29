@@ -1836,9 +1836,6 @@ function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
-
-    // REPLACE your old drawing functions with these three new versions
-
 function handleDrawingStart(e) {
     if (isTabletMode && e.type.startsWith('touch')) {
         const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
@@ -1875,7 +1872,48 @@ function handleDrawingStart(e) {
     lastPos = pos;
     activeCtx.beginPath();
     activeCtx.moveTo(pos.x, pos.y);
-}		function addBoardDrawListeners() {
+}
+
+function handleDrawingMove(e) {
+    if (!drawing) return;
+
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+
+    const pos = getPos(e, currentTargetCanvas);
+    if (!pos) return;
+    if (e.touches) e.preventDefault();
+
+    const midPoint = { x: (lastPos.x + pos.x) / 2, y: (lastPos.y + pos.y) / 2 };
+
+    activeCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
+    activeCtx.stroke();
+    activeCtx.moveTo(midPoint.x, midPoint.y);
+
+    lastPos = pos;
+}
+
+function handleDrawingEnd(e) {
+    if (isTabletMode) {
+        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+        buttonVanishTimer = setTimeout(() => {
+            if (bottomBar) bottomBar.classList.remove('bar-hidden-by-stylus');
+        }, 500);
+    }
+
+    if (!drawing) return;
+    drawing = false;
+
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
+
+    activeCtx.lineTo(lastPos.x, lastPos.y);
+    activeCtx.stroke();
+    activeCtx.closePath();
+}
+    // REPLACE your old drawing functions with these three new versions
+function addBoardDrawListeners() {
         canvas.addEventListener('mousedown', handleDrawingStart);
         canvas.addEventListener('mousemove', handleDrawingMove);
         canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
