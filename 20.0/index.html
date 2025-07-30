@@ -14,9 +14,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
 	<link rel="manifest" href="/manifest.json" />
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-KiWOvVjnN8qwKMvhIvhdwOpVVghpLCG0kM0Gczvb2V2eDkSpkIQ/JImps6BiiOlg" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM6LpLnH8iC3KXLHeJ5T6snwIsc2G_kTKsEZ3vA2kZ/R" crossorigin="anonymous"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/Gf1ESgqCax6aL_QGqGDvGz3eBxcUKSZkH0pVRyLddTuKS8Ym" crossorigin="anonymous" onload="renderMathInElement(document.body);"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -1062,30 +1059,6 @@ body.lang-en {
     box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.07);
     background-color: var(--thelo-bg);
 }
-	/* Add this with your other CSS rules */
-#headlineOverlay {
-    position: absolute;
-    top: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 80%;
-    max-width: 900px;
-    padding: 0 1rem;
-    box-sizing: border-box;
-    text-align: center;
-    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
-    font-size: 20px;
-    line-height: 1.5;
-    color: var(--thelo-text);
-    pointer-events: none; /* Allows clicks to go through to the canvas */
-    z-index: 10; /* Ensures it's above the canvases but below controls */
-}
-
-/* This targets the rendered math and makes it bold */
-#headlineOverlay .katex {
-    font-size: 1.1em; /* Slightly larger for emphasis */
-    font-weight: 700 !important; /* Use !important to override KaTeX defaults if needed */
-}
 </style>
 </head>
 <body>
@@ -1095,8 +1068,6 @@ body.lang-en {
     <div id="app">
         <div id="lessonArea">
             <div id="boardWrap">
-		    <div id="headlineOverlay"></div>
-    
                 <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
                 <canvas id="backgroundCanvas"></canvas>
                 <canvas id="replayCanvas"></canvas>
@@ -1346,7 +1317,6 @@ function getPreviousWeekIdentifier(weekId) {
 }
 
     /* ========== DOM Elements ========== */
-	  const headlineOverlay = document.getElementById('headlineOverlay');
     const backgroundCanvas = document.getElementById('backgroundCanvas');
     const replayCanvas = document.getElementById('replayCanvas');
     const canvas = document.getElementById('board');
@@ -2317,9 +2287,6 @@ function renderStageUI(index, isResize = false) {
             return resolve();
         }
 
-        // Clear the KaTeX headline overlay from the previous stage
-        if (headlineOverlay) headlineOverlay.innerHTML = '';
-        
         const TXT = getCurrentUIText();
         if (!isResize && isThelobookActive) closeThelobook(true);
         if (!isResize && isPageGridVisible) closePageGridView();
@@ -2348,21 +2315,6 @@ function renderStageUI(index, isResize = false) {
         }
 
         function setupStageContent() {
-            // Render the headline using the new overlay div and KaTeX
-            if (headlineOverlay && currentStageData.headline) {
-                headlineOverlay.textContent = currentStageData.headline;
-                // Tell KaTeX's auto-render extension to process the element
-                renderMathInElement(headlineOverlay, {
-                    delimiters: [
-                        {left: '$$', right: '$$', display: true},
-                        {left: '$', right: '$', display: false},
-                        {left: '\\(', right: '\\)', display: false},
-                        {left: '\\[', right: '\\]', display: true}
-                    ],
-                    throwOnError: false
-                });
-            }
-
             const mcqDetails = currentStageData.optionsQuiz;
             const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
             const isQuestionStage = currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution' || isMCQDisplayStage;
@@ -2481,23 +2433,43 @@ function renderStageUI(index, isResize = false) {
             if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
 
+        function drawHeadlineText() {
+            const padding = 27; const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
+            const maxWidth = cssWidthForText * 0.8; const textX = cssWidthForText / 2;
+            let headlineCurrentY = padding * 2; const lineHeight = 30;
+            let headlineText = currentStageData.headline || '';
+            if (headlineText && bgCtx && (bgCtx.canvas.width > 0)) {
+                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+                bgCtx.font = `20px ${fontFamily}`;
+                bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+                bgCtx.textAlign = 'center';
+                bgCtx.textBaseline = 'top';
+                const plainHeadlineText = headlineText.replace(/<strong>(.*?)<\/strong>/gi, '$1');
+                wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
+            }
+        }
+
         if (currentStageData.image && bgCtx) {
             const img = new Image();
+            // ✅ THIS IS THE FIX: Allow cross-origin images to be loaded
             img.crossOrigin = "Anonymous";
             img.src = currentStageData.image;
 
             img.onload = () => {
                 drawImageWithCorrectLayout(bgCtx, img, currentStageData);
+                drawHeadlineText();
                 setupStageContent();
                 resolve();
             };
 
             img.onerror = () => {
                 console.error("Failed to load stage image:", currentStageData.image);
+                drawHeadlineText();
                 setupStageContent();
                 resolve();
             };
         } else {
+            drawHeadlineText();
             setupStageContent();
             resolve();
         }
