@@ -1800,25 +1800,17 @@ function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
     }
 
    
-    function updateColorIndicator() {
-        const TXT = getCurrentUIText();
-        if(colorIndicator) {
-            let showIndicator = false;
-            if (isThelobookActive && !isPageGridVisible) {
-                colorIndicator.textContent = isThelobookEraserActive ? TXT.thelobookEraser : TXT.thelobookInk;
-                showIndicator = true;
-            } else if (currentStageData && !isPageGridVisible && !isThelobookActive) {
-                    const mcqDetails = currentStageData.optionsQuiz;
-                    const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-                if ((currentStageData.type === 'question_handwriting' || currentStageData.studentInput === true) && !isMCQDisplayStage) {
-                    colorIndicator.textContent = (currentColor === 'blue') ? TXT.inkBlue : TXT.inkBlack;
-                    showIndicator = true;
-                }
-            }
-            colorIndicator.style.display = showIndicator ? 'inline-flex' : 'none';
-        }
-        if(canvas) canvas.classList.toggle('blue-mode', currentColor === 'blue' && !isThelobookActive && !isPageGridVisible);
-    }
+   function updateColorIndicator() {
+    const TXT = getCurrentUIText();
+    if (colorIndicator) {
+        let showIndicator = false;
+        if (isThelobookActive && !isPageGridVisible) {
+            colorIndicator.textContent = isThelobookEraserActive ? TXT.thelobookEraser : TXT.thelobookInk;
+            showIndicator = true;
+        }
+        colorIndicator.style.display = showIndicator ? 'inline-flex' : 'none';
+    }
+}
     function getPos(e, targetCanvas) {
         if (!targetCanvas) return null;
         const rect = targetCanvas.getBoundingClientRect(); let clientX, clientY;
@@ -3859,57 +3851,55 @@ auth.onAuthStateChanged(user => {
 
 // Add this function somewhere logical, e.g., near updateUserPointsInFirestore
 async function logDigitForTraining(recognizedValue, feedbackType) {
-    const user = auth.currentUser;
-    if (!user) {
-        console.warn("No user for digit logging. Skipping.");
-        return;
-    }
+    const user = auth.currentUser;
+    if (!user) {
+        console.warn("No user for digit logging. Skipping.");
+        return;
+    }
 
-    // Ensure finalAnswerCanvas has content (blue ink drawing)
-    if (!finalAnswerCanvas || finalAnswerCanvas.width === 0 || finalAnswerCanvas.height === 0) {
-        console.warn("finalAnswerCanvas is not ready or empty. Cannot log digit for training.");
-        return;
-    }
+    // Ensure the main canvas has content
+    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+        console.warn("Main canvas is not ready or empty. Cannot log digit for training.");
+        return;
+    }
 
-    let base64ImageData;
-    try {
-        // Capture the content of the finalAnswerCanvas (which contains the blue ink)
-        // You might want to consider cropping this canvas to just the bounding box of the digit
-        // for optimal training data, but for a demo, the whole canvas is fine.
-        base64ImageData = finalAnswerCanvas.toDataURL('image/png'); // PNG is generally better for line art/digits
-    } catch (e) {
-        console.error("Failed to get image data from canvas for logging:", e);
-        return;
-    }
+    let base64ImageData;
+    try {
+        // Capture the content of the main canvas (which contains the blue ink)
+        base64ImageData = canvas.toDataURL('image/png');
+    } catch (e) {
+        console.error("Failed to get image data from canvas for logging:", e);
+        return;
+    }
 
-    const metadata = {
-        digit: String(recognizedValue), // The correct digit from the lesson data
-        recognizedByVision: currentStageData.correctAnswerOcr, // What Google Vision identified
-        feedbackType: feedbackType, // 'correct' or 'incorrect' for feedback
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        userId: user.uid, // Anonymous user ID
-        lessonId: new URLSearchParams(window.location.search).get('lessonFile')?.replace('.json', '') || 'unknown',
-        stageIndex: currentStageIndex,
-        deviceType: isTabletMode ? 'tablet' : 'desktop', // Simple detection
-        userAgent: navigator.userAgent, // Detailed user agent
-        screenWidth: window.screen.width,
-        screenHeight: window.screen.height,
-        canvasWidth: finalAnswerCanvas.width,
-        canvasHeight: finalAnswerCanvas.height,
-        devicePixelRatio: window.devicePixelRatio || 1,
-        // You could add inputMethod: e.pointerType (from drawing start event, but harder to pass here)
-    };
+    const metadata = {
+        digit: String(recognizedValue),
+        recognizedByVision: currentStageData.correctAnswerOcr,
+        feedbackType: feedbackType,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        userId: user.uid,
+        lessonId: new URLSearchParams(window.location.search).get('lessonFile')?.replace('.json', '') || 'unknown',
+        stageIndex: currentStageIndex,
+        deviceType: isTabletMode ? 'tablet' : 'desktop',
+        userAgent: navigator.userAgent,
+        screenWidth: window.screen.width,
+        screenHeight: window.screen.height,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+        devicePixelRatio: window.devicePixelRatio || 1,
+    };
 
-    try {
-        // Send to a new collection specifically for training data
-        await db.collection('thelo-training-digits-demo').add({
-            imageData: base64ImageData, // Base64 encoded image
-            metadata: metadata
-        });
-        console.log("Handwritten digit logged for training demo:", recognizedValue);
-    } catch (error) {
-        console.error("Error logging digit for training demo:", error);
-    }
+    try {
+        // Send to a new collection specifically for training data
+        await db.collection('thelo-training-digits-demo').add({
+            imageData: base64ImageData,
+            metadata: metadata
+        });
+        console.log("Handwritten digit logged for training demo:", recognizedValue);
+    } catch (error) {
+        console.error("Error logging digit for training demo:", error);
+    }
+}
 }
 </script>
 </html>
