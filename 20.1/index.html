@@ -1563,44 +1563,37 @@ function resizeCanvases() {
         checkTabletMode();
         if (!boardWrapper) return;
 
-        // <<< STEP 1: Save the current drawings before they get erased.
+        // Save the current drawing before it gets erased by the resize.
         let userDrawingData = null;
-        let finalAnswerData = null;
-
-        // Only save if a drawing has actually occurred to avoid errors.
         if (userDrawingOccurred && canvas.width > 0 && canvas.height > 0) {
             userDrawingData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            finalAnswerData = finalCtx.getImageData(0, 0, finalAnswerCanvas.width, finalAnswerCanvas.height);
         }
 
         const rect = boardWrapper.getBoundingClientRect();
-        const cssWidth = Math.max(1, Math.floor(rect.width)); 
+        const cssWidth = Math.max(1, Math.floor(rect.width));
         const cssHeight = Math.max(1, Math.floor(rect.height));
         devicePixelRatio = window.devicePixelRatio || 1;
-        const internalWidth = Math.floor(cssWidth * devicePixelRatio); 
+        const internalWidth = Math.floor(cssWidth * devicePixelRatio);
         const internalHeight = Math.floor(cssHeight * devicePixelRatio);
-        
+
         // This loop erases the canvases when it sets the new width/height.
-        [backgroundCanvas, replayCanvas, canvas, finalAnswerCanvas, thelobookCanvas].forEach(c => {
-            if (c) { 
-                c.width = internalWidth; 
-                c.height = internalHeight; 
-                c.style.width = `${cssWidth}px`; 
-                c.style.height = `${cssHeight}px`; 
+        [backgroundCanvas, replayCanvas, canvas, thelobookCanvas].forEach(c => {
+            if (c) {
+                c.width = internalWidth;
+                c.height = internalHeight;
+                c.style.width = `${cssWidth}px`;
+                c.style.height = `${cssHeight}px`;
             }
         });
         
         setupContexts();
 
-        // <<< STEP 2: Restore the saved drawings onto the newly resized (and cleared) canvases.
+        // Restore the saved drawing onto the newly resized canvas.
         if (userDrawingData) {
             ctx.putImageData(userDrawingData, 0, 0);
         }
-        if (finalAnswerData) {
-            finalCtx.putImageData(finalAnswerData, 0, 0);
-        }
 
-        // Redraw the rest of the UI (this part of your code was already correct).
+        // Redraw the rest of the UI.
         if (currentStageIndex >= 0 && lessonStages.length > 0) renderStageUI(currentStageIndex, true);
         
         if (isThelobookActive) {
@@ -1612,8 +1605,7 @@ function resizeCanvases() {
         if(isPageGridVisible) renderPageGridBatch(currentPageGridBatch, false);
 
     }, 150);
-}
-    function setupContexts() {
+}    function setupContexts() {
         if (!backgroundCanvas || !replayCanvas || !canvas || !finalAnswerCanvas || !thelobookCanvas) return;
         replayCtx = replayCanvas.getContext('2d'); thelobookCtx = thelobookCanvas.getContext('2d');
         [bgCtx, replayCtx, ctx, finalCtx, thelobookCtx].forEach(context => {
