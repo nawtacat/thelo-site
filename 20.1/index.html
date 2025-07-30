@@ -1072,7 +1072,6 @@ body.lang-en {
                 <canvas id="backgroundCanvas"></canvas>
                 <canvas id="replayCanvas"></canvas>
                 <canvas id="board"></canvas>
-                <canvas id="finalAnswerCanvas"></canvas>
                 <canvas id="thelobookCanvas"></canvas>
 		<div id="calculatorOverlay" class="calculator-hidden">
                 <iframe id="calculatorFrame" src="about:blank" allow="clipboard-write"></iframe>
@@ -1102,7 +1101,7 @@ body.lang-en {
             </div>
 
             <div id="bottomBar">
-                
+                <div id="colorIndicator"></div>
                 <div id="pointsDisplay"></div>
                 <div id="actionButtons">
     <button id="prevBtn" class="control-btn"></button>
@@ -1172,7 +1171,7 @@ body.lang-en {
             correct: "Ճիշտ է։", incorrect: "Սխալ է", apiKeyInvalid: "API բանալին անվավեր է",
             inkBlack: "Գույն՝ Սև", inkBlue: "Գույն՝ Կապույտ", loading: "Բեռնվում է...",
             clear: "Մաքրել", start: "Սկսել", prev: "Նախորդ",
-            welcome: "Ողջու՛յն։ Սեղմիր Սկսել դասը սկսելու համար։ Սեղմիր <strong>'A'</strong> կապույտով միայն պատասխանը նշելու համար։",
+            welcome: "Ողջու՛յն։ Սեղմիր Սկսել դասը սկսելու համար։",
             checkingAI: `Ստուգում եմ քո <strong style="color:${INK_COLORS.blue};">կապույտով</strong> գրված պատասխանը...`,
             blankBlueWarning: `⚠️ Կարծես թե պատասխանը <strong style="color:${INK_COLORS.blue};">կապույտով</strong> չես նշել։ Սեղմիր 'A' ստեղնը գույնը փոխելու համար։`,
             noTextFound: `⚠️ <strong style="color:${INK_COLORS.blue};">Կապույտով</strong> գրվածից տեքստ չգտնվեց։ Փորձիր գրել ավելի պարզ։`,
@@ -1223,7 +1222,7 @@ body.lang-en {
   start: "Start",
   prev: "Previous",
 
-  welcome: "Welcome! Press Start to begin. To write your answer in blue, press <strong>'A'</strong>.",
+  welcome: "Welcome! Press Start to begin.",
   checkingAI: `Looking at your answer in <strong style="color:${INK_COLORS.blue};">blue</strong>...`,
   blankBlueWarning: `It looks like there's no answer in <strong style="color:${INK_COLORS.blue};">blue</strong>. Press 'A' to change your ink color.`,
   noTextFound: `I couldn’t find any writing in <strong style="color:${INK_COLORS.blue};">blue</strong>. Try writing a bit more clearly.`,
@@ -1321,7 +1320,6 @@ function getPreviousWeekIdentifier(weekId) {
     const replayCanvas = document.getElementById('replayCanvas');
     const canvas = document.getElementById('board');
     const loadingOverlay = document.getElementById('loading-overlay'); // <-- ADD THIS
-    const finalAnswerCanvas = document.getElementById('finalAnswerCanvas');
     const thelobookCanvas = document.getElementById('thelobookCanvas');
     const boardWrapper = document.getElementById('boardWrap');
     const stageAudioPlayer = document.getElementById('stageAudioPlayer');
@@ -1337,7 +1335,6 @@ function getPreviousWeekIdentifier(weekId) {
     const bgCtx = backgroundCanvas.getContext('2d');
     let replayCtx = null;
     const ctx = canvas.getContext('2d');
-    const finalCtx = finalAnswerCanvas.getContext('2d');
     let thelobookCtx = null;
 
     const prevBtn = document.getElementById('prevBtn');
@@ -1380,7 +1377,7 @@ let lastIframeUpdateTime = 0;
     let lessonStagesRoot = null; let lessonStages = []; let isLessonLoading = false;
     let isImageModeActive = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
-    let drawing = false; let lastPos = { x: 0, y: 0 }; let currentColor = 'black';
+    let drawing = false; let lastPos = { x: 0, y: 0 };
     let userDrawingOccurred = false; let isTransitioning = false;
     let devicePixelRatio = window.devicePixelRatio || 1; window.userInteracted = false;
     let currentReplayAnimationId = null; let currentStageAudio = null; 
@@ -1621,36 +1618,23 @@ function resizeCanvases() {
 
     }, 150);
 }
-   function setupContexts() {
-    if (!backgroundCanvas || !replayCanvas || !canvas || !finalAnswerCanvas || !thelobookCanvas) return;
-    replayCtx = replayCanvas.getContext('2d');
-    thelobookCtx = thelobookCanvas.getContext('2d');
-
-    [bgCtx, replayCtx, ctx, finalCtx, thelobookCtx].forEach(context => {
-        if (context) { context.resetTransform(); context.scale(devicePixelRatio, devicePixelRatio); }
-    });
-
-    // Set main answer canvas (finalCtx) to always be blue
-    finalCtx.strokeStyle = INK_COLORS.blue;
-    finalCtx.lineWidth = 3;
-    finalCtx.lineCap = 'round';
-    finalCtx.lineJoin = 'round';
-
-    if (thelobookCtx) {
-        // Set thelobook canvas to always use black ink
-        thelobookCtx.strokeStyle = INK_COLORS.black;
-        thelobookCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
-        thelobookCtx.lineCap = 'round';
-        thelobookCtx.lineJoin = 'round';
+    function setupContexts() {
+        if (!backgroundCanvas || !replayCanvas || !canvas || !finalAnswerCanvas || !thelobookCanvas) return;
+        replayCtx = replayCanvas.getContext('2d'); thelobookCtx = thelobookCanvas.getContext('2d');
+        [bgCtx, replayCtx, ctx, finalCtx, thelobookCtx].forEach(context => {
+            if (context) { context.resetTransform(); context.scale(devicePixelRatio, devicePixelRatio); }
+        });
+        bgCtx.lineWidth = 2; bgCtx.strokeStyle = '#333'; bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+        const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+        bgCtx.font = `20px ${fontFamily}`; bgCtx.textAlign = 'center'; bgCtx.textBaseline = 'top';
+        if (replayCtx) { replayCtx.lineCap = 'round'; replayCtx.lineJoin = 'round'; }
+        ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = INK_COLORS.blue;
+        finalCtx.lineWidth = 6; finalCtx.lineCap = 'round'; finalCtx.lineJoin = 'round'; finalCtx.strokeStyle = INK_COLORS.black;
+        if (thelobookCtx) {
+            thelobookCtx.lineCap = 'round'; thelobookCtx.lineJoin = 'round';
+        }
+        updateColorIndicator();
     }
-
-    // Setup background text font
-    const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-    bgCtx.font = `20px ${fontFamily}`;
-    bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-    bgCtx.textAlign = 'center';
-    bgCtx.textBaseline = 'top';
-}
 
     function calculateDrawingDuration(drawingData){
         if (!drawingData || !drawingData.strokes || drawingData.strokes.length === 0) return 0;
@@ -1815,12 +1799,7 @@ function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         currentReplayAnimationId = requestAnimationFrame(animateStrokes);
     }
 
-    function toggleColor() {
-        if (isThelobookActive || isPageGridVisible) return;
-        currentColor = (currentColor === 'black') ? 'blue' : 'black';
-        if(ctx) ctx.strokeStyle = INK_COLORS[currentColor];
-        updateColorIndicator();
-    }
+   
     function updateColorIndicator() {
         const TXT = getCurrentUIText();
         if(colorIndicator) {
@@ -1861,8 +1840,7 @@ function handleDrawingStart(e) {
     }
 
     const currentTargetCanvas = e.currentTarget;
-    // NEW
-const activeCtx = isThelobookActive ? thelobookCtx : finalCtx;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
     if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
     if (!isThelobookActive && currentTargetCanvas !== canvas) return;
@@ -2317,7 +2295,6 @@ function renderStageUI(index, isResize = false) {
         currentStageData = lessonStages[index];
         currentStageIndex = index;
         isStudentInputAllowed = currentStageData.studentInput === true;
-        currentColor = 'black';
         if (ctx) ctx.strokeStyle = INK_COLORS[currentColor];
 
         if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
@@ -2706,24 +2683,20 @@ async function displayLessonComplete() {
     }
 }
 		function clearUserCanvas() {
-    if (isPageGridVisible) return;
-
-    if (isThelobookActive) {
-        if (thelobookCtx) {
-            thelobookCtx.clearRect(0, 0, thelobookCanvas.width / devicePixelRatio, thelobookCanvas.height / devicePixelRatio);
-            if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
-                thelobookPages[currentThelobookPageIndex] = null;
+        if (isPageGridVisible) return;
+        if (isThelobookActive) {
+            if (thelobookCtx) {
+                thelobookCtx.clearRect(0,0, thelobookCanvas.width/devicePixelRatio, thelobookCanvas.height/devicePixelRatio);
+                if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
+                    thelobookPages[currentThelobookPageIndex] = null;
+                }
             }
+            return;
         }
-        return;
+        if(ctx) ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+        if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); }
+        userDrawingOccurred = false;
     }
-
-    // Only clear the final answer canvas for the main board
-    if (finalCtx) {
-        finalCtx.clearRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio);
-    }
-    userDrawingOccurred = false;
-}
             // REPLACE your existing addChatImage function with this one
     function addChatImage(url) {
     const wrapper = Object.assign(document.createElement('div'), {
@@ -3088,20 +3061,21 @@ async function checkHandwritingAnswer() {
     } else {
         addChatMessage('AI', formatAIMessage('checkingAI'));
     }
-
-    let base64ImageData;
-    try {
-        const blankCanvas = document.createElement('canvas');
-        blankCanvas.width = finalAnswerCanvas.width;
-        blankCanvas.height = finalAnswerCanvas.height;
-        const finalAnswerDataUrl = finalAnswerCanvas.toDataURL('image/png');
-        if (finalAnswerDataUrl === blankCanvas.toDataURL()) {
-            throw new Error("BLANK_ANSWER");
-        }
-        base64ImageData = finalAnswerDataUrl.split(',')[1];
-    } catch (error) {
-        const msg = error.message === "BLANK_ANSWER" ? formatAIMessage('blankBlueWarning') : formatAIMessage('imageDataError', { errorMessage: error.message });
-        const shortMsg = "Please write your answer in blue ink.";
+let base64ImageData;
+try {
+    const blankCanvas = document.createElement('canvas');
+    blankCanvas.width = canvas.width;
+    blankCanvas.height = canvas.height;
+    const imageDataUrl = canvas.toDataURL('image/png');
+    if (imageDataUrl === blankCanvas.toDataURL()) {
+        // Use a more generic warning now
+        throw new Error("BLANK_ANSWER");
+    }
+    base64ImageData = imageDataUrl.split(',')[1];
+} catch (error) {
+    // Use the generic "draw something" warning instead of the blue ink one
+    const msg = error.message === "BLANK_ANSWER" ? formatAIMessage('drawActivityWarning') : formatAIMessage('imageDataError', { errorMessage: error.message });
+   	const shortMsg = "Please write your answer in blue ink.";
         isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', msg);
         playRandomFeedback('disapprove');
         nextCheckBtn.disabled = false;
@@ -3266,7 +3240,6 @@ async function checkMathDrawing() {
         }
     }, 100);
 }
-function eraseBlueInk() { if (isThelobookActive || isPageGridVisible) return; const TXT = getCurrentUIText(); if(finalCtx) { finalCtx.fillStyle = '#FFFFFF'; finalCtx.fillRect(0, 0, finalAnswerCanvas.width / devicePixelRatio, finalAnswerCanvas.height / devicePixelRatio); } addChatMessage('AI', formatAIMessage('blueInkErased')); }
 
     /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
