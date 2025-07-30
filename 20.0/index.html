@@ -3214,6 +3214,7 @@ if (detectedAnswer && parseFloat(detectedAnswer) === parseFloat(correctAnswer)) 
     }
 }
 // In your main HTML file, REPLACE the 'checkMathDrawing' function with this one.
+// In your main HTML file, REPLACE the 'checkMathDrawing' function with this one.
 
 async function checkMathDrawing() {
     if (nextCheckBtn.disabled || isTransitioning) return;
@@ -3233,22 +3234,22 @@ async function checkMathDrawing() {
             compositeCtx.drawImage(canvas, 0, 0);
             const imageBase64 = compositeCanvas.toDataURL("image/png");
 
+            // ✅ NEW: Add customInstructions to the payload
             const payload = {
                 imageBase64: imageBase64,
                 problemText: currentStageData.problemText || "No problem text provided.",
                 correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
-                solutionSteps: currentStageData.solutionSteps || ""
+                solutionSteps: currentStageData.solutionSteps || "",
+                customInstructions: currentStageData.customInstructions || "" // Send custom instructions if they exist
             };
 
             const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
             const result = await analyzeMathDrawing(payload);
 
-            // ✅ NEW: Get both status and feedback from the response
             const { status, feedback } = result.data;
 
             addChatMessage('AI', `🔍 ${feedback}`);
 
-            // ✅ NEW: Use the status to control the UI
             if (status === 'correct') {
                 playRandomFeedback('approve');
                 nextCheckBtn.classList.add('correct');
@@ -3257,7 +3258,6 @@ async function checkMathDrawing() {
             } else { // Handles 'incorrect' and 'clarification_needed'
                 playRandomFeedback('disapprove');
                 nextCheckBtn.classList.add('incorrect');
-                // Let the user try again
                 setTimeout(() => {
                     nextCheckBtn.disabled = false;
                     nextCheckBtn.textContent = TXT.check;
@@ -3269,7 +3269,7 @@ async function checkMathDrawing() {
             console.error("Math analysis failed:", error);
             addChatMessage('AI', `⚠️ An error occurred: ${error.message}`);
             playRandomFeedback('disapprove');
-            nextCheckBtn.disabled = false; // Make sure button is usable after an error
+            nextCheckBtn.disabled = false;
             nextCheckBtn.textContent = TXT.check;
         }
     }, 100);
