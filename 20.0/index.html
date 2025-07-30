@@ -2272,6 +2272,8 @@ function closeReplayPlayer() {
     replayFrame.src = 'about:blank';
 }
 // REPLACE your entire renderStageUI function with this one
+// In your main HTML file, REPLACE your entire renderStageUI function with this one.
+
 function renderStageUI(index, isResize = false) {
     return new Promise((resolve, reject) => {
         if (isLessonLoading || index < 0 || index >= lessonStages.length) {
@@ -2282,13 +2284,13 @@ function renderStageUI(index, isResize = false) {
                 if (colorIndicator && colorIndicator.style) colorIndicator.style.display = 'none';
                 if (mcqOptionsContainer && mcqOptionsContainer.style) mcqOptionsContainer.style.display = 'none';
             }
-            return resolve(); // Resolve the promise even if there's nothing to render
+            return resolve();
         }
 
         const TXT = getCurrentUIText();
         if (!isResize && isThelobookActive) closeThelobook(true);
         if (!isResize && isPageGridVisible) closePageGridView();
-        if (!isResize) closeReplayPlayer(); // Ensure replay player is closed on stage change
+        if (!isResize) closeReplayPlayer();
 
         if (!isResize) {
             if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
@@ -2306,7 +2308,6 @@ function renderStageUI(index, isResize = false) {
 
         if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
 
-        // Clear canvases
         if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
         if (!isResize) {
             clearUserCanvas();
@@ -2316,33 +2317,21 @@ function renderStageUI(index, isResize = false) {
         function setupStageContent() {
             const mcqDetails = currentStageData.optionsQuiz;
             const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-            // Replace the line above with this one to include the new type:
+            const isQuestionStage = currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution' || isMCQDisplayStage;
 
-const isQuestionStage = currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution' || isMCQDisplayStage;
-            // NEW LOGIC BLOCK FOR REPLAY STAGES (SYNCHRONIZED)
-            // (Inside renderStageUI, within setupStageContent)
-// ...
-if (currentStageData.type === 'calculator_replay') {
-    openReplayPlayer(); // Opens the iframe
-
-    // *** THE FIX ***
-    // ONLY reset the time if it's a fresh stage render, NOT a resume/resize.
-    if (!isResize) {
-        internalPlaybackTime = 0;
-        lastFrameTimestampForManualAdvance = 0;
-    }
-
-    // Promises to load all relevant media data and get their durations
-    const audioMetaPromise = new Promise((resolveAudio) => {
-// ...
+            if (currentStageData.type === 'calculator_replay') {
+                openReplayPlayer();
+                if (!isResize) {
+                    internalPlaybackTime = 0;
+                    lastFrameTimestampForManualAdvance = 0;
+                }
+                const audioMetaPromise = new Promise((resolveAudio) => {
                     if (currentStageData.audioFile) {
-                        playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { /* onEnded for audio */ }, isResize);
+                        playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
                     } else {
                         resolveAudio(0);
                     }
                 });
-
-                // Get replay data duration
                 const replayDataDurationPromise = fetch(currentStageData.replayDataUrl)
                     .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
                     .then(json => {
@@ -2353,32 +2342,24 @@ if (currentStageData.type === 'calculator_replay') {
                             } else if (action.action === 'animateView') {
                                 totalReplayTime += action.payload.duration;
                             }
-                            // Assuming other actions take negligible time relative to delays/animations
                         });
-                        return totalReplayTime / 1000; // Convert to seconds
+                        return totalReplayTime / 1000;
                     })
                     .catch(e => { console.error("Failed to load replay data for duration calculation:", e); return 0; });
-			// (Inside renderStageUI, within the 'calculator_replay' block)
-// (Inside renderStageUI, within the 'calculator_replay' block)
-
-// Make sure this block looks like this again:
-Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration, replayDuration]) => {
-    currentStageTotalDuration = Math.max(audioDuration, replayDuration);
-
-    isMediaScrubbingActive = true;
-    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
-    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible'); 
-
-    if (!currentReplayAnimationId) { 
-        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-    }
-}).catch(e => console.error("Error setting up replay stage durations:", e));
+                Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration, replayDuration]) => {
+                    currentStageTotalDuration = Math.max(audioDuration, replayDuration);
+                    isMediaScrubbingActive = true;
+                    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+                    if (!currentReplayAnimationId) {
+                        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+                    }
+                }).catch(e => console.error("Error setting up replay stage durations:", e));
                 if (nextCheckBtn) {
                     nextCheckBtn.textContent = TXT.gotIt;
                     nextCheckBtn.disabled = false;
                 }
                 if (clearBtn) clearBtn.style.display = 'none';
-
             } else if (isQuestionStage) {
                 if (!isResize) isMediaScrubbingActive = false;
                 if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
@@ -2386,36 +2367,31 @@ Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration,
                     if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
                     if (clearBtn) clearBtn.style.display = 'none';
                     if (nextCheckBtn) nextCheckBtn.disabled = true;
-                // Replace the block above with this one:
-
-                } else if (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution') {
-                    if (bottomBar) bottomBar.style.display = 'flex';
-                    if (nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
-                    if (clearBtn) clearBtn.style.display = 'inline-flex';
-                }
-                if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => {}, () => {}, isResize); }
-            } else { // Original Logic for Explanation Stages (non-question, non-replay)
+                } else if (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution') {
+                    if (bottomBar) bottomBar.style.display = 'flex';
+                    if (nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
+                    if (clearBtn) clearBtn.style.display = 'inline-flex';
+                }
+                if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => { }, () => { }, isResize); }
+            } else {
                 if (bottomBar) bottomBar.style.display = 'flex';
                 if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
                 const isDrawingInputStage = currentStageData.studentInput === true;
                 if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
-
-                if (currentStageData.audioFile || currentStageData.drawingRecord) { // Only if audio OR drawing
+                if (currentStageData.audioFile || currentStageData.drawingRecord) {
                     if (!isResize) {
                         isMediaScrubbingActive = true;
                         lastFrameTimestampForManualAdvance = 0;
                         internalPlaybackTime = 0;
                     }
                     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
-
                     const audioMetaPromise = new Promise((resolveAudio) => {
                         if (currentStageData.audioFile) {
-                            playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => {}, isResize);
+                            playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
                         } else {
                             resolveAudio(0);
                         }
                     });
-
                     let drawingDataPromise;
                     if (currentStageData.drawingRecord) {
                         if (!isResize || !currentStageDrawingData) {
@@ -2427,12 +2403,10 @@ Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration,
                         currentStageDrawingData = null;
                         drawingDataPromise = Promise.resolve(null);
                     }
-
                     Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
                         if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
                         const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
                         currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
-
                         if (isMediaScrubbingActive && currentStageTotalDuration > 0) {
                             updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
                             if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
@@ -2440,24 +2414,23 @@ Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration,
                             currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
                         }
                     });
-                } else { // No media for this stage
+                } else {
                     isMediaScrubbingActive = false; if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                     currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
                     if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
                 }
                 if (nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
             }
-
             updateColorIndicator();
-            canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible && !isReplayActive) ? 'auto' : 'none'; // Also disable if replay is active
+            canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible && !isReplayActive) ? 'auto' : 'none';
             if (nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
             if (!isResize) userDrawingOccurred = false;
-            if (prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible || isReplayActive); // Disable if replay is active
+            if (prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible || isReplayActive);
             if (nextCheckBtn) {
                 const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
-                nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW || isReplayActive && !currentStageData.audioFile); // Disable if replay is active and no audio to sync with.
+                nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW || isReplayActive && !currentStageData.audioFile);
             }
-            if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive); // Disable if replay is active
+            if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
 
         function drawHeadlineText() {
@@ -2465,7 +2438,6 @@ Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration,
             const maxWidth = cssWidthForText * 0.8; const textX = cssWidthForText / 2;
             let headlineCurrentY = padding * 2; const lineHeight = 30;
             let headlineText = currentStageData.headline || '';
-
             if (headlineText && bgCtx && (bgCtx.canvas.width > 0)) {
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
                 bgCtx.font = `20px ${fontFamily}`;
@@ -2479,6 +2451,8 @@ Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration,
 
         if (currentStageData.image && bgCtx) {
             const img = new Image();
+            // ✅ THIS IS THE FIX: Allow cross-origin images to be loaded
+            img.crossOrigin = "Anonymous";
             img.src = currentStageData.image;
 
             img.onload = () => {
