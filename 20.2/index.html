@@ -2612,34 +2612,38 @@ async function displayLessonComplete() {
  * Handles clicks on the main "Next" / "Check" / "Got It" button.
  * This function is now the central point for evaluating all interactive stages.
  */
+/**
+ * Handles clicks on the main "Next" / "Check" / "Got It" button.
+ * This function is now the central point for evaluating all interactive stages.
+ */
 function handleNextCheckClick() {
-    // Universal guard clause
-    if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
-    const TXT = getCurrentUIText();
+    // Universal guard clause
+    if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
+    const TXT = getCurrentUIText();
 
-    // 1. Handle the initial "Start" button click
-    if (currentStageIndex === -1 && lessonStages.length > 0) {
-        lessonStartTime = Date.now();
-        const user = auth.currentUser;
-        const urlParams = new URLSearchParams(window.location.search);
-        const lessonFileName = urlParams.get('lessonFile');
-        if (user && lessonFileName) {
-            db.collection("analytics_events").add({
-                type: "lesson_started",
-                userId: user.uid,
-                lessonId: lessonFileName.replace('.json', ''),
-                courseId: "sat-math-prep",
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        }
-        transitionToStage(0);
-        return;
-    }
+    // 1. Handle the initial "Start" button click
+    if (currentStageIndex === -1 && lessonStages.length > 0) {
+        lessonStartTime = Date.now();
+        const user = auth.currentUser;
+        const urlParams = new URLSearchParams(window.location.search);
+        const lessonFileName = urlParams.get('lessonFile');
+        if (user && lessonFileName) {
+            db.collection("analytics_events").add({
+                type: "lesson_started",
+                userId: user.uid,
+                lessonId: lessonFileName.replace('.json', ''),
+                courseId: "sat-math-prep",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        transitionToStage(0);
+        return;
+    }
 
-    const mcqDetails = currentStageData.optionsQuiz;
-    const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+    const mcqDetails = currentStageData.optionsQuiz;
+    const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
 
-    // 2. Handle submission for MCQ stages
+    // 2. Handle submission for MCQ stages
     if (isMCQStage) {
         if (selectedMcqIndex === null) {
             addChatMessage('AI', '⚠️ Please select an answer before checking.');
@@ -2662,10 +2666,11 @@ function handleNextCheckClick() {
             addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
             
             setTimeout(async () => {
-                // This ensures the full try...catch...finally structure is present.
                 try {
+                    // We pass 'true' to indicate this is for an MCQ.
                     await checkMathDrawing(true);
                 } catch (error) {
+                    // If the AI check fails, tell the user.
                     console.error("Error during AI drawing analysis:", error);
                     addChatMessage('AI', '⚠️ I had trouble analyzing your drawing. Please try again.');
                 } finally {
@@ -2677,70 +2682,39 @@ function handleNextCheckClick() {
         }
         return;
     }
-                    // If the AI check fails, tell the user.
-                    console.error("Error during AI drawing analysis:", error);
-                    addChatMessage('AI', '⚠️ I had trouble analyzing your drawing. Please try again.');
-                } finally {
-                    // ALWAYS re-enable the buttons so the user is never stuck.
-                    optionButtons.forEach(btn => btn.disabled = false);
-                    nextCheckBtn.disabled = false;
-                }
-            }, 1500);
-            // --- END OF CORRECTED BLOCK ---
-        }
-        return;
-    }
 
-    // 3. Handle all other stage types ("Got It", handwriting, etc.)
-    if (nextCheckBtn.textContent === TXT.gotIt) {
-        if (!stagesWithPointsAwarded.has(currentStageIndex)) {
-            stagesWithPointsAwarded.add(currentStageIndex);
-            stopCurrentStageAudio();
-            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-            userPoints += randomPoints;
-            sessionPoints += randomPoints;
-            updateUserPointsInFirestore(randomPoints);
-            updatePointsDisplay();
-            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-            if (window.userInteracted && gotItSoundPlayer) {
-                gotItSoundPlayer.currentTime = 0;
-                gotItSoundPlayer.play().catch(e => {});
-            }
-        }
-        if (isReplayActive) {
-            closeReplayPlayer();
-        }
-        nextStage();
-        return;
-    }
-    
-    if (currentStageData.type === 'question_handwriting') {
-        checkHandwritingAnswer();
-    } else if (currentStageData.type === 'question_math_solution') {
-        checkMathDrawing();
-    } else {
-        nextStage();
-    }
-}	  function clearUserCanvas() {
-    if (isPageGridVisible) return;
-    
-    if (isThelobookActive) {
-        if (thelobookCtx) {
-            thelobookCtx.clearRect(0, 0, thelobookCanvas.width / devicePixelRatio, thelobookCanvas.height / devicePixelRatio);
-            if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
-                thelobookPages[currentThelobookPageIndex] = null;
-            }
-        }
-        return;
-    }
-
-    if (ctx) {
-        ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
-    }
-    
-    userDrawingOccurred = false;
+    // 3. Handle all other stage types ("Got It", handwriting, etc.)
+    if (nextCheckBtn.textContent === TXT.gotIt) {
+        if (!stagesWithPointsAwarded.has(currentStageIndex)) {
+            stagesWithPointsAwarded.add(currentStageIndex);
+            stopCurrentStageAudio();
+            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
+            userPoints += randomPoints;
+            sessionPoints += randomPoints;
+            updateUserPointsInFirestore(randomPoints);
+            updatePointsDisplay();
+            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+            if (window.userInteracted && gotItSoundPlayer) {
+                gotItSoundPlayer.currentTime = 0;
+                gotItSoundPlayer.play().catch(e => {});
+            }
+        }
+        if (isReplayActive) {
+            closeReplayPlayer();
+        }
+        nextStage();
+        return;
+    }
+    
+    if (currentStageData.type === 'question_handwriting') {
+        checkHandwritingAnswer();
+    } else if (currentStageData.type === 'question_math_solution') {
+        checkMathDrawing();
+    } else {
+        nextStage();
+    }
 }
-    function addChatImage(url) {
+	  function addChatImage(url) {
     const wrapper = Object.assign(document.createElement('div'), {
         className: 'ai-message chat-image-container'
     });
