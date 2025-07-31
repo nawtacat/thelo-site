@@ -2656,17 +2656,26 @@ function handleNextCheckClick() {
             // CORRECT ANSWER: Give feedback and advance
             addChatMessage('AI', `🎉 ${mcqDetails.feedbackCorrect || TXT.correct}`);
             playRandomFeedback('approve');
-            // Points logic can be added here
             setTimeout(nextStage, 2500);
         } else {
             // INCORRECT ANSWER: Analyze the drawing
             addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
+            
+            // --- THIS IS THE CORRECTED BLOCK ---
             setTimeout(async () => {
-                await checkMathDrawing(); // Call AI to analyze the drawing
-                // Re-enable UI for another attempt
-                optionButtons.forEach(btn => btn.disabled = false);
-                nextCheckBtn.disabled = false;
+                try {
+                    await checkMathDrawing(); // Attempt to get AI feedback
+                } catch (error) {
+                    // If the AI check fails, tell the user.
+                    console.error("Error during AI drawing analysis:", error);
+                    addChatMessage('AI', '⚠️ I had trouble analyzing your drawing. Please try again.');
+                } finally {
+                    // ALWAYS re-enable the buttons so the user is never stuck.
+                    optionButtons.forEach(btn => btn.disabled = false);
+                    nextCheckBtn.disabled = false;
+                }
             }, 1500);
+            // --- END OF CORRECTED BLOCK ---
         }
         return;
     }
@@ -2701,8 +2710,7 @@ function handleNextCheckClick() {
     } else {
         nextStage();
     }
-}
-	  function clearUserCanvas() {
+}	  function clearUserCanvas() {
     if (isPageGridVisible) return;
     
     if (isThelobookActive) {
