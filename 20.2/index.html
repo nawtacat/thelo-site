@@ -2106,7 +2106,7 @@ function addBoardDrawListeners() {
 
 	
   // Replace your old function with this simplified version
-function handleMcqOptionClick(selectedIndex) {
+function handleMcqOptionClick(selectedIndex, mcqDetails){
     if (!mcqOptionsContainer) return;
 
     selectedMcqIndex = selectedIndex; // Store the user's choice
@@ -2116,6 +2116,11 @@ function handleMcqOptionClick(selectedIndex) {
     optionButtons.forEach((btn, index) => {
         btn.classList.toggle('selected', index === selectedIndex);
     });
+    
+    // Enable the main "Check" button now that an answer is selected
+    if (nextCheckBtn) {
+        nextCheckBtn.disabled = false;
+    }
 }
 // Add this function inside your <script> tag
 
@@ -2240,7 +2245,6 @@ function closeReplayPlayer() {
     replayPlayerContainer.classList.add('replay-hidden');
     replayFrame.src = 'about:blank';
 }
-// REPLACE your entire renderStageUI function with this one
 // In your main HTML file, REPLACE your entire renderStageUI function with this one.
 
 function renderStageUI(index, isResize = false) {
@@ -2286,6 +2290,11 @@ function renderStageUI(index, isResize = false) {
             const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
             const isQuestionStage = currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution' || isMCQDisplayStage;
 
+            // This ensures the button is visible for non-MCQ stages
+            if (!isMCQDisplayStage && nextCheckBtn) {
+                nextCheckBtn.style.display = 'inline-flex';
+            }
+
             if (currentStageData.type === 'calculator_replay') {
                 openReplayPlayer();
                 if (!isResize) {
@@ -2330,11 +2339,21 @@ function renderStageUI(index, isResize = false) {
             } else if (isQuestionStage) {
                 if (!isResize) isMediaScrubbingActive = false;
                 if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                
+                // --- THIS IS THE UPDATED BLOCK FOR MCQs ---
                 if (isMCQDisplayStage && mcqDetails) {
-                    if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
+                    if (bottomBar) bottomBar.style.display = 'flex'; 
+                    displayMcq(mcqDetails);
                     if (clearBtn) clearBtn.style.display = 'none';
-		    if (nextCheckBtn) nextCheckBtn.style.display = 'none';
-                    if (nextCheckBtn) nextCheckBtn.disabled = true;
+
+                    // Ensure the button is visible but DISABLED initially
+                    if (nextCheckBtn) {
+                        nextCheckBtn.style.display = 'inline-flex';
+                        nextCheckBtn.disabled = true; // User must select an answer first
+                        nextCheckBtn.textContent = TXT.check;
+                    }
+                // --- END OF UPDATED BLOCK ---
+                
                 } else if (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution') {
                     if (bottomBar) bottomBar.style.display = 'flex';
                     if (nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
@@ -2396,7 +2415,9 @@ function renderStageUI(index, isResize = false) {
             if (prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible || isReplayActive);
             if (nextCheckBtn) {
                 const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
-                nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || (isMCQDisplayStage && mcqDetails) || isCorrectlyAnsweredHW || isReplayActive && !currentStageData.audioFile);
+                if (!isMCQDisplayStage) { // Keep button enabled unless it's a new MCQ stage
+                    nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || isCorrectlyAnsweredHW || isReplayActive && !currentStageData.audioFile);
+                }
             }
             if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
@@ -2419,17 +2440,14 @@ function renderStageUI(index, isResize = false) {
 
         if (currentStageData.image && bgCtx) {
             const img = new Image();
-            // ✅ THIS IS THE FIX: Allow cross-origin images to be loaded
             img.crossOrigin = "Anonymous";
             img.src = currentStageData.image;
-
             img.onload = () => {
                 drawImageWithCorrectLayout(bgCtx, img, currentStageData);
                 drawHeadlineText();
                 setupStageContent();
                 resolve();
             };
-
             img.onerror = () => {
                 console.error("Failed to load stage image:", currentStageData.image);
                 drawHeadlineText();
@@ -2595,11 +2613,11 @@ async function displayLessonComplete() {
  * This function is now the central point for evaluating all interactive stages.
  */
 function handleNextCheckClick() {
-    // Universal guard clause to prevent actions during transitions or when overlays are active.
+    // Universal guard clause
     if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
     const TXT = getCurrentUIText();
 
-    // --- 1. Handle the initial "Start" button click ---
+    // 1. Handle the initial "Start" button click
     if (currentStageIndex === -1 && lessonStages.length > 0) {
         lessonStartTime = Date.now();
         const user = auth.currentUser;
@@ -2618,98 +2636,69 @@ function handleNextCheckClick() {
         return;
     }
 
-    // --- 2. NEW: Handle submission for MCQ stages ---
     const mcqDetails = currentStageData.optionsQuiz;
     const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
 
+    // 2. Handle submission for MCQ stages
     if (isMCQStage) {
-        // A. Check if the user has selected an answer.
         if (selectedMcqIndex === null) {
             addChatMessage('AI', '⚠️ Please select an answer before checking.');
             return;
         }
+        
+        const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
+        optionButtons.forEach(btn => btn.disabled = true);
+        nextCheckBtn.disabled = true;
 
         const isCorrect = (selectedMcqIndex === mcqDetails.correctIndex);
 
         if (isCorrect) {
-            // B. CORRECT ANSWER: Standard success routine.
+            // CORRECT ANSWER: Give feedback and advance
             addChatMessage('AI', `🎉 ${mcqDetails.feedbackCorrect || TXT.correct}`);
             playRandomFeedback('approve');
-            const points = 5; // Points awarded for a correct MCQ answer.
-            userPoints += points;
-            sessionPoints += points;
-            updateUserPointsInFirestore(points);
-            updatePointsDisplay();
-
-            // Visually confirm the correct choice and disable buttons.
-            const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
-            optionButtons.forEach(btn => btn.disabled = true);
-            if (optionButtons[selectedMcqIndex]) {
-                 optionButtons[selectedMcqIndex].classList.add('correct');
-            }
-            
-            // Advance to the next stage after a short delay.
+            // Points logic can be added here
             setTimeout(nextStage, 2500);
-
         } else {
-            // C. INCORRECT ANSWER: The new AI analysis path.
-            addChatMessage('AI', `🤔 That's not the right option. Let me look at your work...`);
-            
-            // Disable UI to prevent re-submission while AI is working.
-            const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
-            optionButtons.forEach(btn => btn.disabled = true);
-            if (nextCheckBtn) nextCheckBtn.disabled = true;
-
-            // Wait a moment for the user to read the message, then analyze the drawing.
+            // INCORRECT ANSWER: Analyze the drawing
+            addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
             setTimeout(async () => {
-                await checkMathDrawing(); // This calls the AI to analyze the drawing.
-                
-                // After feedback, re-enable the UI for another attempt.
+                await checkMathDrawing(); // Call AI to analyze the drawing
+                // Re-enable UI for another attempt
                 optionButtons.forEach(btn => btn.disabled = false);
-                if (nextCheckBtn) nextCheckBtn.disabled = false;
-
+                nextCheckBtn.disabled = false;
             }, 1500);
         }
-        return; // End the function execution here for MCQ stages.
+        return;
     }
 
-    // --- 3. Handle "Got It" button for explanation stages ---
+    // 3. Handle all other stage types ("Got It", handwriting, etc.)
     if (nextCheckBtn.textContent === TXT.gotIt) {
-        // Award points if this stage hasn't been rewarded yet.
         if (!stagesWithPointsAwarded.has(currentStageIndex)) {
             stagesWithPointsAwarded.add(currentStageIndex);
             stopCurrentStageAudio();
-            
             const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
             userPoints += randomPoints;
             sessionPoints += randomPoints;
             updateUserPointsInFirestore(randomPoints);
             updatePointsDisplay();
             addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-            
             if (window.userInteracted && gotItSoundPlayer) {
                 gotItSoundPlayer.currentTime = 0;
                 gotItSoundPlayer.play().catch(e => {});
             }
         }
-
-        // If an interactive replay was active, close it.
         if (isReplayActive) {
             closeReplayPlayer();
         }
-
-        // Always advance to the next stage.
         nextStage();
         return;
     }
     
-    // --- 4. Handle other question types (legacy handwriting & math solution stages) ---
     if (currentStageData.type === 'question_handwriting') {
         checkHandwritingAnswer();
     } else if (currentStageData.type === 'question_math_solution') {
         checkMathDrawing();
     } else {
-        // Default action if no other condition is met.
         nextStage();
     }
 }
