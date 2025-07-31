@@ -3135,36 +3135,52 @@ async function checkHandwritingAnswer() {
     }
 }
 // Replace your entire checkMathDrawing function with this one
+// Replace your entire checkMathDrawing function with this definitive version.
 
 async function checkMathDrawing() {
-    // --- NEW: Add robust authentication and token refresh ---
+    // 1. Ensure user is authenticated and token is fresh
     if (!auth.currentUser) {
-        console.error("User is not authenticated. Cannot call analyzeMathDrawing.");
+        console.error("User is not authenticated.");
         addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
-        throw new Error("User not authenticated."); // Throw error to be caught by the calling function
+        throw new Error("User not authenticated.");
     }
-
     try {
         await auth.currentUser.getIdToken(true);
-        console.log("Successfully refreshed auth token for AI call.");
     } catch (error) {
         console.error("Token refresh failed:", error);
         addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
-        throw new Error("Token refresh failed."); // Throw error
+        throw new Error("Token refresh failed.");
     }
-    // --- END OF NEW BLOCK ---
+
+    // --- THIS IS THE NEW, CRUCIAL FIX ---
+    // 2. Check if the user's canvas is blank BEFORE calling the AI
+    try {
+        const blankCanvasCheck = document.createElement('canvas');
+        blankCanvasCheck.width = canvas.width;
+        blankCanvasCheck.height = canvas.height;
+        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
+            // If the canvas is blank, inform the user and stop.
+            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
+            throw new Error("No drawing found on canvas.");
+        }
+    } catch (e) {
+        console.error("Blank canvas check failed:", e.message);
+        // This re-throws the error so the 'finally' block in the calling function
+        // can re-enable the buttons, preventing a stuck UI.
+        throw e;
+    }
+    // --- END OF THE NEW FIX ---
 
     if (nextCheckBtn.disabled || isTransitioning) return;
 
     const TXT = getCurrentUIText();
     nextCheckBtn.disabled = true;
     nextCheckBtn.textContent = TXT.checking;
-    // The "Analyzing..." message is now sent from the calling function (handleNextCheckClick)
     
-    // This timeout is a good practice to let the UI update before heavy processing.
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
+        // 3. Composite the canvases and prepare the payload for the AI
         const compositeCanvas = document.createElement('canvas');
         compositeCanvas.width = canvas.width;
         compositeCanvas.height = canvas.height;
@@ -3181,23 +3197,20 @@ async function checkMathDrawing() {
             customInstructions: currentStageData.customInstructions || ""
         };
 
+        // 4. Call the AI and process the response
         const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
         const result = await analyzeMathDrawing(payload);
-
         const { status, feedback } = result.data;
 
-        // This is where the feedback is sent to the chat
-        addChatMessage('AI', `🔍 ${feedback}`);
+        addChatMessage('AI', `🔍 ${feedback}`); // Send AI feedback to chat
 
         if (status === 'correct') {
             playRandomFeedback('approve');
             nextCheckBtn.classList.add('correct');
-            // For MCQs, the calling function handles the next step.
-            // For standalone math questions, we set the button to "Got It".
             if (currentStageData.type === 'question_math_solution') {
                  nextCheckBtn.textContent = TXT.gotIt;
             }
-        } else { // Handles 'incorrect' and 'clarification_needed'
+        } else {
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
         }
@@ -3206,11 +3219,9 @@ async function checkMathDrawing() {
         console.error("Math analysis failed:", error);
         addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
         playRandomFeedback('disapprove');
-        // Re-throw the error so the calling function's "finally" block can run
         throw error;
     }
-}
-    /* ========== THELOBOOK FUNCTIONALITY ========== */
+}    /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
         const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
