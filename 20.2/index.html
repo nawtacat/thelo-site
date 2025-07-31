@@ -1059,11 +1059,12 @@ body.lang-en {
     box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.07);
     background-color: var(--thelo-bg);
 }
-  /* Add this to your CSS */
+	/* Add near your other .mcq-option-btn rules */
 .mcq-option-btn.selected {
     border-color: var(--thelo-blue);
-    background-color: #eff6ff; /* A light blue to indicate selection */
+    background-color: #eff6ff; /* A light blue background */
     color: var(--thelo-blue);
+    border-width: 2px;
     transform: translateY(-3px);
     box-shadow: var(--shadow-lg);
 }
@@ -1374,6 +1375,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     /* ========== State Variables ========== */
     let isAuthReady = false;
+	  let selectedMcqIndex = null; // To store the selected MCQ option index
           let isTabletMode = false;
 	let isCalculatorActive = false;
 	let isReplayActive = false;
@@ -2069,18 +2071,19 @@ function addBoardDrawListeners() {
     }
     }
 
-	function displayMcq(mcqDetails, evaluateImmediately = true) {
+	function displayMcq(mcqDetails){
     const choices = mcqDetails.choices;
-    if (!mcqOptionsContainer || !mcqDetails || !Array.isArray(choices) || choices.length === 0) {
-        return;
-    }
+    if (!mcqOptionsContainer || !mcqDetails ||
+        !Array.isArray(choices) || choices.length === 0) return;
     if (isPageGridVisible) closePageGridView();
 
     mcqOptionsContainer.innerHTML = '';
 
-    /* ===== Smart-layout ===== */
+    /* ===== Smart‑layout ===== */
     const isShort = choices.every(choice => choice.length < 10);
     mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
+
+    /* <<—‑‑‑  ADD THESE TWO LINES  ‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑>> */
     const isSideBySide = !!(currentStageData && currentStageData.image);
     mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
     /* --------------------------------------------------- */
@@ -2088,76 +2091,39 @@ function addBoardDrawListeners() {
     choices.forEach((optionText, index) => {
         const optionButton = document.createElement('button');
         optionButton.classList.add('mcq-option-btn');
-        optionButton.textContent = optionText;
+        optionButton.textContent  = optionText;
         optionButton.dataset.index = index;
-
-        if (evaluateImmediately) {
-            // This is your OLD logic for instant feedback stages
-            optionButton.addEventListener('click', () => handleMcqOptionClick(index, mcqDetails));
-        } else {
-            // NEW logic for our hybrid stage
-            optionButton.addEventListener('click', () => {
-                // Remove 'selected' from any other button
-                mcqOptionsContainer.querySelectorAll('.mcq-option-btn').forEach(btn => {
-                    btn.classList.remove('selected');
-                });
-                // Add 'selected' to the clicked button
-                optionButton.classList.add('selected');
-            });
-        }
+        optionButton.addEventListener(
+            'click',
+            () => handleMcqOptionClick(index, mcqDetails)
+        );
         mcqOptionsContainer.appendChild(optionButton);
     });
 
     mcqOptionsContainer.style.display = 'flex';
     mcqOptionsContainer.style.opacity = '1';
 }
-	
-    function handleMcqOptionClick(selectedIndex, mcqDetails){
-    stopCurrentStageAudio();
-    const TXT = getCurrentUIText();
 
+	
+   function handleMcqOptionClick(selectedIndex) {
+    const TXT = getCurrentUIText();
     if (!mcqOptionsContainer) return;
 
+    // Store the selection
+    selectedMcqIndex = selectedIndex;
+
     const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
-    optionButtons.forEach(btn => btn.disabled = true);
 
-    const selectedButton = optionButtons[selectedIndex];
-    const isCorrectAnswer = parseInt(selectedButton.dataset.index) === mcqDetails.correctIndex;
+    // Update visual selection state
+    optionButtons.forEach((btn, index) => {
+        btn.classList.toggle('selected', index === selectedIndex);
+    });
 
-    let feedbackMessageForChat; // This variable will hold the message sent to the chat
-    if (isCorrectAnswer) {
-        selectedButton.classList.add('correct');
-
-        playRandomFeedback('approve');
-        userPoints += 5; // This updates the permanent score
-        sessionPoints += 5; // ADDED: This updates the score for this lesson
-        updatePointsDisplay();
-	updateUserPointsInFirestore(5);
-        // Construct the message to include points
-        const baseFeedback = mcqDetails.feedbackCorrect || TXT.correct;
-        feedbackMessageForChat = `${baseFeedback} ${formatAIMessage('pointsGained', { points: 5 })}`;
-
-    }
-    
-	    else {
-        selectedButton.classList.add('incorrect');
-        const correctButton = optionButtons[mcqDetails.correctIndex];
-        if (correctButton) correctButton.classList.add('correct-answer-shown');
-
-        feedbackMessageForChat = mcqDetails.feedbackIncorrect || TXT.incorrect;
-
-        const correctTextOptions = mcqDetails.choices;
-        const correctButtonText = correctTextOptions[mcqDetails.correctIndex];
-        if (feedbackMessageForChat.includes('{correctText}')) {
-            const tempDiv = document.createElement('div');
-            tempDiv.textContent = correctButtonText;
-            feedbackMessageForChat = feedbackMessageForChat.replace('{correctText}', tempDiv.innerHTML);
-        }
-        playRandomFeedback('disapprove');
+    // Enable the main check button so the user can submit
+    if (nextCheckBtn) {
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
     }
-
-    addChatMessage('AI', feedbackMessageForChat); // Use the new variable for the chat message
-    setTimeout(nextStage, 2500);
 }
 // Add this function inside your <script> tag
 
@@ -2329,20 +2295,6 @@ function renderStageUI(index, isResize = false) {
             const isQuestionStage = currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution' || isMCQDisplayStage;
 
             if (currentStageData.type === 'calculator_replay') {
-              // ADD THIS NEW BLOCK OF CODE HERE
-if (currentStageData.type === 'question_mcq_with_drawing') {
-    // Call displayMcq with evaluateImmediately set to false
-    displayMcq(currentStageData.optionsQuiz, false);
-    
-    // Ensure the main check button is visible and enabled
-    if (nextCheckBtn) {
-        nextCheckBtn.textContent = TXT.check;
-        nextCheckBtn.disabled = false;
-    }
-    if (clearBtn) clearBtn.style.display = 'inline-flex';
-    if (bottomBar) bottomBar.style.display = 'flex';
-} else 
-// END OF NEW BLOCK (note the 'else' to chain it)
                 openReplayPlayer();
                 if (!isResize) {
                     internalPlaybackTime = 0;
@@ -2500,6 +2452,7 @@ if (currentStageData.type === 'question_mcq_with_drawing') {
 }
           function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
+		  selectedMcqIndex = null; // <-- ADD THIS LINE
 		  if (isReplayActive) closeReplayPlayer();
     if (isThelobookActive) closeThelobook(true);
     if (isPageGridVisible) closePageGridView();
@@ -2644,10 +2597,16 @@ async function displayLessonComplete() {
         }
     }
 }		
-	  function handleNextCheckClick() {
+	 /**
+ * Handles clicks on the main "Next" / "Check" / "Got It" button.
+ * This function is now the central point for evaluating all interactive stages.
+ */
+function handleNextCheckClick() {
+    // Universal guard clause to prevent actions during transitions or when overlays are active.
     if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
     const TXT = getCurrentUIText();
 
+    // --- 1. Handle the initial "Start" button click ---
     if (currentStageIndex === -1 && lessonStages.length > 0) {
         lessonStartTime = Date.now();
         const user = auth.currentUser;
@@ -2666,84 +2625,100 @@ async function displayLessonComplete() {
         return;
     }
 
+    // --- 2. NEW: Handle submission for MCQ stages ---
     const mcqDetails = currentStageData.optionsQuiz;
     const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-    if (isMCQStage) return;
 
+    if (isMCQStage) {
+        // A. Check if the user has selected an answer.
+        if (selectedMcqIndex === null) {
+            addChatMessage('AI', '⚠️ Please select an answer before checking.');
+            return;
+        }
+
+        const isCorrect = (selectedMcqIndex === mcqDetails.correctIndex);
+
+        if (isCorrect) {
+            // B. CORRECT ANSWER: Standard success routine.
+            addChatMessage('AI', `🎉 ${mcqDetails.feedbackCorrect || TXT.correct}`);
+            playRandomFeedback('approve');
+            const points = 5; // Points awarded for a correct MCQ answer.
+            userPoints += points;
+            sessionPoints += points;
+            updateUserPointsInFirestore(points);
+            updatePointsDisplay();
+
+            // Visually confirm the correct choice and disable buttons.
+            const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
+            optionButtons.forEach(btn => btn.disabled = true);
+            if (optionButtons[selectedMcqIndex]) {
+                 optionButtons[selectedMcqIndex].classList.add('correct');
+            }
+            
+            // Advance to the next stage after a short delay.
+            setTimeout(nextStage, 2500);
+
+        } else {
+            // C. INCORRECT ANSWER: The new AI analysis path.
+            addChatMessage('AI', `🤔 That's not the right option. Let me look at your work...`);
+            
+            // Disable UI to prevent re-submission while AI is working.
+            const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
+            optionButtons.forEach(btn => btn.disabled = true);
+            if (nextCheckBtn) nextCheckBtn.disabled = true;
+
+            // Wait a moment for the user to read the message, then analyze the drawing.
+            setTimeout(async () => {
+                await checkMathDrawing(); // This calls the AI to analyze the drawing.
+                
+                // After feedback, re-enable the UI for another attempt.
+                optionButtons.forEach(btn => btn.disabled = false);
+                if (nextCheckBtn) nextCheckBtn.disabled = false;
+
+            }, 1500);
+        }
+        return; // End the function execution here for MCQ stages.
+    }
+
+    // --- 3. Handle "Got It" button for explanation stages ---
     if (nextCheckBtn.textContent === TXT.gotIt) {
+        // Award points if this stage hasn't been rewarded yet.
         if (!stagesWithPointsAwarded.has(currentStageIndex)) {
             stagesWithPointsAwarded.add(currentStageIndex);
             stopCurrentStageAudio();
+            
             const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
             userPoints += randomPoints;
             sessionPoints += randomPoints;
             updateUserPointsInFirestore(randomPoints);
             updatePointsDisplay();
-            addChatMessage('AI', formatAIMessage('pointsGained', {
-                points: randomPoints
-            }));
+            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
+            
             if (window.userInteracted && gotItSoundPlayer) {
                 gotItSoundPlayer.currentTime = 0;
                 gotItSoundPlayer.play().catch(e => {});
             }
         }
+
+        // If an interactive replay was active, close it.
         if (isReplayActive) {
             closeReplayPlayer();
         }
+
+        // Always advance to the next stage.
         nextStage();
         return;
     }
-
-    if (currentStageData.type === 'question_mcq_with_drawing') {
-        const selectedOption = mcqOptionsContainer.querySelector('.mcq-option-btn.selected');
-
-        if (!selectedOption) {
-            addChatMessage('AI', '⚠️ Please select an answer before checking.');
-            return;
-        }
-
-        const selectedIndex = parseInt(selectedOption.dataset.index, 10);
-        const correctIndex = currentStageData.optionsQuiz.correctIndex;
-
-        if (selectedIndex === correctIndex) {
-            addChatMessage('AI', `🎉 ${currentStageData.optionsQuiz.feedbackCorrect || 'Correct!'}`);
-            playRandomFeedback('approve');
-            const pointsGained = 15;
-            sessionPoints += pointsGained;
-            updateUserPointsInFirestore(pointsGained);
-            updatePointsDisplay();
-            setTimeout(nextStage, 2000);
-        } else {
-            addChatMessage('AI', '🤔 The selected answer is not quite right. Let me look at your work...');
-            playRandomFeedback('disapprove');
-            checkMathDrawing();
-        }
-    } else if (currentStageData.type === 'question_handwriting') {
+    
+    // --- 4. Handle other question types (legacy handwriting & math solution stages) ---
+    if (currentStageData.type === 'question_handwriting') {
         checkHandwritingAnswer();
     } else if (currentStageData.type === 'question_math_solution') {
         checkMathDrawing();
     } else {
+        // Default action if no other condition is met.
         nextStage();
     }
-}
-	  function clearUserCanvas() {
-    if (isPageGridVisible) return;
-    
-    if (isThelobookActive) {
-        if (thelobookCtx) {
-            thelobookCtx.clearRect(0, 0, thelobookCanvas.width / devicePixelRatio, thelobookCanvas.height / devicePixelRatio);
-            if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
-                thelobookPages[currentThelobookPageIndex] = null;
-            }
-        }
-        return;
-    }
-
-    if (ctx) {
-        ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
-    }
-    
-    userDrawingOccurred = false;
 }
     function addChatImage(url) {
     const wrapper = Object.assign(document.createElement('div'), {
