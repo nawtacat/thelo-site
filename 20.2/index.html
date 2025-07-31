@@ -2661,12 +2661,21 @@ function handleNextCheckClick() {
             // INCORRECT ANSWER: Analyze the drawing
             addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
             
-            // --- THIS IS THE CORRECTED BLOCK ---
             setTimeout(async () => {
                 try {
-                    // Pass a flag to indicate this is from an MCQ stage
-                    await checkMathDrawing(true); 
+                    // We pass 'true' to indicate this is for an MCQ.
+                    await checkMathDrawing(true);
                 } catch (error) {
+                    // If the AI check fails, tell the user.
+                    console.error("Error during AI drawing analysis:", error);
+                    addChatMessage('AI', '⚠️ I had trouble analyzing your drawing. Please try again.');
+                } finally {
+                    // ALWAYS re-enable the buttons so the user is never stuck.
+                    optionButtons.forEach(btn => btn.disabled = false);
+                    nextCheckBtn.disabled = false;
+                }
+            }, 1500);
+        }
                     // If the AI check fails, tell the user.
                     console.error("Error during AI drawing analysis:", error);
                     addChatMessage('AI', '⚠️ I had trouble analyzing your drawing. Please try again.');
@@ -3138,8 +3147,8 @@ async function checkHandwritingAnswer() {
 // Replace your entire checkMathDrawing function with this one
 // Replace your entire checkMathDrawing function with this definitive version.
 
-async function checkMathDrawing(isMcqContext = false) { // <<< 1. ADD THE PARAMETER HERE
-    // 1. Ensure user is authenticated and token is fresh
+async function checkMathDrawing(isMcqContext = false) {
+    // 1. Authenticate user
     if (!auth.currentUser) {
         console.error("User is not authenticated.");
         addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
@@ -3153,7 +3162,7 @@ async function checkMathDrawing(isMcqContext = false) { // <<< 1. ADD THE PARAME
         throw new Error("Token refresh failed.");
     }
 
-    // 2. Check if the user's canvas is blank BEFORE calling the AI
+    // 2. Check for blank canvas
     try {
         const blankCanvasCheck = document.createElement('canvas');
         blankCanvasCheck.width = canvas.width;
@@ -3166,8 +3175,9 @@ async function checkMathDrawing(isMcqContext = false) { // <<< 1. ADD THE PARAME
         console.error("Blank canvas check failed:", e.message);
         throw e;
     }
-   
-    if (nextCheckBtn.disabled || isTransitioning) return;
+
+    // <<< THIS IS THE FIX: The problematic line has been removed. >>>
+    // We no longer check "if (nextCheckBtn.disabled)".
 
     const TXT = getCurrentUIText();
     nextCheckBtn.disabled = true;
@@ -3176,15 +3186,13 @@ async function checkMathDrawing(isMcqContext = false) { // <<< 1. ADD THE PARAME
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-        // <<< 2. THIS IS THE NEW LOGIC BLOCK FOR IMAGE CREATION >>>
+        // 3. Prepare image based on context
         let imageBase64;
         if (isMcqContext) {
-            // For MCQs, we ONLY want the user's handwriting, not the background.
-            console.log("MCQ context: Capturing user ink canvas only.");
+            // For MCQs, we ONLY want the user's handwriting.
             imageBase64 = canvas.toDataURL("image/png");
         } else {
-            // For standard problems, we composite the background and the user's ink.
-            console.log("Standard context: Capturing composite canvas.");
+            // For standard problems, we composite the background and the ink.
             const compositeCanvas = document.createElement('canvas');
             compositeCanvas.width = canvas.width;
             compositeCanvas.height = canvas.height;
@@ -3195,7 +3203,7 @@ async function checkMathDrawing(isMcqContext = false) { // <<< 1. ADD THE PARAME
         }
 
         const payload = {
-            imageBase64: imageBase64, // The payload now uses the correct image
+            imageBase64: imageBase64,
             problemText: currentStageData.problemText || "No problem text provided.",
             correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
             solutionSteps: currentStageData.solutionSteps || "",
@@ -3213,7 +3221,7 @@ async function checkMathDrawing(isMcqContext = false) { // <<< 1. ADD THE PARAME
             playRandomFeedback('approve');
             nextCheckBtn.classList.add('correct');
             if (currentStageData.type === 'question_math_solution') {
-                 nextCheckBtn.textContent = TXT.gotIt;
+                nextCheckBtn.textContent = TXT.gotIt;
             }
         } else {
             playRandomFeedback('disapprove');
