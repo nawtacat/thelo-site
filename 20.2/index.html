@@ -3048,181 +3048,102 @@ function logHandwritingAttempt(result) {
     }
 }
 	// REPLACE your entire old function with this new one
+// REPLACE your old checkHandwritingAnswer function with this one
+
 async function checkHandwritingAnswer() {
     console.log("Auth state at time of call:", isAuthReady);
-    if (!isAuthReady) {
-        console.warn("Auth is not ready yet. Aborting check.");
-        return;
-    }
-
-    if (!auth.currentUser) {
-        const TXT = getCurrentUIText();
+    if (!isAuthReady || !auth.currentUser) {
         addChatMessage('AI', formatAIMessage('authErrorVision'));
-        console.error("User is not authenticated. Cannot call analyzeHandwriting.");
-        
-        if (nextCheckBtn) {
-            nextCheckBtn.disabled = false;
-            nextCheckBtn.textContent = TXT.check;
-        }
+        console.error("User is not authenticated. Cannot call AI function.");
         return;
     }
 
-    // =================================================================
-    //  FIX: Force a refresh of the user's ID token.
-    // =================================================================
     try {
-        await auth.currentUser.getIdToken(true);
-        console.log("Successfully refreshed auth token.");
+        await auth.currentUser.getIdToken(true); // Refresh token to ensure validity
     } catch (error) {
         console.error("Token refresh failed:", error);
-        addChatMessage('AI', "Authentication error. Please try again.");
-        // Re-enable the button so the user can try again
-        if(nextCheckBtn) {
-             const TXT = getCurrentUIText();
-             nextCheckBtn.disabled = false;
-             nextCheckBtn.textContent = TXT.check;
-        }
+        addChatMessage('AI', "Authentication error. Please try logging in again.");
         return;
     }
-    // =================================================================
-
-    if (isThelobookActive || isPageGridVisible) return;
-    stopCurrentStageAudio();
-    if (!currentStageData || currentStageData.type !== 'question_handwriting') return;
-    if (nextCheckBtn.disabled || isTransitioning) return;
+    
+    if (isThelobookActive || isPageGridVisible || nextCheckBtn.disabled || isTransitioning) return;
 
     const TXT = getCurrentUIText();
     nextCheckBtn.disabled = true;
     nextCheckBtn.textContent = TXT.checking;
-    nextCheckBtn.classList.remove('correct', 'incorrect');
+    addChatMessage('AI', formatAIMessage('checkingAI'));
 
-    if (isImageModeActive) {
-        imageTerminalFeedback.innerHTML = `<span>${TXT.checking}</span>`;
-        imageTerminalFeedback.style.opacity = 1;
-    } else {
-        addChatMessage('AI', formatAIMessage('checkingAI'));
-    }
-let base64ImageData;
-try {
-    const blankCanvas = document.createElement('canvas');
-    blankCanvas.width = canvas.width;
-    blankCanvas.height = canvas.height;
-    const imageDataUrl = canvas.toDataURL('image/png');
-    if (imageDataUrl === blankCanvas.toDataURL()) {
-        // Use a more generic warning now
-        throw new Error("BLANK_ANSWER");
-    }
-    base64ImageData = imageDataUrl.split(',')[1];
-} catch (error) {
-    // Use the generic "draw something" warning instead of the blue ink one
-    const msg = error.message === "BLANK_ANSWER" ? formatAIMessage('drawActivityWarning') : formatAIMessage('imageDataError', { errorMessage: error.message });
-   	const shortMsg = "Please write your answer in blue ink.";
-        isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', msg);
+    let base64ImageData;
+    try {
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = canvas.width;
+        blankCanvas.height = canvas.height;
+        const imageDataUrl = canvas.toDataURL('image/png');
+        if (imageDataUrl === blankCanvas.toDataURL()) {
+            throw new Error("BLANK_ANSWER");
+        }
+        base64ImageData = imageDataUrl; // Send the full Data URI
+    } catch (error) {
+        addChatMessage('AI', formatAIMessage('drawActivityWarning'));
         playRandomFeedback('disapprove');
         nextCheckBtn.disabled = false;
         nextCheckBtn.textContent = TXT.check;
-        if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
         return;
     }
+    
+    // --- THIS IS THE KEY CHANGE ---
+    // We now construct a payload for your new OpenAI function
+    const payload = {
+        imageBase64: base64ImageData,
+        problemText: "The user is writing a number to answer a question.",
+        correctAnswer: String(currentStageData.correctAnswerOcr),
+        // This instruction guides the AI for simple number recognition
+        customInstructions: `Analyze the user's handwritten number. The work is 'correct' ONLY IF the number in the image is clearly identifiable and matches the correct answer: ${currentStageData.correctAnswerOcr}. Otherwise, it is 'incorrect'.`
+    };
 
     try {
-        const analyzeHandwriting = firebase.functions().httpsCallable('analyzeHandwriting');
-        const result = await analyzeHandwriting({ imageBase64: base64ImageData });
-        const detectedText = result.data.text || '';
+        // Call your new OpenAI-powered Cloud Function
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
 
-        if (!detectedText.trim()) {
-            throw new Error("NO_TEXT_FOUND");
-        }
+        // Process the new { status, feedback } response format from OpenAI
+        const { status, feedback } = result.data;
+        
+        addChatMessage('AI', `🔍 ${feedback}`); // Display the feedback from OpenAI
 
-        let cleanedText = detectedText.replace(/\s+/g, '').replace(/[oO]/g, '0').replace(/,/g, '.'); // Also replace commas with dots
-const numberPattern = /-?\d+(\.\d+)?/; // This is the new regex
-const detectedAnswerMatch = cleanedText.match(numberPattern);
-const detectedAnswer = detectedAnswerMatch ? detectedAnswerMatch[0] : ''; // Extract the full number
-
-const correctAnswer = String(currentStageData.correctAnswerOcr);
-
-if (detectedAnswer && parseFloat(detectedAnswer) === parseFloat(correctAnswer)) {
+        if (status === 'correct') {
             logHandwritingAttempt('correct');
             const pointsGained = 10;
-            const feedbackForTerminal = "🎉 Correct!";
             playRandomFeedback('approve');
             userPoints += pointsGained;
             sessionPoints += pointsGained;
             updatePointsDisplay();
             updateUserPointsInFirestore(pointsGained);
             nextCheckBtn.classList.add('correct');
-            const chatMessageWithPoints = `${formatAIMessage('correctAI', { detectedAnswer })} ${formatAIMessage('pointsGained', { points: pointsGained })}`;
+            nextCheckBtn.textContent = TXT.correct;
 
-            // --- ADD THIS LINE FOR LOGGING ON CORRECT ANSWER ---
-            logDigitForTraining(detectedAnswer, 'correct'); // Log the correctly recognized digit
-
-            if (isImageModeActive) {
-                imageTerminalFeedback.innerHTML = `<span>${feedbackForTerminal}</span>`;
-                imageTerminalFeedback.style.opacity = 1;
-                lessonStages[currentStageIndex].headline = chatMessageWithPoints;
-                setTimeout(nextStage, 2000);
-            } else {
-    addChatMessage('AI', chatMessageWithPoints);
-    // Wrap the nextStage call in its own timeout to let the chat animation finish first.
-    setTimeout(() => {
-        nextStage();
-    }, 2000); // 2 seconds gives plenty of time for the user to read the feedback.
-}
-        } else {
+            setTimeout(nextStage, 2500); // Advance to the next stage
+        } else { // Handles 'incorrect' or 'clarification_needed'
             logHandwritingAttempt('incorrect');
-            const feedbackForTerminal = "Not quite, try again!";
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
-
-            // --- ADD THIS LINE FOR LOGGING ON INCORRECT ANSWER (if you want to capture these too) ---
-            // You might log 'detectedAnswer' as the guessed value and 'correctAnswer' as the true value
-            logDigitForTraining(detectedAnswer, 'incorrect');
-
-            if (isImageModeActive) {
-                imageTerminalFeedback.innerHTML = `<span>⚠️ ${feedbackForTerminal}</span>`;
-                imageTerminalFeedback.style.opacity = 1;
-                setTimeout(() => {
-                    imageTerminalFeedback.style.opacity = 0;
-                    nextCheckBtn.disabled = false;
-                    nextCheckBtn.textContent = TXT.check;
-                    nextCheckBtn.classList.remove('incorrect');
-                }, 2500);
-            } else {
-                addChatMessage('AI', formatAIMessage('incorrectAI', { detectedAnswer: detectedAnswer || 'none', correctAnswer }));
+            
+            // Allow the user to try again
+            setTimeout(() => {
                 nextCheckBtn.disabled = false;
                 nextCheckBtn.textContent = TXT.check;
-                setTimeout(() => nextCheckBtn.classList.remove('incorrect'), 600);
-            }
+                nextCheckBtn.classList.remove('incorrect');
+            }, 1000);
         }
+
     } catch (error) {
-        console.error("Function call failed:", error);
-        let userErrorMessage;
-        const isKnownUITextError = Object.values(TXT).includes(error.message);
-
-        if (error.code === 'functions/resource-exhausted') {
-            userErrorMessage = TXT.limitReached;
-        } else if (error.code === 'unauthenticated' || error.message.includes('logged in')) {
-            userErrorMessage = TXT.authErrorVision;
-        } else if (error.message === "NO_TEXT_FOUND") {
-            userErrorMessage = formatAIMessage('noTextFound');
-        } else if (isKnownUITextError) {
-            userErrorMessage = error.message;
-        } else {
-            userErrorMessage = formatAIMessage('apiErrorGeneral', { errorMessage: error.message });
-        }
-
-        const shortMsg = error.code === 'functions/resource-exhausted' ? "Monthly limit reached." : "An error occurred.";
-        isImageModeActive ? (imageTerminalFeedback.innerHTML = `<span>⚠️ ${shortMsg}</span>`, imageTerminalFeedback.style.opacity = 1) : addChatMessage('AI', userErrorMessage);
-
+        console.error("Function call to analyzeMathDrawing failed:", error);
+        addChatMessage('AI', formatAIMessage('apiErrorGeneral', { errorMessage: error.message }));
         playRandomFeedback('disapprove');
         nextCheckBtn.disabled = false;
         nextCheckBtn.textContent = TXT.check;
-        if (isImageModeActive) setTimeout(() => imageTerminalFeedback.style.opacity = 0, 2500);
     }
 }
-// In your main HTML file, REPLACE the 'checkMathDrawing' function with this one.
-// In your main HTML file, REPLACE the 'checkMathDrawing' function with this one.
-
 async function checkMathDrawing() {
     if (nextCheckBtn.disabled || isTransitioning) return;
 
