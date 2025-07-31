@@ -2658,14 +2658,15 @@ function handleNextCheckClick() {
             playRandomFeedback('approve');
             setTimeout(nextStage, 2500);
         } else {
-            // INCORRECT ANSWER: Analyze the drawing
-            addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
-            
-            // --- THIS IS THE CORRECTED BLOCK ---
-            setTimeout(async () => {
-                try {
-                    await checkMathDrawing(); // Attempt to get AI feedback
-                } catch (error) {
+            // INCORRECT ANSWER: Analyze the drawing
+            addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
+            
+            // --- THIS IS THE CORRECTED BLOCK ---
+            setTimeout(async () => {
+                try {
+                    // Pass a flag to indicate this is from an MCQ stage
+                    await checkMathDrawing(true); 
+                } catch (error) {
                     // If the AI check fails, tell the user.
                     console.error("Error during AI drawing analysis:", error);
                     addChatMessage('AI', '⚠️ I had trouble analyzing your drawing. Please try again.');
@@ -3137,91 +3138,96 @@ async function checkHandwritingAnswer() {
 // Replace your entire checkMathDrawing function with this one
 // Replace your entire checkMathDrawing function with this definitive version.
 
-async function checkMathDrawing() {
-    // 1. Ensure user is authenticated and token is fresh
-    if (!auth.currentUser) {
-        console.error("User is not authenticated.");
-        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
-        throw new Error("User not authenticated.");
-    }
-    try {
-        await auth.currentUser.getIdToken(true);
-    } catch (error) {
-        console.error("Token refresh failed:", error);
-        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
-        throw new Error("Token refresh failed.");
-    }
+async function checkMathDrawing(isMcqContext = false) { // <<< 1. ADD THE PARAMETER HERE
+    // 1. Ensure user is authenticated and token is fresh
+    if (!auth.currentUser) {
+        console.error("User is not authenticated.");
+        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
+        throw new Error("User not authenticated.");
+    }
+    try {
+        await auth.currentUser.getIdToken(true);
+    } catch (error) {
+        console.error("Token refresh failed:", error);
+        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
+        throw new Error("Token refresh failed.");
+    }
 
-    // --- THIS IS THE NEW, CRUCIAL FIX ---
-    // 2. Check if the user's canvas is blank BEFORE calling the AI
-    try {
-        const blankCanvasCheck = document.createElement('canvas');
-        blankCanvasCheck.width = canvas.width;
-        blankCanvasCheck.height = canvas.height;
-        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
-            // If the canvas is blank, inform the user and stop.
-            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
-            throw new Error("No drawing found on canvas.");
-        }
-    } catch (e) {
-        console.error("Blank canvas check failed:", e.message);
-        // This re-throws the error so the 'finally' block in the calling function
-        // can re-enable the buttons, preventing a stuck UI.
-        throw e;
-    }
-    // --- END OF THE NEW FIX ---
+    // 2. Check if the user's canvas is blank BEFORE calling the AI
+    try {
+        const blankCanvasCheck = document.createElement('canvas');
+        blankCanvasCheck.width = canvas.width;
+        blankCanvasCheck.height = canvas.height;
+        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
+            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
+            throw new Error("No drawing found on canvas.");
+        }
+    } catch (e) {
+        console.error("Blank canvas check failed:", e.message);
+        throw e;
+    }
+   
+    if (nextCheckBtn.disabled || isTransitioning) return;
 
-    if (nextCheckBtn.disabled || isTransitioning) return;
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+        // <<< 2. THIS IS THE NEW LOGIC BLOCK FOR IMAGE CREATION >>>
+        let imageBase64;
+        if (isMcqContext) {
+            // For MCQs, we ONLY want the user's handwriting, not the background.
+            console.log("MCQ context: Capturing user ink canvas only.");
+            imageBase64 = canvas.toDataURL("image/png");
+        } else {
+            // For standard problems, we composite the background and the user's ink.
+            console.log("Standard context: Capturing composite canvas.");
+            const compositeCanvas = document.createElement('canvas');
+            compositeCanvas.width = canvas.width;
+            compositeCanvas.height = canvas.height;
+            const compositeCtx = compositeCanvas.getContext('2d');
+            compositeCtx.drawImage(backgroundCanvas, 0, 0);
+            compositeCtx.drawImage(canvas, 0, 0);
+            imageBase64 = compositeCanvas.toDataURL("image/png");
+        }
 
-    const TXT = getCurrentUIText();
-    nextCheckBtn.disabled = true;
-    nextCheckBtn.textContent = TXT.checking;
-    
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    try {
-        // 3. Composite the canvases and prepare the payload for the AI
-        const compositeCanvas = document.createElement('canvas');
-        compositeCanvas.width = canvas.width;
-        compositeCanvas.height = canvas.height;
-        const compositeCtx = compositeCanvas.getContext('2d');
-        compositeCtx.drawImage(backgroundCanvas, 0, 0);
-        compositeCtx.drawImage(canvas, 0, 0);
-        const imageBase64 = compositeCanvas.toDataURL("image/png");
+        const payload = {
+            imageBase64: imageBase64, // The payload now uses the correct image
+            problemText: currentStageData.problemText || "No problem text provided.",
+            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
+            solutionSteps: currentStageData.solutionSteps || "",
+            customInstructions: currentStageData.customInstructions || ""
+        };
 
-        const payload = {
-            imageBase64: imageBase64,
-            problemText: currentStageData.problemText || "No problem text provided.",
-            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
-            solutionSteps: currentStageData.solutionSteps || "",
-            customInstructions: currentStageData.customInstructions || ""
-        };
+        // 4. Call the AI and process the response
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
+        const { status, feedback } = result.data;
 
-        // 4. Call the AI and process the response
-        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-        const result = await analyzeMathDrawing(payload);
-        const { status, feedback } = result.data;
+        addChatMessage('AI', `🔍 ${feedback}`); // Send AI feedback to chat
 
-        addChatMessage('AI', `🔍 ${feedback}`); // Send AI feedback to chat
+        if (status === 'correct') {
+            playRandomFeedback('approve');
+            nextCheckBtn.classList.add('correct');
+            if (currentStageData.type === 'question_math_solution') {
+                 nextCheckBtn.textContent = TXT.gotIt;
+            }
+        } else {
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+        }
 
-        if (status === 'correct') {
-            playRandomFeedback('approve');
-            nextCheckBtn.classList.add('correct');
-            if (currentStageData.type === 'question_math_solution') {
-                 nextCheckBtn.textContent = TXT.gotIt;
-            }
-        } else {
-            playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-        }
-
-    } catch (error) {
-        console.error("Math analysis failed:", error);
-        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
-        playRandomFeedback('disapprove');
-        throw error;
-    }
-}    /* ========== THELOBOOK FUNCTIONALITY ========== */
+    } catch (error) {
+        console.error("Math analysis failed:", error);
+        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
+        playRandomFeedback('disapprove');
+        throw error;
+    }
+}
+	    /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
         const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
