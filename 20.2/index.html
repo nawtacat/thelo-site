@@ -2105,25 +2105,17 @@ function addBoardDrawListeners() {
 }
 
 	
-   function handleMcqOptionClick(selectedIndex) {
-    const TXT = getCurrentUIText();
+  // Replace your old function with this simplified version
+function handleMcqOptionClick(selectedIndex) {
     if (!mcqOptionsContainer) return;
 
-    // Store the selection
-    selectedMcqIndex = selectedIndex;
+    selectedMcqIndex = selectedIndex; // Store the user's choice
 
+    // Visually update which button is selected
     const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
-
-    // Update visual selection state
     optionButtons.forEach((btn, index) => {
         btn.classList.toggle('selected', index === selectedIndex);
     });
-
-    // Enable the main check button so the user can submit
-    if (nextCheckBtn) {
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-    }
 }
 // Add this function inside your <script> tag
 
@@ -2341,6 +2333,7 @@ function renderStageUI(index, isResize = false) {
                 if (isMCQDisplayStage && mcqDetails) {
                     if (bottomBar) bottomBar.style.display = 'flex'; displayMcq(mcqDetails);
                     if (clearBtn) clearBtn.style.display = 'none';
+		    if (nextCheckBtn) nextCheckBtn.style.display = 'none';
                     if (nextCheckBtn) nextCheckBtn.disabled = true;
                 } else if (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution') {
                     if (bottomBar) bottomBar.style.display = 'flex';
@@ -3499,163 +3492,134 @@ function closeCalculator() {
     resumeMediaState();
 }
 function handleKeyDown(event) {
-    // =================================================================
-    // ===== REPLAY SEEK LOGIC (WORKS UNIVERSALLY, EVEN AT END) ======
-    // =================================================================
-    
-    // CHANGE 1: Check if the stage has a timeline, not if it's currently scrubbing.
+    // 1. Universal Replay Seeking with Arrow Keys
+    // This block MUST come first to override other key bindings when a replay is active.
     if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         event.preventDefault();
-
-        // CHANGE 2: Re-enable media scrubbing so the loop can resume after seeking.
         isMediaScrubbingActive = true;
-
-        // Stop the current animation loop to prevent state corruption.
         if (currentReplayAnimationId) {
             cancelAnimationFrame(currentReplayAnimationId);
             currentReplayAnimationId = null;
         }
-
-        const step = 5; // Amount to seek in seconds
+        const step = 5;
         const diff = event.key === 'ArrowLeft' ? -step : step;
-
-        // Calculate the new absolute playback time, clamped to the valid range.
-        let newTime = internalPlaybackTime + diff;
-        newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
+        let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, currentStageTotalDuration));
         internalPlaybackTime = newTime;
-
-        // 1. Seek the <audio> element if it exists for this stage.
         if (currentStageAudio) {
             const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
             currentStageAudio.currentTime = audioTargetTime;
             if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) {
-                currentStageAudio.play().catch(() => { /* Autoplay prevented, ignore */ });
+                currentStageAudio.play().catch(() => {});
             }
         }
-
-        // 2. Seek the iframe replay ONLY if it's the active type.
         if (isReplayActive && replayFrame && replayFrame.contentWindow) {
-            replayFrame.contentWindow.postMessage({
-                command: 'seekToTime',
-                timeMs: newTime * 1000
-            }, '*');
+            replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*');
         }
-
-        // 3. Immediately redraw the main replay canvas for instant feedback.
         if (currentStageDrawingData && replayCtx) {
             renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
         }
-        
-        // 4. Update the main app's progress bar to reflect the seek.
         updateMediaProgressBar(newTime, currentStageTotalDuration);
-
-        // 5. Restart the main app's media playback loop from the new state.
         lastFrameTimestampForManualAdvance = 0;
         currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+        return;
+    }
+
+    // 2. Ignore inputs when modifier keys are pressed or in text fields
+    if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) {
+        return;
+    }
+    
+    // 3. Define state for the current stage
+    const mcqDetails = currentStageData ? currentStageData.optionsQuiz : null;
+    const isMcqActive = !!(currentStageData && currentStageData.type === "explanation_with_mcq" && mcqDetails && mcqDetails.choices);
+
+    // 4. Handle Spacebar Press
+    if (event.key === ' ') {
+        event.preventDefault(); // Always prevent spacebar from scrolling the page
+
+        // A. If an MCQ is active, use spacebar to confirm the answer
+        if (isMcqActive) {
+            if (selectedMcqIndex === null) {
+                addChatMessage('AI', '⚠️ Please select an answer option first.');
+                return;
+            }
+
+            const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
+            optionButtons.forEach(btn => btn.disabled = true); // Disable buttons during check
+
+            const isCorrect = (selectedMcqIndex === mcqDetails.correctIndex);
+
+            if (isCorrect) {
+                // Correct Answer: Give feedback and advance
+                addChatMessage('AI', `🎉 ${mcqDetails.feedbackCorrect || getCurrentUIText().correct}`);
+                playRandomFeedback('approve');
+                // You can add points logic here if you want
+                setTimeout(nextStage, 2500);
+            } else {
+                // Incorrect Answer: Analyze the user's drawing
+                addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
+                setTimeout(async () => {
+                    await checkMathDrawing(); // Call OpenAI to check the drawing
+                    // Re-enable buttons for another attempt after AI gives feedback
+                    optionButtons.forEach(btn => btn.disabled = false);
+                }, 1500);
+            }
+            return; // Stop further execution
+        }
         
-        return; // Stop further keydown processing.
-    }
-
-    // --- Original function logic continues below for all other keys ---
-
-    if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) return;
-
-    if (event.key === ' ' && dashboardBtn && dashboardBtn.classList.contains('visible')) {
-        dashboardBtn.click();
-        event.preventDefault();
+        // B. Fallback for "Start", "Got It", or "View Dashboard" buttons
+        if (dashboardBtn && dashboardBtn.classList.contains('visible')) {
+            dashboardBtn.click();
+        } else if (nextCheckBtn && !nextCheckBtn.disabled) {
+            handleNextCheckClick();
+        }
         return;
     }
+    
+    // 5. Handle all other keyboard shortcuts
 
+    // Page Grid View Controls
     if (isPageGridVisible) {
-        switch (event.key.toLowerCase()) {
-            case 'c':
-                changePageGridBatch(1);
-                event.preventDefault();
-                return;
-            case 'x':
-                changePageGridBatch(-1);
-                event.preventDefault();
-                return;
-            case 'escape':
-                closePageGridView();
-                event.preventDefault();
-                return;
-        }
+        if (event.key.toLowerCase() === 'c') changePageGridBatch(1);
+        if (event.key.toLowerCase() === 'x') changePageGridBatch(-1);
+        if (event.key === 'Escape') closePageGridView();
         return;
     }
 
+    // Calculator Controls
     if (isCalculatorActive) {
-        if (event.key.toLowerCase() === 'f' || event.key === 'Escape') {
-            closeCalculator();
-            event.preventDefault();
-        }
+        if (event.key.toLowerCase() === 'f' || event.key === 'Escape') closeCalculator();
+        return;
+    }
+    
+    // Thelobook (Notebook) Controls
+    if (isThelobookActive) {
+        if (event.key.toLowerCase() === 'b' || event.key === 'Escape') closeThelobook(true);
+        if (event.key.toLowerCase() === 'e') toggleThelobookEraser();
+        if (event.key.toLowerCase() === 'c') clearUserCanvas();
         return;
     }
 
-    if (isThelobookActive) {
+    // General app controls (only run if no overlays are active)
+    if (currentStageIndex >= 0 && !isTransitioning && !isLessonLoading && currentStageData) {
         switch (event.key.toLowerCase()) {
             case 'b':
-                closeThelobook(true);
-                event.preventDefault();
-                return;
-            case 'escape':
-                closeThelobook(true);
-                event.preventDefault();
-                return;
-            case 'e':
-                toggleThelobookEraser();
-                event.preventDefault();
-                return;
-            case 'c':
-                clearUserCanvas();
-                event.preventDefault();
-                return;
-        }
-        return;
-    }
-
-    if (event.key === ' ' && currentStageIndex === -1 && !isLessonLoading && !isTransitioning && !isThelobookActive && !isPageGridVisible && nextCheckBtn && !nextCheckBtn.disabled) {
-        handleNextCheckClick();
-        event.preventDefault();
-        return;
-    }
-
-    if (currentStageIndex < 0 || isTransitioning || isLessonLoading || !currentStageData) return;
-
-    const mcqDetails = currentStageData.optionsQuiz;
-    const isMcqActive = !!(mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0);
-
-    switch (event.key.toLowerCase()) {
-        case ' ':
-            if (!isMcqActive && nextCheckBtn && !nextCheckBtn.disabled) {
-                handleNextCheckClick();
-                event.preventDefault();
-            }
-            break;
-        case 'a':
-            if (isStudentInputAllowed && !isMcqActive) {
-                toggleColor();
-                event.preventDefault();
-            }
-            break;
-        case 'b':
-            if (currentStageIndex >= 0 && currentStageData) {
                 openThelobook();
                 event.preventDefault();
-            }
-            break;
-        case 'f':
-            openCalculator();
-            event.preventDefault();
-            break;
-        case 'c':
-            if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled) {
-                clearUserCanvas();
+                break;
+            case 'f':
+                openCalculator();
                 event.preventDefault();
-            }
-            break;
+                break;
+            case 'c':
+                if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled) {
+                    clearUserCanvas();
+                    event.preventDefault();
+                }
+                break;
+        }
     }
-}		// Prevent zooming via keyboard and mouse wheel
+}	// Prevent zooming via keyboard and mouse wheel
 window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
