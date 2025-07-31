@@ -3134,65 +3134,82 @@ async function checkHandwritingAnswer() {
         nextCheckBtn.textContent = TXT.check;
     }
 }
+// Replace your entire checkMathDrawing function with this one
+
 async function checkMathDrawing() {
+    // --- NEW: Add robust authentication and token refresh ---
+    if (!auth.currentUser) {
+        console.error("User is not authenticated. Cannot call analyzeMathDrawing.");
+        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
+        throw new Error("User not authenticated."); // Throw error to be caught by the calling function
+    }
+
+    try {
+        await auth.currentUser.getIdToken(true);
+        console.log("Successfully refreshed auth token for AI call.");
+    } catch (error) {
+        console.error("Token refresh failed:", error);
+        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
+        throw new Error("Token refresh failed."); // Throw error
+    }
+    // --- END OF NEW BLOCK ---
+
     if (nextCheckBtn.disabled || isTransitioning) return;
 
     const TXT = getCurrentUIText();
     nextCheckBtn.disabled = true;
     nextCheckBtn.textContent = TXT.checking;
-    addChatMessage('AI', "Analyzing your solution... ⏳");
+    // The "Analyzing..." message is now sent from the calling function (handleNextCheckClick)
+    
+    // This timeout is a good practice to let the UI update before heavy processing.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = canvas.width;
+        compositeCanvas.height = canvas.height;
+        const compositeCtx = compositeCanvas.getContext('2d');
+        compositeCtx.drawImage(backgroundCanvas, 0, 0);
+        compositeCtx.drawImage(canvas, 0, 0);
+        const imageBase64 = compositeCanvas.toDataURL("image/png");
 
-    setTimeout(async () => {
-        try {
-            const compositeCanvas = document.createElement('canvas');
-            compositeCanvas.width = canvas.width;
-            compositeCanvas.height = canvas.height;
-            const compositeCtx = compositeCanvas.getContext('2d');
-            compositeCtx.drawImage(backgroundCanvas, 0, 0);
-            compositeCtx.drawImage(canvas, 0, 0);
-            const imageBase64 = compositeCanvas.toDataURL("image/png");
+        const payload = {
+            imageBase64: imageBase64,
+            problemText: currentStageData.problemText || "No problem text provided.",
+            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
+            solutionSteps: currentStageData.solutionSteps || "",
+            customInstructions: currentStageData.customInstructions || ""
+        };
 
-            // ✅ NEW: Add customInstructions to the payload
-            const payload = {
-                imageBase64: imageBase64,
-                problemText: currentStageData.problemText || "No problem text provided.",
-                correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
-                solutionSteps: currentStageData.solutionSteps || "",
-                customInstructions: currentStageData.customInstructions || "" // Send custom instructions if they exist
-            };
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
 
-            const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-            const result = await analyzeMathDrawing(payload);
+        const { status, feedback } = result.data;
 
-            const { status, feedback } = result.data;
+        // This is where the feedback is sent to the chat
+        addChatMessage('AI', `🔍 ${feedback}`);
 
-            addChatMessage('AI', `🔍 ${feedback}`);
-
-            if (status === 'correct') {
-                playRandomFeedback('approve');
-                nextCheckBtn.classList.add('correct');
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = TXT.gotIt;
-            } else { // Handles 'incorrect' and 'clarification_needed'
-                playRandomFeedback('disapprove');
-                nextCheckBtn.classList.add('incorrect');
-                setTimeout(() => {
-                    nextCheckBtn.disabled = false;
-                    nextCheckBtn.textContent = TXT.check;
-                    nextCheckBtn.classList.remove('incorrect');
-                }, 1000);
+        if (status === 'correct') {
+            playRandomFeedback('approve');
+            nextCheckBtn.classList.add('correct');
+            // For MCQs, the calling function handles the next step.
+            // For standalone math questions, we set the button to "Got It".
+            if (currentStageData.type === 'question_math_solution') {
+                 nextCheckBtn.textContent = TXT.gotIt;
             }
-
-        } catch (error) {
-            console.error("Math analysis failed:", error);
-            addChatMessage('AI', `⚠️ An error occurred: ${error.message}`);
+        } else { // Handles 'incorrect' and 'clarification_needed'
             playRandomFeedback('disapprove');
-            nextCheckBtn.disabled = false;
-            nextCheckBtn.textContent = TXT.check;
+            nextCheckBtn.classList.add('incorrect');
         }
-    }, 100);
-}
 
+    } catch (error) {
+        console.error("Math analysis failed:", error);
+        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
+        playRandomFeedback('disapprove');
+        // Re-throw the error so the calling function's "finally" block can run
+        throw error;
+    }
+}
     /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
