@@ -10,14 +10,15 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-KiWOvVjnN8qwKMvhcrA9v8cIqfnLSumDDnZqK7jpiohMnrXPcAeFXBYuTGOxtiFL" crossorigin="anonymous">
-
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTadx5StOHTjqusscGCgKCEbSWAY6QuzXcQAUAeVZjwIngYImA3D7G433A" crossorigin="anonymous"></script>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
 	<link rel="manifest" href="/manifest.json" />
+	
 <meta name="apple-mobile-web-app-capable" content="yes">
+	<!-- KaTeX Stylesheet & Script -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
 
@@ -1413,6 +1414,22 @@ let lastIframeUpdateTime = 0;
     let tempFullPageCanvasForThumbnails = null;
     let buttonVanishTimer = null;
     let stagesWithPointsAwarded = new Set();
+	  /**
+ * A helper function that finds and renders LaTeX math within a string.
+ * @param {string} str - The input string that may contain LaTeX.
+ * @returns {string} - The HTML string with math rendered by KaTeX.
+ */
+function renderMathInText(str) {
+    if (!str || typeof str !== 'string') {
+        return '';
+    }
+    // Replace display mode ($$) before inline mode ($)
+    return str.replace(/\$\$(.*?)\$\$/g, (match, latex) => {
+        return katex.renderToString(latex, { displayMode: true, throwOnError: false });
+    }).replace(/\$(.*?)\$/g, (match, latex) => {
+        return katex.renderToString(latex, { displayMode: false, throwOnError: false });
+    });
+}
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
     function updateAllUITexts() {
@@ -2110,6 +2127,7 @@ function addBoardDrawListeners() {
         const optionButton = document.createElement('button');
         optionButton.classList.add('mcq-option-btn');
         optionButton.textContent  = optionText;
+	    optionButton.innerHTML = renderMathInText(optionText);
         optionButton.dataset.index = index;
         optionButton.addEventListener(
             'click',
@@ -2440,36 +2458,31 @@ function renderStageUI(index, isResize = false) {
             }
             if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
-const mathPlaceholder = document.createElement('div');
-mathPlaceholder.style.visibility = 'hidden';
-document.body.appendChild(mathPlaceholder);
-        function drawHeadlineText() {
-    let headlineText = currentStageData.headline || '';
-    if (headlineText && bgCtx) {
-        // Render the LaTeX to our hidden div to get its dimensions and SVG
-        katex.render(headlineText, mathPlaceholder, {
-            throwOnError: false,
-            output: 'svg' // Tell KaTeX to generate an SVG
-        });
 
-        const svgElement = mathPlaceholder.querySelector('svg');
-        if (svgElement) {
-            // Convert the SVG to a Data URL to be used as an image source
-            const svgString = new XMLSerializer().serializeToString(svgElement);
-            const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(svgString);
+       function drawHeadlineText() {
+            const padding = 27;
+            const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
+            const maxWidth = cssWidthForText * 0.8;
+            const textX = cssWidthForText / 2;
+            let headlineCurrentY = padding * 2;
+            const lineHeight = 30;
+            let headlineText = currentStageData.headline || '';
 
-            const img = new Image();
-            img.onload = function() {
-                // Now draw the rendered math image onto the canvas
-                const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-                const x = (canvasWidth - this.width) / 2; // Center it
-                const y = 50; // Adjust vertical position as needed
-                bgCtx.drawImage(img, x, y);
-            };
-            img.src = svgDataUrl;
+            if (headlineText && bgCtx && (bgCtx.canvas.width > 0)) {
+                // This is a simplified approach for canvas rendering.
+                // It splits the text by LaTeX delimiters ($) and draws mixed content.
+                // NOTE: This will not render complex fractions or symbols perfectly on the canvas.
+                // A full HTML/SVG overlay is required for perfect canvas rendering.
+                const plainHeadlineText = headlineText.replace(/\$(.*?)\$/g, ' $1 ').replace(/\$\$(.*?)\$\$/g, ' $1 ');
+
+                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+                bgCtx.font = `20px ${fontFamily}`;
+                bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+                bgCtx.textAlign = 'center';
+                bgCtx.textBaseline = 'top';
+                wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
+            }
         }
-    }
-}
           function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
 		  selectedMcqIndex = null; // <-- ADD THIS LINE
@@ -2753,82 +2766,56 @@ function handleNextCheckClick() {
         });
     };
     }
-  /**
- * A helper function that finds and renders LaTeX math within a string.
- * It handles both inline ($...$) and display ($$...$$) modes.
- * @param {string} str - The input string that may contain LaTeX.
- * @returns {string} - The HTML string with math rendered by KaTeX.
- */
-function renderMathInText(str) {
-    // Note: This is a simple implementation. For very complex cases,
-    // you might use a more advanced parser, but this works well for most needs.
-    // It's important to replace display mode ($$) BEFORE inline mode ($).
-    return str.replace(/\$\$(.*?)\$\$/g, (match, latex) => {
-        try {
-            return katex.renderToString(latex, { displayMode: true, throwOnError: false });
-        } catch (e) {
-            return match; // On error, return the original string
-        }
-    }).replace(/\$(.*?)\$/g, (match, latex) => {
-        try {
-            return katex.renderToString(latex, { displayMode: false, throwOnError: false });
-        } catch (e) {
-            return match; // On error, return the original string
-        }
-    });
-}
+    // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
+// REPLACE your entire addChatMessage function with this one
 
-/**
- * Adds a message to the chat terminal or shows a toast on tablets.
- * It now processes the message to render any LaTeX math.
- */
 function addChatMessage(sender, rawMsg) {
-    if (isTabletMode) {
-        // Tablet toast logic remains the same
-        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
-        showToast(rawMsg, isImportant ? 5000 : 3500);
-    } else {
-        // Desktop/mobile terminal chat
-        const chatArea = document.getElementById('chat');
-        if (!chatArea) return;
+    if (isTabletMode) {
+        // Tablet toast logic remains the same
+        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
+        showToast(rawMsg, isImportant ? 5000 : 3500);
+    } else {
+        // Desktop/mobile terminal chat
+        const chatArea = document.getElementById('chat');
+        if (!chatArea) return;
 
-        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
-        const TXT = getCurrentUIText();
-        let emoji = '🫧';
+        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+        const TXT = getCurrentUIText();
+        let emoji = '🫧';
 
-        // --- This emoji classification logic is unchanged ---
-        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
-        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
-        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
-        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
-        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
 
-        if(isWrong) emoji = '🤔';
-        else if (isCorrect || isPoints) emoji = '🎉';
-        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
-        else if (isWelcome) emoji = '👋';
-        else if (isChecking) emoji = '⏳';
+        if(isWrong) emoji = '🤔';
+        else if (isCorrect || isPoints) emoji = '🎉';
+        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+        else if (isWelcome) emoji = '👋';
+        else if (isChecking) emoji = '⏳';
 
-        // --- NEW: Render the math before creating the element ---
-        const renderedHTML = renderMathInText(msg);
+        const bubble = document.createElement('div');
+        bubble.className = 'ai-message'; // Starts with opacity: 0
+	    const renderedHTML = renderMathInText(msg);
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${renderedHTML}</span>`;
+        chatArea.appendChild(bubble);
 
-        const bubble = document.createElement('div');
-        bubble.className = 'ai-message'; // Starts with opacity: 0
-        
-        // --- UPDATED: Use the rendered HTML ---
-        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${renderedHTML}</span>`;
-        chatArea.appendChild(bubble);
-
-        // --- This animation logic is unchanged ---
-        requestAnimationFrame(() => {
-            setTimeout(() => {
-                bubble.classList.add('show');
-                chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-            }, 10); 
-        });
-    }
-}   /**
+        // ===================================================================
+        // ===== THE FIX: Forcing the browser to paint the initial state =====
+        // ===================================================================
+        requestAnimationFrame(() => {
+            // This nested timeout ensures the class addition happens in a separate
+            // task, after the browser has painted the invisible element.
+            setTimeout(() => {
+                bubble.classList.add('show');
+                // Scroll into view after the animation starts.
+                chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+            }, 10); // A tiny delay is all that's needed.
+        });
+    }
+}    /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
  * @param {string} topicId - The unique ID for the lesson (e.g., 'sat-linear-equations-one-var').
