@@ -1843,6 +1843,7 @@ function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
+// THIS IS THE NEW, UPDATED FUNCTION
 function handleDrawingStart(e) {
     if (isTabletMode && e.type.startsWith('touch')) {
         const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
@@ -1850,8 +1851,7 @@ function handleDrawingStart(e) {
             e.preventDefault();
             return;
         }
-        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-        if (bottomBar) bottomBar.classList.add('bar-hidden-by-stylus');
+        // The UI-hiding logic has been REMOVED from here.
     }
 
     const currentTargetCanvas = e.currentTarget;
@@ -1880,9 +1880,22 @@ function handleDrawingStart(e) {
     activeCtx.beginPath();
     activeCtx.moveTo(pos.x, pos.y);
 }
-
+// THIS IS THE NEW, UPDATED FUNCTION
 function handleDrawingMove(e) {
     if (!drawing) return;
+
+    // >>> ADD THIS NEW BLOCK OF CODE <<<
+    // This new logic hides the UI only when a stylus actively starts
+    // moving to draw a line, ignoring simple taps.
+    if (isTabletMode) {
+        // Clear any pending timer that would make the bar reappear
+        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+        // Hide the bar if it's not already hidden
+        if (bottomBar && !bottomBar.classList.contains('bar-hidden-by-stylus')) {
+            bottomBar.classList.add('bar-hidden-by-stylus');
+        }
+    }
+    // >>> END OF NEW BLOCK <<<
 
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
@@ -1900,7 +1913,6 @@ function handleDrawingMove(e) {
 
     lastPos = pos;
 }
-
 function handleDrawingEnd(e) {
     if (isTabletMode) {
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
