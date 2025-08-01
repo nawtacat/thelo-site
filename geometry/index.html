@@ -228,17 +228,32 @@
         function setActiveTool(toolName) {
             currentTool = toolName;
             Object.values(toolButtons).forEach(btn => btn.classList.remove('active'));
-            toolButtons[toolName]?.classList.add('active');
+            if (toolButtons[toolName]) {
+                toolButtons[toolName].classList.add('active');
+            }
             deselectObject();
             angleCreationState.active = (toolName === 'measureAngle');
             angleCreationState.points = [];
+            render();
         }
 
         function getMousePos(event) {
+            // Failsafe check for CTM
+            if (!CTM) {
+                CTM = svgCanvas.getScreenCTM();
+            }
+            if (!CTM) {
+                return { x: 0, y: 0 }; // Return a default if CTM is still not available
+            }
             const pt = svgCanvas.createSVGPoint();
             pt.x = event.clientX;
             pt.y = event.clientY;
-            return pt.matrixTransform(CTM.inverse());
+            try {
+                return pt.matrixTransform(CTM.inverse());
+            } catch (error) {
+                console.error("Could not transform point:", error);
+                return { x: 0, y: 0 };
+            }
         }
         
         function render() {
@@ -302,7 +317,42 @@
                         element.setAttribute('font-family', 'Manrope, sans-serif');
                         element.textContent = obj.content;
                         break;
-                    // Other cases...
+                    case 'rightAngle':
+                        element = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        element.setAttribute('d', `M ${obj.x} ${obj.y+15} L ${obj.x+15} ${obj.y+15} L ${obj.x+15} ${obj.y}`);
+                        element.setAttribute('class', 'right-angle-symbol');
+                        element.setAttribute('stroke', obj.color);
+                        break;
+                    case 'measureAngle':
+                        const [p1, vertex, p3] = obj.points;
+                        const angleRad1 = Math.atan2(p1.y - vertex.y, p1.x - vertex.x);
+                        const angleRad2 = Math.atan2(p3.y - vertex.y, p3.x - vertex.x);
+                        let angleDeg = (angleRad2 - angleRad1) * 180 / Math.PI;
+                        if (angleDeg < 0) angleDeg += 360;
+
+                        const arcRadius = 30;
+                        const startArc = { x: vertex.x + arcRadius * Math.cos(angleRad1), y: vertex.y + arcRadius * Math.sin(angleRad1) };
+                        const endArc = { x: vertex.x + arcRadius * Math.cos(angleRad2), y: vertex.y + arcRadius * Math.sin(angleRad2) };
+                        const largeArcFlag = (angleDeg <= 180) ? "0" : "1";
+
+                        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        path.setAttribute('d', `M ${startArc.x} ${startArc.y} A ${arcRadius} ${arcRadius} 0 ${largeArcFlag} 1 ${endArc.x} ${endArc.y}`);
+                        path.setAttribute('class', 'angle-arc');
+                        path.setAttribute('stroke', obj.color);
+
+                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        const textAngle = angleRad1 + (angleRad2 - angleRad1) / 2;
+                        text.setAttribute('x', vertex.x + (arcRadius + 15) * Math.cos(textAngle));
+                        text.setAttribute('y', vertex.y + (arcRadius + 15) * Math.sin(textAngle));
+                        text.setAttribute('fill', obj.color);
+                        text.setAttribute('font-size', '14');
+                        text.textContent = `${angleDeg.toFixed(1)}°`;
+                        
+                        group.appendChild(path);
+                        group.appendChild(text);
+                        element = group;
+                        break;
                 }
 
                 if (element) {
@@ -317,6 +367,18 @@
                     svgCanvas.appendChild(element);
                 }
             });
+
+            if (angleCreationState.active) {
+                angleCreationState.points.forEach(p => {
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.setAttribute('cx', p.x);
+                    circle.setAttribute('cy', p.y);
+                    circle.setAttribute('r', '5');
+                    circle.setAttribute('class', 'snap-point');
+                    svgCanvas.appendChild(circle);
+                });
+            }
+
             CTM = svgCanvas.getScreenCTM();
         }
 
@@ -395,12 +457,24 @@
                 }
             });
 
-            return (minDistance < SELECTION_THRESHOLD) ? closest : null;
+            return (minDistance < SELECTION_THRESHOLD / (viewBox.w / 1000)) ? closest : null;
         }
 
         svgCanvas.addEventListener('mousedown', (e) => {
             const mousePos = getMousePos(e);
             
+            if (angleCreationState.active) {
+                angleCreationState.points.push(mousePos);
+                if (angleCreationState.points.length === 3) {
+                    const newObject = { id: nextId++, type: 'measureAngle', points: angleCreationState.points, color: strokeColorInput.value };
+                    svgObjects.push(newObject);
+                    angleCreationState.points = [];
+                    saveState();
+                }
+                render();
+                return;
+            }
+
             if (currentTool === 'select') {
                 const target = findClosestObject(mousePos);
                 if (target) {
@@ -442,7 +516,7 @@
                         obj.x2 += dx; obj.y2 += dy;
                     } else if (obj.type === 'circle') {
                         obj.cx += dx; obj.cy += dy;
-                    } else { // text, rightAngle
+                    } else { 
                         obj.x += dx; obj.y += dy;
                     }
                 }
@@ -517,7 +591,9 @@
                        newObject = { id: nextId++, type: 'text', x: startPoint.x, y: startPoint.y, content, color, fontSize: 20 };
                     }
                     break;
-                // Other cases...
+                case 'rightAngle':
+                    newObject = { id: nextId++, type: 'rightAngle', x: startPoint.x, y: startPoint.y, color };
+                    break;
             }
 
             if (newObject) {
@@ -530,8 +606,9 @@
         canvasContainer.addEventListener('wheel', (e) => {
             e.preventDefault();
             const mousePos = getMousePos(e);
+            if (!mousePos) return;
+
             const zoomFactor = 1.1;
-            
             const scale = (e.deltaY < 0) ? 1 / zoomFactor : zoomFactor;
             
             viewBox.x = mousePos.x + (viewBox.x - mousePos.x) * scale;
@@ -561,6 +638,11 @@
             if (e.key === 'Shift') isShiftDown = false;
         });
 
+        // Add event listeners to all tool buttons
+        Object.entries(toolButtons).forEach(([name, btn]) => {
+            btn.addEventListener('click', () => setActiveTool(name));
+        });
+
         deleteBtn.addEventListener('click', () => {
             if (selectedObjectId !== null) {
                 svgObjects = svgObjects.filter(obj => obj.id !== selectedObjectId);
@@ -580,10 +662,9 @@
         downloadBtn.addEventListener('click', () => {
             deselectObject();
             setTimeout(() => {
-                // Create a temporary SVG for export without the grid
                 const tempSvg = svgCanvas.cloneNode(true);
-                tempSvg.querySelector('#grid').parentElement.remove(); // Remove defs with grid
-                tempSvg.querySelector('rect[fill="url(#grid)"]').remove(); // Remove grid rect
+                tempSvg.querySelector('#grid').parentElement.remove();
+                tempSvg.querySelector('rect[fill="url(#grid)"]').remove();
                 
                 const svgData = new XMLSerializer().serializeToString(tempSvg);
                 const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
@@ -613,12 +694,17 @@
 
         // --- Initial Setup ---
         const initialBounds = canvasContainer.getBoundingClientRect();
-        viewBox.w = initialBounds.width;
-        viewBox.h = initialBounds.height;
+        viewBox.w = initialBounds.width || 1000; // Fallback to prevent 0 width
+        viewBox.h = initialBounds.height || 750; // Fallback to prevent 0 height
+        
         setActiveTool('select');
         saveState();
         render();
+
         window.addEventListener('resize', () => {
+            const newBounds = canvasContainer.getBoundingClientRect();
+            viewBox.w = newBounds.width || 1000;
+            viewBox.h = newBounds.height || 750;
             render();
         });
     </script>
