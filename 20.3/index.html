@@ -3182,7 +3182,7 @@ async function checkMathDrawing(isMcqContext = false) {
             correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
             solutionSteps: currentStageData.solutionSteps || "",
             customInstructions: currentStageData.customInstructions || "",
-            language: currentLang // <<< UPDATED
+            language: currentLang
         };
 
         const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
@@ -3194,19 +3194,41 @@ async function checkMathDrawing(isMcqContext = false) {
         if (status === 'correct') {
             playRandomFeedback('approve');
             nextCheckBtn.classList.add('correct');
+            
+            // Add points for a correct math solution
+            const pointsGained = 15;
+            userPoints += pointsGained;
+            sessionPoints += pointsGained;
+            updatePointsDisplay();
+            updateUserPointsInFirestore(pointsGained);
+
             if (currentStageData.type === 'question_math_solution') {
                 nextCheckBtn.textContent = TXT.gotIt;
             }
-        } else {
+            // FIX: Re-enable the button so the user can click "Got It" to proceed.
+            nextCheckBtn.disabled = false;
+
+        } else { // Handles 'incorrect' and 'clarification_needed'
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
+            
+            // FIX: Re-enable the button after a delay so the user can try again.
+            setTimeout(() => {
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                nextCheckBtn.classList.remove('incorrect');
+            }, 2000); // 2-second delay to read feedback
         }
 
     } catch (error) {
         console.error("Math analysis failed:", error);
         addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
         playRandomFeedback('disapprove');
-        throw error;
+        
+        // FIX: Always re-enable the button on an error.
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        nextCheckBtn.classList.remove('incorrect');
     }
 }
 	    /* ========== THELOBOOK FUNCTIONALITY ========== */
