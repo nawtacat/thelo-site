@@ -3039,176 +3039,175 @@ function logHandwritingAttempt(result) {
     }
 }
 	async function checkHandwritingAnswer() {
-    console.log("Auth state at time of call:", isAuthReady);
-    if (!isAuthReady || !auth.currentUser) {
-        addChatMessage('AI', formatAIMessage('authErrorVision'));
-        console.error("User is not authenticated. Cannot call AI function.");
-        return;
-    }
+    console.log("Auth state at time of call:", isAuthReady);
+    if (!isAuthReady || !auth.currentUser) {
+        addChatMessage('AI', formatAIMessage('authErrorVision'));
+        console.error("User is not authenticated. Cannot call AI function.");
+        return;
+    }
 
-    try {
-        await auth.currentUser.getIdToken(true); // Refresh token to ensure validity
-    } catch (error) {
-        console.error("Token refresh failed:", error);
-        addChatMessage('AI', "Authentication error. Please try logging in again.");
-        return;
-    }
-    
-    if (isThelobookActive || isPageGridVisible || nextCheckBtn.disabled || isTransitioning) return;
+    try {
+        await auth.currentUser.getIdToken(true); // Refresh token to ensure validity
+    } catch (error) {
+        console.error("Token refresh failed:", error);
+        addChatMessage('AI', "Authentication error. Please try logging in again.");
+        return;
+    }
+    
+    if (isThelobookActive || isPageGridVisible || nextCheckBtn.disabled || isTransitioning) return;
 
-    const TXT = getCurrentUIText();
-    nextCheckBtn.disabled = true;
-    nextCheckBtn.textContent = TXT.checking;
-    addChatMessage('AI', formatAIMessage('checkingAI'));
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
+    addChatMessage('AI', formatAIMessage('checkingAI'));
 
-    let base64ImageData;
-    try {
-        const blankCanvas = document.createElement('canvas');
-        blankCanvas.width = canvas.width;
-        blankCanvas.height = canvas.height;
-        const imageDataUrl = canvas.toDataURL('image/png');
-        if (imageDataUrl === blankCanvas.toDataURL()) {
-            throw new Error("BLANK_ANSWER");
-        }
-        base64ImageData = imageDataUrl; // Send the full Data URI
-    } catch (error) {
-        addChatMessage('AI', formatAIMessage('drawActivityWarning'));
-        playRandomFeedback('disapprove');
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        return;
-    }
-    
-    const payload = {
-        imageBase64: base64ImageData,
-        problemText: "The user is writing a number to answer a question.",
-        correctAnswer: String(currentStageData.correctAnswerOcr),
-        customInstructions: `Analyze the user's handwritten number. The work is 'correct' ONLY IF the number in the image is clearly identifiable and matches the correct answer: ${currentStageData.correctAnswerOcr}. Otherwise, it is 'incorrect'.`,
-        language: currentLang // <-- MODIFIED
-    };
+    let base64ImageData;
+    try {
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = canvas.width;
+        blankCanvas.height = canvas.height;
+        const imageDataUrl = canvas.toDataURL('image/png');
+        if (imageDataUrl === blankCanvas.toDataURL()) {
+            throw new Error("BLANK_ANSWER");
+        }
+        base64ImageData = imageDataUrl; // Send the full Data URI
+    } catch (error) {
+        addChatMessage('AI', formatAIMessage('drawActivityWarning'));
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        return;
+    }
+    
+    const payload = {
+        imageBase64: base64ImageData,
+        problemText: "The user is writing a number to answer a question.",
+        correctAnswer: String(currentStageData.correctAnswerOcr),
+        customInstructions: `Analyze the user's handwritten number. The work is 'correct' ONLY IF the number in the image is clearly identifiable and matches the correct answer: ${currentStageData.correctAnswerOcr}. Otherwise, it is 'incorrect'.`,
+        language: currentLang // <<< UPDATED
+    };
 
-    try {
-        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-        const result = await analyzeMathDrawing(payload);
-        const { status, feedback } = result.data;
-        
-        addChatMessage('AI', `🔍 ${feedback}`);
+    try {
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
 
-        if (status === 'correct') {
-            logHandwritingAttempt('correct');
-            const pointsGained = 10;
-            playRandomFeedback('approve');
-            userPoints += pointsGained;
-            sessionPoints += pointsGained;
-            updatePointsDisplay();
-            updateUserPointsInFirestore(pointsGained);
-            nextCheckBtn.classList.add('correct');
-            nextCheckBtn.textContent = TXT.correct;
+        const { status, feedback } = result.data;
+        
+        addChatMessage('AI', `🔍 ${feedback}`); 
 
-            setTimeout(nextStage, 2500);
-        } else {
-            logHandwritingAttempt('incorrect');
-            playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-            
-            setTimeout(() => {
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = TXT.check;
-                nextCheckBtn.classList.remove('incorrect');
-            }, 1000);
-        }
+        if (status === 'correct') {
+            logHandwritingAttempt('correct');
+            const pointsGained = 10;
+            playRandomFeedback('approve');
+            userPoints += pointsGained;
+            sessionPoints += pointsGained;
+            updatePointsDisplay();
+            updateUserPointsInFirestore(pointsGained);
+            nextCheckBtn.classList.add('correct');
+            nextCheckBtn.textContent = TXT.correct;
 
-    } catch (error) {
-        console.error("Function call to analyzeMathDrawing failed:", error);
-        addChatMessage('AI', formatAIMessage('apiErrorGeneral', { errorMessage: error.message }));
-        playRandomFeedback('disapprove');
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-    }
+            setTimeout(nextStage, 2500);
+        } else { 
+            logHandwritingAttempt('incorrect');
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+            
+            setTimeout(() => {
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                nextCheckBtn.classList.remove('incorrect');
+            }, 1000);
+        }
+
+    } catch (error) {
+        console.error("Function call to analyzeMathDrawing failed:", error);
+        addChatMessage('AI', formatAIMessage('apiErrorGeneral', { errorMessage: error.message }));
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+    }
 }
+
+
 async function checkMathDrawing(isMcqContext = false) {
-    // 1. Authenticate user
-    if (!auth.currentUser) {
-        console.error("User is not authenticated.");
-        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
-        throw new Error("User not authenticated.");
-    }
-    try {
-        await auth.currentUser.getIdToken(true);
-    } catch (error) {
-        console.error("Token refresh failed:", error);
-        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
-        throw new Error("Token refresh failed.");
-    }
+    if (!auth.currentUser) {
+        console.error("User is not authenticated.");
+        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
+        throw new Error("User not authenticated.");
+    }
+    try {
+        await auth.currentUser.getIdToken(true);
+    } catch (error) {
+        console.error("Token refresh failed:", error);
+        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
+        throw new Error("Token refresh failed.");
+    }
 
-    // 2. Check for blank canvas
-    try {
-        const blankCanvasCheck = document.createElement('canvas');
-        blankCanvasCheck.width = canvas.width;
-        blankCanvasCheck.height = canvas.height;
-        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
-            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
-            throw new Error("No drawing found on canvas.");
-        }
-    } catch (e) {
-        console.error("Blank canvas check failed:", e.message);
-        throw e;
-    }
+    try {
+        const blankCanvasCheck = document.createElement('canvas');
+        blankCanvasCheck.width = canvas.width;
+        blankCanvasCheck.height = canvas.height;
+        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
+            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
+            throw new Error("No drawing found on canvas.");
+        }
+    } catch (e) {
+        console.error("Blank canvas check failed:", e.message);
+        throw e;
+    }
 
-    const TXT = getCurrentUIText();
-    nextCheckBtn.disabled = true;
-    nextCheckBtn.textContent = TXT.checking;
-    
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    try {
-        // 3. Prepare image based on context
-        let imageBase64;
-        if (isMcqContext) {
-            imageBase64 = canvas.toDataURL("image/png");
-        } else {
-            const compositeCanvas = document.createElement('canvas');
-            compositeCanvas.width = canvas.width;
-            compositeCanvas.height = canvas.height;
-            const compositeCtx = compositeCanvas.getContext('2d');
-            compositeCtx.drawImage(backgroundCanvas, 0, 0);
-            compositeCtx.drawImage(canvas, 0, 0);
-            imageBase64 = compositeCanvas.toDataURL("image/png");
-        }
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+        let imageBase64;
+        if (isMcqContext) {
+            imageBase64 = canvas.toDataURL("image/png");
+        } else {
+            const compositeCanvas = document.createElement('canvas');
+            compositeCanvas.width = canvas.width;
+            compositeCanvas.height = canvas.height;
+            const compositeCtx = compositeCanvas.getContext('2d');
+            compositeCtx.drawImage(backgroundCanvas, 0, 0);
+            compositeCtx.drawImage(canvas, 0, 0);
+            imageBase64 = compositeCanvas.toDataURL("image/png");
+        }
 
-        const payload = {
-            imageBase64: imageBase64,
-            problemText: currentStageData.problemText || "No problem text provided.",
-            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
-            solutionSteps: currentStageData.solutionSteps || "",
-            customInstructions: currentStageData.customInstructions || "",
-            language: currentLang // <-- MODIFIED
-        };
+        const payload = {
+            imageBase64: imageBase64,
+            problemText: currentStageData.problemText || "No problem text provided.",
+            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
+            solutionSteps: currentStageData.solutionSteps || "",
+            customInstructions: currentStageData.customInstructions || "",
+            language: currentLang // <<< UPDATED
+        };
 
-        // 4. Call the AI and process the response
-        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-        const result = await analyzeMathDrawing(payload);
-        const { status, feedback } = result.data;
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
+        const { status, feedback } = result.data;
 
-        addChatMessage('AI', `🔍 ${feedback}`);
+        addChatMessage('AI', `🔍 ${feedback}`);
 
-        if (status === 'correct') {
-            playRandomFeedback('approve');
-            nextCheckBtn.classList.add('correct');
-            if (currentStageData.type === 'question_math_solution') {
-                nextCheckBtn.textContent = TXT.gotIt;
-            }
-        } else {
-            playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-        }
+        if (status === 'correct') {
+            playRandomFeedback('approve');
+            nextCheckBtn.classList.add('correct');
+            if (currentStageData.type === 'question_math_solution') {
+                nextCheckBtn.textContent = TXT.gotIt;
+            }
+        } else {
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+        }
 
-    } catch (error) {
-        console.error("Math analysis failed:", error);
-        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
-        playRandomFeedback('disapprove');
-        throw error;
-    }
+    } catch (error) {
+        console.error("Math analysis failed:", error);
+        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
+        playRandomFeedback('disapprove');
+        throw error;
+    }
 }
 	    /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
