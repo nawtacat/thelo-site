@@ -3551,47 +3551,24 @@ function handleKeyDown(event) {
     const isMcqActive = !!(currentStageData && currentStageData.type === "explanation_with_mcq" && mcqDetails && mcqDetails.choices);
 
     // 4. Handle Spacebar Press
-    if (event.key === ' ') {
-        event.preventDefault(); // Always prevent spacebar from scrolling the page
+    // >>> REPLACE THE OLD BLOCK WITH THIS NEW, SIMPLIFIED ONE <<<
+if (event.key === ' ') {
+    event.preventDefault(); // Prevent the default action (like scrolling)
 
-        // A. If an MCQ is active, use spacebar to confirm the answer
-        if (isMcqActive) {
-            if (selectedMcqIndex === null) {
-                addChatMessage('AI', '⚠️ Please select an answer option first.');
-                return;
-            }
-
-            const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
-            optionButtons.forEach(btn => btn.disabled = true); // Disable buttons during check
-
-            const isCorrect = (selectedMcqIndex === mcqDetails.correctIndex);
-
-            if (isCorrect) {
-                // Correct Answer: Give feedback and advance
-                addChatMessage('AI', `🎉 ${mcqDetails.feedbackCorrect || getCurrentUIText().correct}`);
-                playRandomFeedback('approve');
-                // You can add points logic here if you want
-                setTimeout(nextStage, 2500);
-            } else {
-                // Incorrect Answer: Analyze the user's drawing
-                addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
-                setTimeout(async () => {
-                    await checkMathDrawing(); // Call OpenAI to check the drawing
-                    // Re-enable buttons for another attempt after AI gives feedback
-                    optionButtons.forEach(btn => btn.disabled = false);
-                }, 1500);
-            }
-            return; // Stop further execution
-        }
-        
-        // B. Fallback for "Start", "Got It", or "View Dashboard" buttons
-        if (dashboardBtn && dashboardBtn.classList.contains('visible')) {
-            dashboardBtn.click();
-        } else if (nextCheckBtn && !nextCheckBtn.disabled) {
-            handleNextCheckClick();
-        }
-        return;
+    // First, check if the lesson is complete and the dashboard button is shown.
+    if (dashboardBtn && dashboardBtn.classList.contains('visible')) {
+        dashboardBtn.click();
+        return; // Done
     }
+
+    // For ALL other cases (Start, Got It, Check MCQ, etc.),
+    // we simply trigger the main button's click handler if it's enabled.
+    // This removes duplicated logic and makes the spacebar behave
+    // exactly like a mouse click on the primary button.
+    if (nextCheckBtn && !nextCheckBtn.disabled) {
+        handleNextCheckClick();
+    }
+}
     
     // 5. Handle all other keyboard shortcuts
 
