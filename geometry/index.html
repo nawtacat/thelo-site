@@ -50,10 +50,9 @@
             box-shadow: 0 4px 14px rgba(0,0,0,0.05);
         }
 
-        #svg-canvas.panning { cursor: grab; }
-        #svg-canvas.can-drag { cursor: move; }
-        #svg-canvas.crosshair { cursor: crosshair; }
-        #svg-canvas.cropping { cursor: crosshair; }
+        #svg-canvas.mode-panning { cursor: grab; }
+        #svg-canvas.mode-dragging { cursor: move; }
+        #svg-canvas.mode-drawing, #svg-canvas.mode-cropping { cursor: crosshair; }
         
         .drawable:hover {
             stroke: var(--thelo-blue);
@@ -93,6 +92,17 @@
             font-weight: bold;
             pointer-events: none;
         }
+        
+        .vertex-handle {
+            fill: var(--thelo-blue);
+            stroke: white;
+            stroke-width: 2px;
+            cursor: move;
+        }
+        
+        .vertex-handle:hover {
+            r: 8;
+        }
     </style>
 </head>
 <body class="w-screen h-screen flex flex-col antialiased">
@@ -121,6 +131,10 @@
                         <i class="fas fa-drafting-compass fa-lg w-5 text-center"></i>
                         <span class="text-sm font-semibold">Line</span>
                     </button>
+                    <button id="tool-triangle" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="fas fa-play fa-lg w-5 text-center" style="transform: rotate(-90deg);"></i>
+                        <span class="text-sm font-semibold">Triangle</span>
+                    </button>
                     <button id="tool-circle" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
                         <i class="far fa-circle fa-lg w-5 text-center"></i>
                         <span class="text-sm font-semibold">Circle</span>
@@ -129,7 +143,7 @@
                         <i class="fas fa-font fa-lg w-5 text-center"></i>
                         <span class="text-sm font-semibold">Text</span>
                     </button>
-                    <button id="tool-crop" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100 col-span-2">
+                    <button id="tool-crop" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
                         <i class="fas fa-crop-simple fa-lg w-5 text-center"></i>
                         <span class="text-sm font-semibold">Crop</span>
                     </button>
@@ -192,6 +206,7 @@
     <textarea id="svg-code-output" class="absolute -left-full"></textarea>
 
     <script type="module">
+        // --- DOM Elements ---
         const svgCanvas = document.getElementById('svg-canvas');
         const canvasContainer = document.getElementById('canvas-container');
         const propertiesPanel = document.getElementById('properties-panel');
@@ -209,28 +224,27 @@
         const toolButtons = {
             select: document.getElementById('tool-select'),
             line: document.getElementById('tool-line'),
+            triangle: document.getElementById('tool-triangle'),
             circle: document.getElementById('tool-circle'),
             text: document.getElementById('tool-text'),
             crop: document.getElementById('tool-crop'),
         };
 
+        // --- State Management ---
         let currentTool = 'select';
         let svgObjects = [];
         let selectedObjectId = null;
-        let startPoint = { x: 0, y: 0 };
-        let nextId = 0;
         let history = [];
         let historyIndex = -1;
-        let cropRect = null;
-        let previewObject = null;
         let isShiftDown = false;
+        
         let state = {
-            isDrawing: false,
-            isDragging: false,
-            isPanning: false,
-            isCropping: false,
-            dragStartPoint: {x: 0, y: 0},
-            panStartPoint: {x: 0, y: 0},
+            mode: 'idle', // idle, drawing, panning, dragging, cropping
+            startPoint: { x: 0, y: 0 },
+            dragOffset: { x: 0, y: 0 },
+            draggedVertex: null,
+            previewObject: null,
+            cropRect: null,
         };
 
         const SELECTION_THRESHOLD = 10;
@@ -239,6 +253,7 @@
         let viewBox = { x: 0, y: 0, w: 1000, h: 750 };
         let CTM;
 
+        // --- History (Undo/Redo) ---
         function saveState() {
             history = history.slice(0, historyIndex + 1);
             history.push({ objects: JSON.parse(JSON.stringify(svgObjects)), viewBox: { ...viewBox } });
@@ -256,6 +271,7 @@
             }
         }
 
+        // --- Tool and Mode Switching ---
         function setActiveTool(toolName) {
             currentTool = toolName;
             Object.values(toolButtons).forEach(btn => btn.classList.remove('active'));
@@ -269,6 +285,25 @@
             updateCursor();
         }
 
+        function setMode(newMode) {
+            state.mode = newMode;
+            updateCursor();
+        }
+
+        function updateCursor() {
+            svgCanvas.classList.remove('mode-panning', 'mode-dragging', 'mode-drawing', 'mode-cropping');
+            if (state.mode === 'panning') {
+                svgCanvas.classList.add('mode-panning');
+            } else if (state.mode === 'dragging') {
+                svgCanvas.classList.add('mode-dragging');
+            } else if (state.mode === 'drawing') {
+                svgCanvas.classList.add('mode-drawing');
+            } else if (state.mode === 'cropping') {
+                svgCanvas.classList.add('mode-cropping');
+            }
+        }
+
+        // --- Coordinate and Geometry Utilities ---
         function getMousePos(event) {
             if (!CTM) CTM = svgCanvas.getScreenCTM();
             if (!CTM) return { x: 0, y: 0 };
@@ -281,7 +316,28 @@
                 return { x: 0, y: 0 };
             }
         }
-        
+
+        function getSnapPoint(pos) {
+            const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
+            
+            for (const obj of svgObjects) {
+                let points = [];
+                if (obj.type === 'line') {
+                    points = [{x: obj.x1, y: obj.y1}, {x: obj.x2, y: obj.y2}];
+                } else if (obj.type === 'triangle') {
+                    points = [obj.p1, obj.p2, obj.p3];
+                }
+                
+                for (const p of points) {
+                    if (Math.hypot(pos.x - p.x, pos.y - p.y) < scaledSnapThreshold) {
+                        return { ...p, snapped: true };
+                    }
+                }
+            }
+            return { ...pos, snapped: false };
+        }
+
+        // --- Rendering Engine ---
         function render() {
             svgCanvas.innerHTML = '';
             svgCanvas.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
@@ -311,7 +367,7 @@
             svgCanvas.appendChild(gridRect);
 
             const allObjects = [...svgObjects];
-            if (previewObject) allObjects.push(previewObject);
+            if (state.previewObject) allObjects.push(state.previewObject);
 
             allObjects.forEach(obj => {
                 let element;
@@ -322,17 +378,12 @@
                         element.setAttribute('y1', obj.y1);
                         element.setAttribute('x2', obj.x2);
                         element.setAttribute('y2', obj.y2);
-                        element.setAttribute('stroke', obj.color);
-                        element.setAttribute('stroke-width', '2.5');
-                        element.setAttribute('stroke-linecap', 'round');
                         break;
                     case 'circle':
                         element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                         element.setAttribute('cx', obj.cx);
                         element.setAttribute('cy', obj.cy);
                         element.setAttribute('r', obj.r);
-                        element.setAttribute('stroke', obj.color);
-                        element.setAttribute('stroke-width', '2.5');
                         element.setAttribute('fill', 'transparent');
                         break;
                     case 'text':
@@ -345,9 +396,19 @@
                         element.setAttribute('font-family', 'Manrope, sans-serif');
                         element.textContent = obj.content;
                         break;
+                    case 'triangle':
+                        element = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                        const points = `${obj.p1.x},${obj.p1.y} ${obj.p2.x},${obj.p2.y} ${obj.p3.x},${obj.p3.y}`;
+                        element.setAttribute('points', points);
+                        element.setAttribute('fill', 'transparent');
+                        break;
                 }
 
                 if (element) {
+                    element.setAttribute('stroke', obj.color);
+                    element.setAttribute('stroke-width', '2.5');
+                    element.setAttribute('stroke-linecap', 'round');
+
                     element.setAttribute('id', `obj-${obj.id}`);
                     if (!obj.isPreview) {
                         element.classList.add('drawable');
@@ -357,12 +418,25 @@
                         element.setAttribute('stroke-dasharray', '5 5');
                     }
                     svgCanvas.appendChild(element);
+
+                    if (obj.type === 'triangle' && obj.id === selectedObjectId) {
+                        ['p1', 'p2', 'p3'].forEach(pKey => {
+                            const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                            handle.setAttribute('cx', obj[pKey].x);
+                            handle.setAttribute('cy', obj[pKey].y);
+                            handle.setAttribute('r', '6');
+                            handle.setAttribute('class', 'vertex-handle');
+                            handle.dataset.vertex = pKey;
+                            handle.dataset.objId = obj.id;
+                            svgCanvas.appendChild(handle);
+                        });
+                    }
                 }
             });
 
-            if (cropRect) {
+            if (state.cropRect) {
+                const {x, y, width, height} = state.cropRect;
                 const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                const {x, y, width, height} = cropRect;
                 const worldBorder = `M ${viewBox.x} ${viewBox.y} H ${viewBox.x + viewBox.w} V ${viewBox.y + viewBox.h} H ${viewBox.x} Z`;
                 const cropHole = `M ${x} ${y} H ${x + width} V ${y + height} H ${x} Z`;
                 overlay.setAttribute('d', worldBorder + " " + cropHole);
@@ -371,10 +445,10 @@
                 svgCanvas.appendChild(overlay);
 
                 const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                rect.setAttribute('x', cropRect.x);
-                rect.setAttribute('y', cropRect.y);
-                rect.setAttribute('width', cropRect.width);
-                rect.setAttribute('height', cropRect.height);
+                rect.setAttribute('x', x);
+                rect.setAttribute('y', y);
+                rect.setAttribute('width', width);
+                rect.setAttribute('height', height);
                 rect.setAttribute('class', 'crop-rect');
                 svgCanvas.appendChild(rect);
             }
@@ -382,6 +456,47 @@
             CTM = svgCanvas.getScreenCTM();
         }
 
+        function drawSmartGuides(start, end) {
+            svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label').forEach(el => el.remove());
+            const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
+            const dx = Math.abs(start.x - end.x);
+            const dy = Math.abs(start.y - end.y);
+
+            let guide, label;
+
+            if (dy < scaledSnapThreshold) {
+                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                guide.setAttribute('x1', viewBox.x);
+                guide.setAttribute('y1', start.y);
+                guide.setAttribute('x2', viewBox.x + viewBox.w);
+                guide.setAttribute('y2', start.y);
+                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', end.x + 10);
+                label.setAttribute('y', end.y - 10);
+                label.textContent = "Horizontal";
+                end.y = start.y;
+            } else if (dx < scaledSnapThreshold) {
+                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                guide.setAttribute('x1', start.x);
+                guide.setAttribute('y1', viewBox.y);
+                guide.setAttribute('x2', start.x);
+                guide.setAttribute('y2', viewBox.y + viewBox.h);
+                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', end.x + 10);
+                label.setAttribute('y', end.y);
+                label.textContent = "Vertical";
+                end.x = start.x;
+            }
+
+            if (guide) {
+                guide.setAttribute('class', 'smart-guide');
+                svgCanvas.appendChild(guide);
+                label.setAttribute('class', 'smart-guide-label');
+                svgCanvas.appendChild(label);
+            }
+        }
+
+        // --- Object and Property Management ---
         function selectObject(id) {
             selectedObjectId = id;
             const selectedObject = svgObjects.find(obj => obj.id === id);
@@ -450,6 +565,17 @@
                     if (pos.x >= x && pos.x <= x + w && pos.y >= y - h && pos.y <= y) {
                         dist = 0;
                     }
+                } else if (obj.type === 'triangle') {
+                    const sides = [[obj.p1, obj.p2], [obj.p2, obj.p3], [obj.p3, obj.p1]];
+                    for (const side of sides) {
+                        const [pA, pB] = side;
+                        const l2 = (pB.x - pA.x)**2 + (pB.y - pA.y)**2;
+                        if (l2 === 0) continue;
+                        let t = ((pos.x - pA.x) * (pB.x - pA.x) + (pos.y - pA.y) * (pB.y - pA.y)) / l2;
+                        t = Math.max(0, Math.min(1, t));
+                        const d = Math.hypot(pos.x - (pA.x + t * (pB.x - pA.x)), pos.y - (pA.y + t * (pB.y - pA.y)));
+                        if (d < dist) dist = d;
+                    }
                 }
 
                 if (dist < minDistance) {
@@ -461,238 +587,207 @@
             return (minDistance < scaledThreshold) ? closest : null;
         }
 
-        function updateCursor(mousePos) {
-            svgCanvas.classList.remove('panning', 'can-drag', 'crosshair', 'cropping');
-            if (state.isPanning) {
-                svgCanvas.classList.add('panning');
-                return;
-            }
-            if (currentTool === 'select') {
-                if (mousePos && findClosestObject(mousePos)) {
-                    svgCanvas.classList.add('can-drag');
-                }
-            } else if (currentTool === 'crop') {
-                svgCanvas.classList.add('cropping');
-            } else {
-                svgCanvas.classList.add('crosshair');
-            }
-        }
-
-        function drawSmartGuides(start, end) {
-            svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label').forEach(el => el.remove());
-            const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
-            const dx = Math.abs(start.x - end.x);
-            const dy = Math.abs(start.y - end.y);
-
-            let guide, label;
-
-            if (dy < scaledSnapThreshold) { // Horizontal
-                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                guide.setAttribute('x1', viewBox.x);
-                guide.setAttribute('y1', start.y);
-                guide.setAttribute('x2', viewBox.x + viewBox.w);
-                guide.setAttribute('y2', start.y);
-                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                label.setAttribute('x', end.x + 10);
-                label.setAttribute('y', end.y - 10);
-                label.textContent = "Horizontal";
-                end.y = start.y;
-            } else if (dx < scaledSnapThreshold) { // Vertical
-                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                guide.setAttribute('x1', start.x);
-                guide.setAttribute('y1', viewBox.y);
-                guide.setAttribute('x2', start.x);
-                guide.setAttribute('y2', viewBox.y + viewBox.h);
-                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                label.setAttribute('x', end.x + 10);
-                label.setAttribute('y', end.y);
-                label.textContent = "Vertical";
-                end.x = start.x;
-            }
-
-            if (guide) {
-                guide.setAttribute('class', 'smart-guide');
-                svgCanvas.appendChild(guide);
-                label.setAttribute('class', 'smart-guide-label');
-                svgCanvas.appendChild(label);
-            }
-        }
-
+        // --- Crop Functionality ---
         function confirmCrop() {
-            if (!cropRect) return;
-            viewBox.x = cropRect.x;
-            viewBox.y = cropRect.y;
-            viewBox.w = cropRect.width;
-            viewBox.h = cropRect.height;
+            if (!state.cropRect) return;
+            viewBox.x = state.cropRect.x;
+            viewBox.y = state.cropRect.y;
+            viewBox.w = state.cropRect.width;
+            viewBox.h = state.cropRect.height;
             cancelCrop();
             saveState();
         }
 
         function cancelCrop() {
-            cropRect = null;
+            state.cropRect = null;
             cropActions.classList.add('hidden');
             render();
         }
 
-        // --- Event Listeners ---
-
+        // --- Mouse Event Handlers ---
         svgCanvas.addEventListener('mousedown', (e) => {
             const mousePos = getMousePos(e);
             
             if (currentTool === 'select') {
+                if (e.target.classList.contains('vertex-handle')) {
+                    setMode('dragging');
+                    state.draggedVertex = {
+                        objId: parseInt(e.target.dataset.objId),
+                        vertexKey: e.target.dataset.vertex
+                    };
+                    return;
+                }
                 const target = findClosestObject(mousePos);
                 if (target) {
                     selectObject(target.id);
-                    state.isDragging = true;
-                    state.dragStartPoint = mousePos;
+                    setMode('dragging');
+                    state.dragOffset.x = target.x1 ? mousePos.x - target.x1 : mousePos.x - target.cx;
+                    state.dragOffset.y = target.y1 ? mousePos.y - target.y1 : mousePos.y - target.cy;
                 } else {
                     deselectObject();
-                    state.isPanning = true;
-                    state.panStartPoint = { x: e.clientX, y: e.clientY };
+                    setMode('panning');
+                    state.startPoint = { x: e.clientX, y: e.clientY };
                 }
             } else if (currentTool === 'crop') {
-                state.isCropping = true;
-                startPoint = mousePos;
+                setMode('cropping');
+                state.startPoint = mousePos;
             } else {
-                state.isDrawing = true;
-                startPoint = mousePos;
+                setMode('drawing');
+                const snapPoint = getSnapPoint(mousePos);
+                state.startPoint = snapPoint.snapped ? snapPoint : mousePos;
             }
-            updateCursor(mousePos);
         });
 
         svgCanvas.addEventListener('mousemove', (e) => {
+            if (state.mode === 'idle') return;
             const mousePos = getMousePos(e);
-            if (state.isPanning) {
-                const dx = (e.clientX - state.panStartPoint.x) * (viewBox.w / svgCanvas.clientWidth);
-                const dy = (e.clientY - state.panStartPoint.y) * (viewBox.h / svgCanvas.clientHeight);
-                viewBox.x -= dx;
-                viewBox.y -= dy;
-                state.panStartPoint = { x: e.clientX, y: e.clientY };
-                render();
-                return;
-            }
 
-            if (state.isDragging && selectedObjectId !== null) {
-                const dx = mousePos.x - state.dragStartPoint.x;
-                const dy = mousePos.y - state.dragStartPoint.y;
-                const obj = svgObjects.find(o => o.id === selectedObjectId);
-                if (obj) {
-                    if (obj.type === 'line') {
-                        obj.x1 += dx; obj.y1 += dy;
-                        obj.x2 += dx; obj.y2 += dy;
-                    } else if (obj.type === 'circle') {
-                        obj.cx += dx; obj.cy += dy;
-                    } else { 
-                        obj.x += dx; obj.y += dy;
-                    }
-                }
-                state.dragStartPoint = mousePos;
-                render();
-                return;
-            }
-            
-            if (state.isCropping) {
-                const x = Math.min(startPoint.x, mousePos.x);
-                const y = Math.min(startPoint.y, mousePos.y);
-                const width = Math.abs(startPoint.x - mousePos.x);
-                const height = Math.abs(startPoint.y - mousePos.y);
-                cropRect = { x, y, width, height };
-                render();
-                return;
-            }
+            switch (state.mode) {
+                case 'panning':
+                    const dx = (e.clientX - state.startPoint.x) * (viewBox.w / svgCanvas.clientWidth);
+                    const dy = (e.clientY - state.startPoint.y) * (viewBox.h / svgCanvas.clientHeight);
+                    viewBox.x -= dx;
+                    viewBox.y -= dy;
+                    state.startPoint = { x: e.clientX, y: e.clientY };
+                    break;
 
-            if (state.isDrawing) {
-                let currentPos = mousePos;
-                if (currentTool === 'line') {
-                    drawSmartGuides(startPoint, currentPos);
-                    if (isShiftDown) {
-                        const dx = currentPos.x - startPoint.x;
-                        const dy = currentPos.y - startPoint.y;
-                        if (Math.abs(dx) > Math.abs(dy)) currentPos.y = startPoint.y;
-                        else currentPos.x = startPoint.x;
+                case 'dragging':
+                    if (state.draggedVertex) {
+                        const obj = svgObjects.find(o => o.id === state.draggedVertex.objId);
+                        if (obj) {
+                            const snapPoint = getSnapPoint(mousePos);
+                            obj[state.draggedVertex.vertexKey] = snapPoint.snapped ? snapPoint : mousePos;
+                        }
+                    } else if (selectedObjectId !== null) {
+                        const obj = svgObjects.find(o => o.id === selectedObjectId);
+                        if (obj) {
+                            const dragDx = mousePos.x - (obj.x1 || obj.cx || obj.p1.x) - state.dragOffset.x;
+                            const dragDy = mousePos.y - (obj.y1 || obj.cy || obj.p1.y) - state.dragOffset.y;
+                             if (obj.type === 'line') {
+                                obj.x1 += dragDx; obj.y1 += dragDy; obj.x2 += dragDx; obj.y2 += dragDy;
+                            } else if (obj.type === 'circle') {
+                                obj.cx += dragDx; obj.cy += dragDy;
+                            } else if (obj.type === 'triangle') {
+                                obj.p1.x += dragDx; obj.p1.y += dragDy;
+                                obj.p2.x += dragDx; obj.p2.y += dragDy;
+                                obj.p3.x += dragDx; obj.p3.y += dragDy;
+                            } else { 
+                                obj.x += dragDx; obj.y += dragDy;
+                            }
+                        }
                     }
-                }
+                    break;
                 
-                const color = strokeColorInput.value;
-                switch (currentTool) {
-                    case 'line':
-                        previewObject = { id: -1, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: currentPos.x, y2: currentPos.y, color, isPreview: true };
-                        break;
-                    case 'circle':
-                        const r = Math.hypot(currentPos.x - startPoint.x, currentPos.y - startPoint.y);
-                        previewObject = { id: -1, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color, isPreview: true };
-                        break;
-                }
-                render();
+                case 'cropping':
+                    const cropX = Math.min(state.startPoint.x, mousePos.x);
+                    const cropY = Math.min(state.startPoint.y, mousePos.y);
+                    const cropW = Math.abs(state.startPoint.x - mousePos.x);
+                    const cropH = Math.abs(state.startPoint.y - mousePos.y);
+                    state.cropRect = { x: cropX, y: cropY, width: cropW, height: cropH };
+                    break;
+
+                case 'drawing':
+                    let currentPos = mousePos;
+                    const snapPoint = getSnapPoint(currentPos);
+                    if (snapPoint.snapped) {
+                        currentPos = snapPoint;
+                    }
+
+                    if (currentTool === 'line') {
+                        drawSmartGuides(state.startPoint, currentPos);
+                        if (isShiftDown) {
+                            const dxShift = currentPos.x - state.startPoint.x;
+                            const dyShift = currentPos.y - state.startPoint.y;
+                            if (Math.abs(dxShift) > Math.abs(dyShift)) currentPos.y = state.startPoint.y;
+                            else currentPos.x = state.startPoint.x;
+                        }
+                    }
+                    
+                    const color = strokeColorInput.value;
+                    switch (currentTool) {
+                        case 'line':
+                            state.previewObject = { id: -1, type: 'line', x1: state.startPoint.x, y1: state.startPoint.y, x2: currentPos.x, y2: currentPos.y, color, isPreview: true };
+                            break;
+                        case 'circle':
+                            const r = Math.hypot(currentPos.x - state.startPoint.x, currentPos.y - state.startPoint.y);
+                            state.previewObject = { id: -1, type: 'circle', cx: state.startPoint.x, cy: state.startPoint.y, r, color, isPreview: true };
+                            break;
+                    }
+                    break;
             }
-            updateCursor(mousePos);
+            render();
         });
 
         svgCanvas.addEventListener('mouseup', (e) => {
-            if (state.isPanning || state.isDragging) {
-                if (state.isDragging) saveState();
-                state.isPanning = false;
-                state.isDragging = false;
-                updateCursor(getMousePos(e));
-                return;
-            }
-            
-            if (state.isCropping) {
-                state.isCropping = false;
-                if (cropRect && (cropRect.width > 10 || cropRect.height > 10)) {
+            if (state.mode === 'idle') return;
+
+            if (state.mode === 'dragging') {
+                saveState();
+            } else if (state.mode === 'cropping') {
+                if (state.cropRect && (state.cropRect.width > 10 || state.cropRect.height > 10)) {
                     cropActions.classList.remove('hidden');
                 } else {
                     cancelCrop();
                 }
-                return;
-            }
-
-            if (state.isDrawing) {
-                state.isDrawing = false;
+            } else if (state.mode === 'drawing') {
                 svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label').forEach(el => el.remove());
                 
                 let endPoint = getMousePos(e);
+                const snapPoint = getSnapPoint(endPoint);
+                if (snapPoint.snapped) endPoint = snapPoint;
+
                 let newObject;
                 const color = strokeColorInput.value;
 
                 switch (currentTool) {
                     case 'line':
-                        const dx = Math.abs(startPoint.x - endPoint.x);
-                        const dy = Math.abs(startPoint.y - endPoint.y);
-                        const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
-                        if (dy < scaledSnapThreshold) endPoint.y = startPoint.y;
-                        if (dx < scaledSnapThreshold) endPoint.x = startPoint.x;
-                        if (isShiftDown) {
-                            if (dx > dy) endPoint.y = startPoint.y;
-                            else endPoint.x = startPoint.x;
+                         if (isShiftDown) {
+                            const dx = endPoint.x - state.startPoint.x;
+                            const dy = endPoint.y - state.startPoint.y;
+                            if (Math.abs(dx) > Math.abs(dy)) endPoint.y = state.startPoint.y;
+                            else endPoint.x = state.startPoint.x;
                         }
-
-                        if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) > 5) {
-                            newObject = { id: nextId++, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
+                        if (Math.hypot(endPoint.x - state.startPoint.x, endPoint.y - state.startPoint.y) > 5) {
+                            newObject = { id: nextId++, type: 'line', x1: state.startPoint.x, y1: state.startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
                         }
                         break;
+                    case 'triangle':
+                        const side = 100;
+                        const h = side * Math.sqrt(3)/2;
+                        newObject = {
+                            id: nextId++,
+                            type: 'triangle',
+                            p1: { x: state.startPoint.x, y: state.startPoint.y - h/2 },
+                            p2: { x: state.startPoint.x - side/2, y: state.startPoint.y + h/2 },
+                            p3: { x: state.startPoint.x + side/2, y: state.startPoint.y + h/2 },
+                            color
+                        };
+                        break;
                     case 'circle':
-                         const r = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
+                         const r = Math.hypot(endPoint.x - state.startPoint.x, endPoint.y - state.startPoint.y);
                          if (r > 5) {
-                            newObject = { id: nextId++, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color };
+                            newObject = { id: nextId++, type: 'circle', cx: state.startPoint.x, cy: state.startPoint.y, r, color };
                          }
                         break;
                     case 'text':
                         const content = prompt("Enter text:", "A");
                         if (content) {
-                           newObject = { id: nextId++, type: 'text', x: startPoint.x, y: startPoint.y, content, color, fontSize: 20 };
+                           newObject = { id: nextId++, type: 'text', x: state.startPoint.x, y: state.startPoint.y, content, color, fontSize: 20 };
                         }
                         break;
                 }
 
-                previewObject = null;
                 if (newObject) {
                     svgObjects.push(newObject);
                     saveState();
                 }
-                render();
             }
-            updateCursor(getMousePos(e));
+            
+            // Reset state
+            setMode('idle');
+            state.draggedVertex = null;
+            state.previewObject = null;
+            render();
         });
 
         canvasContainer.addEventListener('wheel', (e) => {
@@ -711,6 +806,7 @@
             render();
         });
         
+        // --- Keyboard and Button Listeners ---
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Shift') isShiftDown = true;
             if (e.ctrlKey && (e.key.toLowerCase() === 'z')) {
@@ -753,6 +849,7 @@
         fontSizeInput.addEventListener('change', saveState);
         strokeColorInput.addEventListener('change', saveState);
 
+        // --- Export ---
         function getSvgForExport() {
             const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             tempSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -802,7 +899,7 @@
 
         window.addEventListener('resize', () => {
             const newBounds = canvasContainer.getBoundingClientRect();
-            if (!Object.values(state).some(s => s)) { // Only resize if not busy
+            if (state.mode === 'idle') { 
                 viewBox.w = newBounds.width || 1000;
                 viewBox.h = newBounds.height || 750;
             }
