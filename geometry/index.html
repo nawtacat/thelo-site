@@ -78,6 +78,21 @@
             fill: rgba(0, 0, 0, 0.5);
             pointer-events: none;
         }
+        
+        .smart-guide {
+            stroke: var(--thelo-blue);
+            stroke-width: 1px;
+            stroke-dasharray: 4 4;
+            pointer-events: none;
+        }
+
+        .smart-guide-label {
+            fill: var(--thelo-blue);
+            font-family: 'Manrope', sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="w-screen h-screen flex flex-col antialiased">
@@ -88,7 +103,7 @@
             <h1 class="text-xl font-bold text-gray-800">Geometry Creator</h1>
         </div>
         <div class="text-sm text-gray-500">
-            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Scroll</kbd> to Zoom, <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Backspace</kbd> to Delete
+             <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Shift</kbd> to straighten, <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Scroll</kbd> to Zoom
         </div>
     </header>
 
@@ -207,6 +222,8 @@
         let history = [];
         let historyIndex = -1;
         let cropRect = null;
+        let previewObject = null;
+        let isShiftDown = false;
         let state = {
             isDrawing: false,
             isDragging: false,
@@ -217,6 +234,7 @@
         };
 
         const SELECTION_THRESHOLD = 10;
+        const SNAP_THRESHOLD = 10;
         
         let viewBox = { x: 0, y: 0, w: 1000, h: 750 };
         let CTM;
@@ -292,8 +310,10 @@
             gridRect.setAttribute('fill', 'url(#grid)');
             svgCanvas.appendChild(gridRect);
 
+            const allObjects = [...svgObjects];
+            if (previewObject) allObjects.push(previewObject);
 
-            svgObjects.forEach(obj => {
+            allObjects.forEach(obj => {
                 let element;
                 switch (obj.type) {
                     case 'line':
@@ -329,8 +349,13 @@
 
                 if (element) {
                     element.setAttribute('id', `obj-${obj.id}`);
-                    element.classList.add('drawable');
-                    if (obj.id === selectedObjectId) element.classList.add('selected');
+                    if (!obj.isPreview) {
+                        element.classList.add('drawable');
+                        if (obj.id === selectedObjectId) element.classList.add('selected');
+                    } else {
+                        element.setAttribute('opacity', '0.6');
+                        element.setAttribute('stroke-dasharray', '5 5');
+                    }
                     svgCanvas.appendChild(element);
                 }
             });
@@ -453,6 +478,46 @@
             }
         }
 
+        function drawSmartGuides(start, end) {
+            svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label').forEach(el => el.remove());
+            const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
+            const dx = Math.abs(start.x - end.x);
+            const dy = Math.abs(start.y - end.y);
+
+            let guide, label;
+
+            if (dy < scaledSnapThreshold) { // Horizontal
+                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                guide.setAttribute('x1', viewBox.x);
+                guide.setAttribute('y1', start.y);
+                guide.setAttribute('x2', viewBox.x + viewBox.w);
+                guide.setAttribute('y2', start.y);
+                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', end.x + 10);
+                label.setAttribute('y', end.y - 10);
+                label.textContent = "Horizontal";
+                end.y = start.y;
+            } else if (dx < scaledSnapThreshold) { // Vertical
+                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                guide.setAttribute('x1', start.x);
+                guide.setAttribute('y1', viewBox.y);
+                guide.setAttribute('x2', start.x);
+                guide.setAttribute('y2', viewBox.y + viewBox.h);
+                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', end.x + 10);
+                label.setAttribute('y', end.y);
+                label.textContent = "Vertical";
+                end.x = start.x;
+            }
+
+            if (guide) {
+                guide.setAttribute('class', 'smart-guide');
+                svgCanvas.appendChild(guide);
+                label.setAttribute('class', 'smart-guide-label');
+                svgCanvas.appendChild(label);
+            }
+        }
+
         function confirmCrop() {
             if (!cropRect) return;
             viewBox.x = cropRect.x;
@@ -525,17 +590,38 @@
                 render();
                 return;
             }
-
-            if (state.isDrawing || state.isCropping) {
+            
+            if (state.isCropping) {
                 const x = Math.min(startPoint.x, mousePos.x);
                 const y = Math.min(startPoint.y, mousePos.y);
                 const width = Math.abs(startPoint.x - mousePos.x);
                 const height = Math.abs(startPoint.y - mousePos.y);
+                cropRect = { x, y, width, height };
+                render();
+                return;
+            }
+
+            if (state.isDrawing) {
+                let currentPos = mousePos;
+                if (currentTool === 'line') {
+                    drawSmartGuides(startPoint, currentPos);
+                    if (isShiftDown) {
+                        const dx = currentPos.x - startPoint.x;
+                        const dy = currentPos.y - startPoint.y;
+                        if (Math.abs(dx) > Math.abs(dy)) currentPos.y = startPoint.y;
+                        else currentPos.x = startPoint.x;
+                    }
+                }
                 
-                if (state.isCropping) {
-                    cropRect = { x, y, width, height };
-                } else {
-                    // This logic is now simplified as preview objects are not needed for this version
+                const color = strokeColorInput.value;
+                switch (currentTool) {
+                    case 'line':
+                        previewObject = { id: -1, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: currentPos.x, y2: currentPos.y, color, isPreview: true };
+                        break;
+                    case 'circle':
+                        const r = Math.hypot(currentPos.x - startPoint.x, currentPos.y - startPoint.y);
+                        previewObject = { id: -1, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color, isPreview: true };
+                        break;
                 }
                 render();
             }
@@ -563,12 +649,24 @@
 
             if (state.isDrawing) {
                 state.isDrawing = false;
+                svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label').forEach(el => el.remove());
+                
                 let endPoint = getMousePos(e);
                 let newObject;
                 const color = strokeColorInput.value;
 
                 switch (currentTool) {
                     case 'line':
+                        const dx = Math.abs(startPoint.x - endPoint.x);
+                        const dy = Math.abs(startPoint.y - endPoint.y);
+                        const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
+                        if (dy < scaledSnapThreshold) endPoint.y = startPoint.y;
+                        if (dx < scaledSnapThreshold) endPoint.x = startPoint.x;
+                        if (isShiftDown) {
+                            if (dx > dy) endPoint.y = startPoint.y;
+                            else endPoint.x = startPoint.x;
+                        }
+
                         if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) > 5) {
                             newObject = { id: nextId++, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
                         }
@@ -587,6 +685,7 @@
                         break;
                 }
 
+                previewObject = null;
                 if (newObject) {
                     svgObjects.push(newObject);
                     saveState();
@@ -613,6 +712,7 @@
         });
         
         document.addEventListener('keydown', (e) => {
+            if (e.key === 'Shift') isShiftDown = true;
             if (e.ctrlKey && (e.key.toLowerCase() === 'z')) {
                 e.preventDefault();
                 undo();
@@ -624,6 +724,10 @@
                     saveState();
                 }
             }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'Shift') isShiftDown = false;
         });
 
         Object.entries(toolButtons).forEach(([name, btn]) => {
@@ -698,7 +802,7 @@
 
         window.addEventListener('resize', () => {
             const newBounds = canvasContainer.getBoundingClientRect();
-            if (!state.isPanning && !state.isDrawing && !state.isCropping) {
+            if (!Object.values(state).some(s => s)) { // Only resize if not busy
                 viewBox.w = newBounds.width || 1000;
                 viewBox.h = newBounds.height || 750;
             }
