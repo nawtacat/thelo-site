@@ -45,19 +45,18 @@
         }
         
         #svg-canvas {
-            cursor: crosshair;
             background-color: #fff;
             border-radius: 0.75rem;
             box-shadow: 0 4px 14px rgba(0,0,0,0.05);
         }
 
-        #svg-canvas.panning {
-            cursor: grab;
-        }
+        #svg-canvas.panning { cursor: grab; }
+        #svg-canvas.can-drag { cursor: move; }
+        #svg-canvas.crosshair { cursor: crosshair; }
         
         .drawable:hover {
             stroke: var(--thelo-blue);
-            stroke-width: 3px;
+            stroke-width: 3.5px;
             fill-opacity: 0.7;
         }
         
@@ -73,10 +72,26 @@
             stroke-width: 2;
         }
 
-        .snap-point {
+        .snap-point, .smart-guide-snap-indicator {
             fill: var(--thelo-blue);
             stroke: white;
             stroke-width: 2px;
+            pointer-events: none;
+        }
+        
+        .smart-guide {
+            stroke: var(--thelo-blue);
+            stroke-width: 1px;
+            stroke-dasharray: 4 4;
+            pointer-events: none;
+        }
+
+        .smart-guide-label {
+            fill: var(--thelo-blue);
+            font-family: 'Manrope', sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -193,23 +208,26 @@
         let currentTool = 'select';
         let svgObjects = [];
         let selectedObjectId = null;
-        let isDrawing = false;
         let isShiftDown = false;
-        let isDragging = false;
-        let isPanning = false;
         let startPoint = { x: 0, y: 0 };
-        let dragStartPoint = { x: 0, y: 0 };
         let nextId = 0;
         let previewObject = null;
         let history = [];
         let historyIndex = -1;
         let angleCreationState = { active: false, points: [] };
-        
+        let state = {
+            isDrawing: false,
+            isDragging: false,
+            isPanning: false,
+            dragStartPoint: {x: 0, y: 0},
+            panStartPoint: {x: 0, y: 0},
+        };
+
         const SNAP_THRESHOLD = 10;
         const SELECTION_THRESHOLD = 10;
         
         let viewBox = { x: 0, y: 0, w: 1000, h: 750 };
-        let CTM; // Current Transformation Matrix
+        let CTM;
 
         function saveState() {
             history = history.slice(0, historyIndex + 1);
@@ -234,24 +252,18 @@
             deselectObject();
             angleCreationState.active = (toolName === 'measureAngle');
             angleCreationState.points = [];
-            render();
+            updateCursor();
         }
 
         function getMousePos(event) {
-            // Failsafe check for CTM
-            if (!CTM) {
-                CTM = svgCanvas.getScreenCTM();
-            }
-            if (!CTM) {
-                return { x: 0, y: 0 }; // Return a default if CTM is still not available
-            }
+            if (!CTM) CTM = svgCanvas.getScreenCTM();
+            if (!CTM) return { x: 0, y: 0 };
             const pt = svgCanvas.createSVGPoint();
             pt.x = event.clientX;
             pt.y = event.clientY;
             try {
                 return pt.matrixTransform(CTM.inverse());
-            } catch (error) {
-                console.error("Could not transform point:", error);
+            } catch (e) {
                 return { x: 0, y: 0 };
             }
         }
@@ -260,7 +272,7 @@
             svgCanvas.innerHTML = '';
             svgCanvas.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
             
-            // Render grid
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             const gridPattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
             gridPattern.setAttribute('id', 'grid');
             gridPattern.setAttribute('width', '20');
@@ -270,14 +282,15 @@
             gridPath.setAttribute('d', 'M 20 0 L 0 0 0 20');
             gridPath.setAttribute('fill', 'none');
             gridPath.setAttribute('stroke', 'var(--grid-color)');
-            gridPath.setAttribute('stroke-width', '1');
+            gridPath.setAttribute('stroke-width', '0.5');
             gridPattern.appendChild(gridPath);
-            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             defs.appendChild(gridPattern);
             svgCanvas.appendChild(defs);
             const gridRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            gridRect.setAttribute('width', '100%');
-            gridRect.setAttribute('height', '100%');
+            gridRect.setAttribute('x', viewBox.x);
+            gridRect.setAttribute('y', viewBox.y);
+            gridRect.setAttribute('width', viewBox.w);
+            gridRect.setAttribute('height', viewBox.h);
             gridRect.setAttribute('fill', 'url(#grid)');
             svgCanvas.appendChild(gridRect);
 
@@ -341,16 +354,16 @@
                         path.setAttribute('class', 'angle-arc');
                         path.setAttribute('stroke', obj.color);
 
-                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         const textAngle = angleRad1 + (angleRad2 - angleRad1) / 2;
-                        text.setAttribute('x', vertex.x + (arcRadius + 15) * Math.cos(textAngle));
-                        text.setAttribute('y', vertex.y + (arcRadius + 15) * Math.sin(textAngle));
-                        text.setAttribute('fill', obj.color);
-                        text.setAttribute('font-size', '14');
-                        text.textContent = `${angleDeg.toFixed(1)}°`;
+                        textEl.setAttribute('x', vertex.x + (arcRadius + 15) * Math.cos(textAngle));
+                        textEl.setAttribute('y', vertex.y + (arcRadius + 15) * Math.sin(textAngle));
+                        textEl.setAttribute('fill', obj.color);
+                        textEl.setAttribute('font-size', '14');
+                        textEl.textContent = `${angleDeg.toFixed(1)}°`;
                         
                         group.appendChild(path);
-                        group.appendChild(text);
+                        group.appendChild(textEl);
                         element = group;
                         break;
                 }
@@ -427,6 +440,7 @@
         function findClosestObject(pos) {
             let closest = null;
             let minDistance = Infinity;
+            const scaledThreshold = SELECTION_THRESHOLD / (viewBox.w / 1000);
 
             svgObjects.forEach(obj => {
                 let dist = Infinity;
@@ -457,8 +471,113 @@
                 }
             });
 
-            return (minDistance < SELECTION_THRESHOLD / (viewBox.w / 1000)) ? closest : null;
+            return (minDistance < scaledThreshold) ? closest : null;
         }
+
+        function getSnapPoint(pos, ignoreGrid = false) {
+            const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
+            let snapped = { x: pos.x, y: pos.y, snapped: false };
+
+            // Endpoint and Midpoint Snap
+            for (const obj of svgObjects) {
+                if (obj.type === 'line') {
+                    const points = [
+                        {x: obj.x1, y: obj.y1}, 
+                        {x: obj.x2, y: obj.y2},
+                        {x: (obj.x1 + obj.x2) / 2, y: (obj.y1 + obj.y2) / 2} // Midpoint
+                    ];
+                    for (const p of points) {
+                        if (Math.hypot(pos.x - p.x, pos.y - p.y) < scaledSnapThreshold) {
+                            snapped = { ...p, snapped: true };
+                            return snapped;
+                        }
+                    }
+                }
+            }
+            
+            // Grid Snap
+            if (!ignoreGrid) {
+                const gridX = Math.round(pos.x / 20) * 20;
+                const gridY = Math.round(pos.y / 20) * 20;
+                if (Math.hypot(pos.x - gridX, pos.y - gridY) < scaledSnapThreshold) {
+                    snapped = { x: gridX, y: gridY, snapped: true };
+                    return snapped;
+                }
+            }
+
+            return snapped;
+        }
+
+        function updateCursor(mousePos) {
+            svgCanvas.classList.remove('panning', 'can-drag', 'crosshair');
+            if (state.isPanning) {
+                svgCanvas.classList.add('panning');
+                return;
+            }
+            if (currentTool === 'select') {
+                if (mousePos && findClosestObject(mousePos)) {
+                    svgCanvas.classList.add('can-drag');
+                } else {
+                    svgCanvas.classList.add('panning'); // Default to panning if not over an object
+                }
+            } else {
+                svgCanvas.classList.add('crosshair');
+            }
+        }
+
+        function drawSmartGuides(start, end) {
+            // Clear previous guides
+            svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label, .smart-guide-snap-indicator').forEach(el => el.remove());
+
+            const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
+            const dx = Math.abs(start.x - end.x);
+            const dy = Math.abs(start.y - end.y);
+
+            let guide, label, snapIndicator;
+
+            if (dy < scaledSnapThreshold) { // Horizontal
+                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                guide.setAttribute('x1', viewBox.x);
+                guide.setAttribute('y1', start.y);
+                guide.setAttribute('x2', viewBox.x + viewBox.w);
+                guide.setAttribute('y2', start.y);
+                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', end.x + 10);
+                label.setAttribute('y', end.y - 10);
+                label.textContent = "Horizontal";
+                end.y = start.y;
+            } else if (dx < scaledSnapThreshold) { // Vertical
+                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                guide.setAttribute('x1', start.x);
+                guide.setAttribute('y1', viewBox.y);
+                guide.setAttribute('x2', start.x);
+                guide.setAttribute('y2', viewBox.y + viewBox.h);
+                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', end.x + 10);
+                label.setAttribute('y', end.y);
+                label.textContent = "Vertical";
+                end.x = start.x;
+            }
+
+            if (guide) {
+                guide.setAttribute('class', 'smart-guide');
+                svgCanvas.appendChild(guide);
+                label.setAttribute('class', 'smart-guide-label');
+                svgCanvas.appendChild(label);
+            }
+
+            const snapPoint = getSnapPoint(end, true);
+            if (snapPoint.snapped) {
+                snapIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                snapIndicator.setAttribute('cx', snapPoint.x);
+                snapIndicator.setAttribute('cy', snapPoint.y);
+                snapIndicator.setAttribute('r', '5');
+                snapIndicator.setAttribute('class', 'smart-guide-snap-indicator');
+                svgCanvas.appendChild(snapIndicator);
+            }
+        }
+
+        // --- Event Listeners ---
 
         svgCanvas.addEventListener('mousedown', (e) => {
             const mousePos = getMousePos(e);
@@ -479,36 +598,35 @@
                 const target = findClosestObject(mousePos);
                 if (target) {
                     selectObject(target.id);
-                    isDragging = true;
-                    dragStartPoint = mousePos;
+                    state.isDragging = true;
+                    state.dragStartPoint = mousePos;
                 } else {
                     deselectObject();
-                    isPanning = true;
-                    svgCanvas.classList.add('panning');
-                    startPoint = { x: e.clientX, y: e.clientY };
+                    state.isPanning = true;
+                    state.panStartPoint = { x: e.clientX, y: e.clientY };
                 }
-                return;
+            } else {
+                state.isDrawing = true;
+                startPoint = getSnapPoint(mousePos).snapped ? getSnapPoint(mousePos) : mousePos;
             }
-
-            isDrawing = true;
-            startPoint = mousePos;
+            updateCursor(mousePos);
         });
 
         svgCanvas.addEventListener('mousemove', (e) => {
-            if (isPanning) {
-                const dx = (e.clientX - startPoint.x) * (viewBox.w / svgCanvas.clientWidth);
-                const dy = (e.clientY - startPoint.y) * (viewBox.h / svgCanvas.clientHeight);
+            const mousePos = getMousePos(e);
+            if (state.isPanning) {
+                const dx = (e.clientX - state.panStartPoint.x) * (viewBox.w / svgCanvas.clientWidth);
+                const dy = (e.clientY - state.panStartPoint.y) * (viewBox.h / svgCanvas.clientHeight);
                 viewBox.x -= dx;
                 viewBox.y -= dy;
-                startPoint = { x: e.clientX, y: e.clientY };
+                state.panStartPoint = { x: e.clientX, y: e.clientY };
                 render();
                 return;
             }
 
-            if (isDragging && selectedObjectId !== null) {
-                const mousePos = getMousePos(e);
-                const dx = mousePos.x - dragStartPoint.x;
-                const dy = mousePos.y - dragStartPoint.y;
+            if (state.isDragging && selectedObjectId !== null) {
+                const dx = mousePos.x - state.dragStartPoint.x;
+                const dy = mousePos.y - state.dragStartPoint.y;
                 const obj = svgObjects.find(o => o.id === selectedObjectId);
                 if (obj) {
                     if (obj.type === 'line') {
@@ -520,87 +638,98 @@
                         obj.x += dx; obj.y += dy;
                     }
                 }
-                dragStartPoint = mousePos;
+                state.dragStartPoint = mousePos;
                 render();
                 return;
             }
 
-            if (!isDrawing) return;
-            let currentPos = getMousePos(e);
+            if (state.isDrawing) {
+                let currentPos = mousePos;
+                drawSmartGuides(startPoint, currentPos);
 
-            if (isShiftDown && currentTool === 'line') {
-                const dx = currentPos.x - startPoint.x;
-                const dy = currentPos.y - startPoint.y;
-                if (Math.abs(dx) > Math.abs(dy)) currentPos.y = startPoint.y;
-                else currentPos.x = startPoint.x;
+                if (isShiftDown && currentTool === 'line') {
+                    const dx = currentPos.x - startPoint.x;
+                    const dy = currentPos.y - startPoint.y;
+                    if (Math.abs(dx) > Math.abs(dy)) currentPos.y = startPoint.y;
+                    else currentPos.x = startPoint.x;
+                }
+                
+                const color = strokeColorInput.value;
+                switch (currentTool) {
+                    case 'line':
+                        previewObject = { id: -1, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: currentPos.x, y2: currentPos.y, color, isPreview: true };
+                        break;
+                    case 'circle':
+                        const r = Math.hypot(currentPos.x - startPoint.x, currentPos.y - startPoint.y);
+                        previewObject = { id: -1, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color, isPreview: true };
+                        break;
+                }
+                render();
             }
-            
-            const color = strokeColorInput.value;
-            switch (currentTool) {
-                case 'line':
-                    previewObject = { id: -1, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: currentPos.x, y2: currentPos.y, color, isPreview: true };
-                    break;
-                case 'circle':
-                    const r = Math.hypot(currentPos.x - startPoint.x, currentPos.y - startPoint.y);
-                    previewObject = { id: -1, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color, isPreview: true };
-                    break;
-            }
-            render();
+            updateCursor(mousePos);
         });
 
         svgCanvas.addEventListener('mouseup', (e) => {
-            if (isPanning) {
-                isPanning = false;
-                svgCanvas.classList.remove('panning');
+            if (state.isPanning || state.isDragging) {
+                if (state.isDragging) saveState();
+                state.isPanning = false;
+                state.isDragging = false;
+                updateCursor(getMousePos(e));
                 return;
             }
-            if (isDragging) {
-                isDragging = false;
-                saveState();
-                return;
-            }
-            if (!isDrawing) return;
-            isDrawing = false;
-            previewObject = null;
-            
-            let endPoint = getMousePos(e);
-            let newObject;
-            const color = strokeColorInput.value;
 
-            switch (currentTool) {
-                case 'line':
-                    if (isShiftDown) {
-                        const dx = endPoint.x - startPoint.x;
-                        const dy = endPoint.y - startPoint.y;
-                        if (Math.abs(dx) > Math.abs(dy)) endPoint.y = startPoint.y;
-                        else endPoint.x = startPoint.x;
-                    }
-                    if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) > 5) {
-                        newObject = { id: nextId++, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
-                    }
-                    break;
-                case 'circle':
-                     const r = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
-                     if (r > 5) {
-                        newObject = { id: nextId++, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color };
-                     }
-                    break;
-                case 'text':
-                    const content = prompt("Enter text:", "A");
-                    if (content) {
-                       newObject = { id: nextId++, type: 'text', x: startPoint.x, y: startPoint.y, content, color, fontSize: 20 };
-                    }
-                    break;
-                case 'rightAngle':
-                    newObject = { id: nextId++, type: 'rightAngle', x: startPoint.x, y: startPoint.y, color };
-                    break;
-            }
+            if (state.isDrawing) {
+                state.isDrawing = false;
+                svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label, .smart-guide-snap-indicator').forEach(el => el.remove());
+                
+                let endPoint = getMousePos(e);
+                const snapEnd = getSnapPoint(endPoint);
+                if (snapEnd.snapped) endPoint = snapEnd;
 
-            if (newObject) {
-                svgObjects.push(newObject);
-                saveState();
+                let newObject;
+                const color = strokeColorInput.value;
+
+                switch (currentTool) {
+                    case 'line':
+                        const dx = Math.abs(startPoint.x - endPoint.x);
+                        const dy = Math.abs(startPoint.y - endPoint.y);
+                        const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
+                        if (dy < scaledSnapThreshold) endPoint.y = startPoint.y;
+                        if (dx < scaledSnapThreshold) endPoint.x = startPoint.x;
+                        if (isShiftDown) {
+                            if (dx > dy) endPoint.y = startPoint.y;
+                            else endPoint.x = startPoint.x;
+                        }
+
+                        if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) > 5) {
+                            newObject = { id: nextId++, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
+                        }
+                        break;
+                    case 'circle':
+                         const r = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
+                         if (r > 5) {
+                            newObject = { id: nextId++, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color };
+                         }
+                        break;
+                    case 'text':
+                        const content = prompt("Enter text:", "A");
+                        if (content) {
+                           newObject = { id: nextId++, type: 'text', x: startPoint.x, y: startPoint.y, content, color, fontSize: 20 };
+                        }
+                        break;
+                    case 'rightAngle':
+                        newObject = { id: nextId++, type: 'rightAngle', x: startPoint.x, y: startPoint.y, color };
+                        break;
+                }
+
+                previewObject = null;
+                if (newObject) {
+                    svgObjects.push(newObject);
+                    saveState();
+                }
+                render();
             }
-            render();
+            updateCursor(getMousePos(e));
         });
 
         canvasContainer.addEventListener('wheel', (e) => {
@@ -638,7 +767,6 @@
             if (e.key === 'Shift') isShiftDown = false;
         });
 
-        // Add event listeners to all tool buttons
         Object.entries(toolButtons).forEach(([name, btn]) => {
             btn.addEventListener('click', () => setActiveTool(name));
         });
@@ -664,7 +792,6 @@
             setTimeout(() => {
                 const tempSvg = svgCanvas.cloneNode(true);
                 tempSvg.querySelector('#grid').parentElement.remove();
-                tempSvg.querySelector('rect[fill="url(#grid)"]').remove();
                 
                 const svgData = new XMLSerializer().serializeToString(tempSvg);
                 const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
@@ -682,7 +809,6 @@
             setTimeout(() => {
                 const tempSvg = svgCanvas.cloneNode(true);
                 tempSvg.querySelector('#grid').parentElement.remove();
-                tempSvg.querySelector('rect[fill="url(#grid)"]').remove();
                 
                 const svgData = new XMLSerializer().serializeToString(tempSvg);
                 svgCodeOutput.value = svgData;
@@ -693,13 +819,17 @@
         });
 
         // --- Initial Setup ---
-        const initialBounds = canvasContainer.getBoundingClientRect();
-        viewBox.w = initialBounds.width || 1000; // Fallback to prevent 0 width
-        viewBox.h = initialBounds.height || 750; // Fallback to prevent 0 height
-        
-        setActiveTool('select');
-        saveState();
-        render();
+        function initialize() {
+            const initialBounds = canvasContainer.getBoundingClientRect();
+            viewBox.w = initialBounds.width || 1000;
+            viewBox.h = initialBounds.height || 750;
+            
+            setActiveTool('select');
+            saveState();
+            render();
+        }
+
+        initialize();
 
         window.addEventListener('resize', () => {
             const newBounds = canvasContainer.getBoundingClientRect();
