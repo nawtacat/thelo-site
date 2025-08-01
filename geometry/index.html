@@ -61,6 +61,7 @@
         .drawable:hover {
             stroke: var(--thelo-blue);
             stroke-width: 3px;
+            fill-opacity: 0.7;
         }
         
         .selected {
@@ -69,10 +70,16 @@
             stroke-dasharray: 5 5;
         }
         
-        .right-angle-symbol {
+        .right-angle-symbol, .angle-arc {
             fill: none;
             stroke: var(--thelo-text);
             stroke-width: 2;
+        }
+
+        .snap-point {
+            fill: var(--thelo-blue);
+            stroke: white;
+            stroke-width: 2px;
         }
     </style>
 </head>
@@ -84,32 +91,43 @@
             <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo logo" class="h-10 w-auto" />
             <h1 class="text-xl font-bold text-gray-800">Geometry Creator</h1>
         </div>
+        <div class="text-sm text-gray-500">
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Ctrl</kbd>+<kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Z</kbd> to Undo, <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Shift</kbd> to straighten lines.
+        </div>
     </header>
 
     <!-- Main Content -->
     <div class="flex-grow flex gap-6 p-6 overflow-hidden">
 
         <!-- Left Panel: Toolbar -->
-        <aside class="w-64 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-8">
+        <aside class="w-72 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-8">
             <!-- Tools Section -->
             <div>
                 <h2 class="font-bold text-lg mb-3">Tools</h2>
                 <div class="grid grid-cols-2 gap-3">
-                    <button id="tool-select" class="tool-btn active flex flex-col items-center p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
-                        <i class="fas fa-mouse-pointer fa-lg mb-1"></i>
-                        <span class="text-xs font-semibold">Select</span>
+                    <button id="tool-select" class="tool-btn active flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="fas fa-mouse-pointer fa-lg w-5 text-center"></i>
+                        <span class="text-sm font-semibold">Select</span>
                     </button>
-                    <button id="tool-line" class="tool-btn flex flex-col items-center p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
-                        <i class="fas fa-drafting-compass fa-lg mb-1"></i>
-                        <span class="text-xs font-semibold">Line</span>
+                    <button id="tool-line" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="fas fa-drafting-compass fa-lg w-5 text-center"></i>
+                        <span class="text-sm font-semibold">Line</span>
                     </button>
-                    <button id="tool-text" class="tool-btn flex flex-col items-center p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
-                        <i class="fas fa-font fa-lg mb-1"></i>
-                        <span class="text-xs font-semibold">Text</span>
+                    <button id="tool-circle" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="far fa-circle fa-lg w-5 text-center"></i>
+                        <span class="text-sm font-semibold">Circle</span>
                     </button>
-                    <button id="tool-right-angle" class="tool-btn flex flex-col items-center p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
-                        <i class="far fa-square fa-lg mb-1"></i>
-                        <span class="text-xs font-semibold">Angle</span>
+                    <button id="tool-text" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="fas fa-font fa-lg w-5 text-center"></i>
+                        <span class="text-sm font-semibold">Text</span>
+                    </button>
+                    <button id="tool-right-angle" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="far fa-square fa-lg w-5 text-center"></i>
+                        <span class="text-sm font-semibold">Right Angle</span>
+                    </button>
+                    <button id="tool-measure-angle" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                         <i class="fas fa-angle-left fa-lg w-5 text-center"></i>
+                        <span class="text-sm font-semibold">Measure</span>
                     </button>
                 </div>
             </div>
@@ -118,12 +136,10 @@
             <div id="properties-panel" class="hidden">
                 <h2 class="font-bold text-lg mb-3">Properties</h2>
                 <div class="space-y-4">
-                    <!-- Text Properties -->
                     <div id="text-properties" class="hidden">
                         <label for="text-input" class="block text-sm font-medium text-gray-700">Text</label>
                         <input type="text" id="text-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                     </div>
-                     <!-- Common Properties -->
                     <div>
                         <label for="stroke-color" class="block text-sm font-medium text-gray-700">Color</label>
                         <input type="color" id="stroke-color" value="#111827" class="mt-1 block w-full h-8 rounded-md border-gray-300 shadow-sm">
@@ -155,12 +171,9 @@
 
     </div>
     
-    <!-- Hidden textarea for copying SVG code -->
     <textarea id="svg-code-output" class="absolute -left-full"></textarea>
 
-
     <script type="module">
-        // --- DOM Elements ---
         const svgCanvas = document.getElementById('svg-canvas');
         const propertiesPanel = document.getElementById('properties-panel');
         const textProperties = document.getElementById('text-properties');
@@ -173,38 +186,55 @@
         const toolButtons = {
             select: document.getElementById('tool-select'),
             line: document.getElementById('tool-line'),
+            circle: document.getElementById('tool-circle'),
             text: document.getElementById('tool-text'),
             rightAngle: document.getElementById('tool-right-angle'),
+            measureAngle: document.getElementById('tool-measure-angle'),
         };
 
-        // --- State ---
         let currentTool = 'select';
         let svgObjects = [];
         let selectedObjectId = null;
         let isDrawing = false;
+        let isShiftDown = false;
         let startPoint = { x: 0, y: 0 };
         let nextId = 0;
+        let previewObject = null;
+        
+        let history = [];
+        let historyIndex = -1;
 
-        // --- Functions ---
+        let angleCreationState = {
+            active: false,
+            points: [],
+        };
+        
+        const SNAP_THRESHOLD = 10;
 
-        /**
-         * Sets the active tool and updates the UI accordingly.
-         * @param {string} toolName - The name of the tool to activate.
-         */
+        function saveState() {
+            history = history.slice(0, historyIndex + 1);
+            history.push(JSON.parse(JSON.stringify(svgObjects)));
+            historyIndex++;
+        }
+
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                svgObjects = JSON.parse(JSON.stringify(history[historyIndex]));
+                deselectObject();
+                render();
+            }
+        }
+
         function setActiveTool(toolName) {
             currentTool = toolName;
             Object.values(toolButtons).forEach(btn => btn.classList.remove('active'));
-            if (toolButtons[toolName]) {
-                toolButtons[toolName].classList.add('active');
-            }
+            toolButtons[toolName]?.classList.add('active');
             deselectObject();
+            angleCreationState.active = (toolName === 'measureAngle');
+            angleCreationState.points = [];
         }
 
-        /**
-         * Gets mouse coordinates relative to the SVG canvas.
-         * @param {MouseEvent} event - The mouse event.
-         * @returns {{x: number, y: number}}
-         */
         function getMousePos(event) {
             const rect = svgCanvas.getBoundingClientRect();
             return {
@@ -212,14 +242,43 @@
                 y: event.clientY - rect.top
             };
         }
-        
-        /**
-         * Main render function. Clears and redraws all objects on the SVG canvas.
-         */
-        function render() {
-            svgCanvas.innerHTML = ''; // Clear canvas
 
-            svgObjects.forEach(obj => {
+        function getSnapPoint(pos) {
+            // Grid snap
+            let snappedPos = { 
+                x: Math.round(pos.x / 20) * 20,
+                y: Math.round(pos.y / 20) * 20
+            };
+            let isSnapped = (Math.abs(pos.x - snappedPos.x) < SNAP_THRESHOLD) || (Math.abs(pos.y - snappedPos.y) < SNAP_THRESHOLD);
+
+            // Endpoint snap
+            for (const obj of svgObjects) {
+                if (obj.type === 'line') {
+                    const points = [{x: obj.x1, y: obj.y1}, {x: obj.x2, y: obj.y2}];
+                    for (const p of points) {
+                        const dist = Math.hypot(pos.x - p.x, pos.y - p.y);
+                        if (dist < SNAP_THRESHOLD) {
+                            return { ...p };
+                        }
+                    }
+                } else if (obj.type === 'circle') {
+                     const dist = Math.hypot(pos.x - obj.cx, pos.y - obj.cy);
+                     if (dist < SNAP_THRESHOLD) {
+                         return { x: obj.cx, y: obj.cy };
+                     }
+                }
+            }
+            
+            return isSnapped ? snappedPos : pos;
+        }
+
+        function render() {
+            svgCanvas.innerHTML = ''; 
+
+            const allObjects = [...svgObjects];
+            if (previewObject) allObjects.push(previewObject);
+
+            allObjects.forEach(obj => {
                 let element;
                 switch (obj.type) {
                     case 'line':
@@ -231,6 +290,15 @@
                         element.setAttribute('stroke', obj.color);
                         element.setAttribute('stroke-width', '2.5');
                         element.setAttribute('stroke-linecap', 'round');
+                        break;
+                    case 'circle':
+                        element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        element.setAttribute('cx', obj.cx);
+                        element.setAttribute('cy', obj.cy);
+                        element.setAttribute('r', obj.r);
+                        element.setAttribute('stroke', obj.color);
+                        element.setAttribute('stroke-width', '2.5');
+                        element.setAttribute('fill', 'none');
                         break;
                     case 'text':
                         element = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -248,31 +316,69 @@
                         element.setAttribute('class', 'right-angle-symbol');
                         element.setAttribute('stroke', obj.color);
                         break;
+                    case 'measureAngle':
+                        const [p1, vertex, p3] = obj.points;
+                        const angleRad1 = Math.atan2(p1.y - vertex.y, p1.x - vertex.x);
+                        const angleRad2 = Math.atan2(p3.y - vertex.y, p3.x - vertex.x);
+                        let angleDeg = (angleRad2 - angleRad1) * 180 / Math.PI;
+                        if (angleDeg < 0) angleDeg += 360;
+
+                        const arcRadius = 30;
+                        const startArc = { x: vertex.x + arcRadius * Math.cos(angleRad1), y: vertex.y + arcRadius * Math.sin(angleRad1) };
+                        const endArc = { x: vertex.x + arcRadius * Math.cos(angleRad2), y: vertex.y + arcRadius * Math.sin(angleRad2) };
+                        const largeArcFlag = (angleDeg <= 180) ? "0" : "1";
+
+                        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        path.setAttribute('d', `M ${startArc.x} ${startArc.y} A ${arcRadius} ${arcRadius} 0 ${largeArcFlag} 1 ${endArc.x} ${endArc.y}`);
+                        path.setAttribute('class', 'angle-arc');
+                        path.setAttribute('stroke', obj.color);
+
+                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        const textAngle = angleRad1 + (angleRad2 - angleRad1) / 2;
+                        text.setAttribute('x', vertex.x + (arcRadius + 15) * Math.cos(textAngle));
+                        text.setAttribute('y', vertex.y + (arcRadius + 15) * Math.sin(textAngle));
+                        text.setAttribute('fill', obj.color);
+                        text.setAttribute('font-size', '14');
+                        text.textContent = `${angleDeg.toFixed(1)}°`;
+                        
+                        group.appendChild(path);
+                        group.appendChild(text);
+                        element = group;
+                        break;
                 }
 
                 if (element) {
                     element.setAttribute('id', `obj-${obj.id}`);
-                    element.classList.add('drawable');
-                    if (obj.id === selectedObjectId) {
-                        element.classList.add('selected');
-                    }
-                    
-                    element.addEventListener('mousedown', (e) => {
-                        e.stopPropagation(); // Prevent canvas mousedown from firing
-                        if (currentTool === 'select') {
-                           selectObject(obj.id);
+                    if (!obj.isPreview) {
+                        element.classList.add('drawable');
+                        if (obj.id === selectedObjectId) {
+                            element.classList.add('selected');
                         }
-                    });
-
+                        element.addEventListener('mousedown', (e) => {
+                            e.stopPropagation();
+                            if (currentTool === 'select') selectObject(obj.id);
+                        });
+                    } else {
+                        element.setAttribute('opacity', '0.6');
+                        element.setAttribute('stroke-dasharray', '5 5');
+                    }
                     svgCanvas.appendChild(element);
                 }
             });
+
+            if (angleCreationState.active) {
+                angleCreationState.points.forEach(p => {
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.setAttribute('cx', p.x);
+                    circle.setAttribute('cy', p.y);
+                    circle.setAttribute('r', '5');
+                    circle.setAttribute('class', 'snap-point');
+                    svgCanvas.appendChild(circle);
+                });
+            }
         }
 
-        /**
-         * Selects an object, updates its properties in the panel, and re-renders.
-         * @param {number} id - The ID of the object to select.
-         */
         function selectObject(id) {
             selectedObjectId = id;
             const selectedObject = svgObjects.find(obj => obj.id === id);
@@ -293,9 +399,6 @@
             render();
         }
 
-        /**
-         * Deselects any currently selected object and hides the properties panel.
-         */
         function deselectObject() {
             selectedObjectId = null;
             propertiesPanel.classList.add('hidden');
@@ -303,48 +406,98 @@
             render();
         }
         
-        /**
-         * Updates the properties of the currently selected object.
-         * @param {string} prop - The property name to update.
-         * @param {*} value - The new value for the property.
-         */
         function updateSelectedObject(prop, value) {
             if (selectedObjectId === null) return;
             const obj = svgObjects.find(o => o.id === selectedObjectId);
             if (obj) {
                 obj[prop] = value;
+                saveState();
                 render();
             }
         }
 
         // --- Event Listeners ---
 
-        // Tool selection
         Object.entries(toolButtons).forEach(([name, btn]) => {
             btn.addEventListener('click', () => setActiveTool(name));
         });
 
-        // Canvas interactions
         svgCanvas.addEventListener('mousedown', (e) => {
             if (currentTool === 'select') {
                  deselectObject();
                  return;
             }
+            if (angleCreationState.active) return;
             isDrawing = true;
-            startPoint = getMousePos(e);
+            startPoint = getSnapPoint(getMousePos(e));
+        });
+
+        svgCanvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            let currentPos = getSnapPoint(getMousePos(e));
+
+            if (isShiftDown && (currentTool === 'line')) {
+                const dx = currentPos.x - startPoint.x;
+                const dy = currentPos.y - startPoint.y;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    currentPos.y = startPoint.y;
+                } else {
+                    currentPos.x = startPoint.x;
+                }
+            }
+            
+            const color = strokeColorInput.value;
+            switch (currentTool) {
+                case 'line':
+                    previewObject = { id: -1, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: currentPos.x, y2: currentPos.y, color, isPreview: true };
+                    break;
+                case 'circle':
+                    const r = Math.hypot(currentPos.x - startPoint.x, currentPos.y - startPoint.y);
+                    previewObject = { id: -1, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color, isPreview: true };
+                    break;
+            }
+            render();
         });
 
         svgCanvas.addEventListener('mouseup', (e) => {
+            const endPoint = getSnapPoint(getMousePos(e));
+
+            if (angleCreationState.active) {
+                angleCreationState.points.push(endPoint);
+                if (angleCreationState.points.length === 3) {
+                    const newObject = { id: nextId++, type: 'measureAngle', points: angleCreationState.points, color: strokeColorInput.value };
+                    svgObjects.push(newObject);
+                    angleCreationState.points = [];
+                    saveState();
+                }
+                render();
+                return;
+            }
+
             if (!isDrawing) return;
             isDrawing = false;
-            const endPoint = getMousePos(e);
+            previewObject = null;
             
             let newObject;
             const color = strokeColorInput.value;
 
             switch (currentTool) {
                 case 'line':
-                    newObject = { id: nextId++, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
+                    if (isShiftDown) {
+                        const dx = endPoint.x - startPoint.x;
+                        const dy = endPoint.y - startPoint.y;
+                        if (Math.abs(dx) > Math.abs(dy)) endPoint.y = startPoint.y;
+                        else endPoint.x = startPoint.x;
+                    }
+                    if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) > 5) {
+                        newObject = { id: nextId++, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
+                    }
+                    break;
+                case 'circle':
+                     const r = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
+                     if (r > 5) {
+                        newObject = { id: nextId++, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color };
+                     }
                     break;
                 case 'text':
                     const content = prompt("Enter text:", "A");
@@ -359,45 +512,69 @@
 
             if (newObject) {
                 svgObjects.push(newObject);
-                render();
+                saveState();
+            }
+            render();
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Shift') isShiftDown = true;
+            if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                undo();
+            }
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (selectedObjectId !== null) {
+                    svgObjects = svgObjects.filter(obj => obj.id !== selectedObjectId);
+                    deselectObject();
+                    saveState();
+                }
             }
         });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'Shift') isShiftDown = false;
+        });
 
-        // Properties panel interactions
         deleteBtn.addEventListener('click', () => {
             if (selectedObjectId !== null) {
                 svgObjects = svgObjects.filter(obj => obj.id !== selectedObjectId);
                 deselectObject();
+                saveState();
             }
         });
         
         textInput.addEventListener('input', (e) => updateSelectedObject('content', e.target.value));
         strokeColorInput.addEventListener('input', (e) => updateSelectedObject('color', e.target.value));
 
-        // Export interactions
         downloadBtn.addEventListener('click', () => {
-            const svgData = new XMLSerializer().serializeToString(svgCanvas);
-            const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-s' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'thelo-geometry.svg';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            deselectObject(); // Ensure no selection artifacts are in the export
+            setTimeout(() => {
+                const svgData = new XMLSerializer().serializeToString(svgCanvas);
+                const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'thelo-geometry.svg';
+                a.click();
+                URL.revokeObjectURL(url);
+            }, 100);
         });
 
         copyBtn.addEventListener('click', () => {
-            const svgData = new XMLSerializer().serializeToString(svgCanvas);
-            svgCodeOutput.value = svgData;
-            svgCodeOutput.select();
-            document.execCommand('copy');
-            alert('SVG code copied to clipboard!');
+            deselectObject();
+            setTimeout(() => {
+                const svgData = new XMLSerializer().serializeToString(svgCanvas);
+                svgCodeOutput.value = svgData;
+                svgCodeOutput.select();
+                document.execCommand('copy');
+                alert('SVG code copied to clipboard!');
+            }, 100);
         });
 
         // --- Initial Setup ---
         setActiveTool('select');
+        saveState();
     </script>
 
 </body>
