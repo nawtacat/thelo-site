@@ -53,6 +53,7 @@
         #svg-canvas.panning { cursor: grab; }
         #svg-canvas.can-drag { cursor: move; }
         #svg-canvas.crosshair { cursor: crosshair; }
+        #svg-canvas.cropping { cursor: crosshair; }
         
         .drawable:hover {
             stroke: var(--thelo-blue);
@@ -66,31 +67,15 @@
             stroke-dasharray: 5 5;
         }
         
-        .right-angle-symbol, .angle-arc {
-            fill: none;
-            stroke: var(--thelo-text);
-            stroke-width: 2;
-        }
-
-        .snap-point, .smart-guide-snap-indicator {
-            fill: var(--thelo-blue);
-            stroke: white;
-            stroke-width: 2px;
-            pointer-events: none;
-        }
-        
-        .smart-guide {
+        .crop-rect {
+            fill: rgba(37, 99, 235, 0.1);
             stroke: var(--thelo-blue);
-            stroke-width: 1px;
-            stroke-dasharray: 4 4;
-            pointer-events: none;
+            stroke-width: 2px;
+            stroke-dasharray: 6 6;
         }
 
-        .smart-guide-label {
-            fill: var(--thelo-blue);
-            font-family: 'Manrope', sans-serif;
-            font-size: 12px;
-            font-weight: bold;
+        .crop-overlay {
+            fill: rgba(0, 0, 0, 0.5);
             pointer-events: none;
         }
     </style>
@@ -103,7 +88,7 @@
             <h1 class="text-xl font-bold text-gray-800">Geometry Creator</h1>
         </div>
         <div class="text-sm text-gray-500">
-            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Shift</kbd> to straighten, <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Scroll</kbd> to Zoom
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Scroll</kbd> to Zoom, <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Backspace</kbd> to Delete
         </div>
     </header>
 
@@ -129,16 +114,23 @@
                         <i class="fas fa-font fa-lg w-5 text-center"></i>
                         <span class="text-sm font-semibold">Text</span>
                     </button>
-                    <button id="tool-right-angle" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
-                        <i class="far fa-square fa-lg w-5 text-center"></i>
-                        <span class="text-sm font-semibold">Right Angle</span>
-                    </button>
-                    <button id="tool-measure-angle" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
-                         <i class="fas fa-angle-left fa-lg w-5 text-center"></i>
-                        <span class="text-sm font-semibold">Measure</span>
+                    <button id="tool-crop" class="tool-btn flex items-center justify-center gap-2 p-3 rounded-lg border bg-gray-50 hover:bg-gray-100 col-span-2">
+                        <i class="fas fa-crop-simple fa-lg w-5 text-center"></i>
+                        <span class="text-sm font-semibold">Crop</span>
                     </button>
                 </div>
             </div>
+            
+            <div id="crop-actions" class="hidden space-y-3">
+                <h2 class="font-bold text-lg">Crop Area</h2>
+                 <button id="confirm-crop-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-check mr-2"></i>Confirm Crop
+                </button>
+                 <button id="cancel-crop-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-times mr-2"></i>Cancel
+                </button>
+            </div>
+
 
             <div id="properties-panel" class="hidden">
                 <h2 class="font-bold text-lg mb-3">Properties</h2>
@@ -196,34 +188,34 @@
         const downloadBtn = document.getElementById('download-btn');
         const copyBtn = document.getElementById('copy-btn');
         const svgCodeOutput = document.getElementById('svg-code-output');
+        const cropActions = document.getElementById('crop-actions');
+        const confirmCropBtn = document.getElementById('confirm-crop-btn');
+        const cancelCropBtn = document.getElementById('cancel-crop-btn');
         const toolButtons = {
             select: document.getElementById('tool-select'),
             line: document.getElementById('tool-line'),
             circle: document.getElementById('tool-circle'),
             text: document.getElementById('tool-text'),
-            rightAngle: document.getElementById('tool-right-angle'),
-            measureAngle: document.getElementById('tool-measure-angle'),
+            crop: document.getElementById('tool-crop'),
         };
 
         let currentTool = 'select';
         let svgObjects = [];
         let selectedObjectId = null;
-        let isShiftDown = false;
         let startPoint = { x: 0, y: 0 };
         let nextId = 0;
-        let previewObject = null;
         let history = [];
         let historyIndex = -1;
-        let angleCreationState = { active: false, points: [] };
+        let cropRect = null;
         let state = {
             isDrawing: false,
             isDragging: false,
             isPanning: false,
+            isCropping: false,
             dragStartPoint: {x: 0, y: 0},
             panStartPoint: {x: 0, y: 0},
         };
 
-        const SNAP_THRESHOLD = 10;
         const SELECTION_THRESHOLD = 10;
         
         let viewBox = { x: 0, y: 0, w: 1000, h: 750 };
@@ -231,15 +223,18 @@
 
         function saveState() {
             history = history.slice(0, historyIndex + 1);
-            history.push(JSON.parse(JSON.stringify(svgObjects)));
+            history.push({ objects: JSON.parse(JSON.stringify(svgObjects)), viewBox: { ...viewBox } });
             historyIndex++;
         }
 
         function undo() {
             if (historyIndex > 0) {
                 historyIndex--;
-                svgObjects = JSON.parse(JSON.stringify(history[historyIndex]));
+                const previousState = history[historyIndex];
+                svgObjects = JSON.parse(JSON.stringify(previousState.objects));
+                viewBox = { ...previousState.viewBox };
                 deselectObject();
+                render();
             }
         }
 
@@ -250,8 +245,9 @@
                 toolButtons[toolName].classList.add('active');
             }
             deselectObject();
-            angleCreationState.active = (toolName === 'measureAngle');
-            angleCreationState.points = [];
+            if (toolName !== 'crop') {
+                cancelCrop();
+            }
             updateCursor();
         }
 
@@ -275,6 +271,8 @@
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             const gridPattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
             gridPattern.setAttribute('id', 'grid');
+            gridPattern.setAttribute('x', viewBox.x);
+            gridPattern.setAttribute('y', viewBox.y);
             gridPattern.setAttribute('width', '20');
             gridPattern.setAttribute('height', '20');
             gridPattern.setAttribute('patternUnits', 'userSpaceOnUse');
@@ -289,16 +287,13 @@
             const gridRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             gridRect.setAttribute('x', viewBox.x);
             gridRect.setAttribute('y', viewBox.y);
-            gridRect.setAttribute('width', viewBox.w);
-            gridRect.setAttribute('height', viewBox.h);
+            gridRect.setAttribute('width', '100%');
+            gridRect.setAttribute('height', '100%');
             gridRect.setAttribute('fill', 'url(#grid)');
             svgCanvas.appendChild(gridRect);
 
 
-            const allObjects = [...svgObjects];
-            if (previewObject) allObjects.push(previewObject);
-
-            allObjects.forEach(obj => {
+            svgObjects.forEach(obj => {
                 let element;
                 switch (obj.type) {
                     case 'line':
@@ -330,66 +325,33 @@
                         element.setAttribute('font-family', 'Manrope, sans-serif');
                         element.textContent = obj.content;
                         break;
-                    case 'rightAngle':
-                        element = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        element.setAttribute('d', `M ${obj.x} ${obj.y+15} L ${obj.x+15} ${obj.y+15} L ${obj.x+15} ${obj.y}`);
-                        element.setAttribute('class', 'right-angle-symbol');
-                        element.setAttribute('stroke', obj.color);
-                        break;
-                    case 'measureAngle':
-                        const [p1, vertex, p3] = obj.points;
-                        const angleRad1 = Math.atan2(p1.y - vertex.y, p1.x - vertex.x);
-                        const angleRad2 = Math.atan2(p3.y - vertex.y, p3.x - vertex.x);
-                        let angleDeg = (angleRad2 - angleRad1) * 180 / Math.PI;
-                        if (angleDeg < 0) angleDeg += 360;
-
-                        const arcRadius = 30;
-                        const startArc = { x: vertex.x + arcRadius * Math.cos(angleRad1), y: vertex.y + arcRadius * Math.sin(angleRad1) };
-                        const endArc = { x: vertex.x + arcRadius * Math.cos(angleRad2), y: vertex.y + arcRadius * Math.sin(angleRad2) };
-                        const largeArcFlag = (angleDeg <= 180) ? "0" : "1";
-
-                        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        path.setAttribute('d', `M ${startArc.x} ${startArc.y} A ${arcRadius} ${arcRadius} 0 ${largeArcFlag} 1 ${endArc.x} ${endArc.y}`);
-                        path.setAttribute('class', 'angle-arc');
-                        path.setAttribute('stroke', obj.color);
-
-                        const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        const textAngle = angleRad1 + (angleRad2 - angleRad1) / 2;
-                        textEl.setAttribute('x', vertex.x + (arcRadius + 15) * Math.cos(textAngle));
-                        textEl.setAttribute('y', vertex.y + (arcRadius + 15) * Math.sin(textAngle));
-                        textEl.setAttribute('fill', obj.color);
-                        textEl.setAttribute('font-size', '14');
-                        textEl.textContent = `${angleDeg.toFixed(1)}°`;
-                        
-                        group.appendChild(path);
-                        group.appendChild(textEl);
-                        element = group;
-                        break;
                 }
 
                 if (element) {
                     element.setAttribute('id', `obj-${obj.id}`);
-                    if (!obj.isPreview) {
-                        element.classList.add('drawable');
-                        if (obj.id === selectedObjectId) element.classList.add('selected');
-                    } else {
-                        element.setAttribute('opacity', '0.6');
-                        element.setAttribute('stroke-dasharray', '5 5');
-                    }
+                    element.classList.add('drawable');
+                    if (obj.id === selectedObjectId) element.classList.add('selected');
                     svgCanvas.appendChild(element);
                 }
             });
 
-            if (angleCreationState.active) {
-                angleCreationState.points.forEach(p => {
-                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    circle.setAttribute('cx', p.x);
-                    circle.setAttribute('cy', p.y);
-                    circle.setAttribute('r', '5');
-                    circle.setAttribute('class', 'snap-point');
-                    svgCanvas.appendChild(circle);
-                });
+            if (cropRect) {
+                const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const {x, y, width, height} = cropRect;
+                const worldBorder = `M ${viewBox.x} ${viewBox.y} H ${viewBox.x + viewBox.w} V ${viewBox.y + viewBox.h} H ${viewBox.x} Z`;
+                const cropHole = `M ${x} ${y} H ${x + width} V ${y + height} H ${x} Z`;
+                overlay.setAttribute('d', worldBorder + " " + cropHole);
+                overlay.setAttribute('class', 'crop-overlay');
+                overlay.setAttribute('fill-rule', 'evenodd');
+                svgCanvas.appendChild(overlay);
+
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', cropRect.x);
+                rect.setAttribute('y', cropRect.y);
+                rect.setAttribute('width', cropRect.width);
+                rect.setAttribute('height', cropRect.height);
+                rect.setAttribute('class', 'crop-rect');
+                svgCanvas.appendChild(rect);
             }
 
             CTM = svgCanvas.getScreenCTM();
@@ -474,42 +436,8 @@
             return (minDistance < scaledThreshold) ? closest : null;
         }
 
-        function getSnapPoint(pos, ignoreGrid = false) {
-            const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
-            let snapped = { x: pos.x, y: pos.y, snapped: false };
-
-            // Endpoint and Midpoint Snap
-            for (const obj of svgObjects) {
-                if (obj.type === 'line') {
-                    const points = [
-                        {x: obj.x1, y: obj.y1}, 
-                        {x: obj.x2, y: obj.y2},
-                        {x: (obj.x1 + obj.x2) / 2, y: (obj.y1 + obj.y2) / 2} // Midpoint
-                    ];
-                    for (const p of points) {
-                        if (Math.hypot(pos.x - p.x, pos.y - p.y) < scaledSnapThreshold) {
-                            snapped = { ...p, snapped: true };
-                            return snapped;
-                        }
-                    }
-                }
-            }
-            
-            // Grid Snap
-            if (!ignoreGrid) {
-                const gridX = Math.round(pos.x / 20) * 20;
-                const gridY = Math.round(pos.y / 20) * 20;
-                if (Math.hypot(pos.x - gridX, pos.y - gridY) < scaledSnapThreshold) {
-                    snapped = { x: gridX, y: gridY, snapped: true };
-                    return snapped;
-                }
-            }
-
-            return snapped;
-        }
-
         function updateCursor(mousePos) {
-            svgCanvas.classList.remove('panning', 'can-drag', 'crosshair');
+            svgCanvas.classList.remove('panning', 'can-drag', 'crosshair', 'cropping');
             if (state.isPanning) {
                 svgCanvas.classList.add('panning');
                 return;
@@ -517,64 +445,28 @@
             if (currentTool === 'select') {
                 if (mousePos && findClosestObject(mousePos)) {
                     svgCanvas.classList.add('can-drag');
-                } else {
-                    svgCanvas.classList.add('panning'); // Default to panning if not over an object
                 }
+            } else if (currentTool === 'crop') {
+                svgCanvas.classList.add('cropping');
             } else {
                 svgCanvas.classList.add('crosshair');
             }
         }
 
-        function drawSmartGuides(start, end) {
-            // Clear previous guides
-            svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label, .smart-guide-snap-indicator').forEach(el => el.remove());
+        function confirmCrop() {
+            if (!cropRect) return;
+            viewBox.x = cropRect.x;
+            viewBox.y = cropRect.y;
+            viewBox.w = cropRect.width;
+            viewBox.h = cropRect.height;
+            cancelCrop();
+            saveState();
+        }
 
-            const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
-            const dx = Math.abs(start.x - end.x);
-            const dy = Math.abs(start.y - end.y);
-
-            let guide, label, snapIndicator;
-
-            if (dy < scaledSnapThreshold) { // Horizontal
-                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                guide.setAttribute('x1', viewBox.x);
-                guide.setAttribute('y1', start.y);
-                guide.setAttribute('x2', viewBox.x + viewBox.w);
-                guide.setAttribute('y2', start.y);
-                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                label.setAttribute('x', end.x + 10);
-                label.setAttribute('y', end.y - 10);
-                label.textContent = "Horizontal";
-                end.y = start.y;
-            } else if (dx < scaledSnapThreshold) { // Vertical
-                guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                guide.setAttribute('x1', start.x);
-                guide.setAttribute('y1', viewBox.y);
-                guide.setAttribute('x2', start.x);
-                guide.setAttribute('y2', viewBox.y + viewBox.h);
-                label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                label.setAttribute('x', end.x + 10);
-                label.setAttribute('y', end.y);
-                label.textContent = "Vertical";
-                end.x = start.x;
-            }
-
-            if (guide) {
-                guide.setAttribute('class', 'smart-guide');
-                svgCanvas.appendChild(guide);
-                label.setAttribute('class', 'smart-guide-label');
-                svgCanvas.appendChild(label);
-            }
-
-            const snapPoint = getSnapPoint(end, true);
-            if (snapPoint.snapped) {
-                snapIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                snapIndicator.setAttribute('cx', snapPoint.x);
-                snapIndicator.setAttribute('cy', snapPoint.y);
-                snapIndicator.setAttribute('r', '5');
-                snapIndicator.setAttribute('class', 'smart-guide-snap-indicator');
-                svgCanvas.appendChild(snapIndicator);
-            }
+        function cancelCrop() {
+            cropRect = null;
+            cropActions.classList.add('hidden');
+            render();
         }
 
         // --- Event Listeners ---
@@ -582,18 +474,6 @@
         svgCanvas.addEventListener('mousedown', (e) => {
             const mousePos = getMousePos(e);
             
-            if (angleCreationState.active) {
-                angleCreationState.points.push(mousePos);
-                if (angleCreationState.points.length === 3) {
-                    const newObject = { id: nextId++, type: 'measureAngle', points: angleCreationState.points, color: strokeColorInput.value };
-                    svgObjects.push(newObject);
-                    angleCreationState.points = [];
-                    saveState();
-                }
-                render();
-                return;
-            }
-
             if (currentTool === 'select') {
                 const target = findClosestObject(mousePos);
                 if (target) {
@@ -605,9 +485,12 @@
                     state.isPanning = true;
                     state.panStartPoint = { x: e.clientX, y: e.clientY };
                 }
+            } else if (currentTool === 'crop') {
+                state.isCropping = true;
+                startPoint = mousePos;
             } else {
                 state.isDrawing = true;
-                startPoint = getSnapPoint(mousePos).snapped ? getSnapPoint(mousePos) : mousePos;
+                startPoint = mousePos;
             }
             updateCursor(mousePos);
         });
@@ -643,26 +526,16 @@
                 return;
             }
 
-            if (state.isDrawing) {
-                let currentPos = mousePos;
-                drawSmartGuides(startPoint, currentPos);
-
-                if (isShiftDown && currentTool === 'line') {
-                    const dx = currentPos.x - startPoint.x;
-                    const dy = currentPos.y - startPoint.y;
-                    if (Math.abs(dx) > Math.abs(dy)) currentPos.y = startPoint.y;
-                    else currentPos.x = startPoint.x;
-                }
+            if (state.isDrawing || state.isCropping) {
+                const x = Math.min(startPoint.x, mousePos.x);
+                const y = Math.min(startPoint.y, mousePos.y);
+                const width = Math.abs(startPoint.x - mousePos.x);
+                const height = Math.abs(startPoint.y - mousePos.y);
                 
-                const color = strokeColorInput.value;
-                switch (currentTool) {
-                    case 'line':
-                        previewObject = { id: -1, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: currentPos.x, y2: currentPos.y, color, isPreview: true };
-                        break;
-                    case 'circle':
-                        const r = Math.hypot(currentPos.x - startPoint.x, currentPos.y - startPoint.y);
-                        previewObject = { id: -1, type: 'circle', cx: startPoint.x, cy: startPoint.y, r, color, isPreview: true };
-                        break;
+                if (state.isCropping) {
+                    cropRect = { x, y, width, height };
+                } else {
+                    // This logic is now simplified as preview objects are not needed for this version
                 }
                 render();
             }
@@ -677,30 +550,25 @@
                 updateCursor(getMousePos(e));
                 return;
             }
+            
+            if (state.isCropping) {
+                state.isCropping = false;
+                if (cropRect && (cropRect.width > 10 || cropRect.height > 10)) {
+                    cropActions.classList.remove('hidden');
+                } else {
+                    cancelCrop();
+                }
+                return;
+            }
 
             if (state.isDrawing) {
                 state.isDrawing = false;
-                svgCanvas.querySelectorAll('.smart-guide, .smart-guide-label, .smart-guide-snap-indicator').forEach(el => el.remove());
-                
                 let endPoint = getMousePos(e);
-                const snapEnd = getSnapPoint(endPoint);
-                if (snapEnd.snapped) endPoint = snapEnd;
-
                 let newObject;
                 const color = strokeColorInput.value;
 
                 switch (currentTool) {
                     case 'line':
-                        const dx = Math.abs(startPoint.x - endPoint.x);
-                        const dy = Math.abs(startPoint.y - endPoint.y);
-                        const scaledSnapThreshold = SNAP_THRESHOLD / (viewBox.w / 1000);
-                        if (dy < scaledSnapThreshold) endPoint.y = startPoint.y;
-                        if (dx < scaledSnapThreshold) endPoint.x = startPoint.x;
-                        if (isShiftDown) {
-                            if (dx > dy) endPoint.y = startPoint.y;
-                            else endPoint.x = startPoint.x;
-                        }
-
                         if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) > 5) {
                             newObject = { id: nextId++, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
                         }
@@ -717,12 +585,8 @@
                            newObject = { id: nextId++, type: 'text', x: startPoint.x, y: startPoint.y, content, color, fontSize: 20 };
                         }
                         break;
-                    case 'rightAngle':
-                        newObject = { id: nextId++, type: 'rightAngle', x: startPoint.x, y: startPoint.y, color };
-                        break;
                 }
 
-                previewObject = null;
                 if (newObject) {
                     svgObjects.push(newObject);
                     saveState();
@@ -749,8 +613,7 @@
         });
         
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Shift') isShiftDown = true;
-            if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+            if (e.ctrlKey && (e.key.toLowerCase() === 'z')) {
                 e.preventDefault();
                 undo();
             }
@@ -762,14 +625,13 @@
                 }
             }
         });
-        
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'Shift') isShiftDown = false;
-        });
 
         Object.entries(toolButtons).forEach(([name, btn]) => {
             btn.addEventListener('click', () => setActiveTool(name));
         });
+
+        confirmCropBtn.addEventListener('click', confirmCrop);
+        cancelCropBtn.addEventListener('click', cancelCrop);
 
         deleteBtn.addEventListener('click', () => {
             if (selectedObjectId !== null) {
@@ -787,35 +649,38 @@
         fontSizeInput.addEventListener('change', saveState);
         strokeColorInput.addEventListener('change', saveState);
 
+        function getSvgForExport() {
+            const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            tempSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            tempSvg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+            
+            svgObjects.forEach(obj => {
+                const element = document.getElementById(`obj-${obj.id}`)?.cloneNode(true);
+                if (element) {
+                    element.classList.remove('selected', 'drawable');
+                    tempSvg.appendChild(element);
+                }
+            });
+            return new XMLSerializer().serializeToString(tempSvg);
+        }
+
         downloadBtn.addEventListener('click', () => {
-            deselectObject();
-            setTimeout(() => {
-                const tempSvg = svgCanvas.cloneNode(true);
-                tempSvg.querySelector('#grid').parentElement.remove();
-                
-                const svgData = new XMLSerializer().serializeToString(tempSvg);
-                const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'thelo-geometry.svg';
-                a.click();
-                URL.revokeObjectURL(url);
-            }, 100);
+            const svgData = getSvgForExport();
+            const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'thelo-geometry.svg';
+            a.click();
+            URL.revokeObjectURL(url);
         });
 
         copyBtn.addEventListener('click', () => {
-            deselectObject();
-            setTimeout(() => {
-                const tempSvg = svgCanvas.cloneNode(true);
-                tempSvg.querySelector('#grid').parentElement.remove();
-                
-                const svgData = new XMLSerializer().serializeToString(tempSvg);
-                svgCodeOutput.value = svgData;
-                svgCodeOutput.select();
-                document.execCommand('copy');
-                alert('SVG code copied to clipboard!');
-            }, 100);
+            const svgData = getSvgForExport();
+            svgCodeOutput.value = svgData;
+            svgCodeOutput.select();
+            document.execCommand('copy');
+            alert('SVG code copied to clipboard!');
         });
 
         // --- Initial Setup ---
@@ -833,8 +698,10 @@
 
         window.addEventListener('resize', () => {
             const newBounds = canvasContainer.getBoundingClientRect();
-            viewBox.w = newBounds.width || 1000;
-            viewBox.h = newBounds.height || 750;
+            if (!state.isPanning && !state.isDrawing && !state.isCropping) {
+                viewBox.w = newBounds.width || 1000;
+                viewBox.h = newBounds.height || 750;
+            }
             render();
         });
     </script>
