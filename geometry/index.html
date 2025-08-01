@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thelo Geometry SVG Creator</title>
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+
+    <!-- Fonts and Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        /* Thelo Brand Colors and Base Styles */
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-blue-light: #EFF6FF;
+            --thelo-green: #10B981;
+            --thelo-amber: #F59E0B;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --thelo-text-light: #6B7280;
+            --grid-color: #E5E7EB;
+        }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            overflow: hidden; /* Prevent scrolling */
+        }
+
+        /* Custom Styles for the Tool */
+        .tool-btn {
+            transition: all 0.2s ease;
+        }
+
+        .tool-btn.active {
+            background-color: var(--thelo-blue);
+            color: white;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+        }
+        
+        #svg-canvas {
+            cursor: crosshair;
+            background-color: #fff;
+            background-image:
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px);
+            background-size: 20px 20px;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+        }
+        
+        /* Styles for SVG elements */
+        .drawable:hover {
+            stroke: var(--thelo-blue);
+            stroke-width: 3px;
+        }
+        
+        .selected {
+            stroke: var(--thelo-amber) !important;
+            stroke-width: 3.5px !important;
+            stroke-dasharray: 5 5;
+        }
+        
+        .right-angle-symbol {
+            fill: none;
+            stroke: var(--thelo-text);
+            stroke-width: 2;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex flex-col antialiased">
+
+    <!-- Header -->
+    <header class="bg-white/70 backdrop-blur-lg border-b border-gray-200 p-4 flex justify-between items-center">
+        <div class="flex items-center gap-4">
+            <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo logo" class="h-10 w-auto" />
+            <h1 class="text-xl font-bold text-gray-800">Geometry Creator</h1>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-grow flex gap-6 p-6 overflow-hidden">
+
+        <!-- Left Panel: Toolbar -->
+        <aside class="w-64 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-8">
+            <!-- Tools Section -->
+            <div>
+                <h2 class="font-bold text-lg mb-3">Tools</h2>
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="tool-select" class="tool-btn active flex flex-col items-center p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="fas fa-mouse-pointer fa-lg mb-1"></i>
+                        <span class="text-xs font-semibold">Select</span>
+                    </button>
+                    <button id="tool-line" class="tool-btn flex flex-col items-center p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="fas fa-drafting-compass fa-lg mb-1"></i>
+                        <span class="text-xs font-semibold">Line</span>
+                    </button>
+                    <button id="tool-text" class="tool-btn flex flex-col items-center p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="fas fa-font fa-lg mb-1"></i>
+                        <span class="text-xs font-semibold">Text</span>
+                    </button>
+                    <button id="tool-right-angle" class="tool-btn flex flex-col items-center p-3 rounded-lg border bg-gray-50 hover:bg-gray-100">
+                        <i class="far fa-square fa-lg mb-1"></i>
+                        <span class="text-xs font-semibold">Angle</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Properties Section -->
+            <div id="properties-panel" class="hidden">
+                <h2 class="font-bold text-lg mb-3">Properties</h2>
+                <div class="space-y-4">
+                    <!-- Text Properties -->
+                    <div id="text-properties" class="hidden">
+                        <label for="text-input" class="block text-sm font-medium text-gray-700">Text</label>
+                        <input type="text" id="text-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                     <!-- Common Properties -->
+                    <div>
+                        <label for="stroke-color" class="block text-sm font-medium text-gray-700">Color</label>
+                        <input type="color" id="stroke-color" value="#111827" class="mt-1 block w-full h-8 rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <button id="delete-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        <i class="fas fa-trash-alt mr-2"></i>Delete
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Export Section -->
+            <div class="mt-auto">
+                 <h2 class="font-bold text-lg mb-3">Export</h2>
+                 <div class="space-y-3">
+                    <button id="download-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        <i class="fas fa-download mr-2"></i>Download SVG
+                    </button>
+                    <button id="copy-btn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        <i class="fas fa-copy mr-2"></i>Copy Code
+                    </button>
+                 </div>
+            </div>
+        </aside>
+
+        <!-- Right Panel: SVG Canvas -->
+        <main class="flex-grow bg-white rounded-xl border border-gray-200">
+            <svg id="svg-canvas" class="w-full h-full"></svg>
+        </main>
+
+    </div>
+    
+    <!-- Hidden textarea for copying SVG code -->
+    <textarea id="svg-code-output" class="absolute -left-full"></textarea>
+
+
+    <script type="module">
+        // --- DOM Elements ---
+        const svgCanvas = document.getElementById('svg-canvas');
+        const propertiesPanel = document.getElementById('properties-panel');
+        const textProperties = document.getElementById('text-properties');
+        const textInput = document.getElementById('text-input');
+        const strokeColorInput = document.getElementById('stroke-color');
+        const deleteBtn = document.getElementById('delete-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const copyBtn = document.getElementById('copy-btn');
+        const svgCodeOutput = document.getElementById('svg-code-output');
+        const toolButtons = {
+            select: document.getElementById('tool-select'),
+            line: document.getElementById('tool-line'),
+            text: document.getElementById('tool-text'),
+            rightAngle: document.getElementById('tool-right-angle'),
+        };
+
+        // --- State ---
+        let currentTool = 'select';
+        let svgObjects = [];
+        let selectedObjectId = null;
+        let isDrawing = false;
+        let startPoint = { x: 0, y: 0 };
+        let nextId = 0;
+
+        // --- Functions ---
+
+        /**
+         * Sets the active tool and updates the UI accordingly.
+         * @param {string} toolName - The name of the tool to activate.
+         */
+        function setActiveTool(toolName) {
+            currentTool = toolName;
+            Object.values(toolButtons).forEach(btn => btn.classList.remove('active'));
+            if (toolButtons[toolName]) {
+                toolButtons[toolName].classList.add('active');
+            }
+            deselectObject();
+        }
+
+        /**
+         * Gets mouse coordinates relative to the SVG canvas.
+         * @param {MouseEvent} event - The mouse event.
+         * @returns {{x: number, y: number}}
+         */
+        function getMousePos(event) {
+            const rect = svgCanvas.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        }
+        
+        /**
+         * Main render function. Clears and redraws all objects on the SVG canvas.
+         */
+        function render() {
+            svgCanvas.innerHTML = ''; // Clear canvas
+
+            svgObjects.forEach(obj => {
+                let element;
+                switch (obj.type) {
+                    case 'line':
+                        element = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        element.setAttribute('x1', obj.x1);
+                        element.setAttribute('y1', obj.y1);
+                        element.setAttribute('x2', obj.x2);
+                        element.setAttribute('y2', obj.y2);
+                        element.setAttribute('stroke', obj.color);
+                        element.setAttribute('stroke-width', '2.5');
+                        element.setAttribute('stroke-linecap', 'round');
+                        break;
+                    case 'text':
+                        element = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        element.setAttribute('x', obj.x);
+                        element.setAttribute('y', obj.y);
+                        element.setAttribute('fill', obj.color);
+                        element.setAttribute('font-size', '20');
+                        element.setAttribute('font-weight', 'bold');
+                        element.setAttribute('font-family', 'Manrope, sans-serif');
+                        element.textContent = obj.content;
+                        break;
+                    case 'rightAngle':
+                        element = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        element.setAttribute('d', `M ${obj.x} ${obj.y+15} L ${obj.x+15} ${obj.y+15} L ${obj.x+15} ${obj.y}`);
+                        element.setAttribute('class', 'right-angle-symbol');
+                        element.setAttribute('stroke', obj.color);
+                        break;
+                }
+
+                if (element) {
+                    element.setAttribute('id', `obj-${obj.id}`);
+                    element.classList.add('drawable');
+                    if (obj.id === selectedObjectId) {
+                        element.classList.add('selected');
+                    }
+                    
+                    element.addEventListener('mousedown', (e) => {
+                        e.stopPropagation(); // Prevent canvas mousedown from firing
+                        if (currentTool === 'select') {
+                           selectObject(obj.id);
+                        }
+                    });
+
+                    svgCanvas.appendChild(element);
+                }
+            });
+        }
+
+        /**
+         * Selects an object, updates its properties in the panel, and re-renders.
+         * @param {number} id - The ID of the object to select.
+         */
+        function selectObject(id) {
+            selectedObjectId = id;
+            const selectedObject = svgObjects.find(obj => obj.id === id);
+            
+            if (selectedObject) {
+                propertiesPanel.classList.remove('hidden');
+                strokeColorInput.value = selectedObject.color;
+                
+                if (selectedObject.type === 'text') {
+                    textProperties.classList.remove('hidden');
+                    textInput.value = selectedObject.content;
+                } else {
+                    textProperties.classList.add('hidden');
+                }
+            } else {
+                deselectObject();
+            }
+            render();
+        }
+
+        /**
+         * Deselects any currently selected object and hides the properties panel.
+         */
+        function deselectObject() {
+            selectedObjectId = null;
+            propertiesPanel.classList.add('hidden');
+            textProperties.classList.add('hidden');
+            render();
+        }
+        
+        /**
+         * Updates the properties of the currently selected object.
+         * @param {string} prop - The property name to update.
+         * @param {*} value - The new value for the property.
+         */
+        function updateSelectedObject(prop, value) {
+            if (selectedObjectId === null) return;
+            const obj = svgObjects.find(o => o.id === selectedObjectId);
+            if (obj) {
+                obj[prop] = value;
+                render();
+            }
+        }
+
+        // --- Event Listeners ---
+
+        // Tool selection
+        Object.entries(toolButtons).forEach(([name, btn]) => {
+            btn.addEventListener('click', () => setActiveTool(name));
+        });
+
+        // Canvas interactions
+        svgCanvas.addEventListener('mousedown', (e) => {
+            if (currentTool === 'select') {
+                 deselectObject();
+                 return;
+            }
+            isDrawing = true;
+            startPoint = getMousePos(e);
+        });
+
+        svgCanvas.addEventListener('mouseup', (e) => {
+            if (!isDrawing) return;
+            isDrawing = false;
+            const endPoint = getMousePos(e);
+            
+            let newObject;
+            const color = strokeColorInput.value;
+
+            switch (currentTool) {
+                case 'line':
+                    newObject = { id: nextId++, type: 'line', x1: startPoint.x, y1: startPoint.y, x2: endPoint.x, y2: endPoint.y, color };
+                    break;
+                case 'text':
+                    const content = prompt("Enter text:", "A");
+                    if (content) {
+                       newObject = { id: nextId++, type: 'text', x: startPoint.x, y: startPoint.y, content, color };
+                    }
+                    break;
+                case 'rightAngle':
+                    newObject = { id: nextId++, type: 'rightAngle', x: startPoint.x, y: startPoint.y, color };
+                    break;
+            }
+
+            if (newObject) {
+                svgObjects.push(newObject);
+                render();
+            }
+        });
+
+        // Properties panel interactions
+        deleteBtn.addEventListener('click', () => {
+            if (selectedObjectId !== null) {
+                svgObjects = svgObjects.filter(obj => obj.id !== selectedObjectId);
+                deselectObject();
+            }
+        });
+        
+        textInput.addEventListener('input', (e) => updateSelectedObject('content', e.target.value));
+        strokeColorInput.addEventListener('input', (e) => updateSelectedObject('color', e.target.value));
+
+        // Export interactions
+        downloadBtn.addEventListener('click', () => {
+            const svgData = new XMLSerializer().serializeToString(svgCanvas);
+            const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-s' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'thelo-geometry.svg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        copyBtn.addEventListener('click', () => {
+            const svgData = new XMLSerializer().serializeToString(svgCanvas);
+            svgCodeOutput.value = svgData;
+            svgCodeOutput.select();
+            document.execCommand('copy');
+            alert('SVG code copied to clipboard!');
+        });
+
+        // --- Initial Setup ---
+        setActiveTool('select');
+    </script>
+
+</body>
+</html>
