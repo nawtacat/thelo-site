@@ -16,7 +16,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
-        /* Thelo Brand Colors and Base Styles */
         :root {
             --thelo-blue: #2563EB;
             --thelo-blue-light: #EFF6FF;
@@ -32,10 +31,9 @@
             font-family: 'Manrope', sans-serif;
             background-color: var(--thelo-bg);
             color: var(--thelo-text);
-            overflow: hidden; /* Prevent scrolling */
+            overflow: hidden;
         }
 
-        /* Custom Styles for the Tool */
         .tool-btn {
             transition: all 0.2s ease;
         }
@@ -49,15 +47,14 @@
         #svg-canvas {
             cursor: crosshair;
             background-color: #fff;
-            background-image:
-                linear-gradient(var(--grid-color) 1px, transparent 1px),
-                linear-gradient(to right, var(--grid-color) 1px, transparent 1px);
-            background-size: 20px 20px;
             border-radius: 0.75rem;
             box-shadow: 0 4px 14px rgba(0,0,0,0.05);
         }
+
+        #svg-canvas.panning {
+            cursor: grab;
+        }
         
-        /* Styles for SVG elements */
         .drawable:hover {
             stroke: var(--thelo-blue);
             stroke-width: 3px;
@@ -85,23 +82,19 @@
 </head>
 <body class="w-screen h-screen flex flex-col antialiased">
 
-    <!-- Header -->
-    <header class="bg-white/70 backdrop-blur-lg border-b border-gray-200 p-4 flex justify-between items-center">
+    <header class="bg-white/70 backdrop-blur-lg border-b border-gray-200 p-4 flex justify-between items-center z-10">
         <div class="flex items-center gap-4">
             <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo logo" class="h-10 w-auto" />
             <h1 class="text-xl font-bold text-gray-800">Geometry Creator</h1>
         </div>
         <div class="text-sm text-gray-500">
-            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Ctrl</kbd>+<kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Z</kbd> to Undo, <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Shift</kbd> to straighten lines.
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Shift</kbd> to straighten, <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Scroll</kbd> to Zoom
         </div>
     </header>
 
-    <!-- Main Content -->
     <div class="flex-grow flex gap-6 p-6 overflow-hidden">
 
-        <!-- Left Panel: Toolbar -->
-        <aside class="w-72 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-8">
-            <!-- Tools Section -->
+        <aside class="w-72 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-8 z-10">
             <div>
                 <h2 class="font-bold text-lg mb-3">Tools</h2>
                 <div class="grid grid-cols-2 gap-3">
@@ -132,13 +125,18 @@
                 </div>
             </div>
 
-            <!-- Properties Section -->
             <div id="properties-panel" class="hidden">
                 <h2 class="font-bold text-lg mb-3">Properties</h2>
                 <div class="space-y-4">
                     <div id="text-properties" class="hidden">
-                        <label for="text-input" class="block text-sm font-medium text-gray-700">Text</label>
-                        <input type="text" id="text-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <div>
+                            <label for="text-input" class="block text-sm font-medium text-gray-700">Text</label>
+                            <input type="text" id="text-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="font-size-input" class="block text-sm font-medium text-gray-700">Font Size</label>
+                            <input type="number" id="font-size-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm" min="1">
+                        </div>
                     </div>
                     <div>
                         <label for="stroke-color" class="block text-sm font-medium text-gray-700">Color</label>
@@ -150,7 +148,6 @@
                 </div>
             </div>
             
-            <!-- Export Section -->
             <div class="mt-auto">
                  <h2 class="font-bold text-lg mb-3">Export</h2>
                  <div class="space-y-3">
@@ -164,8 +161,7 @@
             </div>
         </aside>
 
-        <!-- Right Panel: SVG Canvas -->
-        <main class="flex-grow bg-white rounded-xl border border-gray-200">
+        <main class="flex-grow bg-white rounded-xl border border-gray-200" id="canvas-container">
             <svg id="svg-canvas" class="w-full h-full"></svg>
         </main>
 
@@ -175,9 +171,11 @@
 
     <script type="module">
         const svgCanvas = document.getElementById('svg-canvas');
+        const canvasContainer = document.getElementById('canvas-container');
         const propertiesPanel = document.getElementById('properties-panel');
         const textProperties = document.getElementById('text-properties');
         const textInput = document.getElementById('text-input');
+        const fontSizeInput = document.getElementById('font-size-input');
         const strokeColorInput = document.getElementById('stroke-color');
         const deleteBtn = document.getElementById('delete-btn');
         const downloadBtn = document.getElementById('download-btn');
@@ -197,19 +195,21 @@
         let selectedObjectId = null;
         let isDrawing = false;
         let isShiftDown = false;
+        let isDragging = false;
+        let isPanning = false;
         let startPoint = { x: 0, y: 0 };
+        let dragStartPoint = { x: 0, y: 0 };
         let nextId = 0;
         let previewObject = null;
-        
         let history = [];
         let historyIndex = -1;
-
-        let angleCreationState = {
-            active: false,
-            points: [],
-        };
+        let angleCreationState = { active: false, points: [] };
         
         const SNAP_THRESHOLD = 10;
+        const SELECTION_THRESHOLD = 10;
+        
+        let viewBox = { x: 0, y: 0, w: 1000, h: 750 };
+        let CTM; // Current Transformation Matrix
 
         function saveState() {
             history = history.slice(0, historyIndex + 1);
@@ -222,7 +222,6 @@
                 historyIndex--;
                 svgObjects = JSON.parse(JSON.stringify(history[historyIndex]));
                 deselectObject();
-                render();
             }
         }
 
@@ -236,44 +235,37 @@
         }
 
         function getMousePos(event) {
-            const rect = svgCanvas.getBoundingClientRect();
-            return {
-                x: event.clientX - rect.left,
-                y: event.clientY - rect.top
-            };
+            const pt = svgCanvas.createSVGPoint();
+            pt.x = event.clientX;
+            pt.y = event.clientY;
+            return pt.matrixTransform(CTM.inverse());
         }
-
-        function getSnapPoint(pos) {
-            // Grid snap
-            let snappedPos = { 
-                x: Math.round(pos.x / 20) * 20,
-                y: Math.round(pos.y / 20) * 20
-            };
-            let isSnapped = (Math.abs(pos.x - snappedPos.x) < SNAP_THRESHOLD) || (Math.abs(pos.y - snappedPos.y) < SNAP_THRESHOLD);
-
-            // Endpoint snap
-            for (const obj of svgObjects) {
-                if (obj.type === 'line') {
-                    const points = [{x: obj.x1, y: obj.y1}, {x: obj.x2, y: obj.y2}];
-                    for (const p of points) {
-                        const dist = Math.hypot(pos.x - p.x, pos.y - p.y);
-                        if (dist < SNAP_THRESHOLD) {
-                            return { ...p };
-                        }
-                    }
-                } else if (obj.type === 'circle') {
-                     const dist = Math.hypot(pos.x - obj.cx, pos.y - obj.cy);
-                     if (dist < SNAP_THRESHOLD) {
-                         return { x: obj.cx, y: obj.cy };
-                     }
-                }
-            }
-            
-            return isSnapped ? snappedPos : pos;
-        }
-
+        
         function render() {
-            svgCanvas.innerHTML = ''; 
+            svgCanvas.innerHTML = '';
+            svgCanvas.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+            
+            // Render grid
+            const gridPattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+            gridPattern.setAttribute('id', 'grid');
+            gridPattern.setAttribute('width', '20');
+            gridPattern.setAttribute('height', '20');
+            gridPattern.setAttribute('patternUnits', 'userSpaceOnUse');
+            const gridPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            gridPath.setAttribute('d', 'M 20 0 L 0 0 0 20');
+            gridPath.setAttribute('fill', 'none');
+            gridPath.setAttribute('stroke', 'var(--grid-color)');
+            gridPath.setAttribute('stroke-width', '1');
+            gridPattern.appendChild(gridPath);
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            defs.appendChild(gridPattern);
+            svgCanvas.appendChild(defs);
+            const gridRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            gridRect.setAttribute('width', '100%');
+            gridRect.setAttribute('height', '100%');
+            gridRect.setAttribute('fill', 'url(#grid)');
+            svgCanvas.appendChild(gridRect);
+
 
             const allObjects = [...svgObjects];
             if (previewObject) allObjects.push(previewObject);
@@ -298,67 +290,26 @@
                         element.setAttribute('r', obj.r);
                         element.setAttribute('stroke', obj.color);
                         element.setAttribute('stroke-width', '2.5');
-                        element.setAttribute('fill', 'none');
+                        element.setAttribute('fill', 'transparent');
                         break;
                     case 'text':
                         element = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         element.setAttribute('x', obj.x);
                         element.setAttribute('y', obj.y);
                         element.setAttribute('fill', obj.color);
-                        element.setAttribute('font-size', '20');
+                        element.setAttribute('font-size', obj.fontSize || '20');
                         element.setAttribute('font-weight', 'bold');
                         element.setAttribute('font-family', 'Manrope, sans-serif');
                         element.textContent = obj.content;
                         break;
-                    case 'rightAngle':
-                        element = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        element.setAttribute('d', `M ${obj.x} ${obj.y+15} L ${obj.x+15} ${obj.y+15} L ${obj.x+15} ${obj.y}`);
-                        element.setAttribute('class', 'right-angle-symbol');
-                        element.setAttribute('stroke', obj.color);
-                        break;
-                    case 'measureAngle':
-                        const [p1, vertex, p3] = obj.points;
-                        const angleRad1 = Math.atan2(p1.y - vertex.y, p1.x - vertex.x);
-                        const angleRad2 = Math.atan2(p3.y - vertex.y, p3.x - vertex.x);
-                        let angleDeg = (angleRad2 - angleRad1) * 180 / Math.PI;
-                        if (angleDeg < 0) angleDeg += 360;
-
-                        const arcRadius = 30;
-                        const startArc = { x: vertex.x + arcRadius * Math.cos(angleRad1), y: vertex.y + arcRadius * Math.sin(angleRad1) };
-                        const endArc = { x: vertex.x + arcRadius * Math.cos(angleRad2), y: vertex.y + arcRadius * Math.sin(angleRad2) };
-                        const largeArcFlag = (angleDeg <= 180) ? "0" : "1";
-
-                        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        path.setAttribute('d', `M ${startArc.x} ${startArc.y} A ${arcRadius} ${arcRadius} 0 ${largeArcFlag} 1 ${endArc.x} ${endArc.y}`);
-                        path.setAttribute('class', 'angle-arc');
-                        path.setAttribute('stroke', obj.color);
-
-                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        const textAngle = angleRad1 + (angleRad2 - angleRad1) / 2;
-                        text.setAttribute('x', vertex.x + (arcRadius + 15) * Math.cos(textAngle));
-                        text.setAttribute('y', vertex.y + (arcRadius + 15) * Math.sin(textAngle));
-                        text.setAttribute('fill', obj.color);
-                        text.setAttribute('font-size', '14');
-                        text.textContent = `${angleDeg.toFixed(1)}°`;
-                        
-                        group.appendChild(path);
-                        group.appendChild(text);
-                        element = group;
-                        break;
+                    // Other cases...
                 }
 
                 if (element) {
                     element.setAttribute('id', `obj-${obj.id}`);
                     if (!obj.isPreview) {
                         element.classList.add('drawable');
-                        if (obj.id === selectedObjectId) {
-                            element.classList.add('selected');
-                        }
-                        element.addEventListener('mousedown', (e) => {
-                            e.stopPropagation();
-                            if (currentTool === 'select') selectObject(obj.id);
-                        });
+                        if (obj.id === selectedObjectId) element.classList.add('selected');
                     } else {
                         element.setAttribute('opacity', '0.6');
                         element.setAttribute('stroke-dasharray', '5 5');
@@ -366,17 +317,7 @@
                     svgCanvas.appendChild(element);
                 }
             });
-
-            if (angleCreationState.active) {
-                angleCreationState.points.forEach(p => {
-                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    circle.setAttribute('cx', p.x);
-                    circle.setAttribute('cy', p.y);
-                    circle.setAttribute('r', '5');
-                    circle.setAttribute('class', 'snap-point');
-                    svgCanvas.appendChild(circle);
-                });
-            }
+            CTM = svgCanvas.getScreenCTM();
         }
 
         function selectObject(id) {
@@ -390,6 +331,7 @@
                 if (selectedObject.type === 'text') {
                     textProperties.classList.remove('hidden');
                     textInput.value = selectedObject.content;
+                    fontSizeInput.value = selectedObject.fontSize || 20;
                 } else {
                     textProperties.classList.add('hidden');
                 }
@@ -400,6 +342,7 @@
         }
 
         function deselectObject() {
+            if (selectedObjectId === null) return;
             selectedObjectId = null;
             propertiesPanel.classList.add('hidden');
             textProperties.classList.add('hidden');
@@ -410,40 +353,112 @@
             if (selectedObjectId === null) return;
             const obj = svgObjects.find(o => o.id === selectedObjectId);
             if (obj) {
-                obj[prop] = value;
-                saveState();
+                if (prop === 'fontSize') {
+                    obj[prop] = parseFloat(value);
+                } else {
+                    obj[prop] = value;
+                }
                 render();
             }
         }
 
-        // --- Event Listeners ---
+        function findClosestObject(pos) {
+            let closest = null;
+            let minDistance = Infinity;
 
-        Object.entries(toolButtons).forEach(([name, btn]) => {
-            btn.addEventListener('click', () => setActiveTool(name));
-        });
+            svgObjects.forEach(obj => {
+                let dist = Infinity;
+                if (obj.type === 'line') {
+                    const { x1, y1, x2, y2 } = obj;
+                    const l2 = (x2 - x1)**2 + (y2 - y1)**2;
+                    if (l2 === 0) {
+                        dist = Math.hypot(pos.x - x1, pos.y - y1);
+                    } else {
+                        let t = ((pos.x - x1) * (x2 - x1) + (pos.y - y1) * (y2 - y1)) / l2;
+                        t = Math.max(0, Math.min(1, t));
+                        dist = Math.hypot(pos.x - (x1 + t * (x2 - x1)), pos.y - (y1 + t * (y2 - y1)));
+                    }
+                } else if (obj.type === 'circle') {
+                    dist = Math.abs(Math.hypot(pos.x - obj.cx, pos.y - obj.cy) - obj.r);
+                } else if (obj.type === 'text') {
+                    const { x, y, content, fontSize } = obj;
+                    const w = content.length * (fontSize || 20) * 0.6;
+                    const h = (fontSize || 20);
+                    if (pos.x >= x && pos.x <= x + w && pos.y >= y - h && pos.y <= y) {
+                        dist = 0;
+                    }
+                }
+
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closest = obj;
+                }
+            });
+
+            return (minDistance < SELECTION_THRESHOLD) ? closest : null;
+        }
 
         svgCanvas.addEventListener('mousedown', (e) => {
+            const mousePos = getMousePos(e);
+            
             if (currentTool === 'select') {
-                 deselectObject();
-                 return;
+                const target = findClosestObject(mousePos);
+                if (target) {
+                    selectObject(target.id);
+                    isDragging = true;
+                    dragStartPoint = mousePos;
+                } else {
+                    deselectObject();
+                    isPanning = true;
+                    svgCanvas.classList.add('panning');
+                    startPoint = { x: e.clientX, y: e.clientY };
+                }
+                return;
             }
-            if (angleCreationState.active) return;
+
             isDrawing = true;
-            startPoint = getSnapPoint(getMousePos(e));
+            startPoint = mousePos;
         });
 
         svgCanvas.addEventListener('mousemove', (e) => {
-            if (!isDrawing) return;
-            let currentPos = getSnapPoint(getMousePos(e));
+            if (isPanning) {
+                const dx = (e.clientX - startPoint.x) * (viewBox.w / svgCanvas.clientWidth);
+                const dy = (e.clientY - startPoint.y) * (viewBox.h / svgCanvas.clientHeight);
+                viewBox.x -= dx;
+                viewBox.y -= dy;
+                startPoint = { x: e.clientX, y: e.clientY };
+                render();
+                return;
+            }
 
-            if (isShiftDown && (currentTool === 'line')) {
+            if (isDragging && selectedObjectId !== null) {
+                const mousePos = getMousePos(e);
+                const dx = mousePos.x - dragStartPoint.x;
+                const dy = mousePos.y - dragStartPoint.y;
+                const obj = svgObjects.find(o => o.id === selectedObjectId);
+                if (obj) {
+                    if (obj.type === 'line') {
+                        obj.x1 += dx; obj.y1 += dy;
+                        obj.x2 += dx; obj.y2 += dy;
+                    } else if (obj.type === 'circle') {
+                        obj.cx += dx; obj.cy += dy;
+                    } else { // text, rightAngle
+                        obj.x += dx; obj.y += dy;
+                    }
+                }
+                dragStartPoint = mousePos;
+                render();
+                return;
+            }
+
+            if (!isDrawing) return;
+            let currentPos = getMousePos(e);
+
+            if (isShiftDown && currentTool === 'line') {
                 const dx = currentPos.x - startPoint.x;
                 const dy = currentPos.y - startPoint.y;
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    currentPos.y = startPoint.y;
-                } else {
-                    currentPos.x = startPoint.x;
-                }
+                if (Math.abs(dx) > Math.abs(dy)) currentPos.y = startPoint.y;
+                else currentPos.x = startPoint.x;
             }
             
             const color = strokeColorInput.value;
@@ -460,24 +475,21 @@
         });
 
         svgCanvas.addEventListener('mouseup', (e) => {
-            const endPoint = getSnapPoint(getMousePos(e));
-
-            if (angleCreationState.active) {
-                angleCreationState.points.push(endPoint);
-                if (angleCreationState.points.length === 3) {
-                    const newObject = { id: nextId++, type: 'measureAngle', points: angleCreationState.points, color: strokeColorInput.value };
-                    svgObjects.push(newObject);
-                    angleCreationState.points = [];
-                    saveState();
-                }
-                render();
+            if (isPanning) {
+                isPanning = false;
+                svgCanvas.classList.remove('panning');
                 return;
             }
-
+            if (isDragging) {
+                isDragging = false;
+                saveState();
+                return;
+            }
             if (!isDrawing) return;
             isDrawing = false;
             previewObject = null;
             
+            let endPoint = getMousePos(e);
             let newObject;
             const color = strokeColorInput.value;
 
@@ -502,18 +514,31 @@
                 case 'text':
                     const content = prompt("Enter text:", "A");
                     if (content) {
-                       newObject = { id: nextId++, type: 'text', x: startPoint.x, y: startPoint.y, content, color };
+                       newObject = { id: nextId++, type: 'text', x: startPoint.x, y: startPoint.y, content, color, fontSize: 20 };
                     }
                     break;
-                case 'rightAngle':
-                    newObject = { id: nextId++, type: 'rightAngle', x: startPoint.x, y: startPoint.y, color };
-                    break;
+                // Other cases...
             }
 
             if (newObject) {
                 svgObjects.push(newObject);
                 saveState();
             }
+            render();
+        });
+
+        canvasContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const mousePos = getMousePos(e);
+            const zoomFactor = 1.1;
+            
+            const scale = (e.deltaY < 0) ? 1 / zoomFactor : zoomFactor;
+            
+            viewBox.x = mousePos.x + (viewBox.x - mousePos.x) * scale;
+            viewBox.y = mousePos.y + (viewBox.y - mousePos.y) * scale;
+            viewBox.w *= scale;
+            viewBox.h *= scale;
+            
             render();
         });
         
@@ -545,12 +570,22 @@
         });
         
         textInput.addEventListener('input', (e) => updateSelectedObject('content', e.target.value));
+        fontSizeInput.addEventListener('input', (e) => updateSelectedObject('fontSize', e.target.value));
         strokeColorInput.addEventListener('input', (e) => updateSelectedObject('color', e.target.value));
+        
+        textInput.addEventListener('change', saveState);
+        fontSizeInput.addEventListener('change', saveState);
+        strokeColorInput.addEventListener('change', saveState);
 
         downloadBtn.addEventListener('click', () => {
-            deselectObject(); // Ensure no selection artifacts are in the export
+            deselectObject();
             setTimeout(() => {
-                const svgData = new XMLSerializer().serializeToString(svgCanvas);
+                // Create a temporary SVG for export without the grid
+                const tempSvg = svgCanvas.cloneNode(true);
+                tempSvg.querySelector('#grid').parentElement.remove(); // Remove defs with grid
+                tempSvg.querySelector('rect[fill="url(#grid)"]').remove(); // Remove grid rect
+                
+                const svgData = new XMLSerializer().serializeToString(tempSvg);
                 const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -564,7 +599,11 @@
         copyBtn.addEventListener('click', () => {
             deselectObject();
             setTimeout(() => {
-                const svgData = new XMLSerializer().serializeToString(svgCanvas);
+                const tempSvg = svgCanvas.cloneNode(true);
+                tempSvg.querySelector('#grid').parentElement.remove();
+                tempSvg.querySelector('rect[fill="url(#grid)"]').remove();
+                
+                const svgData = new XMLSerializer().serializeToString(tempSvg);
                 svgCodeOutput.value = svgData;
                 svgCodeOutput.select();
                 document.execCommand('copy');
@@ -573,8 +612,15 @@
         });
 
         // --- Initial Setup ---
+        const initialBounds = canvasContainer.getBoundingClientRect();
+        viewBox.w = initialBounds.width;
+        viewBox.h = initialBounds.height;
         setActiveTool('select');
         saveState();
+        render();
+        window.addEventListener('resize', () => {
+            render();
+        });
     </script>
 
 </body>
