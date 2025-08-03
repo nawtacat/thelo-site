@@ -1999,69 +1999,66 @@ function addBoardDrawListeners() {
 let katexStylesheet = null;
 
 /**
- * Render headline with mixed plain text and KaTeX math.
- * - Uses up to 80% of board width; wraps to a new line when exceeded.
- * - New lines start at the same x (no re-centering per line).
- * - Text is split into words; math chunks (/K ... K/) are unbreakable.
+ * Mixed text + KaTeX headline renderer with 80% width wrapping.
+ * Two-pass line layout so every token on a line shares the same baseline.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
   if (!headline || !bgCtx) return;
 
-  // Ensure KaTeX CSS is available (cached)
+  // Cache/load KaTeX CSS
   if (!katexStylesheet) {
     try {
       const res = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      katexStylesheet = await res.text();
-    } catch (err) {
-      console.warn("KaTeX CSS fetch failed; continuing:", err);
-      katexStylesheet = "";
-    }
+      if (res.ok) katexStylesheet = await res.text(); else throw new Error(res.status);
+    } catch { katexStylesheet = ""; }
   }
 
-  // Split into text vs math segments
-  const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
-    if (part.startsWith('/K ') && part.endsWith(' K/')) {
-      return { type: 'math', content: part.slice(3, -3) };
-    }
-    return { type: 'text', content: part };
-  });
+  // Split into segments
+  const segments = (headline.split(/(\/K.*?K\/)/g) || [])
+    .filter(Boolean)
+    .map(p => (p.startsWith('/K ') && p.endsWith(' K/'))
+      ? { type: 'math', content: p.slice(3, -3) }
+      : { type: 'text', content: p });
 
   const fontColor    = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
-  const fontSize     = 20; // must match bgCtx.font set by caller
-  const mathFontSize = 22; // inline math close to text size
+  const fontSize     = 20; // assumes caller set a matching bgCtx.font
+  const mathFontSize = 22;
 
-  // Build atomic tokens (words/spaces for text; single token for math)
+  // Build atomic tokens
   const tokens = [];
   for (const seg of segments) {
     if (seg.type === 'text') {
-      const pieces = seg.content.match(/(\s+|[^\s]+)/g) || [];
-      for (const p of pieces) {
-        const w = bgCtx.measureText(p).width;
-        tokens.push({ type: 'text', content: p, width: w, height: fontSize, isSpace: /^\s+$/.test(p) });
+      const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
+      for (const p of parts) {
+        tokens.push({
+          type: 'text',
+          content: p,
+          width: bgCtx.measureText(p).width,
+          height: fontSize,
+          isSpace: /^\s+$/.test(p)
+        });
       }
     } else {
       try {
         const styled = `\\mathsf{${seg.content}}`;
-        const mathHtml = katex.renderToString(styled, { throwOnError: false, output: 'html' });
+        const html = katex.renderToString(styled, { throwOnError: false, output: 'html' });
 
-        // Measure actual size
         const temp = document.createElement('div');
         temp.style.position = 'absolute';
         temp.style.visibility = 'hidden';
         temp.style.color = fontColor;
         temp.style.fontSize = `${mathFontSize}px`;
-        temp.innerHTML = mathHtml;
+        temp.innerHTML = html;
         document.body.appendChild(temp);
-        const bounds = temp.querySelector('.katex').getBoundingClientRect();
+        const rect = temp.querySelector('.katex').getBoundingClientRect();
         document.body.removeChild(temp);
 
         const svg = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
             <style>${katexStylesheet}</style>
             <foreignObject width="100%" height="100%">
               <div xmlns="http://www.w3.org/1999/xhtml" style="color:${fontColor};font-size:${mathFontSize}px;display:inline-block;line-height:initial;">
-                ${mathHtml}
+                ${html}
               </div>
             </foreignObject>
           </svg>`;
@@ -2070,66 +2067,74 @@ async function renderComplexHeadline(bgCtx, headline, y) {
         image.src = dataUrl;
         await image.decode();
 
-        tokens.push({ type: 'math', image, width: bounds.width, height: bounds.height });
-      } catch (err) {
-        console.error("KaTeX render failed; fallback to text:", err);
+        tokens.push({ type: 'math', image, width: rect.width, height: rect.height });
+      } catch {
         const w = bgCtx.measureText(seg.content).width;
         tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
       }
     }
   }
 
-  // Layout within 80% of canvas width
+  // Layout constants
   const canvasW  = bgCtx.canvas.width / devicePixelRatio;
   const maxWidth = canvasW * 0.80;
-  const startX   = (canvasW - maxWidth) / 2; // left edge of the block
+  const startX   = (canvasW - maxWidth) / 2;
   const lineGap  = 8;
 
-  bgCtx.fillStyle = fontColor;
-  const prevAlign = bgCtx.textAlign;
-  const prevBase  = bgCtx.textBaseline;
-  bgCtx.textAlign = 'left';
-  bgCtx.textBaseline = 'top';
-
-  let x = startX;
-  let curY = y;
-  let lineMaxH = fontSize;
+  // -------- Pass 1: build lines & compute heights --------
+  const lines = [];
+  let line = { tokens: [], width: 0, height: fontSize };
 
   for (const t of tokens) {
-    let w = t.width, h = t.height;
-
-    // If a single math token is too wide, scale it to fit the block
-    if (t.type === 'math' && w > maxWidth) {
-      const s = maxWidth / w; w *= s; h *= s;
+    // scale oversize math to fit the block
+    let width = t.width, height = t.height, drawW = width, drawH = height;
+    if (t.type === 'math' && width > maxWidth) {
+      const s = maxWidth / width; drawW = width * s; drawH = height * s; width = drawW; height = drawH;
     }
+    const token = { ...t, width, height, drawW, drawH };
 
-    // Wrap if this token would overflow the 80% block
-    if (x !== startX && (x + w) > (startX + maxWidth)) {
-      x = startX;
-      curY += lineMaxH + lineGap;
-      lineMaxH = fontSize;
+    // wrap if needed (but never start a line with a space)
+    if (line.tokens.length && line.width + width > maxWidth) {
+      lines.push(line);
+      line = { tokens: [], width: 0, height: fontSize };
     }
-
-    // Skip leading spaces at a new line
-    if (t.isSpace && x === startX) continue;
-
-    // Vertically center each token within the line box
-    const topY = curY + (lineMaxH - h) / 2;
-
-    if (t.type === 'text') {
-      bgCtx.fillText(t.content, x, topY);
-    } else {
-      bgCtx.drawImage(t.image, x, topY, w, h);
+    if (!(line.tokens.length === 0 && token.isSpace)) {
+      line.tokens.push(token);
+      line.width += width;
+      if (height > line.height) line.height = height;
     }
+  }
+  if (line.tokens.length) lines.push(line);
 
-    x += w;
-    if (h > lineMaxH) lineMaxH = h;
+  // -------- Pass 2: render with a stable line height --------
+  bgCtx.fillStyle   = fontColor;
+  const prevAlign   = bgCtx.textAlign;
+  const prevBase    = bgCtx.textBaseline;
+  bgCtx.textAlign   = 'left';
+  bgCtx.textBaseline= 'top';
+
+  let curY = y;
+  for (const L of lines) {
+    let x = startX;
+    for (const t of L.tokens) {
+      const h = t.height;
+      const w = t.width;
+      const topY = curY + (L.height - h) / 2; // consistent vertical alignment within the line
+      if (t.type === 'text') {
+        bgCtx.fillText(t.content, x, topY);
+      } else {
+        bgCtx.drawImage(t.image, x, topY, t.drawW ?? w, t.drawH ?? h);
+      }
+      x += w;
+    }
+    curY += L.height + lineGap;
   }
 
-  // Restore
-  bgCtx.textAlign = prevAlign || 'center';
-  bgCtx.textBaseline = prevBase || 'top';
+  // restore
+  bgCtx.textAlign   = prevAlign || 'center';
+  bgCtx.textBaseline= prevBase  || 'top';
 }
+
 
 
 	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
