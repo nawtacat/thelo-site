@@ -2014,19 +2014,30 @@ function addBoardDrawListeners() {
         }
         if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
-	  /**
- * Renders text containing KaTeX math onto a canvas.
- * @param {CanvasRenderingContext2D} ctx - The canvas context to draw on.
- * @param {string} text - The string, which can contain $...$ delimiters.
- * @param {number} x - The center x-coordinate to draw the text.
- * @param {number} y - The top y-coordinate to draw the text.
- * @param {number} maxWidth - The maximum width the rendered text can occupy.
- * @param {string} fontFamily - The font for the non-math parts of the text.
- * @param {number} fontSize - The font size in pixels.
- * @param {string} color - The color of the text.
- */
+	// REPLACE your old renderMathToCanvas function with this one
+
 function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
+    // --- START: ADDED GUARD CLAUSE ---
+    // First, check if the KaTeX library is actually loaded and ready.
+    if (typeof katex === 'undefined') {
+        console.warn("KaTeX not loaded when renderMathToCanvas was called. Rendering as plain text.");
+        
+        // Fallback: Render the text without attempting math formatting.
+        ctx.font = `${fontSize}px '${fontFamily}', sans-serif`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        
+        // A simple way to strip the math delimiters ($) for the plain text fallback.
+        const plainText = text.replace(/\$/g, ''); 
+        wrapText(ctx, plainText, x, y, maxWidth, fontSize * 1.2);
+
+        return; // Exit the function to prevent the error.
+    }
+    // --- END: ADDED GUARD CLAUSE ---
+
     // 1. Create the KaTeX HTML. Wrap the text in a container that sets the base styles.
+    // This code will now only run if the check above passes.
     const styledText = `<div style="font-family: '${fontFamily}', sans-serif; font-size: ${fontSize}px; color: ${color};">${text}</div>`;
     const katexHtml = katex.renderToString(styledText, {
         displayMode: true, // Use displayMode for better layout control
