@@ -1987,12 +1987,21 @@ function addBoardDrawListeners() {
     /**
  * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
  */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
 let katexStylesheet = null;
 
 /**
  * Renders a headline containing mixed plain text and KaTeX math onto a canvas.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
- * @param {string} headline - The text to render, e.g. "Solve for x in /K x^2=4 K/".
+ * @param {string} headline - The text to render, e.g., "Solve for x in /K x^2=4 K/".
  * @param {number} y - The vertical position (baseline) to draw the text at.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
@@ -2015,53 +2024,69 @@ async function renderComplexHeadline(bgCtx, headline, y) {
     // 2. Parse the headline into 'text' and 'math' segments
     const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
         if (part.startsWith('/K ') && part.endsWith(' K/')) {
-            return { type: 'math', content: part.substring(3, part.length - 3) };
+            return {
+                type: 'math',
+                content: part.substring(3, part.length - 3)
+            };
         }
-        return { type: 'text', content: part };
+        return {
+            type: 'text',
+            content: part
+        };
     });
 
     const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-    const fontSize = 20; // Must match your bgCtx.font size
+    const fontSize = 20; // Font size for regular text
+    const mathFontSize = 26; // Larger font size for KaTeX math
 
     // 3. Process all segments to get their dimensions and image data (for math)
     const processedSegments = await Promise.all(segments.map(async (seg) => {
         if (seg.type === 'text') {
             const metrics = bgCtx.measureText(seg.content);
-            return { ...seg, width: metrics.width, height: fontSize };
+            return { ...seg,
+                width: metrics.width,
+                height: fontSize
+            };
         } else { // 'math'
             try {
-                const mathHtml = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
+                // ===== MODIFICATION IS HERE: Using \mathsf for a sans-serif look =====
+                const styledMathContent = `\\mathsf{${seg.content}}`;
+                const mathHtml = katex.renderToString(styledMathContent, {
+                    throwOnError: false,
+                    output: 'html'
+                });
 
                 // Create an SVG wrapper to convert the HTML to an image
                 const svg = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="200">
-                        <style>
-                            ${katexStylesheet}
-                        </style>
-                        <foreignObject width="100%" height="100%">
-                            <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${fontSize}px; display: inline-block; line-height: initial;">
-                                ${mathHtml}
-                            </div>
-                        </foreignObject>
-                    </svg>`;
-                
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="200">
+                            <style>
+                                ${katexStylesheet}
+                            </style>
+                            <foreignObject width="100%" height="100%">
+                                <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">
+                                    ${mathHtml}
+                                </div>
+                            </foreignObject>
+                        </svg>`;
+
                 // To get the real size, we must render it invisibly in the DOM first
                 const tempContainer = document.createElement('div');
                 tempContainer.style.position = 'absolute';
                 tempContainer.style.visibility = 'hidden';
                 tempContainer.style.color = fontColor;
+                tempContainer.style.fontSize = `${mathFontSize}px`;
                 tempContainer.innerHTML = mathHtml;
                 document.body.appendChild(tempContainer);
                 const bounds = tempContainer.querySelector('.katex').getBoundingClientRect();
                 document.body.removeChild(tempContainer);
 
                 const finalSvg = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}">
-                         <style>${katexStylesheet}</style>
-                        <foreignObject width="100%" height="100%">
-                           <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; display: inline-block; line-height: initial;">${mathHtml}</div>
-                        </foreignObject>
-                    </svg>`;
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}">
+                             <style>${katexStylesheet}</style>
+                            <foreignObject width="100%" height="100%">
+                               <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">${mathHtml}</div>
+                            </foreignObject>
+                        </svg>`;
 
                 const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(finalSvg)));
 
@@ -2069,13 +2094,22 @@ async function renderComplexHeadline(bgCtx, headline, y) {
                 image.src = dataUrl;
                 await image.decode(); // Wait for the image to be ready
 
-                return { ...seg, image, width: bounds.width, height: bounds.height };
+                return { ...seg,
+                    image,
+                    width: bounds.width,
+                    height: bounds.height
+                };
 
             } catch (err) {
                 console.error("KaTeX rendering failed:", err);
                 // Fallback for a failed math segment
                 const metrics = bgCtx.measureText(seg.content);
-                return { type: 'text', content: seg.content, width: metrics.width, height: fontSize };
+                return {
+                    type: 'text',
+                    content: seg.content,
+                    width: metrics.width,
+                    height: fontSize
+                };
             }
         }
     }));
@@ -2098,11 +2132,11 @@ async function renderComplexHeadline(bgCtx, headline, y) {
         currentX += seg.width;
     });
 
-     // Reset context properties to avoid affecting other drawing operations
+    // Reset context properties to avoid affecting other drawing operations
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
 }
-    function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
+	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
     function playStageAudio(
     audioSrc,
@@ -2206,8 +2240,43 @@ async function renderComplexHeadline(bgCtx, headline, y) {
     console.warn("Audio interaction needed for autoplay.");
     }
     }
+/**
+ * Finds and renders KaTeX markup within a string and returns it as HTML.
+ * @param {string} text - The input string, e.g. "The answer is /K x=5 K/".
+ * @returns {string} - The processed HTML string.
+ */
+function renderKatexInString(text) {
+    // If there's no KaTeX markup, return the original text to avoid processing.
+    if (!text || !text.includes('/K ')) {
+        return text;
+    }
 
-	function displayMcq(mcqDetails){
+    // Split the string into text and math parts.
+    const segments = text.split(/(\/K.*?K\/)/g).filter(Boolean);
+
+    const renderedHtml = segments.map(part => {
+        if (part.startsWith('/K ') && part.endsWith(' K/')) {
+            // This is a math part.
+            const mathContent = part.substring(3, part.length - 3);
+            try {
+                // Render it using KaTeX with the 'mathsf' style.
+                return katex.renderToString(`\\mathsf{${mathContent}}`, {
+                    throwOnError: false,
+                    displayMode: false // Important for inline rendering inside buttons
+                });
+            } catch (e) {
+                console.error("KaTeX rendering error in MCQ option:", e);
+                return mathContent; // Fallback to plain text on error.
+            }
+        } else {
+            // This is a plain text part.
+            return part;
+        }
+    }).join('');
+
+    return renderedHtml;
+}
+function displayMcq(mcqDetails) {
     const choices = mcqDetails.choices;
     if (!mcqOptionsContainer || !mcqDetails ||
         !Array.isArray(choices) || choices.length === 0) return;
@@ -2219,15 +2288,18 @@ async function renderComplexHeadline(bgCtx, headline, y) {
     const isShort = choices.every(choice => choice.length < 10);
     mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
 
-    /* <<—‑‑‑  ADD THESE TWO LINES  ‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑>> */
     const isSideBySide = !!(currentStageData && currentStageData.image);
     mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
-    /* --------------------------------------------------- */
 
     choices.forEach((optionText, index) => {
         const optionButton = document.createElement('button');
         optionButton.classList.add('mcq-option-btn');
-        optionButton.textContent  = optionText;
+        
+        // ===== MODIFIED LINE =====
+        // Use the new helper to render KaTeX inside the button.
+        optionButton.innerHTML = renderKatexInString(optionText);
+        // =========================
+
         optionButton.dataset.index = index;
         optionButton.addEventListener(
             'click',
@@ -2239,7 +2311,6 @@ async function renderComplexHeadline(bgCtx, headline, y) {
     mcqOptionsContainer.style.display = 'flex';
     mcqOptionsContainer.style.opacity = '1';
 }
-
 	
   // Replace your old function with this simplified version
 function handleMcqOptionClick(selectedIndex, mcqDetails){
