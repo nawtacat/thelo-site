@@ -1999,10 +1999,10 @@ function addBoardDrawListeners() {
 let katexStylesheet = null;
 
 /**
- * Renders a headline with mixed text and math, using an intelligent word-wrap
- * algorithm to create a balanced, top-heavy layout automatically.
+ * Renders a headline with mixed text and math, supporting KaTeX, manual newlines,
+ * bold text, and intelligent automatic word-wrapping.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
- * @param {string} headline - The text to render, e.g., "Solve for x in /K x^2=4 K/".
+ * @param {string} headline - The text to render.
  * @param {number} y - The vertical position to start drawing the first line.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
@@ -2016,32 +2016,35 @@ async function renderComplexHeadline(bgCtx, headline, y) {
             katexStylesheet = await response.text();
         } catch (error) {
             console.error("Failed to fetch KaTeX stylesheet:", error);
-            bgCtx.fillText(headline.replace(/\/K (.*?) K\//g, '$1'), bgCtx.canvas.width / devicePixelRatio / 2, y);
+            bgCtx.fillText(headline, bgCtx.canvas.width / devicePixelRatio / 2, y);
             return;
         }
     }
 
-    // Step 2: Parse the headline into 'text' and 'math' segments - Unchanged
-    const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
-        if (part.startsWith('/K ') && part.endsWith(' K/')) {
-            return { type: 'math', content: part.substring(3, part.length - 3) };
-        }
-        return { type: 'text', content: part };
-    });
+    // =========================================================================================
+    // NEW UNIFIED PROCESSING LOGIC
+    // =========================================================================================
 
+    // Step 2: Create a master list of all renderable "units" (words, math, newlines, etc.)
+    const allUnits = [];
     const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
     const fontSize = 20;
     const mathFontSize = 26;
+    const originalFont = bgCtx.font; // e.g., "20px 'Manrope'..."
+    const fontFamily = originalFont.split(' ').slice(1).join(' '); // e.g., "'Manrope'..."
+    const boldFont = `bold ${fontSize}px ${fontFamily}`;
 
-    // Step 3: Process all segments to get their dimensions and image data - Unchanged
-    // This part correctly creates the KaTeX images and measures all segments.
-    const processedSegments = await Promise.all(segments.map(async (seg) => {
-        if (seg.type === 'text') {
-            const metrics = bgCtx.measureText(seg.content);
-            return { ...seg, width: metrics.width, height: fontSize };
-        } else { // 'math'
+    // Split the headline by KaTeX blocks first, which are our unbreakable units.
+    const initialParts = headline.split(/(\/K.*?K\/)/g);
+
+    for (const part of initialParts) {
+        if (!part) continue;
+
+        if (part.startsWith('/K ') && part.endsWith(' K/')) {
+            // --- This is a KaTeX math block ---
+            const content = part.substring(3, part.length - 3);
             try {
-                const styledMathContent = `\\mathsf{${seg.content}}`;
+                const styledMathContent = `\\mathsf{${content}}`;
                 const mathHtml = katex.renderToString(styledMathContent, { throwOnError: false, output: 'html' });
                 const tempContainer = document.createElement('div');
                 tempContainer.style.position = 'absolute';
@@ -2055,98 +2058,92 @@ async function renderComplexHeadline(bgCtx, headline, y) {
                 const image = new Image();
                 image.src = dataUrl;
                 await image.decode();
-                return { ...seg, image, width: bounds.width, height: bounds.height };
+                allUnits.push({ type: 'math', image: image, width: bounds.width, height: bounds.height });
             } catch (err) {
                 console.error("KaTeX rendering failed:", err);
-                const metrics = bgCtx.measureText(seg.content);
-                return { type: 'text', content: seg.content, width: metrics.width, height: fontSize };
+            }
+        } else {
+            // --- This is a text block, which may contain words, bolding, and newlines ---
+            const textParts = part.split(/(\n|\*\*.*?\*\*)/g).filter(Boolean); // Split by newlines or bold markers
+            
+            for (const textPart of textParts) {
+                if (textPart === '\n') {
+                    allUnits.push({ type: 'newline' });
+                } else if (textPart.startsWith('**') && textPart.endsWith('**')) {
+                    const word = textPart.substring(2, textPart.length - 2);
+                    bgCtx.font = boldFont;
+                    allUnits.push({ type: 'word', content: word, width: bgCtx.measureText(word).width, height: fontSize, isBold: true });
+                    bgCtx.font = originalFont; // Reset
+                } else {
+                    const words = textPart.trim().split(/\s+/).filter(Boolean);
+                    for (const word of words) {
+                         allUnits.push({ type: 'word', content: word, width: bgCtx.measureText(word).width, height: fontSize, isBold: false });
+                    }
+                }
             }
         }
-    }));
+    }
 
-    // =========================================================================================
-    // NEW & CORRECTED LOGIC: Replaces the original drawing logic with a word-wrapping algorithm
-    // =========================================================================================
-
-    // 4. Flatten all processed segments into a single list of "units" (words and math blocks)
-    const allUnits = [];
-    processedSegments.forEach(seg => {
-        if (seg.type === 'text') {
-            const words = seg.content.trim().split(/\s+/).filter(Boolean); // filter(Boolean) removes empty strings from split
-            words.forEach(word => {
-                allUnits.push({
-                    type: 'word',
-                    content: word,
-                    width: bgCtx.measureText(word).width,
-                    height: seg.height
-                });
-            });
-        } else { // Math segments are already fully processed and are treated as a single, unbreakable unit
-            allUnits.push(seg);
-        }
-    });
-
-    // 5. Arrange all units into lines using a greedy word-wrap algorithm
+    // Step 3: Arrange all units into lines using the wrapping algorithm
     const lines = [];
     let currentLine = [];
     let currentLineWidth = 0;
     const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-    const maxWidth = canvasWidth * 0.85; // Use up to 85% of the canvas width
+    const maxWidth = canvasWidth * 0.85;
     const spaceWidth = bgCtx.measureText(' ').width;
 
     allUnits.forEach(unit => {
-        // Determine the width required for this unit, including a space if it's not the first on the line
-        const requiredWidth = (currentLine.length === 0) ? unit.width : (spaceWidth + unit.width);
+        if (unit.type === 'newline') {
+            if (currentLine.length > 0) lines.push({ units: currentLine, width: currentLineWidth });
+            lines.push({ units: [], width: 0, isManualBreak: true }); // Represent the manual break
+            currentLine = [];
+            currentLineWidth = 0;
+            return;
+        }
 
+        const requiredWidth = (currentLine.length === 0) ? unit.width : (spaceWidth + unit.width);
         if (currentLine.length > 0 && (currentLineWidth + requiredWidth) > maxWidth) {
-            // The line is full. Finalize it and start a new one.
             lines.push({ units: currentLine, width: currentLineWidth });
             currentLine = [unit];
             currentLineWidth = unit.width;
         } else {
-            // Add the unit to the current line.
             currentLine.push(unit);
-            currentLineWidth += requiredWidth;
+            currentLineWidth = (currentLine.length === 1) ? unit.width : currentLineWidth + requiredWidth;
         }
     });
-    // Add the last remaining line.
-    if (currentLine.length > 0) {
-        lines.push({ units: currentLine, width: currentLineWidth });
-    }
+    if (currentLine.length > 0) lines.push({ units: currentLine, width: currentLineWidth });
 
-    // 6. Draw the arranged lines, centering each one
+    // Step 4: Draw the arranged lines
     let currentY = y;
     bgCtx.textAlign = 'left';
     bgCtx.textBaseline = 'middle';
 
     lines.forEach(line => {
+        if (line.isManualBreak) { // Handle empty lines from \n\n
+             currentY += 20; // Add a smaller gap for an empty line
+             return;
+        }
         let currentX = (canvasWidth - line.width) / 2;
         let maxUnitHeight = 0;
 
         line.units.forEach((unit, index) => {
-            if (unit.height > maxUnitHeight) {
-                maxUnitHeight = unit.height;
-            }
+            if (unit.height > maxUnitHeight) maxUnitHeight = unit.height;
+            bgCtx.font = unit.isBold ? boldFont : originalFont;
 
-            // Draw the unit based on its type
             if (unit.type === 'word') {
                 bgCtx.fillText(unit.content, currentX, currentY);
-            } else { // 'math'
+            } else if (unit.type === 'math') {
                 bgCtx.drawImage(unit.image, currentX, currentY - unit.height / 2, unit.width, unit.height);
             }
-
-            // Advance the X position for the next unit
+            
             currentX += unit.width;
-            if (index < line.units.length - 1) { // Add a space unless it's the last unit
-                currentX += spaceWidth;
-            }
+            if (index < line.units.length - 1) currentX += spaceWidth;
         });
         
-        // Advance the Y position for the next line
         currentY += Math.max(35, maxUnitHeight + 10);
     });
 
-    // Reset context properties to avoid affecting other drawing operations
+    bgCtx.font = originalFont; // Final reset
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
 }
