@@ -1981,34 +1981,60 @@ function addBoardDrawListeners() {
  * @param {number} maxWidth The maximum width for a line of text.
  * @param {number} lineHeight The height of each line.
  */
+/**
+ * Renders text on a canvas, automatically wrapping it by word, and then by character
+ * if a single word is too long. Keeps the block centered.
+ * @param {CanvasRenderingContext2D} context The canvas rendering context.
+ * @param {string} text The text string to draw.
+ * @param {number} y The desired vertical center for the entire text block.
+ * @param {number} maxWidth The maximum width for a line of text.
+ * @param {number} lineHeight The height of each line.
+ */
 function wrapText(context, text, y, maxWidth, lineHeight) {
     const canvasWidth = context.canvas.width / (window.devicePixelRatio || 1);
+    
+    // First pass: wrap by whole words
     const words = text.split(' ');
-    let line = '';
-    const lines = [];
-
-    // First, break the text into an array of lines based on maxWidth
-    for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        if (context.measureText(testLine).width > maxWidth && n > 0) {
-            lines.push(line.trim());
-            line = words[n] + ' ';
+    const preliminaryLines = [];
+    let currentLine = '';
+    for (const word of words) {
+        const testLine = currentLine + (currentLine === '' ? '' : ' ') + word;
+        if (context.measureText(testLine).width > maxWidth && currentLine !== '') {
+            preliminaryLines.push(currentLine);
+            currentLine = word;
         } else {
-            line = testLine;
+            currentLine = testLine;
         }
     }
-    lines.push(line.trim());
+    preliminaryLines.push(currentLine);
 
-    // Calculate the starting Y position to center the entire block vertically around y
-    const blockHeight = (lines.length - 1) * lineHeight;
+    // Second pass: wrap any line that is still too long (i.e., a single long word)
+    const finalLines = [];
+    for (const line of preliminaryLines) {
+        if (context.measureText(line).width > maxWidth) {
+            let tempLine = '';
+            for (const char of line) {
+                if (context.measureText(tempLine + char).width > maxWidth) {
+                    finalLines.push(tempLine);
+                    tempLine = char;
+                } else {
+                    tempLine += char;
+                }
+            }
+            finalLines.push(tempLine);
+        } else {
+            finalLines.push(line);
+        }
+    }
+
+    // Drawing logic: Renders the final wrapped lines centered on the canvas
+    const blockHeight = (finalLines.length - 1) * lineHeight;
     let currentY = y - (blockHeight / 2);
 
-    // Set text alignment properties for drawing
     context.textAlign = 'center';
     context.textBaseline = 'middle';
 
-    // Draw each line centered
-    for (const singleLine of lines) {
+    for (const singleLine of finalLines) {
         context.fillText(singleLine, canvasWidth / 2, currentY);
         currentY += lineHeight;
     }
