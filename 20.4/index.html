@@ -3920,56 +3920,40 @@ window.addEventListener('wheel', function(e) {
     }
 
     if (typeof window.appInitialized === 'undefined') {
-        window.appInitialized = false;
-    }
+        window.appInitialized = false;
+    }
 
-    // REPLACE your entire auth.onAuthStateChanged function with this one.
+    // CORRECTED STARTUP LOGIC
+    document.addEventListener('DOMContentLoaded', () => {
+        // 1. Call runApplication() to load scripts and initialize the app.
+        runApplication();
 
-// REPLACE WITH THIS CODE BLOCK:
-document.addEventListener('DOMContentLoaded', () => {
-    auth.onAuthStateChanged(user => {
-        // This inner function will run only after all async tasks are done.
-        const finishInitialization = () => {
-            if (!window.appInitialized) {
-                window.appInitialized = true;
-                initApp();
-            } else {
-                updateAllUITexts();
-            }
-            // Set the flag to true as the very last step.
+        // 2. Set up the auth listener to handle user data in parallel.
+        //    This no longer initializes the app, it only updates user state.
+        auth.onAuthStateChanged(user => {
             isAuthReady = true;
-            console.log("Authentication is now ready.");
-        };
+            console.log("Authentication state has been determined.");
 
-        if (user) {
-            console.log("User authenticated with UID:", user.uid);
-            const userDocRef = db.collection('thelo-students').doc(user.uid);
-            
-            // This is an async call. We must wait for it to finish.
-            userDocRef.get().then(doc => {
-                if (doc.exists) {
-                    userPoints = doc.data().points || 0;
-                } else {
+            if (user) {
+                console.log("User is authenticated:", user.uid);
+                const userDocRef = db.collection('thelo-students').doc(user.uid);
+                
+                userDocRef.get().then(doc => {
+                    userPoints = doc.exists ? (doc.data().points || 0) : 0;
+                    updatePointsDisplay();
+                }).catch(error => {
+                    console.error("Error fetching user points:", error);
                     userPoints = 0;
-                    console.log("No points document found for user, starting at 0.");
-                }
-                updatePointsDisplay();
-                finishInitialization(); // Finish init AFTER getting points.
-            }).catch(error => {
-                console.error("Error fetching user points:", error);
+                    updatePointsDisplay();
+                });
+            } else {
                 userPoints = 0;
                 updatePointsDisplay();
-                finishInitialization(); // Also finish init if there's an error.
-            });
-        } else {
-            // If there is no user, there's no async task, so we can proceed.
-            userPoints = 0;
-            updatePointsDisplay();
-            console.log("User not authenticated.");
-            finishInitialization();
-        }
+                console.log("User is not authenticated.");
+            }
+        });
     });
-});
+
 
 // Add this function somewhere logical, e.g., near updateUserPointsInFirestore
 async function logDigitForTraining(recognizedValue, feedbackType) {
