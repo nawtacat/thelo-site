@@ -1984,17 +1984,25 @@ function addBoardDrawListeners() {
         }
         if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
-  /**
+    /**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
  * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
  */
 let katexStylesheet = null;
 
 /**
- * Renders a headline containing mixed plain text and KaTeX math onto a canvas,
- * wrapping the content to new lines if it exceeds 80% of the canvas width.
+ * Renders a headline containing mixed plain text and KaTeX math onto a canvas.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
- * @param {string} headline - The text to render.
- * @param {number} y - The vertical position for the top of the text block.
+ * @param {string} headline - The text to render, e.g., "Solve for x in /K x^2=4 K/".
+ * @param {number} y - The vertical position (baseline) to draw the text at.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
     if (!headline || !bgCtx) return;
@@ -2007,112 +2015,124 @@ async function renderComplexHeadline(bgCtx, headline, y) {
             katexStylesheet = await response.text();
         } catch (error) {
             console.error("Failed to fetch KaTeX stylesheet:", error);
+            // Fallback: render the headline as plain text
             bgCtx.fillText(headline.replace(/\/K (.*?) K\//g, '$1'), bgCtx.canvas.width / devicePixelRatio / 2, y);
             return;
         }
     }
 
-    const originalFontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-    const fontSize = 20;
-    const mathFontSize = 26;
-    const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-    
-    // Set font for measurement
-    bgCtx.font = `${fontSize}px ${originalFontFamily}`;
-
-    // 2. Parse the headline and break text into word-level segments for better wrapping
-    const rawSegments = headline.split(/(\/K.*?K\/)/g).filter(Boolean);
-    const wordLevelSegments = [];
-
-    rawSegments.forEach(part => {
+    // 2. Parse the headline into 'text' and 'math' segments
+    const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
         if (part.startsWith('/K ') && part.endsWith(' K/')) {
-            wordLevelSegments.push({ type: 'math', content: part.substring(3, part.length - 3) });
-        } else {
-            // For text parts, split them into individual words
-            part.split(' ').forEach(word => {
-                if (word) {
-                    wordLevelSegments.push({ type: 'text', content: word });
-                }
-            });
+            return {
+                type: 'math',
+                content: part.substring(3, part.length - 3)
+            };
         }
+        return {
+            type: 'text',
+            content: part
+        };
     });
 
-    // 3. Process all segments to get their final dimensions
-    const processedSegments = await Promise.all(wordLevelSegments.map(async (seg) => {
+    const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+    const fontSize = 20; // Font size for regular text
+    const mathFontSize = 26; // Larger font size for KaTeX math
+
+    // 3. Process all segments to get their dimensions and image data (for math)
+    const processedSegments = await Promise.all(segments.map(async (seg) => {
         if (seg.type === 'text') {
-            const metrics = bgCtx.measureText(seg.content + ' '); // Measure with space for layout
-            return { ...seg, width: metrics.width, height: fontSize };
+            const metrics = bgCtx.measureText(seg.content);
+            return { ...seg,
+                width: metrics.width,
+                height: fontSize
+            };
         } else { // 'math'
             try {
+                // ===== MODIFICATION IS HERE: Using \mathsf for a sans-serif look =====
                 const styledMathContent = `\\mathsf{${seg.content}}`;
-                const mathHtml = katex.renderToString(styledMathContent, { throwOnError: false, output: 'html' });
+                const mathHtml = katex.renderToString(styledMathContent, {
+                    throwOnError: false,
+                    output: 'html'
+                });
+
+                // Create an SVG wrapper to convert the HTML to an image
+                const svg = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="200">
+                            <style>
+                                ${katexStylesheet}
+                            </style>
+                            <foreignObject width="100%" height="100%">
+                                <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">
+                                    ${mathHtml}
+                                </div>
+                            </foreignObject>
+                        </svg>`;
+
+                // To get the real size, we must render it invisibly in the DOM first
                 const tempContainer = document.createElement('div');
-                tempContainer.style.position = 'absolute'; tempContainer.style.visibility = 'hidden';
-                tempContainer.style.color = fontColor; tempContainer.style.fontSize = `${mathFontSize}px`;
+                tempContainer.style.position = 'absolute';
+                tempContainer.style.visibility = 'hidden';
+                tempContainer.style.color = fontColor;
+                tempContainer.style.fontSize = `${mathFontSize}px`;
                 tempContainer.innerHTML = mathHtml;
                 document.body.appendChild(tempContainer);
                 const bounds = tempContainer.querySelector('.katex').getBoundingClientRect();
                 document.body.removeChild(tempContainer);
-                const finalSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}"><style>${katexStylesheet}</style><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">${mathHtml}</div></foreignObject></svg>`;
+
+                const finalSvg = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}">
+                             <style>${katexStylesheet}</style>
+                            <foreignObject width="100%" height="100%">
+                               <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">${mathHtml}</div>
+                            </foreignObject>
+                        </svg>`;
+
                 const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(finalSvg)));
+
                 const image = new Image();
                 image.src = dataUrl;
-                await image.decode();
-                // Add a little extra width for spacing around formulas
-                return { ...seg, image, width: bounds.width + bgCtx.measureText(' ').width, height: bounds.height };
+                await image.decode(); // Wait for the image to be ready
+
+                return { ...seg,
+                    image,
+                    width: bounds.width,
+                    height: bounds.height
+                };
+
             } catch (err) {
                 console.error("KaTeX rendering failed:", err);
-                const metrics = bgCtx.measureText(seg.content + ' ');
-                return { type: 'text', content: seg.content, width: metrics.width, height: fontSize };
+                // Fallback for a failed math segment
+                const metrics = bgCtx.measureText(seg.content);
+                return {
+                    type: 'text',
+                    content: seg.content,
+                    width: metrics.width,
+                    height: fontSize
+                };
             }
         }
     }));
 
-    // 4. Distribute segments into lines
-    const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-    const maxWidth = canvasWidth * 0.8;
-    const lineHeight = 40; // You can adjust this for line spacing
-    const lines = [];
-    let currentLine = [];
-    let currentLineWidth = 0;
+    // 4. Calculate total width and draw centered on the canvas
+    const totalWidth = processedSegments.reduce((sum, seg) => sum + seg.width, 0);
+    let currentX = (bgCtx.canvas.width / devicePixelRatio - totalWidth) / 2;
+
+    bgCtx.textAlign = 'left';
+    bgCtx.textBaseline = 'middle'; // Align everything to the middle vertically
 
     processedSegments.forEach(seg => {
-        if (currentLineWidth + seg.width > maxWidth && currentLine.length > 0) {
-            lines.push(currentLine);
-            currentLine = [seg];
-            currentLineWidth = seg.width;
-        } else {
-            currentLine.push(seg);
-            currentLineWidth += seg.width;
+        const yPos = y; // Use the middle baseline for all parts
+        if (seg.type === 'text') {
+            bgCtx.fillText(seg.content, currentX, yPos);
+        } else { // 'math'
+            // Draw the image, adjusting for baseline alignment
+            bgCtx.drawImage(seg.image, currentX, yPos - seg.height / 2, seg.width, seg.height);
         }
-    });
-    if (currentLine.length > 0) {
-        lines.push(currentLine);
-    }
-
-    // 5. Draw the assembled lines, centered on the canvas
-    let currentY = y;
-    bgCtx.textAlign = 'left';
-    bgCtx.textBaseline = 'middle';
-
-    lines.forEach(line => {
-        const lineWidth = line.reduce((sum, seg) => sum + seg.width, 0);
-        let currentX = (canvasWidth - lineWidth) / 2;
-
-        line.forEach(seg => {
-            const yPos = currentY + (lineHeight / 2);
-
-            if (seg.type === 'text') {
-                bgCtx.fillText(seg.content + ' ', currentX, yPos);
-            } else { // 'math'
-                bgCtx.drawImage(seg.image, currentX, yPos - seg.height / 2, seg.width, seg.height);
-            }
-            currentX += seg.width;
-        });
-        currentY += lineHeight;
+        currentX += seg.width;
     });
 
-    // 6. Reset context properties
+    // Reset context properties to avoid affecting other drawing operations
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
 }
