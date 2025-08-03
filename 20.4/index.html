@@ -1990,12 +1990,15 @@ function addBoardDrawListeners() {
 /**
  * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
  */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
 let katexStylesheet = null;
 
 /**
  * Renders a headline containing mixed plain text and KaTeX math onto a canvas.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
- * @param {string} headline - The text to render, e.g. "Solve for x in /K x^2=4 K/".
+ * @param {string} headline - The text to render, e.g., "Solve for x in /K x^2=4 K/".
  * @param {number} y - The vertical position (baseline) to draw the text at.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
@@ -2030,7 +2033,8 @@ async function renderComplexHeadline(bgCtx, headline, y) {
     });
 
     const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-    const fontSize = 20; // Must match your bgCtx.font size
+    const fontSize = 20; // Font size for regular text
+    const mathFontSize = 26; // ===== NEW: Larger font size for KaTeX math =====
 
     // 3. Process all segments to get their dimensions and image data (for math)
     const processedSegments = await Promise.all(segments.map(async (seg) => {
@@ -2042,14 +2046,11 @@ async function renderComplexHeadline(bgCtx, headline, y) {
             };
         } else { // 'math'
             try {
-                // ===== MODIFICATION IS HERE =====
-                // Wrap the content in \mathbf{} to make it bold.
                 const boldMathContent = `\\mathbf{${seg.content}}`;
                 const mathHtml = katex.renderToString(boldMathContent, {
                     throwOnError: false,
                     output: 'html'
                 });
-                // ================================
 
                 // Create an SVG wrapper to convert the HTML to an image
                 const svg = `
@@ -2058,7 +2059,7 @@ async function renderComplexHeadline(bgCtx, headline, y) {
                                 ${katexStylesheet}
                             </style>
                             <foreignObject width="100%" height="100%">
-                                <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${fontSize}px; display: inline-block; line-height: initial;">
+                                <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">
                                     ${mathHtml}
                                 </div>
                             </foreignObject>
@@ -2069,6 +2070,8 @@ async function renderComplexHeadline(bgCtx, headline, y) {
                 tempContainer.style.position = 'absolute';
                 tempContainer.style.visibility = 'hidden';
                 tempContainer.style.color = fontColor;
+                // ===== MODIFIED: Use mathFontSize for measurement =====
+                tempContainer.style.fontSize = `${mathFontSize}px`;
                 tempContainer.innerHTML = mathHtml;
                 document.body.appendChild(tempContainer);
                 const bounds = tempContainer.querySelector('.katex').getBoundingClientRect();
@@ -2078,7 +2081,7 @@ async function renderComplexHeadline(bgCtx, headline, y) {
                         <svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}">
                              <style>${katexStylesheet}</style>
                             <foreignObject width="100%" height="100%">
-                               <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; display: inline-block; line-height: initial;">${mathHtml}</div>
+                               <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">${mathHtml}</div>
                             </foreignObject>
                         </svg>`;
 
@@ -2129,8 +2132,7 @@ async function renderComplexHeadline(bgCtx, headline, y) {
     // Reset context properties to avoid affecting other drawing operations
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
-}
-    function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
+}    function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
     function playStageAudio(
     audioSrc,
