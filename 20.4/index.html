@@ -2015,56 +2015,69 @@ function addBoardDrawListeners() {
         if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
 	function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
-    // 1. Use KaTeX's auto-render logic to convert the mixed text/math string to HTML.
-    // This correctly finds and renders the content between the '$' delimiters.
-    const katexHtml = katex.renderToString(text, {
-        throwOnError: false,
-        output: 'html',
-        delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false }
-        ]
-    });
+    // --- START: Corrected KaTeX Rendering Logic ---
+    // We manually split the string by the '$' delimiter to isolate the math expressions.
+    const parts = text.split('$');
+    let finalHtml = '';
 
-    // 2. Create an SVG that wraps the generated HTML in a styled div.
-    // This ensures consistent font and color for the entire headline.
-    const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 5}">
-            <foreignObject width="100%" height="100%">
-                <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: '${fontFamily}', sans-serif; font-size: ${fontSize}px; color: ${color}; text-align: center; line-height: 1.5;">
-                    ${katexHtml}
-                </div>
-            </foreignObject>
-        </svg>`;
+    for (let i = 0; i < parts.length; i++) {
+        if (i % 2 === 1) {
+            // This is a math part (e.g., 'b^2 - 4ac'). Render it with KaTeX.
+            try {
+                finalHtml += katex.renderToString(parts[i], {
+                    throwOnError: false,
+                    displayMode: false // Important: Use inline mode for math in a sentence
+                });
+            } catch (e) {
+                console.error("KaTeX rendering failed for:", parts[i], e);
+                finalHtml += `<span>${parts[i]}</span>`; // Fallback on error
+            }
+        } else {
+            // This is a regular text part. Escape it to be safe.
+            const textPart = parts[i].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            finalHtml += `<span>${textPart}</span>`;
+        }
+    }
+    // --- END: Corrected KaTeX Rendering Logic ---
 
-    // 3. Create an image from the SVG data.
-    const img = new Image();
-    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
+    // The rest of your SVG-to-Image pipeline can now use the correctly generated HTML.
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 5}">
+            <foreignObject width="100%" height="100%">
+                <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: '${fontFamily}', sans-serif; font-size: ${fontSize}px; color: ${color}; text-align: center; line-height: 1.5;">
+                    ${finalHtml}
+                </div>
+            </foreignObject>
+        </svg>`;
 
-    img.onload = function () {
-        // Draw the final image to the canvas, centered and scaled.
-        const scale = Math.min(1, maxWidth / img.width);
-        const finalWidth = img.width * scale;
-        const finalHeight = img.height * scale;
-        const drawX = x - (finalWidth / 2); // Center the image
-        ctx.drawImage(img, drawX, y, finalWidth, finalHeight);
-        URL.revokeObjectURL(url);
-    };
-    
-    img.onerror = function(err) {
-        console.error("Error loading the KaTeX SVG into an image. Rendering plain text fallback.", err);
-        URL.revokeObjectURL(url);
-        // Fallback to drawing plain text if the SVG-to-image conversion fails.
-        ctx.font = `${fontSize}px '${fontFamily}', sans-serif`;
-        ctx.fillStyle = color;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        const plainText = text.replace(/\$/g, ''); // Remove math delimiters for fallback display.
-        wrapText(ctx, plainText, x, y, maxWidth, fontSize * 1.2);
-    };
+    // 3. Create an image from the SVG data (this part remains the same).
+    const img = new Image();
+    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
 
-    img.src = url;
+    img.onload = function () {
+        // Draw the image to the canvas, scaled and centered.
+        const scale = Math.min(1, maxWidth / img.width);
+        const finalWidth = img.width * scale;
+        const finalHeight = img.height * scale;
+        const drawX = x - (finalWidth / 2); // Center the image
+        ctx.drawImage(img, drawX, y, finalWidth, finalHeight);
+        URL.revokeObjectURL(url);
+    };
+    
+    img.onerror = function(err) {
+        console.error("Error loading the KaTeX SVG into an image. Rendering plain text fallback.", err);
+        URL.revokeObjectURL(url);
+        // Fallback to drawing plain text if the image fails
+        ctx.font = `${fontSize}px '${fontFamily}', sans-serif`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const plainText = text.replace(/\$/g, ''); // Remove math delimiters for fallback
+        wrapText(ctx, plainText, x, y, maxWidth, fontSize * 1.2);
+    };
+
+    img.src = url;
 }
     function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
