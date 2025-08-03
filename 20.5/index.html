@@ -1999,16 +1999,16 @@ function addBoardDrawListeners() {
 let katexStylesheet = null;
 
 /**
- * Renders a headline containing mixed plain text and KaTeX math onto a canvas,
- * automatically wrapping the content to new lines if it exceeds 80% of the canvas width.
+ * Renders a headline with mixed text and math, using an intelligent word-wrap
+ * algorithm to create a balanced, top-heavy layout automatically.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
- * @param {string} headline - The text to render, e.g., "Solve for x in /K x^2=4 K/".
- * @param {number} y - The vertical position (baseline) to start drawing the first line.
+ * @param {string} headline - The text to render.
+ * @param {number} y - The vertical position to start drawing the first line.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
     if (!headline || !bgCtx) return;
 
-    // 1. Get KaTeX CSS (with caching) - This part is unchanged
+    // 1. Get KaTeX CSS (with caching) - Unchanged
     if (!katexStylesheet) {
         try {
             const response = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
@@ -2021,31 +2021,47 @@ async function renderComplexHeadline(bgCtx, headline, y) {
         }
     }
 
-    // 2. Parse and process all segments to get their dimensions - This part is unchanged
-    const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
-        if (part.startsWith('/K ') && part.endsWith(' K/')) {
-            return { type: 'math', content: part.substring(3, part.length - 3) };
-        }
-        return { type: 'text', content: part };
-    });
-
     const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
     const fontSize = 20;
     const mathFontSize = 26;
 
-    const processedSegments = await Promise.all(segments.map(async (seg) => {
-        if (seg.type === 'text') {
-            const metrics = bgCtx.measureText(seg.content);
-            return { ...seg, width: metrics.width, height: fontSize };
-        } else { // 'math'
+    // 2. Break headline into unbreakable math segments and text segments
+    const initialSegments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
+        if (part.startsWith('/K ') && part.endsWith(' K/')) {
+            return { type: 'math', content: part.substring(3, part.length - 3).replace(/\*\*(.*?)\*\*/g, '$1') };
+        }
+         if (/\*\*(.*?)\*\*/.test(part)) {
+            return { type: 'text-bold', content: part.replace(/\*\*(.*?)\*\*/g, '$1') };
+        }
+        return { type: 'text', content: part };
+    });
+
+
+    // 3. NEW: Flatten all segments into a single list of "units" (words and math blocks)
+    const allUnits = [];
+    const originalFont = bgCtx.font; // Store original font
+    const boldFont = `bold ${fontSize}px ${originalFont.split(' ').slice(1).join(' ')}`;
+
+    for (const seg of initialSegments) {
+        if (seg.type === 'text' || seg.type === 'text-bold') {
+            // This is a text segment, break it into individual words
+            const words = seg.content.trim().split(/\s+/);
+            for (const word of words) {
+                // Measure each word and add it as a unit
+                 if (seg.type === 'text-bold') {
+                    bgCtx.font = boldFont;
+                }
+                const metrics = bgCtx.measureText(word);
+                bgCtx.font = originalFont; // Reset font immediately after measuring
+                allUnits.push({ ...seg, content: word, width: metrics.width, height: fontSize });
+            }
+        } else { // This is a math segment, treat it as one unbreakable unit
             try {
                 const styledMathContent = `\\mathsf{${seg.content}}`;
                 const mathHtml = katex.renderToString(styledMathContent, { throwOnError: false, output: 'html' });
                 const tempContainer = document.createElement('div');
                 tempContainer.style.position = 'absolute';
                 tempContainer.style.visibility = 'hidden';
-                tempContainer.style.color = fontColor;
-                tempContainer.style.fontSize = `${mathFontSize}px`;
                 tempContainer.innerHTML = mathHtml;
                 document.body.appendChild(tempContainer);
                 const bounds = tempContainer.querySelector('.katex').getBoundingClientRect();
@@ -2054,82 +2070,72 @@ async function renderComplexHeadline(bgCtx, headline, y) {
                 const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(finalSvg)));
                 const image = new Image();
                 image.src = dataUrl;
-                await image.decode();
-                return { ...seg, image, width: bounds.width, height: bounds.height };
-            } catch (err) {
-                console.error("KaTeX rendering failed:", err);
-                const metrics = bgCtx.measureText(seg.content);
-                return { type: 'text', content: seg.content, width: metrics.width, height: fontSize };
-            }
+                await image.decode(); // Wait for image to be ready
+                allUnits.push({ ...seg, image, width: bounds.width, height: bounds.height });
+            } catch (e) { /* fail silently or log error */ }
         }
-    }));
-
-    // ===================================================================
-    // ===== NEW LOGIC: Arrange segments into lines with wrapping ========
-    // ===================================================================
-    const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-    const maxWidth = canvasWidth * 0.80; // Set max width to 80% of the canvas
-    let lines = [];
-    let currentLine = [];
-    let currentLineWidth = 0;
-
-    processedSegments.forEach(seg => {
-        // If the current line is empty and this segment is still too wide, it gets its own line.
-        const segmentIsWiderThanMax = seg.width > maxWidth;
-        const lineWouldBeTooWide = (currentLineWidth + seg.width) > maxWidth;
-
-        if (lineWouldBeTooWide && currentLine.length > 0) {
-            // Finish the current line and push it.
-            lines.push({ segments: currentLine, width: currentLineWidth });
-            // Start a new line with the current segment.
-            currentLine = [seg];
-            currentLineWidth = seg.width;
-        } else {
-            // Add the segment to the current line.
-            currentLine.push(seg);
-            currentLineWidth += seg.width;
-        }
-    });
-
-    // Add the last remaining line.
-    if (currentLine.length > 0) {
-        lines.push({ segments: currentLine, width: currentLineWidth });
     }
 
-    // ===================================================================
-    // ===== NEW LOGIC: Draw the arranged lines, centered individually ===
-    // ===================================================================
+    // 4. Arrange all units into lines using a greedy word-wrap algorithm
+    const lines = [];
+    let currentLine = [];
+    let currentLineWidth = 0;
+    const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
+    const maxWidth = canvasWidth * 0.80;
+    const spaceWidth = bgCtx.measureText(' ').width;
+
+    allUnits.forEach(unit => {
+        const requiredWidth = (currentLine.length === 0) ? unit.width : (spaceWidth + unit.width);
+        if (currentLineWidth + requiredWidth > maxWidth) {
+            lines.push({ units: currentLine, width: currentLineWidth });
+            currentLine = [unit];
+            currentLineWidth = unit.width;
+        } else {
+            currentLine.push(unit);
+            currentLineWidth += requiredWidth;
+        }
+    });
+    if (currentLine.length > 0) {
+        lines.push({ units: currentLine, width: currentLineWidth });
+    }
+
+    // 5. Draw the arranged lines, centered
     let currentY = y;
     bgCtx.textAlign = 'left';
     bgCtx.textBaseline = 'middle';
 
-    lines.forEach((line, index) => {
-        // Center each line horizontally.
+    lines.forEach(line => {
         let currentX = (canvasWidth - line.width) / 2;
-        let maxSegmentHeight = 0;
+        let maxUnitHeight = 0;
 
-        // Draw each segment in the current line.
-        line.segments.forEach(seg => {
-            if (seg.height > maxSegmentHeight) {
-                maxSegmentHeight = seg.height;
+        line.units.forEach((unit, index) => {
+            if (unit.height > maxUnitHeight) maxUnitHeight = unit.height;
+
+            // Draw the unit
+            if (unit.type === 'text-bold') {
+                bgCtx.font = boldFont;
+                bgCtx.fillText(unit.content, currentX, currentY);
+                bgCtx.font = originalFont; // Reset
+            } else if (unit.type === 'text') {
+                bgCtx.fillText(unit.content, currentX, currentY);
+            } else { // math
+                bgCtx.drawImage(unit.image, currentX, currentY - unit.height / 2, unit.width, unit.height);
             }
-            if (seg.type === 'text') {
-                bgCtx.fillText(seg.content, currentX, currentY);
-            } else { // 'math'
-                // Draw the math image, vertically aligning it with the text baseline.
-                bgCtx.drawImage(seg.image, currentX, currentY - seg.height / 2, seg.width, seg.height);
+            // Advance X and add a space if needed
+            currentX += unit.width;
+            if (index < line.units.length - 1) { // Don't add space after the last unit
+                currentX += spaceWidth;
             }
-            currentX += seg.width;
         });
 
-        // Advance the Y position for the next line, using the tallest element + a gap.
-        currentY += Math.max(35, maxSegmentHeight + 10); // Use a minimum line height of 35px or the segment height + 10px padding.
+        currentY += Math.max(35, maxUnitHeight + 10);
     });
 
-    // Reset context properties to avoid affecting other drawing operations.
+    // Reset context properties
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
-}	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
+}
+	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
     function playStageAudio(
     audioSrc,
