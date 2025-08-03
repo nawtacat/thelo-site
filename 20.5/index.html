@@ -1972,18 +1972,80 @@ function addBoardDrawListeners() {
         thelobookDrawListenersAttached = false;
     }
 
-    function wrapText(context, text, x, y, maxWidth, lineHeight){
-        const words = text.split(' '); let line = ''; let currentY = y; let lines = [];
-        for(let n = 0; n < words.length; n++) {
-            const testLine = line + words[n] + ' '; const metrics = context.measureText(testLine);
-            const testWidth = metrics.width; const wordWidth = context.measureText(words[n]).width;
-            if (wordWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = ''; currentY += lineHeight; }
-            if (wordWidth > maxWidth) { context.fillText(words[n], x, currentY); lines.push(words[n]); line = ' '; currentY += lineHeight; }
-            else if (testWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = words[n] + ' '; currentY += lineHeight; }
-            else { line = testLine; }
+   /**
+ * Renders text on a canvas with a line length hierarchy. Top lines are made as
+ * long as possible within the max width, leaving the remainder for the last line.
+ * The entire block is centered. It also handles single words that are too long.
+ * @param {CanvasRenderingContext2D} context The canvas rendering context.
+ * @param {string} text The text string to draw.
+ * @param {number} y The desired vertical center for the entire text block.
+ * @param {number} maxWidth The maximum width for a line of text (80% of canvas).
+ * @param {number} lineHeight The height of each line.
+ */
+function wrapText(context, text, y, maxWidth, lineHeight) {
+    const canvasWidth = context.canvas.width / (window.devicePixelRatio || 1);
+    const words = text.split(' ');
+    const lines = [];
+    let wordIndex = 0;
+
+    // This loop builds each line to be as long as possible
+    while (wordIndex < words.length) {
+        let currentLine = '';
+        // Greedily find the longest sequence of words that fits
+        for (let i = wordIndex; i < words.length; i++) {
+            const word = words[i];
+            const testLine = currentLine + (currentLine === '' ? '' : ' ') + word;
+
+            if (context.measureText(testLine).width > maxWidth) {
+                // The line is full. `currentLine` is the longest we can make it.
+                break; // Exit the inner loop to finalize this line
+            }
+            // The word fits, so update the line and continue
+            currentLine = testLine;
         }
-        if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
+
+        // This handles cases where a single word is longer than the maxWidth
+        // to prevent an infinite loop. It forces at least one word onto the line.
+        if (currentLine === '') {
+            currentLine = words[wordIndex];
+        }
+
+        lines.push(currentLine);
+        // Update the main wordIndex to the start of the next line
+        wordIndex += currentLine.split(' ').length;
     }
+
+    // This second pass handles breaking up any single words that were too long
+    const finalLines = [];
+    for (const line of lines) {
+        if (context.measureText(line).width > maxWidth) {
+            let tempLine = '';
+            for (const char of line) {
+                if (context.measureText(tempLine + char).width > maxWidth) {
+                    finalLines.push(tempLine);
+                    tempLine = char;
+                } else {
+                    tempLine += char;
+                }
+            }
+            finalLines.push(tempLine);
+        } else {
+            finalLines.push(line);
+        }
+    }
+
+    // Drawing logic: Renders the final wrapped lines centered on the canvas
+    const blockHeight = (finalLines.length - 1) * lineHeight;
+    let currentY = y - (blockHeight / 2);
+
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+
+    for (const singleLine of finalLines) {
+        context.fillText(singleLine, canvasWidth / 2, currentY);
+        currentY += lineHeight;
+    }
+}
     /**
  * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
  */
