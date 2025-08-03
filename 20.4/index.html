@@ -1313,37 +1313,59 @@ function loadCSS(href) {
     };
 let katexFontBase64 = null; // Cache for the fetched font data
 
-    async function getKatexFont() {
-        // If we've already fetched the font, return the cached data immediately.
-        if (katexFontBase64) {
-            return katexFontBase64;
-        }
-
-        // URL for the KaTeX Bold font file.
-        const fontUrl = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/fonts/KaTeX_Main-Bold.woff2';
-        
-        try {
-            const response = await fetch(fontUrl);
-            if (!response.ok) throw new Error(`Failed to fetch font: ${response.statusText}`);
-            
-            const blob = await response.blob();
-            
-            // Convert the font file to a Base64 string, which can be embedded in CSS.
-            const dataUrlPromise = new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-            
-            const base64String = await dataUrlPromise;
-            katexFontBase64 = base64String; // Cache the result
-            return base64String;
-        } catch (error) {
-            console.error("Could not load KaTeX font for canvas rendering:", error);
-            return null; // Return null on failure
-        }
+   // REPLACE your old getKatexFont function with this one.
+// It now loads all necessary fonts for KaTeX to render correctly.
+async function getKatexFontsAsCss() {
+    // Cache for the generated CSS to avoid re-fetching on every stage
+    if (window.katexFontsCss) {
+        return window.katexFontsCss;
     }
+
+    const FONT_BASE_URL = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/fonts/';
+    const fontsToLoad = [
+        { family: 'KaTeX_Main', style: 'normal', weight: '400', file: 'KaTeX_Main-Regular.woff2' },
+        { family: 'KaTeX_Main', style: 'normal', weight: '700', file: 'KaTeX_Main-Bold.woff2' },
+        { family: 'KaTeX_Math', style: 'italic', weight: '400', file: 'KaTeX_Math-Italic.woff2' },
+        { family: 'KaTeX_Size1', style: 'normal', weight: '400', file: 'KaTeX_Size1-Regular.woff2' },
+        { family: 'KaTeX_Size2', style: 'normal', weight: '400', file: 'KaTeX_Size2-Regular.woff2' },
+        { family: 'KaTeX_Size3', style: 'normal', weight: '400', file: 'KaTeX_Size3-Regular.woff2' },
+        { family: 'KaTeX_Size4', style: 'normal', weight: '400', file: 'KaTeX_Size4-Regular.woff2' }
+    ];
+
+    try {
+        const fontPromises = fontsToLoad.map(font =>
+            fetch(FONT_BASE_URL + font.file)
+            .then(res => {
+                if (!res.ok) throw new Error(`Failed to fetch ${font.file}`);
+                return res.blob();
+            })
+            .then(blob => new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve({ ...font, base64: reader.result });
+                reader.readAsDataURL(blob);
+            }))
+        );
+
+        const loadedFonts = await Promise.all(fontPromises);
+
+        const cssString = loadedFonts.map(font => `
+            @font-face {
+                font-family: '${font.family}';
+                src: url(${font.base64}) format('woff2');
+                font-weight: ${font.weight};
+                font-style: ${font.style};
+                font-display: swap;
+            }
+        `).join('\n');
+
+        window.katexFontsCss = cssString; // Cache the result
+        return cssString;
+
+    } catch (error) {
+        console.error("Could not load KaTeX fonts for canvas rendering:", error);
+        return ''; // Return empty string on failure
+    }
+}
     let currentLang = 'en';
     /* ========================================================================= */
 /* ===== ADD THIS BLOCK: For Weekly Streak Calculation ===================== */
@@ -2043,17 +2065,15 @@ function addBoardDrawListeners() {
         }
         if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
-	async function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
-    // 1. Ensure the bold KaTeX font is loaded and ready.
-    const fontData = await getKatexFont();
+	// REPLACE your old renderMathToCanvas function with this one.
+async function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
+    // 1. Get the CSS for all the KaTeX fonts.
+    const fontsCss = await getKatexFontsAsCss();
 
-    // 2. Create a temporary element to correctly render mixed text/math using KaTeX's auto-renderer.
+    // 2. Create the temporary element to render math with KaTeX.
     const tempEl = document.createElement('div');
-    tempEl.style.position = 'absolute';
-    tempEl.style.left = '-9999px';
     tempEl.style.visibility = 'hidden';
-    tempEl.innerHTML = text;
-    document.body.appendChild(tempEl);
+    tempEl.innerHTML = text; // Set the raw text, including KaTeX delimiters like $...$
     if (window.renderMathInElement) {
         renderMathInElement(tempEl, {
             delimiters: [{ left: '$', right: '$', display: false }],
@@ -2061,28 +2081,31 @@ function addBoardDrawListeners() {
         });
     }
     const katexHtml = tempEl.innerHTML;
-    document.body.removeChild(tempEl);
 
-    // 3. Create an SVG with the font and styles embedded directly inside it. This is the key to the fix.
+    // 3. Create the SVG with the full font definitions embedded.
     const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 2.5}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 3}">
             <style>
-                /* Embed the fetched font data directly into the SVG's CSS */
-                @font-face {
-                    font-family: 'KaTeX_Main_Bold'; /* Give it a unique name for this context */
-                    src: url(${fontData});
-                }
-                /* Style for the wrapper div (for plain text) */
+                /* This injects all the @font-face rules we generated */
+                ${fontsCss}
+
+                /* This styles the wrapper to correctly handle mixed prose and math */
                 .wrapper {
-                    font-family: '${fontFamily}', sans-serif;
+                    font-family: '${fontFamily}', 'Manrope', 'Mardoto-Light', sans-serif;
                     font-size: ${fontSize}px;
                     color: ${color};
                     line-height: 1.5;
                     text-align: center;
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
                 }
-                /* Style for KaTeX elements to apply the embedded font and make it bold */
+
+                /* This ensures KaTeX elements use the fonts we embedded */
                 .katex {
-                    font-family: 'KaTeX_Main_Bold', serif !important;
+                    font-variant: normal;
                 }
             </style>
             <foreignObject width="100%" height="100%">
@@ -2092,21 +2115,27 @@ function addBoardDrawListeners() {
             </foreignObject>
         </svg>`;
 
-    // 4. Create an image from the SVG data and draw it to the canvas.
+    // 4. Create an image from the SVG and draw it to the canvas.
     const img = new Image();
     const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
 
-    img.onload = function () {
+    img.onload = function() {
         const scale = Math.min(1, maxWidth / img.width);
         const finalWidth = img.width * scale;
         const finalHeight = img.height * scale;
-        const drawX = x - (finalWidth / 2);
-        ctx.drawImage(img, drawX, y, finalWidth, finalHeight); // Use the original 'y' to fix positioning
+        const drawX = x - (finalWidth / 2); // Center the rendered text
+        ctx.drawImage(img, drawX, y, finalWidth, finalHeight);
         URL.revokeObjectURL(url);
     };
 
-    img.onerror = function(err) { /* Fallback code remains the same */ };
+    img.onerror = function(err) {
+        console.error("Error rendering SVG to image:", err);
+        URL.revokeObjectURL(url);
+        // Fallback to plain text if SVG fails
+        ctx.fillText(text.replace(/\$/g, ''), x, y + fontSize / 2);
+    };
+
     img.src = url;
 }
     function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
