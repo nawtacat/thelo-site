@@ -2014,14 +2014,11 @@ function addBoardDrawListeners() {
         }
         if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
-	// REPLACE your old renderMathToCanvas function with this one
-
-// REPLACE the renderMathToCanvas function with this robust version
+	// REPLACE the renderMathToCanvas function with this corrected version
 
 function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
-    // 1. Create the KaTeX HTML.
-    const styledText = `<div style="font-family: '${fontFamily}', sans-serif; font-size: ${fontSize}px; color: ${color};">${text}</div>`;
-    const katexHtml = katex.renderToString(styledText, {
+    // 1. Give KaTeX ONLY the raw text string to convert into math HTML.
+    const katexHtml = katex.renderToString(text, {
         displayMode: true,
         throwOnError: false,
         output: 'html',
@@ -2031,12 +2028,11 @@ function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, col
         ]
     });
 
-    // 2. Create an SVG wrapper. THE FIX IS HERE: The <style> block has been removed
-    // as it can cause silent rendering failures.
+    // 2. Create an SVG wrapper. Apply the font/color styles to the container div here.
     const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 5}">
             <foreignObject width="100%" height="100%">
-                <div xmlns="http://www.w3.org/1999/xhtml">
+                <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: '${fontFamily}', sans-serif; font-size: ${fontSize}px; color: ${color};">
                     ${katexHtml}
                 </div>
             </foreignObject>
@@ -2052,16 +2048,14 @@ function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, col
         const scale = Math.min(1, maxWidth / img.width);
         const finalWidth = img.width * scale;
         const finalHeight = img.height * scale;
-        const drawX = x - (finalWidth / 2); // Center the image on the x-coordinate
+        const drawX = x - (finalWidth / 2);
         ctx.drawImage(img, drawX, y, finalWidth, finalHeight);
-        URL.revokeObjectURL(url); // Clean up the blob URL
+        URL.revokeObjectURL(url);
     };
     
-    // ADDED: An error handler for robustness. If the image fails to load,
-    // it will log the error and draw plain text as a fallback.
     img.onerror = function(err) {
         console.error("Error loading the KaTeX SVG into an image. Rendering plain text fallback.", err);
-        URL.revokeObjectURL(url); // Clean up the blob URL
+        URL.revokeObjectURL(url);
         ctx.font = `${fontSize}px '${fontFamily}', sans-serif`;
         ctx.fillStyle = color;
         ctx.textAlign = 'center';
