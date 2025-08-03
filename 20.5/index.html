@@ -1381,7 +1381,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     /* ========== State Variables ========== */
     let isAuthReady = false;
-	  let katexStylesheet = null; // To cache the fetched KaTeX stylesheet
 	  let selectedMcqIndex = null; // To store the selected MCQ option index
           let isTabletMode = false;
 	let isCalculatorActive = false;
@@ -1973,124 +1972,164 @@ function addBoardDrawListeners() {
         thelobookDrawListenersAttached = false;
     }
 
-   /**
- * Renders text that contains newline characters (\n) as multiple,
- * centered lines on a canvas.
- * @param {CanvasRenderingContext2D} context The canvas rendering context.
- * @param {string} text The text string, possibly with \n characters.
- * @param {number} y The desired vertical center for the entire text block.
- * @param {number} lineHeight The height of each line.
- */
-function wrapText(context, text, y, lineHeight) {
-    const canvasWidth = context.canvas.width / (window.devicePixelRatio || 1);
-    const lines = text.split('\n'); // Split the text by the newline character
-
-    // Calculate the starting Y position to center the entire block vertically
-    const blockHeight = (lines.length - 1) * lineHeight;
-    let currentY = y - (blockHeight / 2);
-
-    // Set text alignment for drawing
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-
-    // Draw each line centered
-    for (const singleLine of lines) {
-        context.fillText(singleLine.trim(), canvasWidth / 2, currentY);
-        currentY += lineHeight;
+    function wrapText(context, text, x, y, maxWidth, lineHeight){
+        const words = text.split(' '); let line = ''; let currentY = y; let lines = [];
+        for(let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' '; const metrics = context.measureText(testLine);
+            const testWidth = metrics.width; const wordWidth = context.measureText(words[n]).width;
+            if (wordWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = ''; currentY += lineHeight; }
+            if (wordWidth > maxWidth) { context.fillText(words[n], x, currentY); lines.push(words[n]); line = ' '; currentY += lineHeight; }
+            else if (testWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = words[n] + ' '; currentY += lineHeight; }
+            else { line = testLine; }
+        }
+        if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
-}
+    /**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+let katexStylesheet = null;
 
 /**
- * Renders a headline. If it's simple text, it uses wrapText to handle \n.
- * If it contains KaTeX math, it renders it on a single line.
+ * Renders a headline containing mixed plain text and KaTeX math onto a canvas.
+ * Wraps lines so each line uses up to 80% of the whiteboard width. When a line
+ * exceeds 80%, it moves to the next line starting at the same horizontal position.
+ * Mark math with /K ... K/.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
-    if (!headline || !bgCtx) return;
+  if (!headline || !bgCtx) return;
 
-    // Ensure the KaTeX stylesheet is loaded once and cached
-    if (!katexStylesheet) {
+  // 1) Ensure KaTeX CSS is available (cached); don't abort if it fails.
+  if (!katexStylesheet) {
+    try {
+      const res = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      katexStylesheet = await res.text();
+    } catch (err) {
+      console.warn("KaTeX CSS fetch failed; continuing without it:", err);
+      katexStylesheet = ""; // proceed; renderToString still works
+    }
+  }
+
+  // 2) Split into text vs math segments
+  const segmentsRaw = headline
+    .split(/(\/K.*?K\/)/g)
+    .filter(Boolean);
+
+  const segments = segmentsRaw.map(part => {
+    if (part.startsWith('/K ') && part.endsWith(' K/')) {
+      return { type: 'math', content: part.substring(3, part.length - 3) };
+    }
+    return { type: 'text', content: part };
+  });
+
+  const fontColor    = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
+  const fontSize     = 20; // text size
+  const mathFontSize = 26; // math size
+
+  // 3) Measure segments; pre-render math segments to images
+  const processedSegments = await Promise.all(
+    segments.map(async seg => {
+      if (seg.type === 'text') {
+        const metrics = bgCtx.measureText(seg.content);
+        return { ...seg, width: metrics.width, height: fontSize };
+      } else {
         try {
-            const response = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
-            if (!response.ok) throw new Error("Network response was not ok");
-            katexStylesheet = await response.text();
-        } catch (error) {
-            console.error("Failed to fetch KaTeX stylesheet:", error);
-            // Simple fallback if CSS fails
-            bgCtx.fillText(headline, bgCtx.canvas.width / (window.devicePixelRatio || 1) / 2, y);
-            return;
+          const styledContent = `\\mathsf{${seg.content}}`;
+          const mathHtml = katex.renderToString(styledContent, { throwOnError: false, output: 'html' });
+
+          // Measure actual size by temporarily placing it in the DOM
+          const temp = document.createElement('div');
+          temp.style.position = 'absolute';
+          temp.style.visibility = 'hidden';
+          temp.style.color = fontColor;
+          temp.style.fontSize = `${mathFontSize}px`;
+          temp.innerHTML = mathHtml;
+          document.body.appendChild(temp);
+          const bounds = temp.querySelector('.katex').getBoundingClientRect();
+          document.body.removeChild(temp);
+
+          const svg = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}">
+              <style>${katexStylesheet}</style>
+              <foreignObject width="100%" height="100%">
+                <div xmlns="http://www.w3.org/1999/xhtml" style="color:${fontColor};font-size:${mathFontSize}px;display:inline-block;line-height:initial;">
+                  ${mathHtml}
+                </div>
+              </foreignObject>
+            </svg>`.trim();
+
+          const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+          const image = new Image();
+          image.src = dataUrl;
+          await image.decode();
+
+          return { ...seg, image, width: bounds.width, height: bounds.height };
+        } catch (err) {
+          console.error("KaTeX render failed; falling back to plain text for this segment:", err);
+          const metrics = bgCtx.measureText(seg.content);
+          return { type: 'text', content: seg.content, width: metrics.width, height: fontSize };
         }
+      }
+    })
+  );
+
+  // 4) Lay out within an 80% block, centered as a whole, left-aligned per line.
+  const canvasW  = bgCtx.canvas.width / devicePixelRatio;
+  const maxWidth = canvasW * 0.80;                  // ← 80% of whiteboard width
+  const startX   = (canvasW - maxWidth) / 2;        // left edge of the text block
+  const lineGap  = 8;
+
+  // Set draw styles (assumes font family already set by caller)
+  bgCtx.fillStyle   = fontColor;
+  const prevAlign   = bgCtx.textAlign;
+  const prevBase    = bgCtx.textBaseline;
+  bgCtx.textAlign   = 'left';
+  bgCtx.textBaseline= 'top';
+
+  let x = startX;
+  let curY = y;
+  let lineMaxH = Math.max(fontSize, mathFontSize);
+
+  processedSegments.forEach(seg => {
+    // Wrap to next line if this segment would overflow the 80% block
+    if (x !== startX && (x + seg.width) > (startX + maxWidth)) {
+      x = startX;
+      curY += lineMaxH + lineGap;
+      lineMaxH = Math.max(fontSize, mathFontSize);
     }
 
-    const lineHeight = 30;
-    const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-    const mathFontSize = 26;
-    const canvasWidth = bgCtx.canvas.width / (window.devicePixelRatio || 1);
-
-    // 1. Split the entire headline by the manual \n line break character
-    const lines = headline.split('\n');
-
-    // 2. Calculate the starting Y position to center the entire text block vertically
-    const blockHeight = (lines.length - 1) * lineHeight;
-    let currentY = y - (blockHeight / 2);
-
-    // 3. Process and draw each line individually
-    for (const line of lines) {
-        // Parse the current line for any KaTeX segments
-        const segments = line.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
-            if (part.startsWith('/K ') && part.endsWith(' K/')) {
-                return { type: 'math', content: part.substring(3, part.length - 3).trim() };
-            }
-            return { type: 'text', content: part };
-        });
-
-        // Asynchronously render all segments of the line to get their dimensions
-        const processedSegments = await Promise.all(segments.map(async (seg) => {
-            if (seg.type === 'text') {
-                return { ...seg, width: bgCtx.measureText(seg.content).width };
-            } else { // 'math'
-                try {
-                    const styledMath = `\\mathsf{${seg.content}}`;
-                    const mathHtml = katex.renderToString(styledMath, { throwOnError: false, output: 'html' });
-                    const tempContainer = document.createElement('div');
-                    tempContainer.style.position = 'absolute'; tempContainer.style.visibility = 'hidden'; tempContainer.innerHTML = mathHtml;
-                    document.body.appendChild(tempContainer);
-                    const bounds = tempContainer.querySelector('.katex').getBoundingClientRect();
-                    document.body.removeChild(tempContainer);
-                    const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}"><style>${katexStylesheet}</style><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;">${mathHtml}</div></foreignObject></svg>`)));
-                    const image = new Image();
-                    image.src = dataUrl;
-                    await image.decode();
-                    return { ...seg, image, width: bounds.width, height: bounds.height };
-                } catch (err) {
-                    return { ...seg, width: bgCtx.measureText(seg.content).width };
-                }
-            }
-        }));
-
-        // Calculate the total width and starting X for THIS line to center it
-        const totalLineWidth = processedSegments.reduce((sum, seg) => sum + seg.width, 0);
-        let currentX = (canvasWidth - totalLineWidth) / 2;
-
-        // Draw all segments for this line side-by-side
-        bgCtx.textAlign = 'left';
-        bgCtx.textBaseline = 'middle';
-        for (const seg of processedSegments) {
-            if (seg.type === 'text') {
-                bgCtx.fillText(seg.content, currentX, currentY);
-            } else if (seg.image) {
-                bgCtx.drawImage(seg.image, currentX, currentY - seg.height / 2, seg.width, seg.height);
-            }
-            currentX += seg.width;
-        }
-
-        // Move down for the next line
-        currentY += lineHeight;
+    if (seg.type === 'text') {
+      bgCtx.fillText(seg.content, x, curY);
+    } else {
+      // If a single math segment is wider than the entire block, scale it down to fit.
+      let drawW = seg.width, drawH = seg.height;
+      if (drawW > maxWidth) {
+        const s = maxWidth / drawW;
+        drawW *= s; drawH *= s;
+      }
+      bgCtx.drawImage(seg.image, x, curY, drawW, drawH);
+      // Update effective size for line metrics when scaled
+      seg.width = drawW; seg.height = drawH;
     }
 
-    // Reset context properties to defaults
-    bgCtx.textAlign = 'center';
-    bgCtx.textBaseline = 'top';
+    x += seg.width;
+    if (seg.height > lineMaxH) lineMaxH = seg.height;
+  });
+
+  // Restore context to avoid side effects elsewhere
+  bgCtx.textAlign   = prevAlign || 'center';
+  bgCtx.textBaseline= prevBase  || 'top';
 }
+
 	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
     function playStageAudio(
@@ -2196,42 +2235,32 @@ async function renderComplexHeadline(bgCtx, headline, y) {
     }
     }
 
-	function displayMcq(mcqDetails) {
+	function displayMcq(mcqDetails){
     const choices = mcqDetails.choices;
-    if (!mcqOptionsContainer || !mcqDetails || !Array.isArray(choices) || choices.length === 0) return;
+    if (!mcqOptionsContainer || !mcqDetails ||
+        !Array.isArray(choices) || choices.length === 0) return;
     if (isPageGridVisible) closePageGridView();
 
     mcqOptionsContainer.innerHTML = '';
+
+    /* ===== Smart‑layout ===== */
     const isShort = choices.every(choice => choice.length < 10);
     mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
+
+    /* <<—‑‑‑  ADD THESE TWO LINES  ‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑>> */
     const isSideBySide = !!(currentStageData && currentStageData.image);
     mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
+    /* --------------------------------------------------- */
 
     choices.forEach((optionText, index) => {
         const optionButton = document.createElement('button');
         optionButton.classList.add('mcq-option-btn');
+        optionButton.textContent  = optionText;
         optionButton.dataset.index = index;
-
-        // This logic parses the button text and renders KaTeX if needed
-        if (optionText.includes('/K ')) {
-            const parts = optionText.split(/(\/K.*?K\/)/g).filter(Boolean);
-            let buttonHtml = '';
-            parts.forEach(part => {
-                if (part.startsWith('/K ') && part.endsWith(' K/')) {
-                    const math = part.substring(3, part.length - 3);
-                    const styledMath = `\\mathsf{${math}}`;
-                    buttonHtml += katex.renderToString(styledMath, { throwOnError: false, displayMode: false });
-                } else {
-                    const textNode = document.createTextNode(part);
-                    buttonHtml += textNode.textContent;
-                }
-            });
-            optionButton.innerHTML = buttonHtml;
-        } else {
-            optionButton.textContent = optionText;
-        }
-
-        optionButton.addEventListener('click', () => handleMcqOptionClick(index, mcqDetails));
+        optionButton.addEventListener(
+            'click',
+            () => handleMcqOptionClick(index, mcqDetails)
+        );
         mcqOptionsContainer.appendChild(optionButton);
     });
 
@@ -3852,13 +3881,7 @@ function initApp() {
             bgCtx.clearRect(0,0,cw,ch); bgCtx.font = `20px 'Mardoto-Light', system-ui, sans-serif`;
             bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
             bgCtx.textAlign='center';bgCtx.textBaseline='middle';
-            const errorLines = TXT.lessonLoadErrorGeneric.split('\n');
-let errorY = ch/2 - ((errorLines.length - 1) * 30) / 2;
-bgCtx.textBaseline = 'middle';
-errorLines.forEach(line => {
-    bgCtx.fillText(line, cw/2, errorY);
-    errorY += 30;
-});
+            wrapText(bgCtx, TXT.lessonLoadErrorGeneric, cw/2, ch/2, cw*0.8, 30);
         }
     }
     const interactionListener = () => { if (window.userInteracted) return; window.userInteracted = true; Object.values(audioElements).forEach(a => { if(a.readyState < 1) a.load(); }); if(stageAudioPlayer && stageAudioPlayer.readyState < 1) stageAudioPlayer.load(); try { const tempAC = new (window.AudioContext || window.webkitAudioContext)(); if (tempAC.state === 'suspended') tempAC.resume().then(()=>tempAC.close()); else tempAC.close(); } catch(e){} document.body.removeEventListener('click', interactionListener); document.body.removeEventListener('keydown', interactionListener); document.body.removeEventListener('touchstart', interactionListener); };
