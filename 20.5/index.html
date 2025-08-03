@@ -3806,108 +3806,114 @@ window.addEventListener('wheel', function(e) {
     
     userDrawingOccurred = false;
 }
-    function initApp() {
-      checkTabletMode();
-        const audioIdsToLoad = [
-            'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
-            'audio_approve1_en', 'audio_approve2_en', 'audio_dis1_en', 'audio_dis2_en', 'gotItSound'
-        ];
-        audioIdsToLoad.forEach(id => {
-            const audio = document.getElementById(id);
-            if (audio) {
-                audioElements[id] = audio;
-                if (id.startsWith('audio_approve') && id.endsWith('_hy')) approveSounds_hy.push(audio);
-                if (id.startsWith('audio_dis') && id.endsWith('_hy')) disapproveSounds_hy.push(audio);
-                if (id.startsWith('audio_approve') && id.endsWith('_en')) approveSounds_en.push(audio);
-                if (id.startsWith('audio_dis') && id.endsWith('_en')) disapproveSounds_en.push(audio);
-            }
-        });
-        resizeCanvases();
-        addBoardDrawListeners();
-        window.addEventListener('mouseup', handleDrawingEnd);
-        window.addEventListener('mouseleave', handleDrawingEnd);
-        window.addEventListener('touchend', handleDrawingEnd);
-        window.addEventListener('touchcancel', handleDrawingEnd);
+    // REPLACE your existing initApp function with this entire block
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const lessonFileName = urlParams.get('lessonFile');
-        if (lessonFileName) {
-            const LESSONS_BASE_PATH = 'https://thelo.space/lessons/';
-            const cleanLFN = lessonFileName.startsWith('/') ? lessonFileName.substring(1) : lessonFileName;
-            loadLesson(LESSONS_BASE_PATH + cleanLFN.replace(/\.\.+/g, ''));
-        } else {
-            const TXT = getCurrentUIText();
-            addChatMessage('AI', formatAIMessage('lessonFileMissing'));
-            if(nextCheckBtn){nextCheckBtn.textContent = TXT.error; nextCheckBtn.disabled = true;}
-            if(prevBtn)prevBtn.disabled = true;
-            if(bgCtx && backgroundCanvas && backgroundCanvas.width > 0){
-                const cw = backgroundCanvas.width/(window.devicePixelRatio||1); const ch = backgroundCanvas.height/(window.devicePixelRatio||1);
-                bgCtx.clearRect(0,0,cw,ch); bgCtx.font = `20px 'Mardoto-Light', system-ui, sans-serif`;
-                bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-                bgCtx.textAlign='center';bgCtx.textBaseline='middle';
-                wrapText(bgCtx, TXT.lessonLoadErrorGeneric, cw/2, ch/2, cw*0.8, 30);
-            }
+function initApp() {
+    // NEW: Add this check at the very top of the function
+    if (typeof katex === 'undefined') {
+        console.warn("KaTeX library not ready, waiting 50ms...");
+        setTimeout(initApp, 50); // Check again in 50 milliseconds
+        return; // Stop execution for now
+    }
+    
+    // --- The rest of your original initApp function continues below ---
+    
+    console.log("KaTeX is ready. Initializing app.");
+    checkTabletMode();
+    const audioIdsToLoad = [
+        'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
+        'audio_approve1_en', 'audio_approve2_en', 'audio_dis1_en', 'audio_dis2_en', 'gotItSound'
+    ];
+    audioIdsToLoad.forEach(id => {
+        const audio = document.getElementById(id);
+        if (audio) {
+            audioElements[id] = audio;
+            if (id.startsWith('audio_approve') && id.endsWith('_hy')) approveSounds_hy.push(audio);
+            if (id.startsWith('audio_dis') && id.endsWith('_hy')) disapproveSounds_hy.push(audio);
+            if (id.startsWith('audio_approve') && id.endsWith('_en')) approveSounds_en.push(audio);
+            if (id.startsWith('audio_dis') && id.endsWith('_en')) disapproveSounds_en.push(audio);
         }
-        const interactionListener = () => { if (window.userInteracted) return; window.userInteracted = true; Object.values(audioElements).forEach(a => { if(a.readyState < 1) a.load(); }); if(stageAudioPlayer && stageAudioPlayer.readyState < 1) stageAudioPlayer.load(); try { const tempAC = new (window.AudioContext || window.webkitAudioContext)(); if (tempAC.state === 'suspended') tempAC.resume().then(()=>tempAC.close()); else tempAC.close(); } catch(e){} document.body.removeEventListener('click', interactionListener); document.body.removeEventListener('keydown', interactionListener); document.body.removeEventListener('touchstart', interactionListener); };
-        document.body.addEventListener('click', interactionListener, { once: true });
-        document.body.addEventListener('keydown', interactionListener, { once: true });
-        document.body.addEventListener('touchstart', interactionListener, { once: true });
-        window.addEventListener('resize', resizeCanvases);
-        if (prevBtn) prevBtn.onclick = previousStage;
-        if (nextCheckBtn) nextCheckBtn.onclick = handleNextCheckClick;
-	const fullscreenBtn = document.getElementById('fullscreenBtn');
+    });
+    resizeCanvases();
+    addBoardDrawListeners();
+    window.addEventListener('mouseup', handleDrawingEnd);
+    window.addEventListener('mouseleave', handleDrawingEnd);
+    window.addEventListener('touchend', handleDrawingEnd);
+    window.addEventListener('touchcancel', handleDrawingEnd);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const lessonFileName = urlParams.get('lessonFile');
+    if (lessonFileName) {
+        const LESSONS_BASE_PATH = 'https://thelo.space/lessons/';
+        const cleanLFN = lessonFileName.startsWith('/') ? lessonFileName.substring(1) : lessonFileName;
+        loadLesson(LESSONS_BASE_PATH + cleanLFN.replace(/\.\.+/g, ''));
+    } else {
+        const TXT = getCurrentUIText();
+        addChatMessage('AI', formatAIMessage('lessonFileMissing'));
+        if(nextCheckBtn){nextCheckBtn.textContent = TXT.error; nextCheckBtn.disabled = true;}
+        if(prevBtn)prevBtn.disabled = true;
+        if(bgCtx && backgroundCanvas && backgroundCanvas.width > 0){
+            const cw = backgroundCanvas.width/(window.devicePixelRatio||1); const ch = backgroundCanvas.height/(window.devicePixelRatio||1);
+            bgCtx.clearRect(0,0,cw,ch); bgCtx.font = `20px 'Mardoto-Light', system-ui, sans-serif`;
+            bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+            bgCtx.textAlign='center';bgCtx.textBaseline='middle';
+            wrapText(bgCtx, TXT.lessonLoadErrorGeneric, cw/2, ch/2, cw*0.8, 30);
+        }
+    }
+    const interactionListener = () => { if (window.userInteracted) return; window.userInteracted = true; Object.values(audioElements).forEach(a => { if(a.readyState < 1) a.load(); }); if(stageAudioPlayer && stageAudioPlayer.readyState < 1) stageAudioPlayer.load(); try { const tempAC = new (window.AudioContext || window.webkitAudioContext)(); if (tempAC.state === 'suspended') tempAC.resume().then(()=>tempAC.close()); else tempAC.close(); } catch(e){} document.body.removeEventListener('click', interactionListener); document.body.removeEventListener('keydown', interactionListener); document.body.removeEventListener('touchstart', interactionListener); };
+    document.body.addEventListener('click', interactionListener, { once: true });
+    document.body.addEventListener('keydown', interactionListener, { once: true });
+    document.body.addEventListener('touchstart', interactionListener, { once: true });
+    window.addEventListener('resize', resizeCanvases);
+    if (prevBtn) prevBtn.onclick = previousStage;
+    if (nextCheckBtn) nextCheckBtn.onclick = handleNextCheckClick;
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
     if (fullscreenBtn) {
         fullscreenBtn.onclick = toggleFocusFullscreen;
     }
 
-        if (clearBtn) clearBtn.onclick = clearUserCanvas;
-        if (thelobookBtn) thelobookBtn.onclick = () => { isThelobookActive ? closeThelobook(true) : openThelobook(); };
+    if (clearBtn) clearBtn.onclick = clearUserCanvas;
+    if (thelobookBtn) thelobookBtn.onclick = () => { isThelobookActive ? closeThelobook(true) : openThelobook(); };
 
-        if (thelobookPrevPageBtn) thelobookPrevPageBtn.onclick = () => changeThelobookPageSimple(-1);
-        if (thelobookNextPageBtn) thelobookNextPageBtn.onclick = () => changeThelobookPageSimple(1);
-        if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
-        if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
-	 if (calculatorCloseBtn) calculatorCloseBtn.onclick = closeCalculator;
-      if (openCalculatorBtn) openCalculatorBtn.onclick = openCalculator;
-	if (dashboardBtn) {
-	    dashboardBtn.onclick = () => {
-	        window.location.href = 'https://thelo.space/sdashboard';
-	    };
-	}
-        // ... inside the initApp() function
-
-        document.querySelectorAll('button').forEach(button => {
-            button.addEventListener('click', () => {
-                button.blur();
-            });
-        });
-
-
-        document.addEventListener('keydown', handleKeyDown);
-
-        // ANALYTICS: Add event listener to handle users leaving the page
-        window.addEventListener('beforeunload', () => {
-            const user = auth.currentUser;
-            // Check if a lesson is currently in progress
-            if (user && lessonStartTime && currentStageIndex < lessonStages.length -1) {
-                const urlParams = new URLSearchParams(window.location.search);
-                const lessonFileName = urlParams.get('lessonFile');
-                
-                // This is a synchronous call. It's not guaranteed to complete,
-                // but it's the best we can do in a 'beforeunload' event.
-                navigator.sendBeacon('https://firestore.googleapis.com/v1/projects/physmathacademy-722b3/databases/(default)/documents/analytics_events', JSON.stringify({
-                    fields: {
-                        type: { stringValue: 'lesson_abandoned' },
-                        userId: { stringValue: user.uid },
-                        lessonId: { stringValue: lessonFileName.replace('.json', '') },
-                        lastCompletedStageIndex: { integerValue: currentStageIndex },
-                        totalStagesInLesson: { integerValue: lessonStages.length },
-                        timestamp: { timestampValue: new Date().toISOString() }
-                    }
-                }));
-            }
-        });
+    if (thelobookPrevPageBtn) thelobookPrevPageBtn.onclick = () => changeThelobookPageSimple(-1);
+    if (thelobookNextPageBtn) thelobookNextPageBtn.onclick = () => changeThelobookPageSimple(1);
+    if (thelobookEraserBtn) thelobookEraserBtn.onclick = toggleThelobookEraser;
+    if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
+    if (calculatorCloseBtn) calculatorCloseBtn.onclick = closeCalculator;
+    if (openCalculatorBtn) openCalculatorBtn.onclick = openCalculator;
+    if (dashboardBtn) {
+        dashboardBtn.onclick = () => {
+            window.location.href = 'https://thelo.space/sdashboard';
+        };
     }
+
+    document.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => {
+            button.blur();
+        });
+    });
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    window.addEventListener('beforeunload', () => {
+        const user = auth.currentUser;
+        if (user && lessonStartTime && currentStageIndex < lessonStages.length -1) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const lessonFileName = urlParams.get('lessonFile');
+            
+            navigator.sendBeacon('https://firestore.googleapis.com/v1/projects/physmathacademy-722b3/databases/(default)/documents/analytics_events', JSON.stringify({
+                fields: {
+                    type: { stringValue: 'lesson_abandoned' },
+                    userId: { stringValue: user.uid },
+                    lessonId: { stringValue: lessonFileName.replace('.json', '') },
+                    lastCompletedStageIndex: { integerValue: currentStageIndex },
+                    totalStagesInLesson: { integerValue: lessonStages.length },
+                    timestamp: { timestampValue: new Date().toISOString() }
+                }
+            }));
+        }
+    });
+}
 
     if (typeof window.appInitialized === 'undefined') {
         window.appInitialized = false;
