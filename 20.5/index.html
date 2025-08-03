@@ -2002,13 +2002,13 @@ let katexStylesheet = null;
  * Renders a headline with mixed text and math, using an intelligent word-wrap
  * algorithm to create a balanced, top-heavy layout automatically.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
- * @param {string} headline - The text to render.
+ * @param {string} headline - The text to render, e.g., "Solve for x in /K x^2=4 K/".
  * @param {number} y - The vertical position to start drawing the first line.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
     if (!headline || !bgCtx) return;
 
-    // 1. Get KaTeX CSS (with caching) - Unchanged
+    // 1. Get KaTeX CSS (with caching)
     if (!katexStylesheet) {
         try {
             const response = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
@@ -2021,41 +2021,24 @@ async function renderComplexHeadline(bgCtx, headline, y) {
         }
     }
 
-    const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-    const fontSize = 20;
-    const mathFontSize = 26;
-
-    // 2. Break headline into unbreakable math segments and text segments
-    const initialSegments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
+    // 2. Parse the headline into 'text' and 'math' segments
+    const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
         if (part.startsWith('/K ') && part.endsWith(' K/')) {
-            return { type: 'math', content: part.substring(3, part.length - 3).replace(/\*\*(.*?)\*\*/g, '$1') };
-        }
-         if (/\*\*(.*?)\*\*/.test(part)) {
-            return { type: 'text-bold', content: part.replace(/\*\*(.*?)\*\*/g, '$1') };
+            return { type: 'math', content: part.substring(3, part.length - 3) };
         }
         return { type: 'text', content: part };
     });
 
+    const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+    const fontSize = 20;
+    const mathFontSize = 26;
 
-    // 3. NEW: Flatten all segments into a single list of "units" (words and math blocks)
-    const allUnits = [];
-    const originalFont = bgCtx.font; // Store original font
-    const boldFont = `bold ${fontSize}px ${originalFont.split(' ').slice(1).join(' ')}`;
-
-    for (const seg of initialSegments) {
-        if (seg.type === 'text' || seg.type === 'text-bold') {
-            // This is a text segment, break it into individual words
-            const words = seg.content.trim().split(/\s+/);
-            for (const word of words) {
-                // Measure each word and add it as a unit
-                 if (seg.type === 'text-bold') {
-                    bgCtx.font = boldFont;
-                }
-                const metrics = bgCtx.measureText(word);
-                bgCtx.font = originalFont; // Reset font immediately after measuring
-                allUnits.push({ ...seg, content: word, width: metrics.width, height: fontSize });
-            }
-        } else { // This is a math segment, treat it as one unbreakable unit
+    // 3. Process all segments to get their dimensions and image data (for math)
+    const processedSegments = await Promise.all(segments.map(async (seg) => {
+        if (seg.type === 'text') {
+            // We only need the segment type for the next step, no need to measure here
+            return { ...seg, height: fontSize };
+        } else { // 'math'
             try {
                 const styledMathContent = `\\mathsf{${seg.content}}`;
                 const mathHtml = katex.renderToString(styledMathContent, { throwOnError: false, output: 'html' });
@@ -2070,27 +2053,63 @@ async function renderComplexHeadline(bgCtx, headline, y) {
                 const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(finalSvg)));
                 const image = new Image();
                 image.src = dataUrl;
-                await image.decode(); // Wait for image to be ready
-                allUnits.push({ ...seg, image, width: bounds.width, height: bounds.height });
-            } catch (e) { /* fail silently or log error */ }
+                await image.decode();
+                return { ...seg, image, width: bounds.width, height: bounds.height };
+            } catch (err) {
+                console.error("KaTeX rendering failed:", err);
+                return { type: 'text', content: seg.content, height: fontSize, width: bgCtx.measureText(seg.content).width }; // Fallback
+            }
         }
-    }
+    }));
 
-    // 4. Arrange all units into lines using a greedy word-wrap algorithm
+    // =========================================================================================
+    // NEW LOGIC STARTS HERE: Replaces the original drawing logic with a word-wrapping algorithm
+    // =========================================================================================
+
+    // 4. Flatten all segments into a single list of "units" (words and math blocks)
+    const allUnits = [];
+    processedSegments.forEach(seg => {
+        if (seg.type === 'text') {
+            const words = seg.content.trim().split(/\s+/);
+            words.forEach(word => {
+                if (word) {
+                    allUnits.push({
+                        type: 'word',
+                        content: word,
+                        width: bgCtx.measureText(word).width,
+                        height: seg.height
+                    });
+                }
+            });
+        } else { // Math segments are treated as a single, unbreakable unit
+            allUnits.push(seg);
+        }
+    });
+
+    // 5. Arrange all units into lines using a greedy word-wrap algorithm
     const lines = [];
     let currentLine = [];
     let currentLineWidth = 0;
     const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-    const maxWidth = canvasWidth * 0.80;
+    const maxWidth = canvasWidth * 0.80; // Set max width to 80% of the canvas
     const spaceWidth = bgCtx.measureText(' ').width;
 
     allUnits.forEach(unit => {
-        const requiredWidth = (currentLine.length === 0) ? unit.width : (spaceWidth + unit.width);
-        if (currentLineWidth + requiredWidth > maxWidth) {
+        const requiredWidth = currentLine.length === 0 ? unit.width : (spaceWidth + unit.width);
+        if (unit.width > maxWidth && currentLine.length > 0) {
+            // If the unit itself is wider than the max width, finish the current line first
+            lines.push({ units: currentLine, width: currentLineWidth });
+            currentLine = [];
+            currentLineWidth = 0;
+        }
+
+        if (currentLine.length > 0 && currentLineWidth + requiredWidth > maxWidth) {
+            // Finish the current line and start a new one
             lines.push({ units: currentLine, width: currentLineWidth });
             currentLine = [unit];
             currentLineWidth = unit.width;
         } else {
+            // Add the unit to the current line
             currentLine.push(unit);
             currentLineWidth += requiredWidth;
         }
@@ -2099,7 +2118,8 @@ async function renderComplexHeadline(bgCtx, headline, y) {
         lines.push({ units: currentLine, width: currentLineWidth });
     }
 
-    // 5. Draw the arranged lines, centered
+
+    // 6. Draw the arranged lines, centering each one
     let currentY = y;
     bgCtx.textAlign = 'left';
     bgCtx.textBaseline = 'middle';
@@ -2112,26 +2132,24 @@ async function renderComplexHeadline(bgCtx, headline, y) {
             if (unit.height > maxUnitHeight) maxUnitHeight = unit.height;
 
             // Draw the unit
-            if (unit.type === 'text-bold') {
-                bgCtx.font = boldFont;
-                bgCtx.fillText(unit.content, currentX, currentY);
-                bgCtx.font = originalFont; // Reset
-            } else if (unit.type === 'text') {
+            if (unit.type === 'word') {
                 bgCtx.fillText(unit.content, currentX, currentY);
             } else { // math
                 bgCtx.drawImage(unit.image, currentX, currentY - unit.height / 2, unit.width, unit.height);
             }
-            // Advance X and add a space if needed
+
+            // Advance X and add a space if not the last unit
             currentX += unit.width;
-            if (index < line.units.length - 1) { // Don't add space after the last unit
+            if (index < line.units.length - 1) {
                 currentX += spaceWidth;
             }
         });
-
+        
+        // Advance Y for the next line
         currentY += Math.max(35, maxUnitHeight + 10);
     });
 
-    // Reset context properties
+    // Reset context properties to avoid affecting other drawing operations
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
 }
