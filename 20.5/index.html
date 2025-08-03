@@ -1972,43 +1972,62 @@ function addBoardDrawListeners() {
         thelobookDrawListenersAttached = false;
     }
 
-    function wrapText(context, text, x, y, maxWidth, lineHeight){
-        const words = text.split(' '); let line = ''; let currentY = y; let lines = [];
-        for(let n = 0; n < words.length; n++) {
-            const testLine = line + words[n] + ' '; const metrics = context.measureText(testLine);
-            const testWidth = metrics.width; const wordWidth = context.measureText(words[n]).width;
-            if (wordWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = ''; currentY += lineHeight; }
-            if (wordWidth > maxWidth) { context.fillText(words[n], x, currentY); lines.push(words[n]); line = ' '; currentY += lineHeight; }
-            else if (testWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = words[n] + ' '; currentY += lineHeight; }
-            else { line = testLine; }
+   /**
+ * Renders text on a canvas, automatically wrapping it to a max width and
+ * keeping the entire text block centered horizontally and vertically.
+ * @param {CanvasRenderingContext2D} context The canvas rendering context.
+ * @param {string} text The text string to draw.
+ * @param {number} y The desired vertical center for the entire text block.
+ * @param {number} maxWidth The maximum width for a line of text.
+ * @param {number} lineHeight The height of each line.
+ */
+function wrapText(context, text, y, maxWidth, lineHeight) {
+    const canvasWidth = context.canvas.width / (window.devicePixelRatio || 1);
+    const words = text.split(' ');
+    let line = '';
+    const lines = [];
+
+    // First, break the text into an array of lines based on maxWidth
+    for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        if (context.measureText(testLine).width > maxWidth && n > 0) {
+            lines.push(line.trim());
+            line = words[n] + ' ';
+        } else {
+            line = testLine;
         }
-        if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
-    /**
- * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
- */
-/**
- * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
- */
-/**
- * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
- */
-/**
- * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
- */
+    lines.push(line.trim());
+
+    // Calculate the starting Y position to center the entire block vertically around y
+    const blockHeight = (lines.length - 1) * lineHeight;
+    let currentY = y - (blockHeight / 2);
+
+    // Set text alignment properties for drawing
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+
+    // Draw each line centered
+    for (const singleLine of lines) {
+        context.fillText(singleLine, canvasWidth / 2, currentY);
+        currentY += lineHeight;
+    }
+}
+ 
 let katexStylesheet = null;
 
 /**
- * Renders a headline with mixed text and math, supporting KaTeX, manual newlines,
- * bold text, and intelligent automatic word-wrapping.
+ * Renders a headline containing mixed plain text and KaTeX math onto a canvas.
+ * For simple text, it wraps the content to 80% of the canvas width.
+ * For complex text with math, it renders all segments on a single line.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
- * @param {string} headline - The text to render.
- * @param {number} y - The vertical position to start drawing the first line.
+ * @param {string} headline - The text to render, e.g., "Solve for x in /K x^2=4 K/".
+ * @param {number} y - The vertical position (baseline) to draw the text at.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
     if (!headline || !bgCtx) return;
 
-    // Step 1: Get KaTeX CSS (with caching) - Unchanged
+    // Get KaTeX CSS (with caching)
     if (!katexStylesheet) {
         try {
             const response = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
@@ -2016,134 +2035,97 @@ async function renderComplexHeadline(bgCtx, headline, y) {
             katexStylesheet = await response.text();
         } catch (error) {
             console.error("Failed to fetch KaTeX stylesheet:", error);
-            bgCtx.fillText(headline, bgCtx.canvas.width / devicePixelRatio / 2, y);
+            // Fallback: render the headline as plain text if CSS fails
+            wrapText(bgCtx, headline.replace(/\/K (.*?) K\//g, '$1'), y, bgCtx.canvas.width / (window.devicePixelRatio || 1) * 0.8, 30);
             return;
         }
     }
 
-    // =========================================================================================
-    // NEW UNIFIED PROCESSING LOGIC
-    // =========================================================================================
+    // Parse the headline into 'text' and 'math' segments
+    const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
+        if (part.startsWith('/K ') && part.endsWith(' K/')) {
+            return { type: 'math', content: part.substring(3, part.length - 3) };
+        }
+        return { type: 'text', content: part };
+    });
 
-    // Step 2: Create a master list of all renderable "units" (words, math, newlines, etc.)
-    const allUnits = [];
+    // If the headline is just simple text (no math), use the wrapping logic.
+    if (segments.length === 1 && segments[0].type === 'text') {
+        const textContent = segments[0].content;
+        const canvasWidth = bgCtx.canvas.width / (window.devicePixelRatio || 1);
+        const maxWidth = canvasWidth * 0.80; // 80% width constraint
+        const lineHeight = 30; // Line height for 20px font
+
+        wrapText(bgCtx, textContent, y, maxWidth, lineHeight);
+
+        // Reset context properties to defaults used elsewhere in the app
+        bgCtx.textAlign = 'center';
+        bgCtx.textBaseline = 'top';
+        return; // Exit function since the headline is drawn
+    }
+    
+    // --- Original logic for complex headlines (text + math) ---
     const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
     const fontSize = 20;
     const mathFontSize = 26;
-    const originalFont = bgCtx.font; // e.g., "20px 'Manrope'..."
-    const fontFamily = originalFont.split(' ').slice(1).join(' '); // e.g., "'Manrope'..."
-    const boldFont = `bold ${fontSize}px ${fontFamily}`;
 
-    // Split the headline by KaTeX blocks first, which are our unbreakable units.
-    const initialParts = headline.split(/(\/K.*?K\/)/g);
-
-    for (const part of initialParts) {
-        if (!part) continue;
-
-        if (part.startsWith('/K ') && part.endsWith(' K/')) {
-            // --- This is a KaTeX math block ---
-            const content = part.substring(3, part.length - 3);
+    const processedSegments = await Promise.all(segments.map(async (seg) => {
+        if (seg.type === 'text') {
+            const metrics = bgCtx.measureText(seg.content);
+            return { ...seg, width: metrics.width, height: fontSize };
+        } else { // 'math'
             try {
-                const styledMathContent = `\\mathsf{${content}}`;
+                const styledMathContent = `\\mathsf{${seg.content}}`;
                 const mathHtml = katex.renderToString(styledMathContent, { throwOnError: false, output: 'html' });
                 const tempContainer = document.createElement('div');
                 tempContainer.style.position = 'absolute';
                 tempContainer.style.visibility = 'hidden';
+                tempContainer.style.color = fontColor;
+                tempContainer.style.fontSize = `${mathFontSize}px`;
                 tempContainer.innerHTML = mathHtml;
                 document.body.appendChild(tempContainer);
                 const bounds = tempContainer.querySelector('.katex').getBoundingClientRect();
                 document.body.removeChild(tempContainer);
-                const finalSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}"><style>${katexStylesheet}</style><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">${mathHtml}</div></foreignObject></svg>`;
+
+                const finalSvg = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}">
+                         <style>${katexStylesheet}</style>
+                        <foreignObject width="100%" height="100%">
+                           <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">${mathHtml}</div>
+                        </foreignObject>
+                    </svg>`;
+                
                 const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(finalSvg)));
                 const image = new Image();
                 image.src = dataUrl;
                 await image.decode();
-                allUnits.push({ type: 'math', image: image, width: bounds.width, height: bounds.height });
+
+                return { ...seg, image, width: bounds.width, height: bounds.height };
             } catch (err) {
                 console.error("KaTeX rendering failed:", err);
-            }
-        } else {
-            // --- This is a text block, which may contain words, bolding, and newlines ---
-            const textParts = part.split(/(\n|\*\*.*?\*\*)/g).filter(Boolean); // Split by newlines or bold markers
-            
-            for (const textPart of textParts) {
-                if (textPart === '\n') {
-                    allUnits.push({ type: 'newline' });
-                } else if (textPart.startsWith('**') && textPart.endsWith('**')) {
-                    const word = textPart.substring(2, textPart.length - 2);
-                    bgCtx.font = boldFont;
-                    allUnits.push({ type: 'word', content: word, width: bgCtx.measureText(word).width, height: fontSize, isBold: true });
-                    bgCtx.font = originalFont; // Reset
-                } else {
-                    const words = textPart.trim().split(/\s+/).filter(Boolean);
-                    for (const word of words) {
-                         allUnits.push({ type: 'word', content: word, width: bgCtx.measureText(word).width, height: fontSize, isBold: false });
-                    }
-                }
+                const metrics = bgCtx.measureText(seg.content);
+                return { type: 'text', content: seg.content, width: metrics.width, height: fontSize };
             }
         }
-    }
+    }));
 
-    // Step 3: Arrange all units into lines using the wrapping algorithm
-    const lines = [];
-    let currentLine = [];
-    let currentLineWidth = 0;
-    const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-    const maxWidth = canvasWidth * 0.85;
-    const spaceWidth = bgCtx.measureText(' ').width;
+    const totalWidth = processedSegments.reduce((sum, seg) => sum + seg.width, 0);
+    let currentX = (bgCtx.canvas.width / (window.devicePixelRatio || 1) - totalWidth) / 2;
 
-    allUnits.forEach(unit => {
-        if (unit.type === 'newline') {
-            if (currentLine.length > 0) lines.push({ units: currentLine, width: currentLineWidth });
-            lines.push({ units: [], width: 0, isManualBreak: true }); // Represent the manual break
-            currentLine = [];
-            currentLineWidth = 0;
-            return;
-        }
-
-        const requiredWidth = (currentLine.length === 0) ? unit.width : (spaceWidth + unit.width);
-        if (currentLine.length > 0 && (currentLineWidth + requiredWidth) > maxWidth) {
-            lines.push({ units: currentLine, width: currentLineWidth });
-            currentLine = [unit];
-            currentLineWidth = unit.width;
-        } else {
-            currentLine.push(unit);
-            currentLineWidth = (currentLine.length === 1) ? unit.width : currentLineWidth + requiredWidth;
-        }
-    });
-    if (currentLine.length > 0) lines.push({ units: currentLine, width: currentLineWidth });
-
-    // Step 4: Draw the arranged lines
-    let currentY = y;
     bgCtx.textAlign = 'left';
     bgCtx.textBaseline = 'middle';
 
-    lines.forEach(line => {
-        if (line.isManualBreak) { // Handle empty lines from \n\n
-             currentY += 20; // Add a smaller gap for an empty line
-             return;
+    processedSegments.forEach(seg => {
+        const yPos = y;
+        if (seg.type === 'text') {
+            bgCtx.fillText(seg.content, currentX, yPos);
+        } else {
+            bgCtx.drawImage(seg.image, currentX, yPos - seg.height / 2, seg.width, seg.height);
         }
-        let currentX = (canvasWidth - line.width) / 2;
-        let maxUnitHeight = 0;
-
-        line.units.forEach((unit, index) => {
-            if (unit.height > maxUnitHeight) maxUnitHeight = unit.height;
-            bgCtx.font = unit.isBold ? boldFont : originalFont;
-
-            if (unit.type === 'word') {
-                bgCtx.fillText(unit.content, currentX, currentY);
-            } else if (unit.type === 'math') {
-                bgCtx.drawImage(unit.image, currentX, currentY - unit.height / 2, unit.width, unit.height);
-            }
-            
-            currentX += unit.width;
-            if (index < line.units.length - 1) currentX += spaceWidth;
-        });
-        
-        currentY += Math.max(35, maxUnitHeight + 10);
+        currentX += seg.width;
     });
 
-    bgCtx.font = originalFont; // Final reset
+    // Reset context properties
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
 }
@@ -2251,43 +2233,8 @@ async function renderComplexHeadline(bgCtx, headline, y) {
     console.warn("Audio interaction needed for autoplay.");
     }
     }
-/**
- * Finds and renders KaTeX markup within a string and returns it as HTML.
- * @param {string} text - The input string, e.g. "The answer is /K x=5 K/".
- * @returns {string} - The processed HTML string.
- */
-function renderKatexInString(text) {
-    // If there's no KaTeX markup, return the original text to avoid processing.
-    if (!text || !text.includes('/K ')) {
-        return text;
-    }
 
-    // Split the string into text and math parts.
-    const segments = text.split(/(\/K.*?K\/)/g).filter(Boolean);
-
-    const renderedHtml = segments.map(part => {
-        if (part.startsWith('/K ') && part.endsWith(' K/')) {
-            // This is a math part.
-            const mathContent = part.substring(3, part.length - 3);
-            try {
-                // Render it using KaTeX with the 'mathsf' style.
-                return katex.renderToString(`\\mathsf{${mathContent}}`, {
-                    throwOnError: false,
-                    displayMode: false // Important for inline rendering inside buttons
-                });
-            } catch (e) {
-                console.error("KaTeX rendering error in MCQ option:", e);
-                return mathContent; // Fallback to plain text on error.
-            }
-        } else {
-            // This is a plain text part.
-            return part;
-        }
-    }).join('');
-
-    return renderedHtml;
-}
-function displayMcq(mcqDetails) {
+	function displayMcq(mcqDetails){
     const choices = mcqDetails.choices;
     if (!mcqOptionsContainer || !mcqDetails ||
         !Array.isArray(choices) || choices.length === 0) return;
@@ -2299,18 +2246,15 @@ function displayMcq(mcqDetails) {
     const isShort = choices.every(choice => choice.length < 10);
     mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
 
+    /* <<—‑‑‑  ADD THESE TWO LINES  ‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑>> */
     const isSideBySide = !!(currentStageData && currentStageData.image);
     mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
+    /* --------------------------------------------------- */
 
     choices.forEach((optionText, index) => {
         const optionButton = document.createElement('button');
         optionButton.classList.add('mcq-option-btn');
-        
-        // ===== MODIFIED LINE =====
-        // Use the new helper to render KaTeX inside the button.
-        optionButton.innerHTML = renderKatexInString(optionText);
-        // =========================
-
+        optionButton.textContent  = optionText;
         optionButton.dataset.index = index;
         optionButton.addEventListener(
             'click',
@@ -2322,6 +2266,7 @@ function displayMcq(mcqDetails) {
     mcqOptionsContainer.style.display = 'flex';
     mcqOptionsContainer.style.opacity = '1';
 }
+
 	
   // Replace your old function with this simplified version
 function handleMcqOptionClick(selectedIndex, mcqDetails){
