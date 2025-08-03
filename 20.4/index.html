@@ -14,11 +14,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
 	<link rel="manifest" href="/manifest.json" />
-	
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-sLc5nQact9tGjplI0SMhCjNBdINodM4n2f7nN2txA5S5+qie3iCvcB2zPOlRd3I2" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoebJnpMNGbYSmRKofE_gDR92eIK9LPmM49IAlK27KvI6Uo4eHRgW2YkI5P4lUu" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/Gf1ESgOGbtDKUCoMheKPHCbD5vrN9gmyqQ0dZGMfxvBTVsoY" crossorigin="anonymous"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
-	<!-- KaTeX Stylesheet & Script -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
 
@@ -1075,6 +1074,11 @@ body.lang-en {
     transform: translateY(-3px);
     box-shadow: var(--shadow-lg);
 }
+	/* ADD THIS RULE TO YOUR <style> BLOCK */
+.katex {
+    font-weight: 700 !important;
+    font-family: 'KaTeX_Main', serif; /* Ensures consistent math font */
+}
 </style>
 </head>
 <body>
@@ -1178,7 +1182,20 @@ body.lang-en {
         .catch((error) => {
             console.error("Auth persistence error:", error.code, error.message);
         });
-
+	// ADD THIS AFTER YOUR FIREBASE INITIALIZATION
+document.addEventListener('DOMContentLoaded', function() {
+    window.renderMathInElement = (elem) => {
+        if (window.renderMathInElement) {
+            renderMathInElement(elem, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                ],
+                throwOnError: false
+            });
+        }
+    };
+});
     const INK_COLORS = { black: '#000000', blue: getComputedStyle(document.documentElement).getPropertyValue('--ink-blue').trim() || '#2563eb' };
 
     const UI_TEXT = {
@@ -1414,22 +1431,6 @@ let lastIframeUpdateTime = 0;
     let tempFullPageCanvasForThumbnails = null;
     let buttonVanishTimer = null;
     let stagesWithPointsAwarded = new Set();
-	  /**
- * A helper function that finds and renders LaTeX math within a string.
- * @param {string} str - The input string that may contain LaTeX.
- * @returns {string} - The HTML string with math rendered by KaTeX.
- */
-function renderMathInText(str) {
-    if (!str || typeof str !== 'string') {
-        return '';
-    }
-    // Replace display mode ($$) before inline mode ($)
-    return str.replace(/\$\$(.*?)\$\$/g, (match, latex) => {
-        return katex.renderToString(latex, { displayMode: true, throwOnError: false });
-    }).replace(/\$(.*?)\$/g, (match, latex) => {
-        return katex.renderToString(latex, { displayMode: false, throwOnError: false });
-    });
-}
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
     function updateAllUITexts() {
@@ -2001,6 +2002,61 @@ function addBoardDrawListeners() {
         }
         if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
+	  /**
+ * Renders text containing KaTeX math onto a canvas.
+ * @param {CanvasRenderingContext2D} ctx - The canvas context to draw on.
+ * @param {string} text - The string, which can contain $...$ delimiters.
+ * @param {number} x - The center x-coordinate to draw the text.
+ * @param {number} y - The top y-coordinate to draw the text.
+ * @param {number} maxWidth - The maximum width the rendered text can occupy.
+ * @param {string} fontFamily - The font for the non-math parts of the text.
+ * @param {number} fontSize - The font size in pixels.
+ * @param {string} color - The color of the text.
+ */
+function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
+    // 1. Create the KaTeX HTML. Wrap the text in a container that sets the base styles.
+    const styledText = `<div style="font-family: '${fontFamily}', sans-serif; font-size: ${fontSize}px; color: ${color};">${text}</div>`;
+    const katexHtml = katex.renderToString(styledText, {
+        displayMode: true, // Use displayMode for better layout control
+        throwOnError: false,
+        output: 'html',
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false},
+        ]
+    });
+
+    // 2. Create an SVG wrapper. We need to embed the font stylesheet for it to work in the SVG.
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 5}">
+            <foreignObject width="100%" height="100%">
+                <div xmlns="http://www.w3.org/1999/xhtml">
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;700&display=swap');
+                        @import url('https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css');
+                        .katex { font-weight: 700 !important; }
+                    </style>
+                    ${katexHtml}
+                </div>
+            </foreignObject>
+        </svg>`;
+
+    // 3. Create an image from the SVG data.
+    const img = new Image();
+    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    img.onload = function () {
+        // 4. Draw the image to the canvas, scaled and centered.
+        const scale = Math.min(1, maxWidth / img.width);
+        const finalWidth = img.width * scale;
+        const finalHeight = img.height * scale;
+        const drawX = x - (finalWidth / 2); // Center the image on the x-coordinate
+        ctx.drawImage(img, drawX, y, finalWidth, finalHeight);
+        URL.revokeObjectURL(url); // Clean up the blob URL
+    };
+    img.src = url;
+}
     function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
     function playStageAudio(
@@ -2127,12 +2183,12 @@ function addBoardDrawListeners() {
         const optionButton = document.createElement('button');
         optionButton.classList.add('mcq-option-btn');
         optionButton.textContent  = optionText;
-	    optionButton.innerHTML = renderMathInText(optionText);
         optionButton.dataset.index = index;
         optionButton.addEventListener(
             'click',
             () => handleMcqOptionClick(index, mcqDetails)
         );
+	if (window.renderMathInElement) renderMathInElement(optionButton);
         mcqOptionsContainer.appendChild(optionButton);
     });
 
@@ -2459,30 +2515,24 @@ function renderStageUI(index, isResize = false) {
             if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
 
-       function drawHeadlineText() {
-            const padding = 27;
-            const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
-            const maxWidth = cssWidthForText * 0.8;
-            const textX = cssWidthForText / 2;
-            let headlineCurrentY = padding * 2;
-            const lineHeight = 30;
-            let headlineText = currentStageData.headline || '';
+        // REPLACE your existing drawHeadlineText function with this one
+function drawHeadlineText() {
+    const headlineText = currentStageData.headline || '';
+    if (!headlineText || !bgCtx || bgCtx.canvas.width === 0) return;
 
-            if (headlineText && bgCtx && (bgCtx.canvas.width > 0)) {
-                // This is a simplified approach for canvas rendering.
-                // It splits the text by LaTeX delimiters ($) and draws mixed content.
-                // NOTE: This will not render complex fractions or symbols perfectly on the canvas.
-                // A full HTML/SVG overlay is required for perfect canvas rendering.
-                const plainHeadlineText = headlineText.replace(/\$(.*?)\$/g, ' $1 ').replace(/\$\$(.*?)\$\$/g, ' $1 ');
+    const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
+    const padding = 27;
+    const maxWidth = cssWidthForText * 0.8;
+    const textX = cssWidthForText / 2;
+    const headlineCurrentY = padding * 2;
+    const font = currentLang === 'en' ? 'Manrope' : 'Mardoto-Light';
+    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
 
-                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-                bgCtx.font = `20px ${fontFamily}`;
-                bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-                bgCtx.textAlign = 'center';
-                bgCtx.textBaseline = 'top';
-                wrapText(bgCtx, plainHeadlineText, textX, headlineCurrentY, maxWidth, lineHeight);
-            }
-        }
+    // Use our new math renderer for all headlines.
+    // It handles text with and without math symbols gracefully.
+    renderMathToCanvas(bgCtx, headlineText, textX, headlineCurrentY, maxWidth, font, 20, textColor);
+});
+}
           function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
 		  selectedMcqIndex = null; // <-- ADD THIS LINE
@@ -2521,7 +2571,6 @@ function renderStageUI(index, isResize = false) {
         });
     }, fadeDuration); // We still wait for the fade-out to finish before preparing the new scene.
 }
-    
     function nextStage() { transitionToStage(currentStageIndex + 1); }
     function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
     // FULL UPDATED FUNCTION
@@ -2799,8 +2848,7 @@ function addChatMessage(sender, rawMsg) {
 
         const bubble = document.createElement('div');
         bubble.className = 'ai-message'; // Starts with opacity: 0
-	    const renderedHTML = renderMathInText(msg);
-        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${renderedHTML}</span>`;
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
         chatArea.appendChild(bubble);
 
         // ===================================================================
@@ -2813,6 +2861,7 @@ function addChatMessage(sender, rawMsg) {
                 bubble.classList.add('show');
                 // Scroll into view after the animation starts.
                 chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+		    if (window.renderMathInElement) renderMathInElement(bubble);
             }, 10); // A tiny delay is all that's needed.
         });
     }
@@ -3086,7 +3135,7 @@ function logHandwritingAttempt(result) {
         nextCheckBtn.textContent = TXT.check;
         return;
     }
-	}
+    
     const payload = {
         imageBase64: base64ImageData,
         problemText: "The user is writing a number to answer a question.",
