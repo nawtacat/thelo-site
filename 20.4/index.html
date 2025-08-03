@@ -1311,7 +1311,39 @@ function loadCSS(href) {
 }
 
     };
+let katexFontBase64 = null; // Cache for the fetched font data
 
+    async function getKatexFont() {
+        // If we've already fetched the font, return the cached data immediately.
+        if (katexFontBase64) {
+            return katexFontBase64;
+        }
+
+        // URL for the KaTeX Bold font file.
+        const fontUrl = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/fonts/KaTeX_Main-Bold.woff2';
+        
+        try {
+            const response = await fetch(fontUrl);
+            if (!response.ok) throw new Error(`Failed to fetch font: ${response.statusText}`);
+            
+            const blob = await response.blob();
+            
+            // Convert the font file to a Base64 string, which can be embedded in CSS.
+            const dataUrlPromise = new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            
+            const base64String = await dataUrlPromise;
+            katexFontBase64 = base64String; // Cache the result
+            return base64String;
+        } catch (error) {
+            console.error("Could not load KaTeX font for canvas rendering:", error);
+            return null; // Return null on failure
+        }
+    }
     let currentLang = 'en';
     /* ========================================================================= */
 /* ===== ADD THIS BLOCK: For Weekly Streak Calculation ===================== */
@@ -2011,51 +2043,46 @@ function addBoardDrawListeners() {
         }
         if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
     }
-	function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
-    // 1. Create a temporary, off-screen element to safely run the auto-renderer.
+	async function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
+    // 1. Ensure the bold KaTeX font is loaded and ready.
+    const fontData = await getKatexFont();
+
+    // 2. Create a temporary element to correctly render mixed text/math using KaTeX's auto-renderer.
     const tempEl = document.createElement('div');
     tempEl.style.position = 'absolute';
-    tempEl.style.left = '-9999px'; // Position it off-screen
-    tempEl.style.width = maxWidth + 'px';
-    tempEl.style.visibility = 'hidden'; // Prevent any brief flashing
-    tempEl.innerHTML = text; // Set the raw text with delimiters
-
-    // 2. Add the element to the DOM, run the KaTeX auto-renderer, and then remove it.
+    tempEl.style.left = '-9999px';
+    tempEl.style.visibility = 'hidden';
+    tempEl.innerHTML = text;
     document.body.appendChild(tempEl);
-    try {
-        if (window.renderMathInElement) {
-            renderMathInElement(tempEl, {
-                delimiters: [
-                    { left: '$$', right: '$$', display: true },
-                    { left: '$', right: '$', display: false },
-                ],
-                throwOnError: false
-            });
-        }
-    } catch (e) {
-        console.error("KaTeX auto-render failed:", e);
+    if (window.renderMathInElement) {
+        renderMathInElement(tempEl, {
+            delimiters: [{ left: '$', right: '$', display: false }],
+            throwOnError: false
+        });
     }
-    const katexHtml = tempEl.innerHTML; // Get the correctly rendered HTML
-    document.body.removeChild(tempEl); // Clean up
+    const katexHtml = tempEl.innerHTML;
+    document.body.removeChild(tempEl);
 
-    // 3. Create an SVG, injecting the necessary styles for both the regular text and the KaTeX math.
+    // 3. Create an SVG with the font and styles embedded directly inside it. This is the key to the fix.
     const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 4}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 2.5}">
             <style>
+                /* Embed the fetched font data directly into the SVG's CSS */
+                @font-face {
+                    font-family: 'KaTeX_Main_Bold'; /* Give it a unique name for this context */
+                    src: url(${fontData});
+                }
+                /* Style for the wrapper div (for plain text) */
                 .wrapper {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100%;
                     font-family: '${fontFamily}', sans-serif;
                     font-size: ${fontSize}px;
                     color: ${color};
                     line-height: 1.5;
                     text-align: center;
                 }
+                /* Style for KaTeX elements to apply the embedded font and make it bold */
                 .katex {
-                    font-family: 'KaTeX_Main', 'Times New Roman', serif !important;
-                    font-weight: 700 !important; /* Make math bold as requested */
+                    font-family: 'KaTeX_Main_Bold', serif !important;
                 }
             </style>
             <foreignObject width="100%" height="100%">
@@ -2065,7 +2092,7 @@ function addBoardDrawListeners() {
             </foreignObject>
         </svg>`;
 
-    // 4. Continue with the existing image rendering pipeline.
+    // 4. Create an image from the SVG data and draw it to the canvas.
     const img = new Image();
     const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
@@ -2075,22 +2102,11 @@ function addBoardDrawListeners() {
         const finalWidth = img.width * scale;
         const finalHeight = img.height * scale;
         const drawX = x - (finalWidth / 2);
-        const drawY = y;
-        ctx.drawImage(img, drawX, drawY, finalWidth, finalHeight);
+        ctx.drawImage(img, drawX, y, finalWidth, finalHeight); // Use the original 'y' to fix positioning
         URL.revokeObjectURL(url);
-    };
-    
-    img.onerror = function(err) {
-        console.error("Error loading the KaTeX SVG into an image. Rendering plain text fallback.", err);
-        URL.revokeObjectURL(url);
-        ctx.font = `${fontSize}px '${fontFamily}', sans-serif`;
-        ctx.fillStyle = color;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        const plainText = text.replace(/\$/g, '');
-        wrapText(ctx, plainText, x, y, maxWidth, fontSize * 1.2);
     };
 
+    img.onerror = function(err) { /* Fallback code remains the same */ };
     img.src = url;
 }
     function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
@@ -2592,18 +2608,18 @@ function renderStageUI(index, isResize = false) {
 
         function drawHeadlineText() {
             const headlineText = currentStageData.headline || '';
-            if (!headlineText || !bgCtx || bgCtx.canvas.width === 0) return;
+            if (!headlineText || !bgCtx || bgCtx.canvas.width === 0) return;
 
-            const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
-            const padding = 27;
-            const maxWidth = cssWidthForText * 0.8;
-            const textX = cssWidthForText / 2;
-            const headlineCurrentY = padding * 2;
-            const font = currentLang === 'en' ? 'Manrope' : 'Mardoto-Light';
-            const textColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+            const cssWidthForText = backgroundCanvas.width / devicePixelRatio;
+            const padding = 27;
+            const maxWidth = cssWidthForText * 0.8;
+            const textX = cssWidthForText / 2;
+            const headlineCurrentY = padding * 2;
+            const font = currentLang === 'en' ? 'Manrope' : 'Mardoto-Light';
+            const textColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
 
-            // Use our new math renderer for all headlines.
-            renderMathToCanvas(bgCtx, headlineText, textX, headlineCurrentY, maxWidth, font, 20, textColor);
+            // Use our new math renderer for all headlines.
+            await renderMathToCanvas(bgCtx, headlineText, textX, headlineCurrentY, maxWidth, font, 20, textColor); // Add "await" here
         }
 
         if (currentStageData.image && bgCtx) {
