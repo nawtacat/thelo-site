@@ -1166,6 +1166,8 @@ body.lang-en {
     </div>
 </div>
 </body>
+	<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoebJnpMNGbYSmRKofE_gDR92eIK9LPmM49IAlK27KvI6Uo4eHRgW2YkI5P4lUu" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/Gf1ESgOGbtDKUCoMheKPHCbD5vrN9gmyqQ0dZGMfxvBTVsoY" crossorigin="anonymous"></script>
   <script>
     const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
     firebase.initializeApp(firebaseConfig);
@@ -1183,19 +1185,7 @@ body.lang-en {
             console.error("Auth persistence error:", error.code, error.message);
         });
 	// ADD THIS AFTER YOUR FIREBASE INITIALIZATION
-document.addEventListener('DOMContentLoaded', function() {
-    window.renderMathInElement = (elem) => {
-        if (window.renderMathInElement) {
-            renderMathInElement(elem, {
-                delimiters: [
-                    {left: '$$', right: '$$', display: true},
-                    {left: '$', right: '$', display: false},
-                ],
-                throwOnError: false
-            });
-        }
-    };
-});
+
     const INK_COLORS = { black: '#000000', blue: getComputedStyle(document.documentElement).getPropertyValue('--ink-blue').trim() || '#2563eb' };
 
     const UI_TEXT = {
@@ -2164,31 +2154,32 @@ function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, col
 
 	function displayMcq(mcqDetails){
     const choices = mcqDetails.choices;
-    if (!mcqOptionsContainer || !mcqDetails ||
-        !Array.isArray(choices) || choices.length === 0) return;
+    if (!mcqOptionsContainer || !mcqDetails || !Array.isArray(choices) || choices.length === 0) return;
     if (isPageGridVisible) closePageGridView();
 
     mcqOptionsContainer.innerHTML = '';
-
-    /* ===== Smart‑layout ===== */
     const isShort = choices.every(choice => choice.length < 10);
     mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
-
-    /* <<—‑‑‑  ADD THESE TWO LINES  ‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑>> */
     const isSideBySide = !!(currentStageData && currentStageData.image);
     mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
-    /* --------------------------------------------------- */
 
     choices.forEach((optionText, index) => {
         const optionButton = document.createElement('button');
         optionButton.classList.add('mcq-option-btn');
-        optionButton.textContent  = optionText;
+        optionButton.innerHTML = optionText;
         optionButton.dataset.index = index;
-        optionButton.addEventListener(
-            'click',
-            () => handleMcqOptionClick(index, mcqDetails)
-        );
-	if (window.renderMathInElement) renderMathInElement(optionButton);
+        optionButton.addEventListener('click', () => handleMcqOptionClick(index, mcqDetails));
+        
+        // CORRECTED: Call the real KaTeX function with options
+        if (window.renderMathInElement) {
+            renderMathInElement(optionButton, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                ],
+                throwOnError: false
+            });
+        }
         mcqOptionsContainer.appendChild(optionButton);
     });
 
@@ -2878,52 +2869,63 @@ function handleNextCheckClick() {
 // REPLACE your entire addChatMessage function with this one
 
 function addChatMessage(sender, rawMsg) {
-    if (isTabletMode) {
-        // Tablet toast logic remains the same
-        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
-        showToast(rawMsg, isImportant ? 5000 : 3500);
-    } else {
-        // Desktop/mobile terminal chat
-        const chatArea = document.getElementById('chat');
-        if (!chatArea) return;
+    if (isTabletMode) {
+        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
+        showToast(rawMsg, isImportant ? 5000 : 3500);
+    } else {
+        const chatArea = document.getElementById('chat');
+        if (!chatArea) return;
 
-        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
-        const TXT = getCurrentUIText();
-        let emoji = '🫧';
+        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+        const TXT = getCurrentUIText();
+        let emoji = '🫧';
 
-        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
-        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
-        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
-        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
-        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
 
-        if(isWrong) emoji = '🤔';
-        else if (isCorrect || isPoints) emoji = '🎉';
-        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
-        else if (isWelcome) emoji = '👋';
-        else if (isChecking) emoji = '⏳';
+        if (isWrong) emoji = '🤔';
+        else if (isCorrect || isPoints) emoji = '🎉';
+        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+        else if (isWelcome) emoji = '👋';
+        else if (isChecking) emoji = '⏳';
 
-        const bubble = document.createElement('div');
-        bubble.className = 'ai-message'; // Starts with opacity: 0
-        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
-        chatArea.appendChild(bubble);
+        const bubble = document.createElement('div');
+        bubble.className = 'ai-message';
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
+        chatArea.appendChild(bubble);
 
-        // ===================================================================
-        // ===== THE FIX: Forcing the browser to paint the initial state =====
-        // ===================================================================
-        requestAnimationFrame(() => {
-            // This nested timeout ensures the class addition happens in a separate
-            // task, after the browser has painted the invisible element.
-            setTimeout(() => {
-                bubble.classList.add('show');
-                // Scroll into view after the animation starts.
-                chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-		    if (window.renderMathInElement) renderMathInElement(bubble);
-            }, 10); // A tiny delay is all that's needed.
-        });
-    }
-}    /**
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                bubble.classList.add('show');
+                chatArea.scrollTo({
+                    top: chatArea.scrollHeight,
+                    behavior: 'smooth'
+                });
+                
+                // Call the KaTeX auto-render function directly on the new element
+                if (window.renderMathInElement) {
+                    renderMathInElement(bubble, {
+                        delimiters: [{
+                            left: '$$',
+                            right: '$$',
+                            display: true
+                        }, {
+                            left: '$',
+                            right: '$',
+                            display: false
+                        }, ],
+                        throwOnError: false
+                    });
+                }
+            }, 10);
+        });
+    }
+}
+	  /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
  * @param {string} topicId - The unique ID for the lesson (e.g., 'sat-linear-equations-one-var').
