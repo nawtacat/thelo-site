@@ -1972,88 +1972,43 @@ function addBoardDrawListeners() {
         thelobookDrawListenersAttached = false;
     }
 
-   /**
- * Renders text on a canvas, automatically wrapping it to a max width and
- * keeping the entire text block centered horizontally and vertically.
- * @param {CanvasRenderingContext2D} context The canvas rendering context.
- * @param {string} text The text string to draw.
- * @param {number} y The desired vertical center for the entire text block.
- * @param {number} maxWidth The maximum width for a line of text.
- * @param {number} lineHeight The height of each line.
+    function wrapText(context, text, x, y, maxWidth, lineHeight){
+        const words = text.split(' '); let line = ''; let currentY = y; let lines = [];
+        for(let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' '; const metrics = context.measureText(testLine);
+            const testWidth = metrics.width; const wordWidth = context.measureText(words[n]).width;
+            if (wordWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = ''; currentY += lineHeight; }
+            if (wordWidth > maxWidth) { context.fillText(words[n], x, currentY); lines.push(words[n]); line = ' '; currentY += lineHeight; }
+            else if (testWidth > maxWidth && line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim()); line = words[n] + ' '; currentY += lineHeight; }
+            else { line = testLine; }
+        }
+        if (line.trim() !== '') { context.fillText(line.trim(), x, currentY); lines.push(line.trim());} return lines.length * lineHeight;
+    }
+    /**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
  */
 /**
- * Renders text on a canvas, automatically wrapping it by word, and then by character
- * if a single word is too long. Keeps the block centered.
- * @param {CanvasRenderingContext2D} context The canvas rendering context.
- * @param {string} text The text string to draw.
- * @param {number} y The desired vertical center for the entire text block.
- * @param {number} maxWidth The maximum width for a line of text.
- * @param {number} lineHeight The height of each line.
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
  */
-function wrapText(context, text, y, maxWidth, lineHeight) {
-    const canvasWidth = context.canvas.width / (window.devicePixelRatio || 1);
-    
-    // First pass: wrap by whole words
-    const words = text.split(' ');
-    const preliminaryLines = [];
-    let currentLine = '';
-    for (const word of words) {
-        const testLine = currentLine + (currentLine === '' ? '' : ' ') + word;
-        if (context.measureText(testLine).width > maxWidth && currentLine !== '') {
-            preliminaryLines.push(currentLine);
-            currentLine = word;
-        } else {
-            currentLine = testLine;
-        }
-    }
-    preliminaryLines.push(currentLine);
-
-    // Second pass: wrap any line that is still too long (i.e., a single long word)
-    const finalLines = [];
-    for (const line of preliminaryLines) {
-        if (context.measureText(line).width > maxWidth) {
-            let tempLine = '';
-            for (const char of line) {
-                if (context.measureText(tempLine + char).width > maxWidth) {
-                    finalLines.push(tempLine);
-                    tempLine = char;
-                } else {
-                    tempLine += char;
-                }
-            }
-            finalLines.push(tempLine);
-        } else {
-            finalLines.push(line);
-        }
-    }
-
-    // Drawing logic: Renders the final wrapped lines centered on the canvas
-    const blockHeight = (finalLines.length - 1) * lineHeight;
-    let currentY = y - (blockHeight / 2);
-
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-
-    for (const singleLine of finalLines) {
-        context.fillText(singleLine, canvasWidth / 2, currentY);
-        currentY += lineHeight;
-    }
-}
- 
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
+/**
+ * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
+ */
 let katexStylesheet = null;
 
 /**
- * Renders a headline containing mixed plain text and KaTeX math onto a canvas.
- * For simple text, it wraps the content to 80% of the canvas width.
- * For complex text with math, it renders all segments on a single line.
+ * Renders a headline containing mixed plain text and KaTeX math onto a canvas,
+ * wrapping the content to fit within 80% of the canvas width.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
  * @param {string} headline - The text to render, e.g., "Solve for x in /K x^2=4 K/".
- * @param {number} y - The vertical position (baseline) to draw the text at.
+ * @param {number} y - The starting vertical position (baseline) to draw the text at.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
     if (!headline || !bgCtx) return;
 
-    // Get KaTeX CSS (with caching)
+    // 1. Fetch KaTeX CSS if not already cached (no changes here)
     if (!katexStylesheet) {
         try {
             const response = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
@@ -2061,13 +2016,13 @@ async function renderComplexHeadline(bgCtx, headline, y) {
             katexStylesheet = await response.text();
         } catch (error) {
             console.error("Failed to fetch KaTeX stylesheet:", error);
-            // Fallback: render the headline as plain text if CSS fails
-            wrapText(bgCtx, headline.replace(/\/K (.*?) K\//g, '$1'), y, bgCtx.canvas.width / (window.devicePixelRatio || 1) * 0.8, 30);
+            // Fallback to plain text rendering on error
+            bgCtx.fillText(headline.replace(/\/K (.*?) K\//g, '$1'), bgCtx.canvas.width / devicePixelRatio / 2, y);
             return;
         }
     }
 
-    // Parse the headline into 'text' and 'math' segments
+    // 2. Parse the headline into 'text' and 'math' segments (no changes here)
     const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
         if (part.startsWith('/K ') && part.endsWith(' K/')) {
             return { type: 'math', content: part.substring(3, part.length - 3) };
@@ -2075,26 +2030,12 @@ async function renderComplexHeadline(bgCtx, headline, y) {
         return { type: 'text', content: part };
     });
 
-    // If the headline is just simple text (no math), use the wrapping logic.
-    if (segments.length === 1 && segments[0].type === 'text') {
-        const textContent = segments[0].content;
-        const canvasWidth = bgCtx.canvas.width / (window.devicePixelRatio || 1);
-        const maxWidth = canvasWidth * 0.80; // 80% width constraint
-        const lineHeight = 30; // Line height for 20px font
-
-        wrapText(bgCtx, textContent, y, maxWidth, lineHeight);
-
-        // Reset context properties to defaults used elsewhere in the app
-        bgCtx.textAlign = 'center';
-        bgCtx.textBaseline = 'top';
-        return; // Exit function since the headline is drawn
-    }
-    
-    // --- Original logic for complex headlines (text + math) ---
     const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
     const fontSize = 20;
     const mathFontSize = 26;
+    const lineHeight = 35; // Set a fixed height for each line of text
 
+    // 3. Process all segments to get their dimensions and image data (no changes here)
     const processedSegments = await Promise.all(segments.map(async (seg) => {
         if (seg.type === 'text') {
             const metrics = bgCtx.measureText(seg.content);
@@ -2103,6 +2044,7 @@ async function renderComplexHeadline(bgCtx, headline, y) {
             try {
                 const styledMathContent = `\\mathsf{${seg.content}}`;
                 const mathHtml = katex.renderToString(styledMathContent, { throwOnError: false, output: 'html' });
+
                 const tempContainer = document.createElement('div');
                 tempContainer.style.position = 'absolute';
                 tempContainer.style.visibility = 'hidden';
@@ -2115,12 +2057,12 @@ async function renderComplexHeadline(bgCtx, headline, y) {
 
                 const finalSvg = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}">
-                         <style>${katexStylesheet}</style>
+                        <style>${katexStylesheet}</style>
                         <foreignObject width="100%" height="100%">
-                           <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">${mathHtml}</div>
+                            <div xmlns="http://www.w3.org/1999/xhtml" style="color: ${fontColor}; font-size: ${mathFontSize}px; display: inline-block; line-height: initial;">${mathHtml}</div>
                         </foreignObject>
                     </svg>`;
-                
+
                 const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(finalSvg)));
                 const image = new Image();
                 image.src = dataUrl;
@@ -2135,23 +2077,60 @@ async function renderComplexHeadline(bgCtx, headline, y) {
         }
     }));
 
-    const totalWidth = processedSegments.reduce((sum, seg) => sum + seg.width, 0);
-    let currentX = (bgCtx.canvas.width / (window.devicePixelRatio || 1) - totalWidth) / 2;
-
-    bgCtx.textAlign = 'left';
-    bgCtx.textBaseline = 'middle';
+    // 4. NEW LOGIC: Group segments into lines that fit within 80% of the canvas width
+    const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
+    const maxWidth = canvasWidth * 0.8;
+    const lines = [];
+    let currentLine = [];
+    let currentLineWidth = 0;
 
     processedSegments.forEach(seg => {
-        const yPos = y;
-        if (seg.type === 'text') {
-            bgCtx.fillText(seg.content, currentX, yPos);
-        } else {
-            bgCtx.drawImage(seg.image, currentX, yPos - seg.height / 2, seg.width, seg.height);
+        // If a single segment is too wide, it gets its own line
+        if (seg.width > maxWidth && currentLine.length > 0) {
+            lines.push({ segments: currentLine, width: currentLineWidth });
+            currentLine = [];
+            currentLineWidth = 0;
         }
-        currentX += seg.width;
+
+        // If the current segment makes the line too long, start a new line
+        if (currentLineWidth + seg.width > maxWidth && currentLine.length > 0) {
+            lines.push({ segments: currentLine, width: currentLineWidth });
+            currentLine = [seg];
+            currentLineWidth = seg.width;
+        } else {
+            // Otherwise, add the segment to the current line
+            currentLine.push(seg);
+            currentLineWidth += seg.width;
+        }
+    });
+    if (currentLine.length > 0) {
+        lines.push({ segments: currentLine, width: currentLineWidth });
+    }
+
+    // 5. NEW LOGIC: Render the gathered lines, centering each one individually
+    bgCtx.textAlign = 'left';
+    bgCtx.textBaseline = 'middle';
+    let currentY = y;
+
+    lines.forEach(line => {
+        // Calculate the starting X position to center the current line
+        let currentX = (canvasWidth - line.width) / 2;
+
+        line.segments.forEach(seg => {
+            const yPos = currentY;
+            if (seg.type === 'text') {
+                bgCtx.fillText(seg.content, currentX, yPos);
+            } else { // 'math'
+                bgCtx.drawImage(seg.image, currentX, yPos - seg.height / 2, seg.width, seg.height);
+            }
+            currentX += seg.width;
+        });
+
+        // Move down for the next line
+        currentY += lineHeight;
     });
 
-    // Reset context properties
+    // Reset context properties to their defaults (no changes here)
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
 }
