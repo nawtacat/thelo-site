@@ -3915,12 +3915,19 @@ function initApp() {
     }
 
     // REPLACE your entire auth.onAuthStateChanged function with this one.
-
-// WRAP the entire auth state listener to ensure the DOM is ready first.
+// This listener ensures the entire page, including KaTeX, is ready before the app starts.
 document.addEventListener('DOMContentLoaded', () => {
 
+    // Diagnostic check: This will tell us if KaTeX loaded correctly.
+    console.log('DOM is ready. Checking for KaTeX library:', typeof katex);
+    if (typeof katex === 'undefined') {
+        console.error('CRITICAL: KaTeX library failed to load before app start.');
+        // You could display an error to the user here.
+        return; // Stop the app from initializing if KaTeX is missing.
+    }
+
+    // The rest of the app initialization now happens safely inside this listener.
     auth.onAuthStateChanged(user => {
-        // This inner function will run only after all async tasks are done.
         const finishInitialization = () => {
             if (!window.appInitialized) {
                 window.appInitialized = true;
@@ -3928,7 +3935,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 updateAllUITexts();
             }
-            // Set the flag to true as the very last step.
             isAuthReady = true;
             console.log("Authentication is now ready.");
         };
@@ -3945,15 +3951,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log("No points document found for user, starting at 0.");
                 }
                 updatePointsDisplay();
-                finishInitialization(); // Finish init AFTER getting points.
+                finishInitialization();
             }).catch(error => {
                 console.error("Error fetching user points:", error);
                 userPoints = 0;
                 updatePointsDisplay();
-                finishInitialization(); // Also finish init if there's an error.
+                finishInitialization();
             });
         } else {
-            // If there is no user, there's no async task, so we can proceed.
             userPoints = 0;
             updatePointsDisplay();
             console.log("User not authenticated.");
