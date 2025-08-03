@@ -1990,70 +1990,77 @@ function addBoardDrawListeners() {
 let katexStylesheet = null;
 
 /**
- * Renders a headline containing mixed plain and bold text onto a canvas.
- * Text wrapped in /K ... K/ will be rendered in bold.
+ * Renders a headline containing mixed plain text and KaTeX math onto a canvas.
  * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
- * @param {string} headline - The text to render, e.g. "Solve for x in /K this part is bold K/".
+ * @param {string} headline - The text to render, e.g. "Solve for x in /K x^2=4 K/".
+ * @param {number} y - The vertical position (baseline) to draw the text at.
+ */
+/**
+ * Renders a headline containing text with mixed font sizes on a canvas.
+ * Text wrapped in /K ... K/ will be rendered at a larger size.
+ * @param {CanvasRenderingContext2D} bgCtx - The context of the background canvas.
+ * @param {string} headline - The text to render, e.g. "This is /K important K/ text.".
  * @param {number} y - The vertical position (baseline) to draw the text at.
  */
 async function renderComplexHeadline(bgCtx, headline, y) {
     if (!headline || !bgCtx) return;
 
-    // 1. Parse the headline into 'text' and 'bold' segments
+    // --- FONT SIZE CONFIGURATION ---
+    const normalFontSize = 20;  // The default font size for the headline.
+    const specialFontSize = 25; // The larger font size for text inside /K ... K/.
+    // -----------------------------
+
+    const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+
+    // 1. Parse the headline into 'text' and 'special' (large text) segments.
     const segments = headline.split(/(\/K.*?K\/)/g).filter(Boolean).map(part => {
         if (part.startsWith('/K ') && part.endsWith(' K/')) {
-            return { type: 'bold', content: part.substring(3, part.length - 3) };
+            return { type: 'special', content: part.substring(3, part.length - 3) };
         }
         return { type: 'text', content: part };
     });
 
-    const fontSize = 20; // This must match the font size used elsewhere
-    const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-
-    // 2. Process all segments to get their dimensions
-    // Note: The function no longer needs to be async, but we keep it to maintain the function signature.
+    // 2. Process all segments to measure their width with the correct font size.
     const processedSegments = segments.map(seg => {
-        const originalFont = bgCtx.font; // Save the current font setting
+        const originalFont = bgCtx.font; // Save current font
         let metrics;
 
         if (seg.type === 'text') {
-            bgCtx.font = `${fontSize}px ${fontFamily}`; // Set to normal font
-            metrics = bgCtx.measureText(seg.content);
-        } else { // 'bold'
-            bgCtx.font = `bold ${fontSize}px ${fontFamily}`; // Set to bold font
-            metrics = bgCtx.measureText(seg.content);
+            bgCtx.font = `${normalFontSize}px ${fontFamily}`;
+        } else { // 'special'
+            bgCtx.font = `${specialFontSize}px ${fontFamily}`;
         }
 
-        bgCtx.font = originalFont; // IMPORTANT: Restore font immediately after measuring
-        return { ...seg, width: metrics.width, height: fontSize };
+        metrics = bgCtx.measureText(seg.content);
+        bgCtx.font = originalFont; // Restore font immediately after measuring
+        return { ...seg, width: metrics.width };
     });
 
-    // 3. Calculate total width and draw the segments centered on the canvas
+    // 3. Calculate total width and draw the segments centered on the canvas.
     const totalWidth = processedSegments.reduce((sum, seg) => sum + seg.width, 0);
     let currentX = (bgCtx.canvas.width / devicePixelRatio - totalWidth) / 2;
 
     bgCtx.textAlign = 'left';
-    bgCtx.textBaseline = 'middle'; // Align all parts to the same vertical middle
+    bgCtx.textBaseline = 'middle'; // This aligns the vertical center of all text pieces, which looks best with mixed sizes.
 
     processedSegments.forEach(seg => {
-        const yPos = y; 
+        const yPos = y;
 
         if (seg.type === 'text') {
-            bgCtx.font = `${fontSize}px ${fontFamily}`; // Use NORMAL font for drawing
-            bgCtx.fillText(seg.content, currentX, yPos);
-        } else { // 'bold'
-            bgCtx.font = `bold ${fontSize}px ${fontFamily}`; // Use BOLD font for drawing
-            bgCtx.fillText(seg.content, currentX, yPos);
+            bgCtx.font = `${normalFontSize}px ${fontFamily}`; // Set NORMAL font for drawing.
+        } else { // 'special'
+            bgCtx.font = `${specialFontSize}px ${fontFamily}`; // Set LARGER font for drawing.
         }
+        bgCtx.fillText(seg.content, currentX, yPos);
         currentX += seg.width;
     });
 
-    // 4. Reset canvas context properties to avoid affecting other drawing operations
+    // 4. Reset canvas context properties to their defaults.
     bgCtx.textAlign = 'center';
     bgCtx.textBaseline = 'top';
-    bgCtx.font = `${fontSize}px ${fontFamily}`; // Reset to the default normal font
-}
-    function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
+    bgCtx.font = `${normalFontSize}px ${fontFamily}`;
+}    
+	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
     function playStageAudio(
     audioSrc,
