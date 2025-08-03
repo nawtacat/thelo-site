@@ -2016,31 +2016,13 @@ function addBoardDrawListeners() {
     }
 	// REPLACE your old renderMathToCanvas function with this one
 
+// REPLACE the renderMathToCanvas function with this robust version
+
 function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, color) {
-    // --- START: ADDED GUARD CLAUSE ---
-    // First, check if the KaTeX library is actually loaded and ready.
-    if (typeof katex === 'undefined') {
-        console.warn("KaTeX not loaded when renderMathToCanvas was called. Rendering as plain text.");
-        
-        // Fallback: Render the text without attempting math formatting.
-        ctx.font = `${fontSize}px '${fontFamily}', sans-serif`;
-        ctx.fillStyle = color;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        
-        // A simple way to strip the math delimiters ($) for the plain text fallback.
-        const plainText = text.replace(/\$/g, ''); 
-        wrapText(ctx, plainText, x, y, maxWidth, fontSize * 1.2);
-
-        return; // Exit the function to prevent the error.
-    }
-    // --- END: ADDED GUARD CLAUSE ---
-
-    // 1. Create the KaTeX HTML. Wrap the text in a container that sets the base styles.
-    // This code will now only run if the check above passes.
+    // 1. Create the KaTeX HTML.
     const styledText = `<div style="font-family: '${fontFamily}', sans-serif; font-size: ${fontSize}px; color: ${color};">${text}</div>`;
     const katexHtml = katex.renderToString(styledText, {
-        displayMode: true, // Use displayMode for better layout control
+        displayMode: true,
         throwOnError: false,
         output: 'html',
         delimiters: [
@@ -2049,16 +2031,12 @@ function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, col
         ]
     });
 
-    // 2. Create an SVG wrapper. We need to embed the font stylesheet for it to work in the SVG.
+    // 2. Create an SVG wrapper. THE FIX IS HERE: The <style> block has been removed
+    // as it can cause silent rendering failures.
     const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${maxWidth}" height="${fontSize * 5}">
             <foreignObject width="100%" height="100%">
                 <div xmlns="http://www.w3.org/1999/xhtml">
-                    <style>
-                        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;700&display=swap');
-                        @import url('https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css');
-                        .katex { font-weight: 700 !important; }
-                    </style>
                     ${katexHtml}
                 </div>
             </foreignObject>
@@ -2078,6 +2056,20 @@ function renderMathToCanvas(ctx, text, x, y, maxWidth, fontFamily, fontSize, col
         ctx.drawImage(img, drawX, y, finalWidth, finalHeight);
         URL.revokeObjectURL(url); // Clean up the blob URL
     };
+    
+    // ADDED: An error handler for robustness. If the image fails to load,
+    // it will log the error and draw plain text as a fallback.
+    img.onerror = function(err) {
+        console.error("Error loading the KaTeX SVG into an image. Rendering plain text fallback.", err);
+        URL.revokeObjectURL(url); // Clean up the blob URL
+        ctx.font = `${fontSize}px '${fontFamily}', sans-serif`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const plainText = text.replace(/\$/g, '');
+        wrapText(ctx, plainText, x, y, maxWidth, fontSize * 1.2);
+    };
+
     img.src = url;
 }
     function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
