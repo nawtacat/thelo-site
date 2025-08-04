@@ -2040,6 +2040,23 @@ async function getKatexCSSWithEmbeddedFonts() {
   katexCSSInlined = css;
   return katexCSSInlined;
 }
+// Wait until the UI font used for headline text is available
+async function ensureHeadlineFontsLoaded() {
+  try {
+    const family = (currentLang === 'en') ? 'Manrope' : 'Mardoto-Light';
+    // Load a specific face/size so measureText uses the right metrics
+    if (document.fonts && document.fonts.load) {
+      // Try to load; don't hang forever if the browser doesn't support it
+      await Promise.race([
+        (async () => {
+          await document.fonts.load(`20px "${family}"`);
+          await document.fonts.ready; // resolves when all pending fonts are ready
+        })(),
+        new Promise(res => setTimeout(res, 800)) // safety timeout
+      ]);
+    }
+  } catch (_) { /* ignore */ }
+}
 
 
 // Mixed text + KaTeX headline renderer (SVG with embedded KaTeX fonts)
@@ -2607,7 +2624,7 @@ function renderStageUI(index, isResize = false) {
             if (headlineText && bgCtx && bgCtx.canvas.width > 0) {
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
                 bgCtx.font = `20px ${fontFamily}`;
-                
+                await ensureHeadlineFontsLoaded();
                 // Use our new complex renderer, adjusting Y-pos for the 'middle' textBaseline it uses
                 await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
             }
