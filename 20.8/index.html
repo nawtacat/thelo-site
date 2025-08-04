@@ -2020,12 +2020,20 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
     } catch { katexStylesheet = ""; }
   }
 
-  // ---- parse segments: /K ... K/ = math ----
+  // ---- parse segments: /K...K/ = math ----
   const segments = (headline.split(/(\/K.*?K\/)/g) || [])
     .filter(Boolean)
-    .map(p => (p.startsWith('/K ') && p.endsWith(' K/'))
-      ? { type: 'math', content: p.slice(3, -3) }
-      : { type: 'text', content: p });
+    .map(p => {
+        // =======================================================
+        // THE BUG WAS HERE. The code was looking for '/K ' with a space.
+        // This corrected version looks for '/K' without a space.
+        // =======================================================
+        if (p.startsWith('/K') && p.endsWith('K/')) {
+            return { type: 'math', content: p.slice(2, -2) }; // Slice also corrected
+        } else {
+            return { type: 'text', content: p };
+        }
+    });
 
   const fontColor    = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
   const fontSize     = 20;  // should match bgCtx.font set by caller
@@ -2047,15 +2055,8 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       }
     } else {
       try {
-        // =======================================================
-        // THIS IS THE ONLY LINE TO CHANGE.
-        // It removes the `\\mathsf{}` wrapper to use the
-        // default KaTeX font, which is the serif one you want.
-        // =======================================================
         const styled = `${seg.content}`;
-
         const html = katex.renderToString(styled, { throwOnError: false, output: 'html' });
-
         // measure KaTeX in DOM
         const tmp = document.createElement('div');
         tmp.style.position = 'absolute';
@@ -2066,7 +2067,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
         document.body.appendChild(tmp);
         const rect = tmp.querySelector('.katex').getBoundingClientRect();
         document.body.removeChild(tmp);
-
         // rasterizable svg
         const svg = `
           <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
@@ -2081,7 +2081,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
         const image = new Image();
         image.src = dataUrl;
         await image.decode();
-
         tokens.push({ type: 'math', image, width: rect.width, height: rect.height });
       } catch {
         const w = bgCtx.measureText(seg.content).width;
@@ -2135,7 +2134,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   bgCtx.textAlign = prevAlign || 'center';
   bgCtx.textBaseline = prevBase || 'top';
 }
-
 
 
 
