@@ -2006,6 +2006,9 @@ let katexStylesheet = null;
  * - Each rendered line is horizontally centered.
  */
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
+  // ADD THIS LINE FOR DIAGNOSTICS. Check your browser's console (F12) to see what string is being received.
+  console.log("renderComplexHeadline received:", headline);
+
   if (!headline || !bgCtx) return;
 
   // ---- config ----
@@ -2024,19 +2027,16 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   const segments = (headline.split(/(\/K.*?K\/)/g) || [])
     .filter(Boolean)
     .map(p => {
-        // =======================================================
-        // THE BUG WAS HERE. The code was looking for '/K ' with a space.
-        // This corrected version looks for '/K' without a space.
-        // =======================================================
+        // This logic correctly finds '/K...K/' without extra spaces
         if (p.startsWith('/K') && p.endsWith('K/')) {
-            return { type: 'math', content: p.slice(2, -2) }; // Slice also corrected
+            return { type: 'math', content: p.slice(2, -2) };
         } else {
             return { type: 'text', content: p };
         }
     });
 
   const fontColor    = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
-  const fontSize     = 20;  // should match bgCtx.font set by caller
+  const fontSize     = 20; 
   const mathFontSize = 22;
 
   // ---- tokenization & measuring ----
@@ -2055,9 +2055,10 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       }
     } else {
       try {
+        // Renders the math content with the default, serif KaTeX font.
         const styled = `${seg.content}`;
         const html = katex.renderToString(styled, { throwOnError: false, output: 'html' });
-        // measure KaTeX in DOM
+        // ... (the rest of the function is the same as before)
         const tmp = document.createElement('div');
         tmp.style.position = 'absolute';
         tmp.style.visibility = 'hidden';
@@ -2067,7 +2068,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
         document.body.appendChild(tmp);
         const rect = tmp.querySelector('.katex').getBoundingClientRect();
         document.body.removeChild(tmp);
-        // rasterizable svg
         const svg = `
           <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
             <style>${katexStylesheet}</style>
@@ -2082,14 +2082,12 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
         image.src = dataUrl;
         await image.decode();
         tokens.push({ type: 'math', image, width: rect.width, height: rect.height });
-      } catch {
+      } catch (e) {
         const w = bgCtx.measureText(seg.content).width;
         tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
       }
     }
   }
-
-  // The rest of the function remains the same...
   const canvasW  = bgCtx.canvas.width / devicePixelRatio;
   const maxWidth = canvasW * widthFraction;
   const lineGap  = 8;
