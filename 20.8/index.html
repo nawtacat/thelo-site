@@ -1997,7 +1997,50 @@ function addBoardDrawListeners() {
 /**
  * A cache for the fetched KaTeX stylesheet to avoid re-fetching.
  */
-let katexStylesheet = null;
+let katexCSSInlined = null;
+
+function abToBase64(ab) {
+  const CHUNK = 0x8000;
+  const bytes = new Uint8Array(ab);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+async function getKatexCSSWithEmbeddedFonts() {
+  if (katexCSSInlined) return katexCSSInlined;
+
+  const base = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist';
+  let css = await (await fetch(`${base}/katex.min.css`)).text();
+
+  // Minimal set that covers typical inline math + delimiters
+  const fonts = [
+    'KaTeX_Main-Regular.woff2',
+    'KaTeX_Main-Italic.woff2',
+    'KaTeX_Main-Bold.woff2',
+    'KaTeX_Math-Italic.woff2',
+    'KaTeX_AMS-Regular.woff2',
+    'KaTeX_Size1-Regular.woff2',
+    'KaTeX_Size2-Regular.woff2'
+  ];
+
+  for (const name of fonts) {
+    const url = `${base}/fonts/${name}`;
+    const res = await fetch(url);
+    const b64 = abToBase64(await res.arrayBuffer());
+    const dataURL = `url(data:font/woff2;base64,${b64}) format("woff2")`;
+    css = css.replace(
+      new RegExp(`url\\([^)]*${name}[^)]*\\)\\s*format\\("woff2"\\)`, 'g'),
+      dataURL
+    );
+  }
+
+  katexCSSInlined = css;
+  return katexCSSInlined;
+}
+
 
 /**
  * Mixed text + KaTeX headline renderer.
@@ -2013,12 +2056,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   const yNudge = opts.yNudge ?? -14; // raise a tiny bit by default
 
   // ---- KaTeX CSS cache ----
-  if (!katexStylesheet) {
-    try {
-      const res = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
-      katexStylesheet = res.ok ? await res.text() : "";
-    } catch { katexStylesheet = ""; }
-  }
+ const katexCSS = await getKatexCSSWithEmbeddedFonts();
 
   // ---- parse segments: /K ... K/ = math ----
   const segments = (headline.split(/(\/K.*?K\/)/g) || [])
@@ -2071,7 +2109,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
 
 const svg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
-    <style>${katexStylesheet}\n${extraRules}</style>
+    <style>${katexCSS}\n${extraRules}</style>
     <foreignObject width="100%" height="100%">
       <div xmlns="http://www.w3.org/1999/xhtml"
            style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;">
@@ -2079,6 +2117,7 @@ const svg = `
       </div>
     </foreignObject>
   </svg>`;
+
 
         const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
         const image = new Image();
