@@ -2006,132 +2006,147 @@ let katexStylesheet = null;
  * - Each rendered line is horizontally centered.
  */
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
-  // ADD THIS LINE FOR DIAGNOSTICS. Check your browser's console (F12) to see what string is being received.
-  console.log("renderComplexHeadline received:", headline);
+  if (!headline || !bgCtx) return;
 
-  if (!headline || !bgCtx) return;
+  // ---- config ----
+  const widthFraction = Math.min(Math.max(opts.widthFraction ?? 0.88, 0.5), 0.98);
+  const yNudge = opts.yNudge ?? -14; // raise a tiny bit by default
 
-  // ---- config ----
-  const widthFraction = Math.min(Math.max(opts.widthFraction ?? 0.88, 0.5), 0.98);
-  const yNudge = opts.yNudge ?? -14; // raise a tiny bit by default
+  // ---- KaTeX CSS cache ----
+  if (!katexStylesheet) {
+    try {
+      const res = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
+      katexStylesheet = res.ok ? await res.text() : "";
+    } catch { katexStylesheet = ""; }
+  }
 
-  // ---- KaTeX CSS cache ----
-  if (!katexStylesheet) {
-    try {
-      const res = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css");
-      katexStylesheet = res.ok ? await res.text() : "";
-    } catch { katexStylesheet = ""; }
-  }
+  // ---- parse segments: /K ... K/ = math ----
+  const segments = (headline.split(/(\/K.*?K\/)/g) || [])
+    .filter(Boolean)
+    .map(p => (p.startsWith('/K ') && p.endsWith(' K/'))
+      ? { type: 'math', content: p.slice(3, -3) }
+      : { type: 'text', content: p });
 
-  // ---- parse segments: /K...K/ = math ----
-  const segments = (headline.split(/(\/K.*?K\/)/g) || [])
-    .filter(Boolean)
-    .map(p => {
-        // This logic correctly finds '/K...K/' without extra spaces
-        if (p.startsWith('/K') && p.endsWith('K/')) {
-            return { type: 'math', content: p.slice(2, -2) };
-        } else {
-            return { type: 'text', content: p };
-        }
-    });
+  const fontColor    = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
+  const fontSize     = 20;  // should match bgCtx.font set by caller
+  const mathFontSize = 22;
 
-  const fontColor    = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
-  const fontSize     = 20; 
-  const mathFontSize = 22;
+  // ---- tokenization & measuring ----
+  const tokens = [];
+  for (const seg of segments) {
+    if (seg.type === 'text') {
+      const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
+      for (const p of parts) {
+        tokens.push({
+          type: 'text',
+          content: p,
+          width: bgCtx.measureText(p).width,
+          height: fontSize,
+          isSpace: /^\s+$/.test(p)
+        });
+      }
+    } else {
+      try {
+	const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
 
-  // ---- tokenization & measuring ----
-  const tokens = [];
-  for (const seg of segments) {
-    if (seg.type === 'text') {
-      const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
-      for (const p of parts) {
-        tokens.push({
-          type: 'text',
-          content: p,
-          width: bgCtx.measureText(p).width,
-          height: fontSize,
-          isSpace: /^\s+$/.test(p)
-        });
-      }
-    } else {
-      try {
-        // Renders the math content with the default, serif KaTeX font.
-        const styled = `${seg.content}`;
-        const html = katex.renderToString(styled, { throwOnError: false, output: 'html' });
-        // ... (the rest of the function is the same as before)
-        const tmp = document.createElement('div');
-        tmp.style.position = 'absolute';
-        tmp.style.visibility = 'hidden';
-        tmp.style.color = fontColor;
-        tmp.style.fontSize = `${mathFontSize}px`;
-        tmp.innerHTML = html;
-        document.body.appendChild(tmp);
-        const rect = tmp.querySelector('.katex').getBoundingClientRect();
-        document.body.removeChild(tmp);
-        const svg = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
-            <style>${katexStylesheet}</style>
-            <foreignObject width="100%" height="100%">
-              <div xmlns="http://www.w3.org/1999/xhtml" style="color:${fontColor};font-size:${mathFontSize}px;display:inline-block;line-height:initial;">
-                ${html}
-              </div>
-            </foreignObject>
-          </svg>`;
-        const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
-        const image = new Image();
-        image.src = dataUrl;
-        await image.decode();
-        tokens.push({ type: 'math', image, width: rect.width, height: rect.height });
-      } catch (e) {
-        const w = bgCtx.measureText(seg.content).width;
-        tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
-      }
-    }
-  }
-  const canvasW  = bgCtx.canvas.width / devicePixelRatio;
-  const maxWidth = canvasW * widthFraction;
-  const lineGap  = 8;
-  const lines = [];
-  let line = { tokens: [], width: 0, height: fontSize };
-  for (const t of tokens) {
-    let width = t.width, height = t.height, drawW = width, drawH = height;
-    if (t.type === 'math' && width > maxWidth) {
-      const s = maxWidth / width; drawW *= s; drawH *= s; width = drawW; height = drawH;
-    }
-    const tok = { ...t, width, height, drawW, drawH };
-    if (line.tokens.length && line.width + width > maxWidth) {
-      lines.push(line);
-      line = { tokens: [], width: 0, height: fontSize };
-    }
-    if (!(line.tokens.length === 0 && tok.isSpace)) {
-      line.tokens.push(tok);
-      line.width += width;
-      if (height > line.height) line.height = height;
-    }
-  }
-  if (line.tokens.length) lines.push(line);
-  const prevAlign = bgCtx.textAlign;
-  const prevBase  = bgCtx.textBaseline;
-  bgCtx.fillStyle = fontColor;
-  bgCtx.textAlign = 'left';
-  bgCtx.textBaseline = 'top';
-  let curY = y + yNudge;
-  for (const L of lines) {
-    let x = (canvasW - L.width) / 2;
-    for (const t of L.tokens) {
-      const topY = curY + (L.height - t.height) / 2;
-      if (t.type === 'text') {
-        bgCtx.fillText(t.content, x, topY);
-      } else {
-        bgCtx.drawImage(t.image, x, topY, t.drawW ?? t.width, t.drawH ?? t.height);
-      }
-      x += t.width;
-    }
-    curY += L.height + lineGap;
-  }
-  bgCtx.textAlign = prevAlign || 'center';
-  bgCtx.textBaseline = prevBase || 'top';
+
+        // measure KaTeX in DOM
+        const tmp = document.createElement('div');
+        tmp.style.position = 'absolute';
+        tmp.style.visibility = 'hidden';
+        tmp.style.color = fontColor;
+        tmp.style.fontSize = `${mathFontSize}px`;
+        tmp.innerHTML = html;
+        document.body.appendChild(tmp);
+        const rect = tmp.querySelector('.katex').getBoundingClientRect();
+        document.body.removeChild(tmp);
+
+        // rasterizable svg
+        const extraRules = `
+.katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
+.katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
+.katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
+.katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
+`;
+
+const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
+    <style>${katexStylesheet}\n${extraRules}</style>
+    <foreignObject width="100%" height="100%">
+      <div xmlns="http://www.w3.org/1999/xhtml"
+           style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;">
+        ${html}
+      </div>
+    </foreignObject>
+  </svg>`;
+
+        const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+        const image = new Image();
+        image.src = dataUrl;
+        await image.decode();
+
+        tokens.push({ type: 'math', image, width: rect.width, height: rect.height });
+      } catch {
+        const w = bgCtx.measureText(seg.content).width;
+        tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
+      }
+    }
+  }
+
+  // ---- layout: build lines respecting max width ----
+  const canvasW  = bgCtx.canvas.width / devicePixelRatio;
+  const maxWidth = canvasW * widthFraction;
+  const lineGap  = 8;
+
+  const lines = [];
+  let line = { tokens: [], width: 0, height: fontSize };
+
+  for (const t of tokens) {
+    // scale oversized math to fit the block
+    let width = t.width, height = t.height, drawW = width, drawH = height;
+    if (t.type === 'math' && width > maxWidth) {
+      const s = maxWidth / width; drawW *= s; drawH *= s; width = drawW; height = drawH;
+    }
+    const tok = { ...t, width, height, drawW, drawH };
+
+    if (line.tokens.length && line.width + width > maxWidth) {
+      lines.push(line);
+      line = { tokens: [], width: 0, height: fontSize };
+    }
+    if (!(line.tokens.length === 0 && tok.isSpace)) {
+      line.tokens.push(tok);
+      line.width += width;
+      if (height > line.height) line.height = height;
+    }
+  }
+  if (line.tokens.length) lines.push(line);
+
+  // ---- render: center EACH line horizontally ----
+  const prevAlign = bgCtx.textAlign;
+  const prevBase  = bgCtx.textBaseline;
+  bgCtx.fillStyle = fontColor;
+  bgCtx.textAlign = 'left';
+  bgCtx.textBaseline = 'top';
+
+  let curY = y + yNudge;
+  for (const L of lines) {
+    let x = (canvasW - L.width) / 2;             // <-- key change: per-line centering
+    for (const t of L.tokens) {
+      const topY = curY + (L.height - t.height) / 2;
+      if (t.type === 'text') {
+        bgCtx.fillText(t.content, x, topY);
+      } else {
+        bgCtx.drawImage(t.image, x, topY, t.drawW ?? t.width, t.drawH ?? t.height);
+      }
+      x += t.width;
+    }
+    curY += L.height + lineGap;
+  }
+
+  bgCtx.textAlign = prevAlign || 'center';
+  bgCtx.textBaseline = prevBase || 'top';
 }
+
 
 
 
