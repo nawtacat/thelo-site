@@ -2042,34 +2042,53 @@ async function getKatexCSSWithEmbeddedFonts() {
 }
 
 
-/**
- * Mixed text + KaTeX headline renderer.
- * - Wrap at widthFraction (default 0.88 of canvas width).
- * - Two-pass layout for stable baselines.
- * - Each rendered line is horizontally centered.
- */
+// Mixed text + KaTeX headline renderer (SVG with embedded KaTeX fonts)
+// - Segments delimited by /K ... K/ are rendered with KaTeX
+// - Lines are wrapped to widthFraction of the canvas and centered per line
+// - Adds 2px pad in SVG to prevent right-edge clipping of last glyphs
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   if (!headline || !bgCtx) return;
 
   // ---- config ----
   const widthFraction = Math.min(Math.max(opts.widthFraction ?? 0.88, 0.5), 0.98);
-  const yNudge = opts.yNudge ?? -14; // raise a tiny bit by default
-
-  // ---- KaTeX CSS cache ----
- const katexCSS = await getKatexCSSWithEmbeddedFonts();
-
-  // ---- parse segments: /K ... K/ = math ----
-  const segments = (headline.split(/(\/K.*?K\/)/g) || [])
-    .filter(Boolean)
-    .map(p => (p.startsWith('/K ') && p.endsWith(' K/'))
-      ? { type: 'math', content: p.slice(3, -3) }
-      : { type: 'text', content: p });
-
-  const fontColor    = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
-  const fontSize     = 20;  // should match bgCtx.font set by caller
+  const yNudge = opts.yNudge ?? -14;
+  const fontSize = 20;
   const mathFontSize = 22;
 
-  // ---- tokenization & measuring ----
+  const fontColor =
+    getComputedStyle(document.documentElement)
+      .getPropertyValue('--thelo-text')
+      .trim() || '#111827';
+
+  // KaTeX CSS with embedded fonts (so data-URL SVG can render the same as DOM)
+  const katexCSS = await getKatexCSSWithEmbeddedFonts();
+
+  // Extra font-family overrides to keep headline matching MCQs
+  const extraRules = `
+.katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
+.katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
+.katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
+.katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
+`;
+
+  // ---- parse headline into segments: /K ... K/ => math
+  const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || [])
+    .filter(Boolean)
+    .map(p =>
+      p.startsWith('/K') && p.endsWith('K/')
+        ? { type: 'math', content: p.replace(/^\/K\s*/, '').replace(/\s*K\/$/, '') }
+        : { type: 'text', content: p }
+    );
+
+  // A hidden host for measuring KaTeX DOM sizes (one per call)
+  const measureHost = document.createElement('div');
+  measureHost.style.position = 'absolute';
+  measureHost.style.visibility = 'hidden';
+  measureHost.style.left = '-9999px';
+  measureHost.style.top = '-9999px';
+  document.body.appendChild(measureHost);
+
+  // ---- tokenize with measurements ----
   const tokens = [];
   for (const seg of segments) {
     if (seg.type === 'text') {
@@ -2083,68 +2102,75 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
           isSpace: /^\s+$/.test(p)
         });
       }
-    } else {
-      try {
-	const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
+      continue;
+    }
 
+    // math segment
+    try {
+      const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
 
-        // measure KaTeX in DOM
-        const tmp = document.createElement('div');
-        tmp.style.position = 'absolute';
-        tmp.style.visibility = 'hidden';
-        tmp.style.color = fontColor;
-        tmp.style.fontSize = `${mathFontSize}px`;
-        tmp.innerHTML = html;
-        document.body.appendChild(tmp);
-        const rect = tmp.querySelector('.katex').getBoundingClientRect();
-        document.body.removeChild(tmp);
+      const tmp = document.createElement('div');
+      tmp.style.color = fontColor;
+      tmp.style.fontSize = `${mathFontSize}px`;
+      tmp.innerHTML = html;
+      measureHost.appendChild(tmp);
 
-        // rasterizable svg
-        const extraRules = `
-.katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
-.katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
-.katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
-.katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
-`;
+      const katexEl = tmp.querySelector('.katex') || tmp;
+      const rect = katexEl.getBoundingClientRect();
 
-const svg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
-    <style>${katexCSS}\n${extraRules}</style>
-    <foreignObject width="100%" height="100%">
-      <div xmlns="http://www.w3.org/1999/xhtml"
-           style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;">
-        ${html}
-      </div>
-    </foreignObject>
-  </svg>`;
+      // remove measured node (keep host)
+      tmp.remove();
 
+      // Pad & round to avoid clipping last glyphs
+      const PAD = 2;
+      const w = Math.ceil(rect.width) + PAD;
+      const h = Math.ceil(rect.height) + PAD;
 
-        const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
-        const image = new Image();
-        image.src = dataUrl;
-        await image.decode();
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+          <style>${katexCSS}\n${extraRules}</style>
+          <foreignObject width="100%" height="100%">
+            <div xmlns="http://www.w3.org/1999/xhtml"
+                 style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;padding-right:${PAD/2}px;">
+              ${html}
+            </div>
+          </foreignObject>
+        </svg>`;
 
-        tokens.push({ type: 'math', image, width: rect.width, height: rect.height });
-      } catch {
-        const w = bgCtx.measureText(seg.content).width;
-        tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
-      }
+      const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+      const image = new Image();
+      image.src = dataUrl;
+      await image.decode();
+
+      tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
+    } catch (e) {
+      // graceful fallback to text measurement
+      const w = bgCtx.measureText(seg.content).width;
+      tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
     }
   }
 
-  // ---- layout: build lines respecting max width ----
-  const canvasW  = bgCtx.canvas.width / devicePixelRatio;
+  // cleanup measure host
+  measureHost.remove();
+
+  // ---- build lines to fit available width ----
+  const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
   const maxWidth = canvasW * widthFraction;
-  const lineGap  = 8;
+  const lineGap = 8;
 
   const lines = [];
   let line = { tokens: [], width: 0, height: fontSize };
 
   for (const t of tokens) {
-    // scale oversized math to fit the block
-    let width = t.width, height = t.height, drawW = width, drawH = height;
+    // allow scaling down oversized math to fit
+    let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
+
     if (t.type === 'math' && width > maxWidth) {
-      const s = maxWidth / width; drawW *= s; drawH *= s; width = drawW; height = drawH;
+      const s = maxWidth / width;
+      width = Math.floor(width * s);
+      height = Math.floor(height * s);
+      drawW = t.drawW * s;
+      drawH = t.drawH * s;
     }
     const tok = { ...t, width, height, drawW, drawH };
 
@@ -2160,32 +2186,35 @@ const svg = `
   }
   if (line.tokens.length) lines.push(line);
 
-  // ---- render: center EACH line horizontally ----
+  // ---- render lines, centered horizontally ----
   const prevAlign = bgCtx.textAlign;
-  const prevBase  = bgCtx.textBaseline;
+  const prevBase = bgCtx.textBaseline;
+  const prevFill = bgCtx.fillStyle;
+
   bgCtx.fillStyle = fontColor;
   bgCtx.textAlign = 'left';
   bgCtx.textBaseline = 'top';
 
   let curY = y + yNudge;
   for (const L of lines) {
-    let x = (canvasW - L.width) / 2;             // <-- key change: per-line centering
+    let x = (canvasW - L.width) / 2;
     for (const t of L.tokens) {
       const topY = curY + (L.height - t.height) / 2;
       if (t.type === 'text') {
         bgCtx.fillText(t.content, x, topY);
       } else {
-        bgCtx.drawImage(t.image, x, topY, t.drawW ?? t.width, t.drawH ?? t.height);
+        bgCtx.drawImage(t.image, x, topY, t.drawW, t.drawH);
       }
       x += t.width;
     }
     curY += L.height + lineGap;
   }
 
+  // restore ctx
   bgCtx.textAlign = prevAlign || 'center';
   bgCtx.textBaseline = prevBase || 'top';
+  bgCtx.fillStyle = prevFill || fontColor;
 }
-
 
 
 
