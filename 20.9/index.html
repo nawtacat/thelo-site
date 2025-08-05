@@ -2391,30 +2391,33 @@ function sanitizeBasicHTML(html) {
 // Normalize common unicode/math to TeX-friendly tokens
 function normalizeForKaTeX(s) {
   return s
-    .replace(/×/g, "\\times ")
-    .replace(/÷/g, "\\div ")
-    .replace(/≤/g, "\\le ")
-    .replace(/≥/g, "\\ge ")
-    .replace(/√\s*\(?\s*([^)]+?)\s*\)?/g, "\\sqrt{$1}")           // √25 or √(25)
-    .replace(/([A-Za-z])\s*\^\s*(\d+)/g, "$1^{$2}");              // a^2 -> a^{2}
+    .replace(/=\s*\?/g, "= \\\\square ")  // turn masked equals into a KaTeX box
+    .replace(/×/g, "\\\\times ")
+    .replace(/÷/g, "\\\\div ")
+    .replace(/≤/g, "\\\\le ")
+    .replace(/≥/g, "\\\\ge ")
+    .replace(/√\s*\(?\s*([^)]+?)\s*\)?/g, "\\\\sqrt{$1}")
+    .replace(/([A-Za-z])\s*\^\s*(\d+)/g, "$1^{$2}");
 }
+
 
 // Split a text string into {type: 'math'|'text', text: ...} tokens
 function splitIntoMathTokens(s) {
-  // Single-line, JS-safe regex (no inline comments, no invalid flags)
-  const MATH_RE = /(\b\d+\s*\/\s*\d+\b|\\sqrt\([^)]+\)|√\s*\(?[^\s)]+\)?|[A-Za-z]\s*\^\s*\d+|(?:[A-Za-z0-9.]+\s*)?(?:[+\-*/×÷]\s*)+[A-Za-z0-9.()]+|[A-Za-z]\s*=\s*[-+]?\d+(?:\.\d+)?|[A-Za-z0-9.()]+\s*=\s*[A-Za-z0-9.()]+)/gu;
+  // math chunk + optional trailing punctuation captured separately
+  const MATH_RE = /(\b\d+\s*\/\s*\d+\b|\\sqrt\([^)]+\)|√\s*\(?[^\s)]+\)?|[A-Za-z]\s*\^\s*\d+|(?:[A-Za-z0-9.]+\s*)?(?:[+\-–—*/×÷]\s*)+[A-Za-z0-9.()]+|[A-Za-z]\s*=\s*[-+]?\d+(?:\.\d+)?|[A-Za-z0-9.()]+\s*=\s*[A-Za-z0-9.()]+)([.,;:!?])?/gu;
 
   const out = [];
-  let last = 0;
-  let m;
+  let last = 0, m;
   while ((m = MATH_RE.exec(s)) !== null) {
     if (m.index > last) out.push({ type: "text", text: s.slice(last, m.index) });
-    out.push({ type: "math", text: m[0] });
+    out.push({ type: "math", text: m[1] });
+    if (m[2]) out.push({ type: "text", text: m[2] }); // the punctuation
     last = m.index + m[0].length;
   }
   if (last < s.length) out.push({ type: "text", text: s.slice(last) });
   return out;
 }
+
 
 // Render KaTeX inline inside an element; allow <strong>/<em>/<br> in text
 function renderAutoKaTeX(targetEl, src) {
