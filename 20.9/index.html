@@ -2380,6 +2380,7 @@ function renderMixedKaTeXInto(targetEl, src) {
   }
 }
 // --- allow only very basic HTML we control (strong/em/br) ---
+// --- allow only very basic HTML we control (strong/em/br) ---
 function sanitizeBasicHTML(html) {
   if (!html) return "";
   html = String(html).replace(/\n/g, "<br>");
@@ -2395,21 +2396,13 @@ function normalizeForKaTeX(s) {
     .replace(/≤/g, "\\le ")
     .replace(/≥/g, "\\ge ")
     .replace(/√\s*\(?\s*([^)]+?)\s*\)?/g, "\\sqrt{$1}")           // √25 or √(25)
-    .replace(/([A-Za-z])\s*\^\s*(\d+)/g, "$1^{${2}}");           // a^2 -> a^{2}
+    .replace(/([A-Za-z])\s*\^\s*(\d+)/g, "$1^{$2}");              // a^2 -> a^{2}
 }
 
 // Split a text string into {type: 'math'|'text', text: ...} tokens
 function splitIntoMathTokens(s) {
-  // Heuristic: match expressions that include operators, ^, =, √, fractions, etc.
-  const MATH_RE =
-    /(\b\d+\s*\/\s*\d+\b|         # 15/100
-      \\sqrt\([^)]+\)|            # \sqrt(...)
-      √\s*\(?[^)\s]+\)?|          # √25, √(25)
-      [A-Za-z]\s*\^\s*\d+|        # a^2
-      (?:[A-Za-z0-9.]+\s*)?(?:[+\-*/×÷]\s*)+[A-Za-z0-9.()]+| # 0.15 × 80, 2x+3
-      [A-Za-z]\s*=\s*[-+]?\d+(?:\.\d+)?|  # x = 4
-      [A-Za-z0-9.()]+\s*=\s*[A-Za-z0-9.()]+ # a^2+b^2=c^2
-     )/gxi;
+  // Single-line, JS-safe regex (no inline comments, no invalid flags)
+  const MATH_RE = /(\b\d+\s*\/\s*\d+\b|\\sqrt\([^)]+\)|√\s*\(?[^\s)]+\)?|[A-Za-z]\s*\^\s*\d+|(?:[A-Za-z0-9.]+\s*)?(?:[+\-*/×÷]\s*)+[A-Za-z0-9.()]+|[A-Za-z]\s*=\s*[-+]?\d+(?:\.\d+)?|[A-Za-z0-9.()]+\s*=\s*[A-Za-z0-9.()]+)/gu;
 
   const out = [];
   let last = 0;
@@ -2456,7 +2449,6 @@ function renderAutoKaTeX(targetEl, src) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       // only allow strong/em/br; drop others just in case
       if (!/^(STRONG|EM|BR)$/i.test(node.tagName)) {
-        // flatten unknown elements into text (shouldn't happen after sanitize)
         destParent.appendChild(document.createTextNode(node.textContent || ""));
         return;
       }
