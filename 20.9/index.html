@@ -1075,11 +1075,6 @@ body.lang-en {
     box-shadow: var(--shadow-lg);
 }
   .mcq-option-btn .katex { vertical-align: middle; }
-  .ai-message .katex,
-.toast-message .katex {
-  vertical-align: middle;
-}
-
 </style>
 </head>
 <body>
@@ -2379,91 +2374,6 @@ function renderMixedKaTeXInto(targetEl, src) {
     targetEl.appendChild(span);
   }
 }
-// --- allow only very basic HTML we control (strong/em/br) ---
-// --- allow only very basic HTML we control (strong/em/br) ---
-// --- keep only very basic HTML we trust ---
-function sanitizeBasicHTML(html) {
-  if (!html) return "";
-  html = String(html).replace(/\n/g, "<br>");
-  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  // re-enable a tiny whitelist
-  return html.replace(/&lt;(\/?)(strong|em|br)\s*&gt;/gi, "<$1$2>");
-}
-
-// Minimal normalization: ^n → ^{n}, sqrt(...) / √... → \sqrt{...}
-function normalizeForKaTeX(s) {
-  return String(s)
-    // if server masked answers as "= ?" convert to a square symbol
-    .replace(/=\s*\?/g, "= \\\\square ")
-    // basic operators
-    .replace(/×/g, "\\\\times ")
-    .replace(/÷/g, "\\\\div ")
-    .replace(/≤/g, "\\\\le ")
-    .replace(/≥/g, "\\\\ge ")
-    // sqrt(…) and √…
-    .replace(/sqrt\s*\(\s*([^)]+?)\s*\)/gi, "\\\\sqrt{$1}")
-    .replace(/√\s*\(?\s*([^)]+?)\s*\)?/g, "\\\\sqrt{$1}")
-    // a^2 → a^{2}
-    .replace(/([A-Za-z])\s*\^\s*(\d+)/g, "$1^{$2}");
-}
-
-// Decide if a token should be rendered as math.
-// Rule of thumb: integers, things with math operators, ^, √, \sqrt, =.
-function isMathToken(tok) {
-  if (!tok || /^\s+$/.test(tok)) return false;
-  if (/^\\[A-Za-z]+/.test(tok)) return true;                // \sqrt, \square, etc.
-  if (/^\d+$/.test(tok)) return true;                       // integers
-  if (/[=+\-*/×÷^√]/.test(tok)) return true;                // has math symbols
-  if (/[A-Za-z]\s*\^\s*\d+/.test(tok)) return true;         // a^2 style
-  return false;
-}
-
-// Split plain text into tokens while preserving punctuation and spaces.
-// This is intentionally simple and robust.
-function splitForMath(s) {
-  return String(s).match(/(\s+|[(),.;:!?]|\\[A-Za-z]+|\d+|[A-Za-z]+|[=+\-*/×÷^√])/g) || [s];
-}
-
-// Render KaTeX inline into an element; allow <strong>/<em>/<br> in the text.
-function renderSimpleKaTeX(targetEl, rawText) {
-  while (targetEl.firstChild) targetEl.removeChild(targetEl.firstChild);
-  const safeHTML = sanitizeBasicHTML(rawText);
-
-  // Parse small HTML whitelist so we only math-render text nodes
-  const tmp = document.createElement("div");
-  tmp.innerHTML = safeHTML;
-
-  const processNode = (node, parent) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const tokens = splitForMath(node.nodeValue);
-      tokens.forEach(t => {
-        if (isMathToken(t)) {
-          const span = document.createElement("span");
-          try {
-            katex.render(normalizeForKaTeX(t), span, { throwOnError: false });
-          } catch {
-            span.textContent = t;
-          }
-          parent.appendChild(span);
-        } else {
-          parent.appendChild(document.createTextNode(t));
-        }
-      });
-      return;
-    }
-    if (node.nodeType === Node.ELEMENT_NODE) {
-      if (!/^(STRONG|EM|BR)$/i.test(node.tagName)) {
-        parent.appendChild(document.createTextNode(node.textContent || ""));
-        return;
-      }
-      const clone = document.createElement(node.tagName.toLowerCase());
-      parent.appendChild(clone);
-      Array.from(node.childNodes).forEach(ch => processNode(ch, clone));
-    }
-  };
-
-  Array.from(tmp.childNodes).forEach(ch => processNode(ch, targetEl));
-}
 
 	function displayMcq(mcqDetails){
     const choices = mcqDetails.choices;
@@ -3165,42 +3075,96 @@ function handleNextCheckClick() {
     }
     // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
 // REPLACE your entire addChatMessage function with this one
+/**
+ * Finds simple math notations in a string and converts them to KaTeX HTML.
+ * Supports:
+ * - `sqrt(content)` -> rendered square root
+ * - `base^exponent` -> rendered power
+ * - `(base)^exponent` -> rendered power with parentheses
+ * @param {string} text - The input string, potentially containing math.
+ * @returns {string} An HTML string with math portions rendered by KaTeX.
+ */
+function parseAndRenderMath(text) {
+    if (!text || typeof text !== 'string') return '';
+
+    // This regex looks for one of three patterns using the OR | operator:
+    // 1. The full "sqrt(content)" expression, capturing the "content".
+    // 2. A parenthesized "(base)" followed by "^exponent", capturing "base" and "exponent".
+    // 3. A simple "base" word followed by "^exponent", capturing "base" and "exponent".
+    const mathRegex = /(\bsqrt\(([^)]+)\))|(\(([^)]+)\)\^(\w+))|(\b(\w+)\^(\w+)\b)/g;
+
+    return text.replace(mathRegex, (match, sqrtFull, sqrtContent, powerParenFull, powerParenBase, powerParenExp, powerWordFull, powerWordBase, powerWordExp) => {
+        try {
+            // Case 1: Matched sqrt(content)
+            if (sqrtFull) {
+                return katex.renderToString(`\\sqrt{${sqrtContent}}`, { throwOnError: false, displayMode: false });
+            }
+            // Case 2: Matched (base)^exponent
+            if (powerParenFull) {
+                return katex.renderToString(`{(${powerParenBase})}^{${powerParenExp}}`, { throwOnError: false, displayMode: false });
+            }
+            // Case 3: Matched base^exponent
+            if (powerWordFull) {
+                return katex.renderToString(`${powerWordBase}^{${powerWordExp}}`, { throwOnError: false, displayMode: false });
+            }
+        } catch (e) {
+            console.warn("KaTeX rendering failed for:", match, e);
+            return match; // In case of error, fall back to the original text.
+        }
+        return match; // Should not be reached, but good practice.
+    });
+}
+// REPLACE your entire addChatMessage function with this one
 
 function addChatMessage(sender, rawMsg) {
-  const chatArea = document.getElementById('chat');
-  if (!chatArea) return;
+    if (isTabletMode) {
+        // Tablet toast logic remains the same
+        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
+        showToast(rawMsg, isImportant ? 5000 : 3500);
+    } else {
+        // Desktop/mobile terminal chat
+        const chatArea = document.getElementById('chat');
+        if (!chatArea) return;
 
-  const bubble = document.createElement('div');
-  bubble.className = sender === 'AI' ? 'ai-message' : 'user-message';
+        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+        const TXT = getCurrentUIText();
+        let emoji = '🫧';
 
-  // emoji / icon
-  const icon = document.createElement('span');
-  icon.className = 'emoji';
-  icon.setAttribute('role', 'img');
-  icon.setAttribute('aria-label', 'icon');
-  icon.textContent = sender === 'AI' ? '🧠' : '🧑';
-  bubble.appendChild(icon);
+        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
 
-  const body = document.createElement('span');
-  bubble.appendChild(body);
+        if(isWrong) emoji = '🤔';
+        else if (isCorrect || isPoints) emoji = '🎉';
+        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+        else if (isWelcome) emoji = '👋';
+        else if (isChecking) emoji = '⏳';
+        
+        // ======================= THE CHANGE IS HERE =======================
+        // Use our new function to parse the message for math before displaying it.
+        const finalHTML = parseAndRenderMath(msg);
+        // ================================================================
 
-  if (sender === 'AI') {
-    // render with simple KaTeX rules
-    renderSimpleKaTeX(body, String(rawMsg));
-  } else {
-    body.textContent = String(rawMsg);
-  }
+        const bubble = document.createElement('div');
+        bubble.className = 'ai-message'; // Starts with opacity: 0
+        
+        // And now we use the processed HTML instead of the raw message.
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${finalHTML}</span>`;
+        chatArea.appendChild(bubble);
 
-  chatArea.appendChild(bubble);
-
-  // entrance animation + scroll
-  requestAnimationFrame(() => {
-    bubble.classList.add('show');
-    chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-  });
+        // Force the browser to paint the initial state before animating
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                bubble.classList.add('show');
+                chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+            }, 10);
+        });
+    }
 }
-
-    /**
+	  /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
  * @param {string} topicId - The unique ID for the lesson (e.g., 'sat-linear-equations-one-var').
