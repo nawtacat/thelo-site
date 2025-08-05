@@ -2379,6 +2379,95 @@ function renderMixedKaTeXInto(targetEl, src) {
     targetEl.appendChild(span);
   }
 }
+// --- allow only very basic HTML we control (strong/em/br) ---
+function sanitizeBasicHTML(html) {
+  if (!html) return "";
+  html = String(html).replace(/\n/g, "<br>");
+  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return html.replace(/&lt;(\/?)(strong|em|br)\s*&gt;/gi, "<$1$2>");
+}
+
+// Normalize common unicode/math to TeX-friendly tokens
+function normalizeForKaTeX(s) {
+  return s
+    .replace(/×/g, "\\times ")
+    .replace(/÷/g, "\\div ")
+    .replace(/≤/g, "\\le ")
+    .replace(/≥/g, "\\ge ")
+    .replace(/√\s*\(?\s*([^)]+?)\s*\)?/g, "\\sqrt{$1}")           // √25 or √(25)
+    .replace(/([A-Za-z])\s*\^\s*(\d+)/g, "$1^{${2}}");           // a^2 -> a^{2}
+}
+
+// Split a text string into {type: 'math'|'text', text: ...} tokens
+function splitIntoMathTokens(s) {
+  // Heuristic: match expressions that include operators, ^, =, √, fractions, etc.
+  const MATH_RE =
+    /(\b\d+\s*\/\s*\d+\b|         # 15/100
+      \\sqrt\([^)]+\)|            # \sqrt(...)
+      √\s*\(?[^)\s]+\)?|          # √25, √(25)
+      [A-Za-z]\s*\^\s*\d+|        # a^2
+      (?:[A-Za-z0-9.]+\s*)?(?:[+\-*/×÷]\s*)+[A-Za-z0-9.()]+| # 0.15 × 80, 2x+3
+      [A-Za-z]\s*=\s*[-+]?\d+(?:\.\d+)?|  # x = 4
+      [A-Za-z0-9.()]+\s*=\s*[A-Za-z0-9.()]+ # a^2+b^2=c^2
+     )/gxi;
+
+  const out = [];
+  let last = 0;
+  let m;
+  while ((m = MATH_RE.exec(s)) !== null) {
+    if (m.index > last) out.push({ type: "text", text: s.slice(last, m.index) });
+    out.push({ type: "math", text: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) out.push({ type: "text", text: s.slice(last) });
+  return out;
+}
+
+// Render KaTeX inline inside an element; allow <strong>/<em>/<br> in text
+function renderAutoKaTeX(targetEl, src) {
+  while (targetEl.firstChild) targetEl.removeChild(targetEl.firstChild);
+  if (!src) return;
+
+  // 1) Keep our basic HTML
+  const safe = sanitizeBasicHTML(src);
+
+  // 2) Parse that HTML into nodes so we can process only TEXT nodes for math
+  const tmp = document.createElement("div");
+  tmp.innerHTML = safe;
+
+  const processNode = (node, destParent) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const tokens = splitIntoMathTokens(node.nodeValue);
+      tokens.forEach(tok => {
+        if (tok.type === "text") {
+          destParent.appendChild(document.createTextNode(tok.text));
+        } else {
+          const span = document.createElement("span");
+          try {
+            katex.render(normalizeForKaTeX(tok.text), span, { throwOnError: false });
+          } catch {
+            span.textContent = tok.text; // fallback
+          }
+          destParent.appendChild(span);
+        }
+      });
+      return;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      // only allow strong/em/br; drop others just in case
+      if (!/^(STRONG|EM|BR)$/i.test(node.tagName)) {
+        // flatten unknown elements into text (shouldn't happen after sanitize)
+        destParent.appendChild(document.createTextNode(node.textContent || ""));
+        return;
+      }
+      const clone = document.createElement(node.tagName.toLowerCase());
+      destParent.appendChild(clone);
+      Array.from(node.childNodes).forEach(child => processNode(child, clone));
+    }
+  };
+
+  Array.from(tmp.childNodes).forEach(child => processNode(child, targetEl));
+}
 
 	function displayMcq(mcqDetails){
     const choices = mcqDetails.choices;
@@ -3082,68 +3171,77 @@ function handleNextCheckClick() {
 // REPLACE your entire addChatMessage function with this one
 
 function addChatMessage(sender, rawMsg) {
-    if (isTabletMode) {
-        // Tablet toast logic remains the same
-        const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
-        showToast(rawMsg, isImportant ? 5000 : 3500);
-    } else {
-        // Desktop/mobile terminal chat
-        const chatArea = document.getElementById('chat');
-        if (!chatArea) return;
+  // Keep tablet behavior (toast). If you also want KaTeX in toasts,
+  // update showToast to call renderAutoKaTeX similarly.
+  if (isTabletMode) {
+    const isImportant = String(rawMsg).includes('🎉') ||
+                        String(rawMsg).includes('🤔') ||
+                        String(rawMsg).includes('⚠️');
+    showToast(rawMsg, isImportant ? 5000 : 3500);
+    return;
+  }
 
-        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
-        const TXT = getCurrentUIText();
-        let emoji = '🫧';
+  const chatArea = document.getElementById('chat');
+  if (!chatArea) return;
 
-        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
-        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
-        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
-        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
-        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+  // Strip any leading emoji from the message itself
+  const msg = String(rawMsg).replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+  const TXT = getCurrentUIText();
 
-        if(isWrong) emoji = '🤔';
-        else if (isCorrect || isPoints) emoji = '🎉';
-        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
-        else if (isWelcome) emoji = '👋';
-        else if (isChecking) emoji = '⏳';
+  // Pick an icon based on message type
+  let emoji = '🫧';
+  const isPoints =
+    /points?\s*earned/i.test(msg) ||
+    (TXT.pointsGained && msg.includes(TXT.pointsGained.split('{')[0].trim()));
+  const isWrong =
+    /Not quite/i.test(msg) ||
+    /incorrect/i.test(msg) ||
+    /wrong/i.test(msg) ||
+    (TXT.incorrect && msg.includes(TXT.incorrect));
+  const isCorrect =
+    !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+  const isWarning =
+    msg.includes('⚠️') || /error/i.test(msg) || (TXT.error && msg.includes(TXT.error));
+  const isWelcome =
+    TXT.welcome && msg.includes(TXT.welcome);
+  const isChecking =
+    TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
 
-        const bubble = document.createElement('div');
-bubble.className = 'ai-message';
+  if (isWrong) emoji = '🤔';
+  else if (isCorrect || isPoints) emoji = '🎉';
+  else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+  else if (isWelcome) emoji = '👋';
+  else if (isChecking) emoji = '⏳';
 
-// Build the DOM nodes (no raw HTML injection)
-const emojiSpan = document.createElement('span');
-emojiSpan.className = 'emoji';
-emojiSpan.setAttribute('role', 'img');
-emojiSpan.setAttribute('aria-label', 'icon');
-emojiSpan.textContent = emoji;
+  // Build bubble with safe KaTeX rendering
+  const bubble = document.createElement('div');
+  bubble.className = 'ai-message'; // starts hidden; CSS anim will fade it in
 
-const textSpan = document.createElement('span');
-textSpan.className = 'ai-ktext';
+  const emojiSpan = document.createElement('span');
+  emojiSpan.className = 'emoji';
+  emojiSpan.setAttribute('role', 'img');
+  emojiSpan.setAttribute('aria-label', 'icon');
+  emojiSpan.textContent = emoji;
 
-// Render mixed text + /K ... K/ math into the span
-renderMixedKaTeXInto(textSpan, msg);   // <-- uses your existing helper
+  const textSpan = document.createElement('span');
+  textSpan.className = 'ai-ktext';
+  // Renders math inline and allows <strong>/<em>/<br> from our own strings
+  renderAutoKaTeX(textSpan, msg);
 
-bubble.appendChild(emojiSpan);
-bubble.appendChild(document.createTextNode(' '));
-bubble.appendChild(textSpan);
-chatArea.appendChild(bubble);
+  bubble.appendChild(emojiSpan);
+  bubble.appendChild(document.createTextNode(' '));
+  bubble.appendChild(textSpan);
+  chatArea.appendChild(bubble);
 
-
-        // ===================================================================
-        // ===== THE FIX: Forcing the browser to paint the initial state =====
-        // ===================================================================
-        requestAnimationFrame(() => {
-            // This nested timeout ensures the class addition happens in a separate
-            // task, after the browser has painted the invisible element.
-            setTimeout(() => {
-                bubble.classList.add('show');
-                // Scroll into view after the animation starts.
-                chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-            }, 10); // A tiny delay is all that's needed.
-        });
-    }
-}    /**
+  // Trigger the show animation and scroll to bottom
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      bubble.classList.add('show');
+      chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+    }, 10);
+  });
+}
+    /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
  * @param {string} topicId - The unique ID for the lesson (e.g., 'sat-linear-equations-one-var').
