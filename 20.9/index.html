@@ -2381,87 +2381,88 @@ function renderMixedKaTeXInto(targetEl, src) {
 }
 // --- allow only very basic HTML we control (strong/em/br) ---
 // --- allow only very basic HTML we control (strong/em/br) ---
+// --- keep only very basic HTML we trust ---
 function sanitizeBasicHTML(html) {
   if (!html) return "";
   html = String(html).replace(/\n/g, "<br>");
   html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // re-enable a tiny whitelist
   return html.replace(/&lt;(\/?)(strong|em|br)\s*&gt;/gi, "<$1$2>");
 }
 
-// Normalize common unicode/math to TeX-friendly tokens
+// Minimal normalization: ^n → ^{n}, sqrt(...) / √... → \sqrt{...}
 function normalizeForKaTeX(s) {
-  return s
-    .replace(/=\s*\?/g, "= \\\\square ")  // turn masked equals into a KaTeX box
+  return String(s)
+    // if server masked answers as "= ?" convert to a square symbol
+    .replace(/=\s*\?/g, "= \\\\square ")
+    // basic operators
     .replace(/×/g, "\\\\times ")
     .replace(/÷/g, "\\\\div ")
     .replace(/≤/g, "\\\\le ")
     .replace(/≥/g, "\\\\ge ")
+    // sqrt(…) and √…
+    .replace(/sqrt\s*\(\s*([^)]+?)\s*\)/gi, "\\\\sqrt{$1}")
     .replace(/√\s*\(?\s*([^)]+?)\s*\)?/g, "\\\\sqrt{$1}")
+    // a^2 → a^{2}
     .replace(/([A-Za-z])\s*\^\s*(\d+)/g, "$1^{$2}");
 }
 
-
-// Split a text string into {type: 'math'|'text', text: ...} tokens
-function splitIntoMathTokens(s) {
-  // math chunk + optional trailing punctuation captured separately
-  const MATH_RE = /(\b\d+\s*\/\s*\d+\b|\\sqrt\([^)]+\)|√\s*\(?[^\s)]+\)?|[A-Za-z]\s*\^\s*\d+|(?:[A-Za-z0-9.]+\s*)?(?:[+\-–—*/×÷]\s*)+[A-Za-z0-9.()]+|[A-Za-z]\s*=\s*[-+]?\d+(?:\.\d+)?|[A-Za-z0-9.()]+\s*=\s*[A-Za-z0-9.()]+)([.,;:!?])?/gu;
-
-  const out = [];
-  let last = 0, m;
-  while ((m = MATH_RE.exec(s)) !== null) {
-    if (m.index > last) out.push({ type: "text", text: s.slice(last, m.index) });
-    out.push({ type: "math", text: m[1] });
-    if (m[2]) out.push({ type: "text", text: m[2] }); // the punctuation
-    last = m.index + m[0].length;
-  }
-  if (last < s.length) out.push({ type: "text", text: s.slice(last) });
-  return out;
+// Decide if a token should be rendered as math.
+// Rule of thumb: integers, things with math operators, ^, √, \sqrt, =.
+function isMathToken(tok) {
+  if (!tok || /^\s+$/.test(tok)) return false;
+  if (/^\\[A-Za-z]+/.test(tok)) return true;                // \sqrt, \square, etc.
+  if (/^\d+$/.test(tok)) return true;                       // integers
+  if (/[=+\-*/×÷^√]/.test(tok)) return true;                // has math symbols
+  if (/[A-Za-z]\s*\^\s*\d+/.test(tok)) return true;         // a^2 style
+  return false;
 }
 
+// Split plain text into tokens while preserving punctuation and spaces.
+// This is intentionally simple and robust.
+function splitForMath(s) {
+  return String(s).match(/(\s+|[(),.;:!?]|\\[A-Za-z]+|\d+|[A-Za-z]+|[=+\-*/×÷^√])/g) || [s];
+}
 
-// Render KaTeX inline inside an element; allow <strong>/<em>/<br> in text
-function renderAutoKaTeX(targetEl, src) {
+// Render KaTeX inline into an element; allow <strong>/<em>/<br> in the text.
+function renderSimpleKaTeX(targetEl, rawText) {
   while (targetEl.firstChild) targetEl.removeChild(targetEl.firstChild);
-  if (!src) return;
+  const safeHTML = sanitizeBasicHTML(rawText);
 
-  // 1) Keep our basic HTML
-  const safe = sanitizeBasicHTML(src);
-
-  // 2) Parse that HTML into nodes so we can process only TEXT nodes for math
+  // Parse small HTML whitelist so we only math-render text nodes
   const tmp = document.createElement("div");
-  tmp.innerHTML = safe;
+  tmp.innerHTML = safeHTML;
 
-  const processNode = (node, destParent) => {
+  const processNode = (node, parent) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      const tokens = splitIntoMathTokens(node.nodeValue);
-      tokens.forEach(tok => {
-        if (tok.type === "text") {
-          destParent.appendChild(document.createTextNode(tok.text));
-        } else {
+      const tokens = splitForMath(node.nodeValue);
+      tokens.forEach(t => {
+        if (isMathToken(t)) {
           const span = document.createElement("span");
           try {
-            katex.render(normalizeForKaTeX(tok.text), span, { throwOnError: false });
+            katex.render(normalizeForKaTeX(t), span, { throwOnError: false });
           } catch {
-            span.textContent = tok.text; // fallback
+            span.textContent = t;
           }
-          destParent.appendChild(span);
+          parent.appendChild(span);
+        } else {
+          parent.appendChild(document.createTextNode(t));
         }
       });
       return;
     }
     if (node.nodeType === Node.ELEMENT_NODE) {
-      // only allow strong/em/br; drop others just in case
       if (!/^(STRONG|EM|BR)$/i.test(node.tagName)) {
-        destParent.appendChild(document.createTextNode(node.textContent || ""));
+        parent.appendChild(document.createTextNode(node.textContent || ""));
         return;
       }
       const clone = document.createElement(node.tagName.toLowerCase());
-      destParent.appendChild(clone);
-      Array.from(node.childNodes).forEach(child => processNode(child, clone));
+      parent.appendChild(clone);
+      Array.from(node.childNodes).forEach(ch => processNode(ch, clone));
     }
   };
 
-  Array.from(tmp.childNodes).forEach(child => processNode(child, targetEl));
+  Array.from(tmp.childNodes).forEach(ch => processNode(ch, targetEl));
 }
 
 	function displayMcq(mcqDetails){
@@ -3166,76 +3167,39 @@ function handleNextCheckClick() {
 // REPLACE your entire addChatMessage function with this one
 
 function addChatMessage(sender, rawMsg) {
-  // Keep tablet behavior (toast). If you also want KaTeX in toasts,
-  // update showToast to call renderAutoKaTeX similarly.
-  if (isTabletMode) {
-    const isImportant = String(rawMsg).includes('🎉') ||
-                        String(rawMsg).includes('🤔') ||
-                        String(rawMsg).includes('⚠️');
-    showToast(rawMsg, isImportant ? 5000 : 3500);
-    return;
-  }
-
   const chatArea = document.getElementById('chat');
   if (!chatArea) return;
 
-  // Strip any leading emoji from the message itself
-  const msg = String(rawMsg).replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
-  const TXT = getCurrentUIText();
-
-  // Pick an icon based on message type
-  let emoji = '🫧';
-  const isPoints =
-    /points?\s*earned/i.test(msg) ||
-    (TXT.pointsGained && msg.includes(TXT.pointsGained.split('{')[0].trim()));
-  const isWrong =
-    /Not quite/i.test(msg) ||
-    /incorrect/i.test(msg) ||
-    /wrong/i.test(msg) ||
-    (TXT.incorrect && msg.includes(TXT.incorrect));
-  const isCorrect =
-    !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-  const isWarning =
-    msg.includes('⚠️') || /error/i.test(msg) || (TXT.error && msg.includes(TXT.error));
-  const isWelcome =
-    TXT.welcome && msg.includes(TXT.welcome);
-  const isChecking =
-    TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
-
-  if (isWrong) emoji = '🤔';
-  else if (isCorrect || isPoints) emoji = '🎉';
-  else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
-  else if (isWelcome) emoji = '👋';
-  else if (isChecking) emoji = '⏳';
-
-  // Build bubble with safe KaTeX rendering
   const bubble = document.createElement('div');
-  bubble.className = 'ai-message'; // starts hidden; CSS anim will fade it in
+  bubble.className = sender === 'AI' ? 'ai-message' : 'user-message';
 
-  const emojiSpan = document.createElement('span');
-  emojiSpan.className = 'emoji';
-  emojiSpan.setAttribute('role', 'img');
-  emojiSpan.setAttribute('aria-label', 'icon');
-  emojiSpan.textContent = emoji;
+  // emoji / icon
+  const icon = document.createElement('span');
+  icon.className = 'emoji';
+  icon.setAttribute('role', 'img');
+  icon.setAttribute('aria-label', 'icon');
+  icon.textContent = sender === 'AI' ? '🧠' : '🧑';
+  bubble.appendChild(icon);
 
-  const textSpan = document.createElement('span');
-  textSpan.className = 'ai-ktext';
-  // Renders math inline and allows <strong>/<em>/<br> from our own strings
-  renderAutoKaTeX(textSpan, msg);
+  const body = document.createElement('span');
+  bubble.appendChild(body);
 
-  bubble.appendChild(emojiSpan);
-  bubble.appendChild(document.createTextNode(' '));
-  bubble.appendChild(textSpan);
+  if (sender === 'AI') {
+    // render with simple KaTeX rules
+    renderSimpleKaTeX(body, String(rawMsg));
+  } else {
+    body.textContent = String(rawMsg);
+  }
+
   chatArea.appendChild(bubble);
 
-  // Trigger the show animation and scroll to bottom
+  // entrance animation + scroll
   requestAnimationFrame(() => {
-    setTimeout(() => {
-      bubble.classList.add('show');
-      chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-    }, 10);
+    bubble.classList.add('show');
+    chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
   });
 }
+
     /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
