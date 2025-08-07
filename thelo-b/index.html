@@ -1180,6 +1180,7 @@ body.lang-en {
                 <canvas id="backgroundCanvas"></canvas>
                 <canvas id="replayCanvas"></canvas>
                 <canvas id="board"></canvas>
+		    <canvas id="boardCapture" style="display:none"></canvas>
                 <canvas id="thelobookCanvas"></canvas>
 		<div id="calculatorOverlay" class="calculator-hidden">
                 <iframe id="calculatorFrame" src="about:blank" allow="clipboard-write"></iframe>
@@ -1454,6 +1455,8 @@ let feedbackTimer = null; // To manage auto-hiding the message
     const bgCtx = backgroundCanvas.getContext('2d');
     let replayCtx = null;
     const ctx = canvas.getContext('2d');
+	  const captureCanvas = document.getElementById('boardCapture');   // NEW
+const captureCtx    = captureCanvas.getContext('2d');            // NEW
     let thelobookCtx = null;
 
     const prevBtn = document.getElementById('prevBtn');
@@ -1498,9 +1501,8 @@ let lastIframeUpdateTime = 0;
     let isImageModeActive = false;
     let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
     let drawing = false; let lastPos = { x: 0, y: 0 };
-	  let originalStrokeStyle = null; // <<< ADD THIS LINE
     let userDrawingOccurred = false; let isTransitioning = false;
-    let devicePixelRatio = window.devicePixelRatio || 1; let dataCanvas = null; window.userInteracted = false;
+    let devicePixelRatio = window.devicePixelRatio || 1; window.userInteracted = false;
     let currentReplayAnimationId = null; let currentStageAudio = null; 
     let userPoints = 0;
     let sessionPoints = 0; // ADDED LINE: To track points for the current lesson session.
@@ -1704,8 +1706,7 @@ function resizeCanvases() {
                 c.style.height = `${cssHeight}px`;
             }
         });
-        dataCanvas.width = internalWidth;   // <<< ADD THIS LINE
-    dataCanvas.height = internalHeight; // <<< ADD THIS LINE
+        
         setupContexts();
 
         // Restore the saved drawing onto the newly resized canvas.
@@ -1983,11 +1984,8 @@ function handleDrawingStart(e) {
     }
 
     const currentTargetCanvas = e.currentTarget;
-    // Inside handleDrawingMove()
-const activeCtx = isThelobookActive ? thelobookCtx : dataCanvas.getContext('2d');
-if (!activeCtx) return;
-	originalStrokeStyle = activeCtx.strokeStyle; // Save the original color
-activeCtx.strokeStyle = 'transparent';       // Set the ink to be invisible
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
     if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
     if (!isThelobookActive && currentTargetCanvas !== canvas) return;
     if (!isStudentInputAllowed && !isThelobookActive) return;
@@ -2034,8 +2032,10 @@ function handleDrawingMove(e) {
     const midPoint = { x: (lastPos.x + pos.x) / 2, y: (lastPos.y + pos.y) / 2 };
 
     activeCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
- activeCtx.stroke(); // The line is now invisible as it's being drawn
-activeCtx.moveTo(midPoint.x, midPoint.y);
+    activeCtx.stroke();
+    activeCtx.moveTo(midPoint.x, midPoint.y);
+	captureCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
+captureCtx.stroke();
 
     lastPos = pos;
 
@@ -2063,9 +2063,8 @@ function handleDrawingEnd(e) {
     if (!activeCtx) return;
 
     activeCtx.lineTo(lastPos.x, lastPos.y);
-activeCtx.stroke(); // This hides the final segment of the line
-activeCtx.closePath();
-	if (originalStrokeStyle) activeCtx.strokeStyle = originalStrokeStyle;
+    activeCtx.stroke();
+    activeCtx.closePath();
 }
     // REPLACE your old drawing functions with these three new versions
 function addBoardDrawListeners() {
@@ -3601,10 +3600,12 @@ function logHandwritingAttempt(result) {
     showFeedback(formatAIMessage('checkingAI'));  
     let base64ImageData;
     try {
-        const blankCanvasCheck = document.createElement('canvas');
-blankCanvasCheck.width = dataCanvas.width;
-blankCanvasCheck.height = dataCanvas.height;
-if (dataCanvas.toDataURL() === blankCanvasCheck.toDataURL()) {
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = canvas.width;
+        blankCanvas.height = canvas.height;
+        const imageDataUrl = captureCanvas.toDataURL('image/png');   // ← NEW
+
+        if (imageDataUrl === blankCanvas.toDataURL()) {
             throw new Error("BLANK_ANSWER");
         }
         base64ImageData = imageDataUrl; // Send the full Data URI
@@ -3680,7 +3681,18 @@ async function checkMathDrawing(isMcqContext = false) {
         throw new Error("Token refresh failed.");
     }
 
-    
+    try {
+        const blankCanvasCheck = document.createElement('canvas');
+        blankCanvasCheck.width = canvas.width;
+        blankCanvasCheck.height = canvas.height;
+        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
+            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
+            throw new Error("No drawing found on canvas.");
+        }
+    } catch (e) {
+        console.error("Blank canvas check failed:", e.message);
+        throw e;
+    }
 
     const TXT = getCurrentUIText();
     nextCheckBtn.disabled = true;
@@ -4193,8 +4205,6 @@ function clearUserCanvas() {
 
     if (ctx) {
         ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
-	    dataCanvas.getContext('2d').clearRect(0, 0, dataCanvas.width, dataCanvas.height);
-	canvas.style.opacity = 1;
     }
 
     userDrawingOccurred = false;
@@ -4213,7 +4223,6 @@ function initApp() {
     // --- The rest of your original initApp function continues below ---
     
     console.log("KaTeX is ready. Initializing app.");
-	dataCanvas = document.createElement('canvas');
     checkTabletMode();
     const audioIdsToLoad = [
         'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
