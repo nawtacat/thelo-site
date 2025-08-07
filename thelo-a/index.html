@@ -1069,6 +1069,37 @@ body.lang-en {
     box-shadow: var(--shadow-lg);
 }
   .mcq-option-btn .katex { vertical-align: middle; }
+/* ===== NEW: Drawing Minimap ===== */
+#minimapContainer {
+    position: absolute;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    width: 220px;
+    height: 165px;
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 1px solid var(--thelo-border);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 10;
+    overflow: hidden;
+    /* Animation styles */
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    transform: scale(0.95) translateY(10px);
+    opacity: 0;
+    pointer-events: none; /* Don't let it block clicks */
+}
+
+/* This class will be toggled by JS to show the minimap */
+#minimapContainer:not(.minimap-hidden) {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+#minimapCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
 </style>
 </head>
 <body>
@@ -1106,6 +1137,9 @@ body.lang-en {
                     <div id="thelobookPageGridContentContainer">
                     </div>
                 </div>
+		    <div id="minimapContainer" class="minimap-hidden">
+    <canvas id="minimapCanvas"></canvas>
+</div>
 
                 <div id="mcqOptionsContainer" style="display: none;"></div>
             </div>
@@ -1332,6 +1366,9 @@ function getPreviousWeekIdentifier(weekId) {
     const bottomBar = document.getElementById('bottomBar');
     const stageProgressBarContainer = document.getElementById('stageProgressBarContainer');
     const stageProgressFill = document.getElementById('stageProgressFill');
+	  const minimapContainer = document.getElementById('minimapContainer');
+const minimapCanvas = document.getElementById('minimapCanvas');
+let minimapCtx = null;
 	const imageTerminal = document.getElementById('image-terminal');
 	const imageTerminalImgContainer = document.getElementById('image-terminal-img-container');
 	const imageTerminalFeedback = document.getElementById('image-terminal-feedback');
@@ -1610,6 +1647,15 @@ function resizeCanvases() {
         if(isPageGridVisible) renderPageGridBatch(currentPageGridBatch, false);
 
     }, 150);
+	// At the end of the resizeCanvases function
+if (minimapCanvas) {
+    const minimapRect = minimapCanvas.getBoundingClientRect();
+    minimapCanvas.width = minimapRect.width * devicePixelRatio;
+    minimapCanvas.height = minimapRect.height * devicePixelRatio;
+}
+
+// The call to setupContexts() should be after this new block
+setupContexts();
 }    
 	  function setupContexts() {
     if (!backgroundCanvas || !replayCanvas || !canvas || !thelobookCanvas) return;
@@ -1647,6 +1693,18 @@ function resizeCanvases() {
         thelobookCtx.lineCap = 'round'; 
         thelobookCtx.lineJoin = 'round';
     }
+		  if (minimapCanvas) {
+        minimapCtx = minimapCanvas.getContext('2d');
+        if (minimapCtx) {
+            minimapCtx.scale(devicePixelRatio, devicePixelRatio);
+            minimapCtx.lineWidth = 2; // A bit thinner for the smaller view
+            minimapCtx.lineCap = 'round';
+            minimapCtx.lineJoin = 'round';
+            minimapCtx.strokeStyle = INK_COLORS.blue;
+        }
+    }
+
+    
     
     updateColorIndicator();
 }
@@ -1873,21 +1931,16 @@ function handleDrawingStart(e) {
     activeCtx.moveTo(pos.x, pos.y);
 }
 // THIS IS THE NEW, UPDATED FUNCTION
+// REPLACE the old handleDrawingMove function with this one
 function handleDrawingMove(e) {
     if (!drawing) return;
 
-    // >>> ADD THIS NEW BLOCK OF CODE <<<
-    // This new logic hides the UI only when a stylus actively starts
-    // moving to draw a line, ignoring simple taps.
     if (isTabletMode) {
-        // Clear any pending timer that would make the bar reappear
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-        // Hide the bar if it's not already hidden
         if (bottomBar && !bottomBar.classList.contains('bar-hidden-by-stylus')) {
             bottomBar.classList.add('bar-hidden-by-stylus');
         }
     }
-    // >>> END OF NEW BLOCK <<<
 
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
@@ -1904,6 +1957,15 @@ function handleDrawingMove(e) {
     activeCtx.moveTo(midPoint.x, midPoint.y);
 
     lastPos = pos;
+
+    // --- NEW MINIMAP DRAWING LOGIC ---
+    // If the minimap context exists and we are NOT in thelobook mode...
+    if (minimapCtx && !isThelobookActive) {
+        // Clear the previous frame on the minimap
+        minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+        // Draw the entire main canvas (where the ink is) onto the minimap, scaled to fit.
+        minimapCtx.drawImage(canvas, 0, 0, minimapCanvas.width / devicePixelRatio, minimapCanvas.height / devicePixelRatio);
+    }
 }
 function handleDrawingEnd(e) {
     if (isTabletMode) {
@@ -2761,6 +2823,16 @@ function renderStageUI(index, isResize = false) {
             img.onload = async () => {
                 drawImageWithCorrectLayout(bgCtx, img, currentStageData);
                 await drawHeadlineText();
+		    const isStudentDrawingStage = currentStageData.studentInput === true && currentStageData.type !== 'explanation_with_mcq';
+
+        // Show or hide the minimap container based on the stage type
+        if (minimapContainer) {
+            if (isStudentDrawingStage) {
+                minimapContainer.classList.remove('minimap-hidden');
+            } else {
+                minimapContainer.classList.add('minimap-hidden');
+            }
+        }
                 setupStageContent();
                 resolve();
             };
@@ -3986,24 +4058,31 @@ window.addEventListener('wheel', function(e) {
     e.preventDefault();
   }
 }, { passive: false });
-	  function clearUserCanvas() {
-    if (isPageGridVisible) return;
-    
-    if (isThelobookActive) {
-        if (thelobookCtx) {
-            thelobookCtx.clearRect(0, 0, thelobookCanvas.width / devicePixelRatio, thelobookCanvas.height / devicePixelRatio);
-            if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
-                thelobookPages[currentThelobookPageIndex] = null;
-            }
-        }
-        return;
-    }
+	 // REPLACE the old clearUserCanvas function with this one
+function clearUserCanvas() {
+    if (isPageGridVisible) return;
 
-    if (ctx) {
-        ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
-    }
-    
-    userDrawingOccurred = false;
+    if (isThelobookActive) {
+        if (thelobookCtx) {
+            thelobookCtx.clearRect(0, 0, thelobookCanvas.width / devicePixelRatio, thelobookCanvas.height / devicePixelRatio);
+            if (currentThelobookPageIndex >= 0 && currentThelobookPageIndex < thelobookPages.length) {
+                thelobookPages[currentThelobookPageIndex] = null;
+            }
+        }
+        return;
+    }
+
+    if (ctx) {
+        ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+    }
+
+    userDrawingOccurred = false;
+
+    // --- ADD THIS ---
+    // Also clear the minimap canvas
+    if (minimapCtx) {
+        minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+    }
 }
     // REPLACE your existing initApp function with this entire block
 
