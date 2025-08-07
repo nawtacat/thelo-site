@@ -1500,7 +1500,7 @@ let lastIframeUpdateTime = 0;
     let drawing = false; let lastPos = { x: 0, y: 0 };
 	  let originalStrokeStyle = null; // <<< ADD THIS LINE
     let userDrawingOccurred = false; let isTransitioning = false;
-    let devicePixelRatio = window.devicePixelRatio || 1; window.userInteracted = false;
+    let devicePixelRatio = window.devicePixelRatio || 1; let dataCanvas = null; window.userInteracted = false;
     let currentReplayAnimationId = null; let currentStageAudio = null; 
     let userPoints = 0;
     let sessionPoints = 0; // ADDED LINE: To track points for the current lesson session.
@@ -1704,7 +1704,8 @@ function resizeCanvases() {
                 c.style.height = `${cssHeight}px`;
             }
         });
-        
+        dataCanvas.width = internalWidth;   // <<< ADD THIS LINE
+    dataCanvas.height = internalHeight; // <<< ADD THIS LINE
         setupContexts();
 
         // Restore the saved drawing onto the newly resized canvas.
@@ -1982,8 +1983,9 @@ function handleDrawingStart(e) {
     }
 
     const currentTargetCanvas = e.currentTarget;
-    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
-    if (!activeCtx) return;
+    // Inside handleDrawingMove()
+const activeCtx = isThelobookActive ? thelobookCtx : dataCanvas.getContext('2d');
+if (!activeCtx) return;
 	originalStrokeStyle = activeCtx.strokeStyle; // Save the original color
 activeCtx.strokeStyle = 'transparent';       // Set the ink to be invisible
     if (isThelobookActive && currentTargetCanvas !== thelobookCanvas) return;
@@ -3599,11 +3601,10 @@ function logHandwritingAttempt(result) {
     showFeedback(formatAIMessage('checkingAI'));  
     let base64ImageData;
     try {
-        const blankCanvas = document.createElement('canvas');
-        blankCanvas.width = canvas.width;
-        blankCanvas.height = canvas.height;
-        const imageDataUrl = canvas.toDataURL('image/png');
-        if (imageDataUrl === blankCanvas.toDataURL()) {
+        const blankCanvasCheck = document.createElement('canvas');
+blankCanvasCheck.width = dataCanvas.width;
+blankCanvasCheck.height = dataCanvas.height;
+if (dataCanvas.toDataURL() === blankCanvasCheck.toDataURL()) {
             throw new Error("BLANK_ANSWER");
         }
         base64ImageData = imageDataUrl; // Send the full Data URI
@@ -4192,6 +4193,7 @@ function clearUserCanvas() {
 
     if (ctx) {
         ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+	    dataCanvas.getContext('2d').clearRect(0, 0, dataCanvas.width, dataCanvas.height);
 	canvas.style.opacity = 1;
     }
 
@@ -4211,6 +4213,7 @@ function initApp() {
     // --- The rest of your original initApp function continues below ---
     
     console.log("KaTeX is ready. Initializing app.");
+	dataCanvas = document.createElement('canvas');
     checkTabletMode();
     const audioIdsToLoad = [
         'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
