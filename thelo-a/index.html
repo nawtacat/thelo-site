@@ -3409,50 +3409,47 @@ function showToast(rawMsg, duration = 4000) {
 }
 	  // Add this new function somewhere in your script, e.g., after the toast/tablet functions
 
+// REPLACE your existing showFeedback function with this DEBUGGING version.
+
 /**
- * Displays a large, animated feedback message in the center of the screen.
- * Replaces the old chat terminal functionality.
- * @param {string} rawMsg - The message to display. Can contain HTML.
- * @param {number} [duration=4000] - How long to show the message in milliseconds.
+ * DEBUGGING VERSION: Displays a large, animated feedback message.
+ * This version is simplified to diagnose visibility issues.
  */
 function showFeedback(rawMsg, duration = 4000) {
-    if (!feedbackOverlay || !feedbackEmoji || !feedbackText) return;
+    // Log to the console to confirm this function is being called
+    console.log("DEBUG: showFeedback was called with the message:", rawMsg);
 
-    // Clear any existing feedback timer to prevent it from hiding the new message too early
-    if (feedbackTimer) {
-        clearTimeout(feedbackTimer);
+    const overlay = document.getElementById('feedbackOverlay');
+    const textEl = document.getElementById('feedbackText');
+    const emojiEl = document.getElementById('feedbackEmoji');
+
+    // Check if the HTML elements actually exist
+    if (!overlay || !textEl || !emojiEl) {
+        console.error("DEBUG: Critical error! The feedback HTML elements were not found.");
+        return;
     }
 
-    // --- Classify message to find the right emoji ---
-    const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
-    const TXT = getCurrentUIText();
-    let emoji = '🫧'; // Default bubble emoji
+    // --- Force the feedback to be visible ---
+    emojiEl.textContent = '👋';
+    textEl.innerHTML = "This is a test message. If you see this, the function is working.";
+    
+    // Use direct styling to override everything else
+    overlay.style.opacity = '1'; 
+    overlay.style.visibility = 'visible';
+    
+    // Also remove the class just in case
+    overlay.classList.remove('feedback-hidden');
 
-    const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
-    const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
-    const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-    const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
-    const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
-    const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+    console.log("DEBUG: The feedback overlay should now be visible on screen.");
 
-    if (isWrong) emoji = '🤔';
-    else if (isCorrect || isPoints) emoji = '🎉';
-    else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
-    else if (isWelcome) emoji = '👋';
-    else if (isChecking) emoji = '⏳';
-
-    // --- Update the content and show the overlay ---
-    feedbackEmoji.textContent = emoji;
-    feedbackText.innerHTML = parseAndRenderMath(msg); // We can reuse your existing math parser!
-    feedbackOverlay.classList.remove('feedback-hidden');
-
-    // --- Set a timer to automatically hide the feedback message ---
-    feedbackTimer = setTimeout(() => {
-        feedbackOverlay.classList.add('feedback-hidden');
-        feedbackTimer = null;
-    }, duration);
+    // We are temporarily disabling the auto-hide feature for this test.
+    // if (feedbackTimer) {
+    //     clearTimeout(feedbackTimer);
+    // }
+    // feedbackTimer = setTimeout(() => {
+    //     overlay.classList.add('feedback-hidden');
+    // }, duration);
 }
-
 function checkTabletMode() {
     // This media query should match the one in your CSS
     const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
