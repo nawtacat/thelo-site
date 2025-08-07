@@ -3412,45 +3412,35 @@ function showToast(rawMsg, duration = 4000) {
 
 // REPLACE your existing showFeedback function with this DEBUGGING version.
 
+// ---------- production showFeedback ----------
+let feedbackTimer = null;
 /**
- * DEBUGGING VERSION: Displays a large, animated feedback message.
- * This version is simplified to diagnose visibility issues.
+ * Pops up a transient feedback card in the centre of the screen.
+ * @param {string} rawMsg  –  HTML-allowed message (e.g. "🎉 <strong>Correct!</strong>")
+ * @param {number} duration – how long to stay visible (ms)
  */
 function showFeedback(rawMsg, duration = 4000) {
-    // Log to the console to confirm this function is being called
-    console.log("DEBUG: showFeedback was called with the message:", rawMsg);
+  const overlay  = document.getElementById('feedbackOverlay');
+  const textEl   = document.getElementById('feedbackText');
+  const emojiEl  = document.getElementById('feedbackEmoji');
+  if (!overlay || !textEl || !emojiEl) return;
 
-    const overlay = document.getElementById('feedbackOverlay');
-    const textEl = document.getElementById('feedbackText');
-    const emojiEl = document.getElementById('feedbackEmoji');
+  /* pick an emoji based on message content */
+  let emoji = '🫧';
+  if (/🎉|✅|correct/i.test(rawMsg))        emoji = '🎉';
+  else if (/🤔|incorrect|wrong/i.test(rawMsg)) emoji = '🤔';
+  else if (/⚠️|error|warning/i.test(rawMsg))   emoji = '⚠️';
+  emojiEl.textContent = emoji;
+  textEl.innerHTML    = rawMsg;
 
-    // Check if the HTML elements actually exist
-    if (!overlay || !textEl || !emojiEl) {
-        console.error("DEBUG: Critical error! The feedback HTML elements were not found.");
-        return;
-    }
+  overlay.classList.remove('feedback-hidden');   // show
 
-    // --- Force the feedback to be visible ---
-    emojiEl.textContent = '👋';
-    textEl.innerHTML = "This is a test message. If you see this, the function is working.";
-    
-    // Use direct styling to override everything else
-    overlay.style.opacity = '1'; 
-    overlay.style.visibility = 'visible';
-    
-    // Also remove the class just in case
-    overlay.classList.remove('feedback-hidden');
-
-    console.log("DEBUG: The feedback overlay should now be visible on screen.");
-
-    // We are temporarily disabling the auto-hide feature for this test.
-    // if (feedbackTimer) {
-    //     clearTimeout(feedbackTimer);
-    // }
-    // feedbackTimer = setTimeout(() => {
-    //     overlay.classList.add('feedback-hidden');
-    // }, duration);
+  if (feedbackTimer) clearTimeout(feedbackTimer);
+  feedbackTimer = setTimeout(() => {
+    overlay.classList.add('feedback-hidden');    // hide
+  }, duration);
 }
+
 function checkTabletMode() {
     // This media query should match the one in your CSS
     const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
