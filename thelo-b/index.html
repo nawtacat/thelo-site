@@ -3097,105 +3097,113 @@ async function displayLessonComplete() {
  * Handles clicks on the main "Next" / "Check" / "Got It" button.
  * This function is now the central point for evaluating all interactive stages.
  */
+/* ------------------------------------------------------------------
+   REPLACE your current handleNextCheckClick() with everything below
+   ------------------------------------------------------------------ */
 function handleNextCheckClick() {
-    // Universal guard clause
-    if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) return;
-    const TXT = getCurrentUIText();
+  // Guard clauses ­– block interaction during transitions or modals
+  if (
+    isTransitioning ||
+    isLessonLoading ||
+    isThelobookActive ||
+    isPageGridVisible
+  ) return;
 
-    // 1. Handle the initial "Start" button click
-    if (currentStageIndex === -1 && lessonStages.length > 0) {
-	    hideFeedback();                 // ← new line
-        lessonStartTime = Date.now();
-        const user = auth.currentUser;
-        const urlParams = new URLSearchParams(window.location.search);
-        const lessonFileName = urlParams.get('lessonFile');
-        if (user && lessonFileName) {
-            db.collection("analytics_events").add({
-                type: "lesson_started",
-                userId: user.uid,
-                lessonId: lessonFileName.replace('.json', ''),
-                courseId: "sat-math-prep",
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        }
-        transitionToStage(0);
-        return;
-    }
+  const TXT = getCurrentUIText();
 
-    const mcqDetails = currentStageData.optionsQuiz;
-    const isMCQStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+  /* ─────────────────── 1. “Start” button ─────────────────── */
+  if (currentStageIndex === -1 && lessonStages.length > 0) {
+    hideFeedback();
+    lessonStartTime = Date.now();
 
-    // 2. Handle submission for MCQ stages
-    if (isMCQStage) {
-        if (selectedMcqIndex === null) {
-            addChatMessage('AI', '⚠️ Please select an answer before checking.');
-            return;
-        }
-        
-        const optionButtons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
-        optionButtons.forEach(btn => btn.disabled = true);
-        nextCheckBtn.disabled = true;
+    // analytics
+    const user       = auth.currentUser;
+    const lessonFile = new URLSearchParams(location.search).get('lessonFile');
+    if (user && lessonFile) {
+      db.collection('analytics_events').add({
+        type      : 'lesson_started',
+        userId    : user.uid,
+        lessonId  : lessonFile.replace('.json', ''),
+        courseId  : 'sat-math-prep',
+        timestamp : firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    transitionToStage(0);
+    return;
+  }
 
-        const isCorrect = (selectedMcqIndex === mcqDetails.correctIndex);
+  /* ─────────────────── 2. MCQ stages ─────────────────── */
+  const mcq = currentStageData.optionsQuiz;
+  const isMCQStage =
+    currentStageData.type === 'explanation_with_mcq' &&
+    mcq &&
+    Array.isArray(mcq.choices) &&
+    mcq.choices.length > 0;
 
-        if (isCorrect) {
-            // CORRECT ANSWER: Give feedback and advance
-            addChatMessage('AI', `🎉 ${mcqDetails.feedbackCorrect || TXT.correct}`);
-            playRandomFeedback('approve');
-            setTimeout(nextStage, 2500);
-        } else {
-            // INCORRECT ANSWER: Analyze the drawing
-            addChatMessage('AI', `🤔 That's not the right option. Let me check your written work...`);
-            
-            setTimeout(async () => {
-                try {
-                    // We pass 'true' to indicate this is for an MCQ.
-                    await checkMathDrawing(true);
-                } catch (error) {
-                    // If the AI check fails, tell the user.
-                    console.error("Error during AI drawing analysis:", error);
-                    addChatMessage('AI', '⚠️ I had trouble analyzing your drawing. Please try again.');
-                } finally {
-                    // ALWAYS re-enable the buttons so the user is never stuck.
-                    optionButtons.forEach(btn => btn.disabled = false);
-                    nextCheckBtn.disabled = false;
-                }
-            }, 1500);
-        }
-        return;
-    }
+  if (isMCQStage) {
+    if (selectedMcqIndex === null) {
+      addChatMessage('AI', '⚠️ Please select an answer before checking.');
+      return;
+    }
 
-    // 3. Handle all other stage types ("Got It", handwriting, etc.)
-    if (nextCheckBtn.textContent === TXT.gotIt) {
-        if (!stagesWithPointsAwarded.has(currentStageIndex)) {
-            stagesWithPointsAwarded.add(currentStageIndex);
-            stopCurrentStageAudio();
-            const randomPoints = Math.floor(Math.random() * (9 - 6 + 1)) + 6;
-            userPoints += randomPoints;
-            sessionPoints += randomPoints;
-            updateUserPointsInFirestore(randomPoints);
-            updatePointsDisplay();
-            addChatMessage('AI', formatAIMessage('pointsGained', { points: randomPoints }));
-            if (window.userInteracted && gotItSoundPlayer) {
-                gotItSoundPlayer.currentTime = 0;
-                gotItSoundPlayer.play().catch(e => {});
-            }
-        }
-        if (isReplayActive) {
-            closeReplayPlayer();
-        }
-        nextStage();
-        return;
-    }
-    
-    if (currentStageData.type === 'question_handwriting') {
-        checkHandwritingAnswer();
-    } else if (currentStageData.type === 'question_math_solution') {
-        checkMathDrawing();
-    } else {
-        nextStage();
-    }
+    // freeze UI while checking
+    const buttons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
+    buttons.forEach(b => (b.disabled = true));
+    nextCheckBtn.disabled = true;
+
+    const correct = selectedMcqIndex === mcq.correctIndex;
+
+    if (correct) {
+      addChatMessage('AI', `🎉 ${mcq.feedbackCorrect || TXT.correct}`);
+      playRandomFeedback('approve');
+      setTimeout(nextStage, 2500);
+    } else {
+      addChatMessage('AI', '🤔 That option looks off – let me check your work…');
+      setTimeout(async () => {
+        try {
+          await checkMathDrawing(true); // MCQ context
+        } finally {
+          buttons.forEach(b => (b.disabled = false));
+          nextCheckBtn.disabled = false;
+        }
+      }, 1500);
+    }
+    return;
+  }
+
+  /* ─────────────────── 3. “Got It” / info stages ─────────────────── */
+  if (nextCheckBtn.textContent === TXT.gotIt) {
+    if (!stagesWithPointsAwarded.has(currentStageIndex)) {
+      stagesWithPointsAwarded.add(currentStageIndex);
+
+      stopCurrentStageAudio();
+      const pts = Math.floor(Math.random() * 4) + 6; // 6-9 pts
+      userPoints     += pts;
+      sessionPoints  += pts;
+      updateUserPointsInFirestore(pts);
+      updatePointsDisplay();
+      addChatMessage('AI', formatAIMessage('pointsGained', { points: pts }));
+      if (window.userInteracted) {
+        gotItSoundPlayer.currentTime = 0;
+        gotItSoundPlayer.play().catch(() => {});
+      }
+    }
+    if (isReplayActive) closeReplayPlayer();
+    nextStage();
+    return;
+  }
+
+  /* ─────────────────── 4. Question stages ─────────────────── */
+  if (currentStageData.type === 'question_handwriting') {
+    checkHandwritingAnswer();
+  } else if (currentStageData.type === 'question_math_solution') {
+    checkMathDrawing();
+  } else {
+    nextStage();
+  }
 }
+/* ------------------------------------------------------------------ */
+
 	  function addChatImage(url) {
     const wrapper = Object.assign(document.createElement('div'), {
         className: 'ai-message chat-image-container'
