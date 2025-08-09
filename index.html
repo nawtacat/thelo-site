@@ -226,6 +226,7 @@
         }), { threshold: 0.1 });
         document.querySelectorAll('.anim-target').forEach(el => animationObserver.observe(el));
         // START: Added Drawing Replay Logic
+// START: Added Drawing Replay Logic
 const setupDrawingReplay = () => {
     const canvas = document.getElementById('replayCanvas');
     const prompt = document.getElementById('replay-prompt');
@@ -261,12 +262,13 @@ const setupDrawingReplay = () => {
 
             context.strokeStyle = stroke.color || '#2563EB';
             context.lineWidth = stroke.lineWidth || 4; // Bolder for visibility
-            
+
             context.beginPath();
             let movedToFirstPoint = false;
 
             for (let i = 0; i < stroke.points.length; i++) {
-                const point = stroke.points[i];
+                const point = stroke.points[(i / 60) * 60 | 0]; // Sample points for ~60 FPS
+                if (!point) continue;
                 const pointTimeAbsolute = strokeStartTime + (point.timeOffset || 0);
                 if (pointTimeAbsolute > targetTime) break;
 
@@ -285,7 +287,7 @@ const setupDrawingReplay = () => {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         prompt.style.opacity = '0'; // Fade out prompt
         let startTime = 0;
-        const totalDuration = data.strokes[data.strokes.length - 1].endTime;
+        const totalDuration = data.strokes.reduce((maxEndTime, stroke) => Math.max(maxEndTime, stroke.endTime), 0);
 
         const animate = (timestamp) => {
             if (!startTime) startTime = timestamp;
@@ -296,7 +298,7 @@ const setupDrawingReplay = () => {
             if (elapsedTime < totalDuration) {
                 animationFrameId = requestAnimationFrame(animate);
             } else {
-                 // Loop the animation
+                // Loop the animation
                 startTime = 0;
                 animationFrameId = requestAnimationFrame(animate);
             }
@@ -305,11 +307,10 @@ const setupDrawingReplay = () => {
     };
 
     const replayObserver = new IntersectionObserver(async (entries) => {
-        const entry = entries[0];
+        const entry = entries[(entries.length - 1) | 0]; // Get the last entry
         if (entry.isIntersecting) {
             if (!drawingData) {
                 try {
-                    // This is the updated URL for your drawing data
                     const response = await fetch('https://thelo.space/lessons/drawings/main.json');
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
@@ -332,7 +333,7 @@ const setupDrawingReplay = () => {
                 animationFrameId = null;
             }
         }
-    }, { threshold: 0.6 }); // Start when 60% of the canvas is visible
+    }, { threshold: 0.4 }); // Trigger when 40% is visible
 
     replayObserver.observe(canvas);
     window.addEventListener('resize', resizeCanvas);
