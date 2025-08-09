@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>thelo</title>
+  <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --thelo-blue:#2563EB;
+      --thelo-bg:#F8F9FA;
+      --thelo-text:#111827;
+      --grid:#E5E7EB;
+      --maxw:1120px;
+      /* Adjust this to move the feedback: larger = higher, smaller = lower */
+      --feedback-bottom:96px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      font-family:'Manrope',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+      color:var(--thelo-text);
+      background:var(--thelo-bg);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      background-image:
+        linear-gradient(to right, var(--grid) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+      background-size:40px 40px;
+    }
+    h1,h2,h3,h4,h5,h6{font-weight:800;margin:0 0 .5rem}
+    p{margin:.5rem 0}
+    a{color:inherit;text-decoration:none}
+
+    /* Layout helpers */
+    .container{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+    .section{padding:96px 0}
+    @media (min-width:1024px){ .section{padding:128px 0} }
+
+    /* Top nav */
+    .nav{
+      position:sticky;top:0;z-index:50;
+      backdrop-filter:blur(6px);
+      background:rgba(255,255,255,.6);
+      border-bottom:1px solid #e5e7eb;
+    }
+    .nav-inner{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:12px 0;
+    }
+    .nav-links{display:none;gap:24px}
+    .nav-links a{font-weight:700;opacity:.9}
+    .nav-links a:hover{color:var(--thelo-blue)}
+    .nav-logo{display:flex;align-items:center;gap:8px}
+    .nav-mobile-btn{display:inline-flex;border:0;background:transparent;padding:8px;cursor:pointer}
+    .nav-mobile{display:none;border-top:1px solid #e5e7eb;background:#fff}
+    .nav-mobile a{display:block;padding:12px 16px;font-weight:700}
+    @media (min-width:768px){
+      .nav-mobile-btn{display:none}
+      .nav-links{display:flex}
+      .nav-mobile{display:none!important}
+    }
+
+    /* Header */
+    header{padding-top:64px;padding-bottom:96px}
+    @media (min-width:1024px){ header{padding-top:96px;padding-bottom:128px} }
+    .grid-2{
+      display:grid;gap:32px;
+      grid-template-columns:1fr;
+    }
+    @media (min-width:1024px){ .grid-2{grid-template-columns:1fr 1fr;gap:48px} }
+    .hero-title{font-size:44px;line-height:1.05;letter-spacing:-.02em}
+    @media (min-width:640px){ .hero-title{font-size:64px} }
+    .blue{color:var(--thelo-blue)}
+    .muted{color:#475569} /* slate-600 */
+
+    /* Card window */
+    .window{
+      position:relative;background:#fff;border:1px solid var(--grid);border-radius:12px;padding:40px;
+      box-shadow:0 2px 8px rgba(0,0,0,.04);
+    }
+    .window::before{
+      content:"";position:absolute;top:12px;left:12px;width:52px;height:12px;
+      background-image:url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;
+    }
+
+    /* Thelopad section */
+    .tag{display:inline-block;background:var(--thelo-blue);color:#fff;font-weight:800;border-radius:999px;padding:8px 14px}
+
+    /* Drawing replay */
+    .video-box{position:relative;width:100%;aspect-ratio:16/9;background:transparent}
+    canvas{position:absolute;inset:0;width:100%;height:100%}
+    .feedback{
+      position:absolute;right:24px;bottom:var(--feedback-bottom);
+      opacity:0;transform:translateY(6px);
+      transition:opacity .6s ease, transform .6s ease;
+      pointer-events:none;
+    }
+    .feedback.show{opacity:1;transform:translateY(0)}
+    .feedback-card{
+      max-width:520px;background:rgba(255,255,255,.7);backdrop-filter:blur(6px);
+      border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.08);
+      padding:16px;pointer-events:auto
+    }
+    .feedback-card p{font-weight:700;color:#1f2937;margin:0}
+
+    /* Contact */
+    .center{text-align:center}
+    .row{display:flex;gap:24px;flex-wrap:wrap;align-items:center;justify-content:center}
+
+    /* Anim (simple) */
+    .fade{opacity:0;transform:translateY(16px);transition:opacity .7s ease, transform .7s ease}
+    .fade.visible{opacity:1;transform:translateY(0)}
+
+    /* Footer */
+    footer{padding:40px 0;text-align:center;color:#64748b;font-size:14px}
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="nav-logo" href="/">
+        <img src="https://thelo.space/img/bluethelo.svg" alt="thelo logo" style="height:36px;width:auto" />
+      </a>
+      <div class="nav-links">
+        <a href="#why">Why thelo?</a>
+        <a href="#thelopad">How It Works</a>
+        <a href="/auth">Log in</a>
+        <a href="#contact">Contact</a>
+      </div>
+      <button id="mobileMenuButton" class="nav-mobile-btn" aria-label="Menu">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/>
+        </svg>
+      </button>
+    </div>
+    <div id="mobileMenu" class="nav-mobile">
+      <div class="container">
+        <a href="#why">Why thelo?</a>
+        <a href="#thelopad">How It Works</a>
+        <a href="/auth">Log in</a>
+        <a href="#contact">Contact</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HEADER -->
+  <header class="section">
+    <div class="container">
+      <div class="grid-2">
+        <div class="fade">
+          <h1 class="hero-title">Weaving <span class="blue">Education.</span></h1>
+        </div>
+        <div class="fade" style="transition-delay:100ms">
+          <p class="muted" style="font-weight:700">thelo merges the natural feel of pencil on paper with the power of a personal AI tutor.</p>
+          <p class="muted" style="margin-top:12px">Write your solutions in a normal notebook placed on our tablet. thelo digitizes your work instantly and guides you, step-by-step.</p>
+          <p class="muted">It’s the most intuitive way to master math.</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- WHY -->
+  <section id="why" class="section">
+    <div class="container">
+      <div class="center fade">
+        <h2 style="font-size:40px">The Best of Both Worlds</h2>
+      </div>
+
+      <div class="window fade" style="transition-delay:200ms;margin-top:32px">
+        <div style="display:grid;gap:24px;text-align:center;grid-template-columns:1fr">
+          <div>
+            <h3 style="font-size:20px">Write on Real Paper</h3>
+            <p class="muted">No more slippery screens. Get the tactile feedback of writing on paper, which is proven to improve retention and understanding.</p>
+          </div>
+          <div>
+            <h3 style="font-size:20px">Instant AI Analysis</h3>
+            <p class="muted">As you write, our AI analyzes your work, providing hints and feedback just like a real tutor would. No waiting, no scanning.</p>
+          </div>
+          <div>
+            <h3 style="font-size:20px">Keep Your Notes</h3>
+            <p class="muted">At the end of a session, you have a physical copy of your work in your notebook, and a digital record of your progress in the cloud.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- THELOPAD -->
+  <section id="thelopad" class="section">
+    <div class="container">
+      <div class="grid-2">
+        <div class="fade">
+          <h2 style="font-size:40px">How Does It Work?</h2>
+          <div class="tag" style="margin-top:8px">Simple &amp; Intuitive</div>
+          <p class="muted" style="margin-top:16px">
+            Our system uses a standard drawing tablet and a special stylus with a graphite tip. You simply place your own paper on the tablet and start writing. The tablet captures the position of your pen, while the graphite leaves a real mark on your paper. It’s a seamless bridge between the physical and digital, requiring no new skills to learn.
+          </p>
+        </div>
+        <div class="fade" style="transition-delay:200ms">
+          <img src="https://thelo.space/img/theloLaptop.png" alt="thelopad and laptop" style="width:100%;height:auto;object-fit:contain">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DRAWING REPLAY -->
+  <section id="drawing-replay" class="section">
+    <div class="container">
+      <div class="video-box">
+        <canvas id="replayCanvas"></canvas>
+
+        <!-- Feedback overlay -->
+        <div id="replay-feedback" class="feedback">
+          <div class="feedback-card">
+            <p>That is the correct formula. Great work! 🎉</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact" class="section">
+    <div class="container center">
+      <div class="fade">
+        <h2 style="font-size:40px">Contact Aram</h2>
+        <p class="muted" style="margin-top:16px">
+          I am actively seeking partners, mentors, and institutions to help grow thelo. The best way to connect is to schedule a 30-minute call directly in my calendar below. I look forward to speaking with you.
+        </p>
+      </div>
+      <div class="fade" style="transition-delay:100ms;margin-top:16px">
+        <p class="muted" style="margin-bottom:8px">Or, contact me directly:</p>
+        <div class="row">
+          <a href="mailto:aramasatryan290@gmail.com" style="font-weight:700">✉️ aramasatryan290@gmail.com</a>
+          <a href="tel:+37477411798" style="font-weight:700">📞 +374 77 411 798</a>
+        </div>
+      </div>
+      <div class="fade" style="transition-delay:200ms;margin-top:32px;min-width:320px;height:700px">
+        <div class="calendly-inline-widget" data-url="https://calendly.com/aramasatryan290/30min" style="min-width:320px;height:700px"></div>
+        <script type="text/javascript" src="https://assets.calendly.com/assets/external/widget.js" async></script>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    © 2025 thelo
+  </footer>
+
+  <script>
+    // Mobile menu toggle
+    const mobileBtn = document.getElementById('mobileMenuButton');
+    const mobileMenu = document.getElementById('mobileMenu');
+    mobileBtn.addEventListener('click', () => {
+      const shown = mobileMenu.style.display === 'block';
+      mobileMenu.style.display = shown ? 'none' : 'block';
+    });
+    document.querySelectorAll('#mobileMenu a').forEach(a=>{
+      a.addEventListener('click',()=>{ mobileMenu.style.display='none'; });
+    });
+
+    // Simple appear-on-scroll animations
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){ e.target.classList.add('visible'); io.unobserve(e.target); }
+      });
+    },{threshold:0.1});
+    document.querySelectorAll('.fade').forEach(el=>io.observe(el));
+
+    // ---- Drawing Replay Logic (no Tailwind) ----
+    (function setupDrawingReplay(){
+      const canvas = document.getElementById('replayCanvas');
+      const feedbackEl = document.getElementById('replay-feedback');
+      if(!canvas || !feedbackEl) return;
+
+      const ctx = canvas.getContext('2d');
+      let drawingData = null;
+      let rafId = null;
+      const dpr = window.devicePixelRatio || 1;
+
+      function resizeCanvas(){
+        const rect = canvas.getBoundingClientRect();
+        // Reset transform before resizing to avoid cumulative scaling
+        ctx.setTransform(1,0,0,1,0,0);
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        ctx.scale(dpr, dpr);
+        if(drawingData) renderAtTime(Infinity, drawingData, ctx);
+      }
+
+      function renderAtTime(t, data, context){
+        const w = context.canvas.width / dpr;
+        const h = context.canvas.height / dpr;
+        context.clearRect(0,0,w,h);
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+
+        data.strokes.forEach(s=>{
+          const start = s.startTime || 0;
+          if(t < start) return;
+          context.strokeStyle = s.color || '#2563EB';
+          context.lineWidth = s.lineWidth || 4;
+          context.beginPath();
+          let moved = false;
+          for(let i=0;i<s.points.length;i++){
+            const p = s.points[i];
+            const pt = start + (p.timeOffset || 0);
+            if(pt > t) break;
+            const x = p.normX * w;
+            const y = p.normY * h;
+            if(!moved){ context.moveTo(x,y); moved = true; }
+            else{ context.lineTo(x,y); }
+          }
+          if(moved) context.stroke();
+        });
+      }
+
+      function startReplay(data){
+        if(rafId) cancelAnimationFrame(rafId);
+        let startTs = 0;
+        const total = data.strokes.reduce((m,s)=>Math.max(m, s.endTime||0), 0);
+
+        function step(ts){
+          if(!startTs) startTs = ts;
+          const elapsed = ts - startTs;
+          renderAtTime(elapsed, data, ctx);
+          if(elapsed < total){
+            rafId = requestAnimationFrame(step);
+          }else{
+            renderAtTime(Infinity, data, ctx);
+            rafId = null;
+            setTimeout(()=>{ feedbackEl.classList.add('show'); }, 400);
+          }
+        }
+        rafId = requestAnimationFrame(step);
+      }
+
+      const replayIO = new IntersectionObserver(async (entries, obs)=>{
+        const entry = entries[0];
+        if(entry.isIntersecting){
+          try{
+            const res = await fetch('https://thelo.space/lessons/drawings/main.json');
+            if(!res.ok) throw new Error('HTTP '+res.status);
+            drawingData = await res.json();
+            resizeCanvas();
+            startReplay(drawingData);
+            obs.unobserve(canvas);
+          }catch(err){
+            console.error('Failed to load drawing data:', err);
+          }
+        }
+      },{threshold:0.4});
+
+      replayIO.observe(canvas);
+      window.addEventListener('resize', resizeCanvas);
+    })();
+  </script>
+</body>
+</html>
