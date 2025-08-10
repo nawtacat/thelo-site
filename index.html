@@ -59,6 +59,8 @@
             background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
             background-repeat: no-repeat;
         }
+        #replay-feedback { transform: translate(-50%, 49px); } /* center on x, 12px below */
+
     </style>
 </head>
 
@@ -155,14 +157,14 @@
             <canvas id="replayCanvas" class="absolute top-0 left-0 w-full h-full bg-transparent"></canvas>
 
             <!-- Feedback overlay: slightly lower than before -->
-      <div id="replay-feedback"
-     class="absolute right-6 opacity-0 transition-opacity duration-700 ease-out pointer-events-none"
-     style="inset:auto auto 96px auto !important;"  <!-- moves it ~32px up -->
-
+      <!-- Feedback overlay -->
+<div id="replay-feedback"
+     class="absolute opacity-0 transition-opacity duration-700 ease-out pointer-events-none">
   <div class="max-w-md p-4 bg-white/70 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-md pointer-events-auto">
     <p class="font-semibold text-slate-800">That is the correct formula. Great work! 🎉</p>
   </div>
 </div>
+
 
 
         </div>
@@ -366,10 +368,38 @@
                         
                         // Show feedback message after a short delay
                         setTimeout(() => {
-                           feedbackEl.classList.remove('opacity-0');
-feedbackEl.classList.add('opacity-100');
+  // place feedback under the last stroke's last point
+  try {
+    const container = canvas.parentElement; // the relative wrapper
+    const rect = container.getBoundingClientRect();
 
-                        }, 500);
+    // pick the stroke that ends last (or just the last in the array)
+    const lastStroke =
+      data.strokes.reduce((a, b) => (a.endTime > b.endTime ? a : b));
+
+    const lastPt = lastStroke.points[lastStroke.points.length - 1];
+
+    // convert normalized coords (0..1) -> pixels inside the container
+    const xPx = lastPt.normX * rect.width;
+    const yPx = lastPt.normY * rect.height;
+
+    // set absolute position (clear any right/bottom that might exist)
+    feedbackEl.style.right = 'auto';
+    feedbackEl.style.bottom = 'auto';
+    feedbackEl.style.left = `${xPx}px`;
+    feedbackEl.style.top  = `${yPx}px`;
+
+    // show it
+    feedbackEl.classList.remove('opacity-0');
+    feedbackEl.classList.add('opacity-100');
+  } catch (e) {
+    console.error('Could not place feedback:', e);
+    // fallback: show it in the old corner
+    feedbackEl.classList.remove('opacity-0');
+    feedbackEl.classList.add('opacity-100');
+  }
+}, 500);
+
                     }
                 };
                 animationFrameId = requestAnimationFrame(animate);
