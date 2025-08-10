@@ -1196,86 +1196,6 @@ body.lang-en {
   height: 35px; /* Adjust the logo size as needed */
   width: auto; /* Makes the logo subtle and less distracting */
 }
-  /* ===== REVISED: Modal Contextual Feedback System ===== */
-#feedbackBackdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(30, 41, 59, 0.1);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
-    z-index: 1000;
-    transition: opacity 0.3s ease;
-}
-
-#feedbackBackdrop.feedback-hidden,
-#contextualFeedbackContainer.feedback-hidden {
-    opacity: 0;
-    pointer-events: none;
-}
-
-#contextualFeedbackContainer {
-    position: fixed; /* Use fixed positioning for consistency */
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1001;
-    width: clamp(340px, 60%, 550px);
-    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
-}
-
-#contextualFeedbackContainer.feedback-hidden {
-    transform: translateX(-50%) translateY(-20px);
-}
-
-#contextualFeedbackBox {
-    background-color: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    color: var(--thelo-text);
-    border-radius: 14px;
-    box-shadow: var(--shadow-lg);
-    border: 1px solid rgba(0,0,0,0.05);
-    cursor: pointer;
-    overflow: hidden;
-    padding: 20px 25px;
-    text-align: center;
-    transition: transform 0.2s ease;
-}
-
-#contextualFeedbackBox:hover {
-    transform: scale(1.02);
-}
-
-#feedbackMainContent {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 15px;
-}
-
-#feedbackIcon {
-    font-size: 2rem;
-}
-
-#feedbackTextContent {
-    font-size: 1.25rem;
-    font-weight: 500;
-    line-height: 1.5;
-}
-
-#feedbackDismissPrompt {
-    margin-top: 12px;
-    font-size: 0.8rem;
-    color: var(--thelo-text-light);
-    opacity: 0.8;
-}
-
-#contextualFeedbackBox .katex {
-    font-size: 1.25em; /* Make KaTeX slightly larger to match text */
-}
 </style>
 </head>
 <body>
@@ -1318,16 +1238,6 @@ body.lang-en {
 </div>
 
                 <div id="mcqOptionsContainer" style="display: none;"></div>
-              <div id="feedbackBackdrop" class="feedback-hidden"></div>
-<div id="contextualFeedbackContainer" class="feedback-hidden">
-    <div id="contextualFeedbackBox">
-        <div id="feedbackMainContent">
-            <span id="feedbackIcon"></span>
-            <span id="feedbackTextContent"></span>
-        </div>
-        <div id="feedbackDismissPrompt">Press 'A' or click to continue</div>
-    </div>
-</div>
             </div>
 
             <div id="bottomBar">
@@ -1553,11 +1463,6 @@ function getPreviousWeekIdentifier(weekId) {
     const backgroundCanvas = document.getElementById('backgroundCanvas');
     const replayCanvas = document.getElementById('replayCanvas');
     const canvas = document.getElementById('board');
-    // Add/update this in your DOM Elements section
-const feedbackBackdrop = document.getElementById('feedbackBackdrop');
-const contextualFeedbackContainer = document.getElementById('contextualFeedbackContainer');
-const feedbackIcon = document.getElementById('feedbackIcon');
-const feedbackTextContent = document.getElementById('feedbackTextContent');
     const loadingOverlay = document.getElementById('loading-overlay'); // <-- ADD THIS
     const thelobookCanvas = document.getElementById('thelobookCanvas');
     const boardWrapper = document.getElementById('boardWrap');
@@ -2644,37 +2549,106 @@ function renderMixedKaTeXInto(targetEl, src) {
   }
 }
 
-	function displayMcq(mcqDetails){
-    const choices = mcqDetails.choices;
-    if (!mcqOptionsContainer || !mcqDetails ||
-        !Array.isArray(choices) || choices.length === 0) return;
-    if (isPageGridVisible) closePageGridView();
+	// REPLACE your existing displayMcq function with this one.
 
-    mcqOptionsContainer.innerHTML = '';
+function displayMcq(mcqDetails){
+    const choices = mcqDetails.choices;
+    if (!mcqOptionsContainer || !mcqDetails ||
+        !Array.isArray(choices) || choices.length === 0) return;
+    if (isPageGridVisible) closePageGridView();
 
-    /* ===== Smart‑layout ===== */
-    const isShort = choices.every(choice => choice.length < 10);
-    mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
+    mcqOptionsContainer.innerHTML = '';
 
-    /* <<—‑‑‑  ADD THESE TWO LINES  ‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑>> */
-    const isSideBySide = !!(currentStageData && currentStageData.image);
-    mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
-    /* --------------------------------------------------- */
+    /* ===== Smart‑layout (Unchanged) ===== */
+    const isShort = choices.every(choice => choice.length < 10);
+    mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
+    const isSideBySide = !!(currentStageData && currentStageData.image);
+    mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
 
-    choices.forEach((optionText, index) => {
-        const optionButton = document.createElement('button');
-        optionButton.classList.add('mcq-option-btn');
-        renderMixedKaTeXInto(optionButton, optionText);
-        optionButton.dataset.index = index;
-        optionButton.addEventListener(
-            'click',
-            () => handleMcqOptionClick(index, mcqDetails)
-        );
-        mcqOptionsContainer.appendChild(optionButton);
-    });
+    choices.forEach((optionText, index) => {
+        const optionButton = document.createElement('button');
+        optionButton.classList.add('mcq-option-btn');
+        renderMixedKaTeXInto(optionButton, optionText);
+        optionButton.dataset.index = index;
 
-    mcqOptionsContainer.style.display = 'flex';
-    mcqOptionsContainer.style.opacity = '1';
+        // ===== NEW: Logic for Hold-to-Select =====
+        let pressTimer = null;
+        let isDrawingThroughButton = false;
+
+        // On mouse down, start a timer and start drawing immediately.
+        optionButton.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDrawingThroughButton = true;
+            drawing = true; // Use the global drawing flag
+            userDrawingOccurred = true;
+
+            // Manually start the drawing sequence on the main canvas (ctx)
+            lastPos = getPos(e, canvas); // Get position relative to the main canvas
+            if (!lastPos) return;
+
+			// Configure the drawing context for a new stroke
+            ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = INK_COLORS.blue;
+            ctx.beginPath();
+            ctx.moveTo(lastPos.x, lastPos.y);
+
+            // Start the hold-to-select timer
+            pressTimer = setTimeout(() => {
+                // Hold successful: Select the option
+                isDrawingThroughButton = false;
+                drawing = false;
+                
+                // End the tiny drawing stroke that might have started
+                ctx.closePath();
+                
+                // Execute the original selection logic
+                handleMcqOptionClick(index, mcqDetails);
+
+            }, 1000); // 1-second delay
+        });
+
+        // When the mouse is released, ALWAYS clear the timer.
+        // If this happens before 1s, the selection logic is never called.
+        const handleMouseUpOrLeave = (e) => {
+            clearTimeout(pressTimer);
+            if (isDrawingThroughButton) {
+                if (drawing) {
+                    // Manually end the drawing stroke on the main canvas
+                    ctx.lineTo(lastPos.x, lastPos.y);
+                    ctx.stroke();
+                    ctx.closePath();
+                }
+            }
+            isDrawingThroughButton = false;
+            drawing = false; // Reset the global flag
+        };
+        
+        optionButton.addEventListener('mouseup', handleMouseUpOrLeave);
+        // Also clear if the user's mouse leaves the button while held down
+        optionButton.addEventListener('mouseleave', handleMouseUpOrLeave);
+
+        // If the mouse moves while held down, continue the drawing stroke.
+        optionButton.addEventListener('mousemove', (e) => {
+            if (!isDrawingThroughButton || !drawing) return;
+
+            // Manually continue the drawing stroke on the main canvas
+            const pos = getPos(e, canvas);
+            if (!pos) return;
+            
+            const midPoint = { x: (lastPos.x + pos.x) / 2, y: (lastPos.y + pos.y) / 2 };
+            ctx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
+            ctx.stroke();
+            ctx.moveTo(midPoint.x, midPoint.y);
+            lastPos = pos;
+        });
+        // ==========================================
+
+        mcqOptionsContainer.appendChild(optionButton);
+    });
+
+    mcqOptionsContainer.style.display = 'flex';
+    mcqOptionsContainer.style.opacity = '1';
 }
 
 	
@@ -3576,42 +3550,34 @@ function showToast(rawMsg, duration = 4000) {
  * @param {string} rawMsg  –  HTML-allowed message (e.g. "🎉 <strong>Correct!</strong>")
  * @param {number} duration – how long to stay visible (ms)
  */
-// A state variable to check if feedback is currently shown
-let isFeedbackVisible = false;
+function showFeedback(rawMsg, duration = 4000) {
+    const overlay = document.getElementById('feedbackOverlay');
+    const textEl = document.getElementById('feedbackText');
+    const emojiEl = document.getElementById('feedbackEmoji');
+    if (!overlay || !textEl || !emojiEl) return;
 
-function showFeedback(rawMsg, type = 'info') {
-    if (isFeedbackVisible) return; // Don't show new feedback if one is already active
-    isFeedbackVisible = true;
+    /* pick an emoji based on message content */
+    let emoji = '🫧';
+    if (/🎉|✅|correct/i.test(rawMsg)) emoji = '🎉';
+    else if (/🤔|incorrect|wrong/i.test(rawMsg)) emoji = '🤔';
+    else if (/⚠️|error|warning/i.test(rawMsg)) emoji = '⚠️';
+    emojiEl.textContent = emoji;
+    textEl.innerHTML = rawMsg;
 
-    // 1. Determine Icon
-    let icon = '🫧';
-    switch (type) {
-        case 'success': icon = '🎉'; break;
-        case 'error':   icon = '🤔'; break;
-        case 'warning': icon = '⚠️'; break;
-    }
-
-    // 2. Set Content
-    feedbackIcon.textContent = icon;
-    feedbackTextContent.innerHTML = parseAndRenderMath(rawMsg);
-
-    // 3. Show the elements
-    feedbackBackdrop.classList.remove('feedback-hidden');
-    contextualFeedbackContainer.classList.remove('feedback-hidden');
-    
-    // 4. Set up dismissal
-    contextualFeedbackContainer.onclick = () => hideFeedback();
-    // The 'A' key listener is handled globally in handleKeyDown
+    overlay.classList.remove('feedback-hidden'); // Just show it.
 }
-
+	  // ---------- helper to force-hide the overlay ----------
 function hideFeedback() {
-    if (!isFeedbackVisible) return;
-    
-    feedbackBackdrop.classList.add('feedback-hidden');
-    contextualFeedbackContainer.classList.add('feedback-hidden');
-    contextualFeedbackContainer.onclick = null;
-    isFeedbackVisible = false;
+  const overlay = document.getElementById('feedbackOverlay');
+  if (!overlay) return;
+  overlay.classList.add('feedback-hidden');
+  // clear timer if one is running
+  if (typeof feedbackTimer !== 'undefined' && feedbackTimer) {
+      clearTimeout(feedbackTimer);
+      feedbackTimer = null;
+  }
 }
+
 
 function checkTabletMode() {
     // This media query should match the one in your CSS
@@ -4222,11 +4188,6 @@ function closeCalculator() {
     resumeMediaState();
 }
 function handleKeyDown(event) {
-  if (isFeedbackVisible && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        hideFeedback();
-        return; // Stop further key processing
-    }
     // 1. Universal Replay Seeking with Arrow Keys
     // This block MUST come first to override other key bindings when a replay is active.
     if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
