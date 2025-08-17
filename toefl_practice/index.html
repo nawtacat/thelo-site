@@ -1,205 +1,289 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TOEFL Speaking Practice</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
-    
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-    
-    <style>
-        /* ... CSS styles are unchanged ... */
-        :root {
-            --thelo-blue: #2563eb; --thelo-blue-dark: #1d4ed8; --thelo-bg: #f9fafb;
-            --thelo-text: #111827; --thelo-text-light: #6b7280; --thelo-border: #e5e7eb;
-            --success-green: #22c55e; --error-red: #ef4444; --accent-yellow: #f59e0b;
-            --bg-white: #ffffff; --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-        }
-        body { font-family: 'Manrope', system-ui, sans-serif; background-color: var(--thelo-bg); color: var(--thelo-text); margin: 0; padding: 2rem; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }
-        #app-container { width: 100%; max-width: 700px; background-color: var(--bg-white); border-radius: 1rem; box-shadow: var(--shadow-lg); padding: 2rem; box-sizing: border-box; display: flex; flex-direction: column; gap: 1.5rem; }
-        h1 { text-align: center; margin: 0 0 0.5rem 0; color: var(--thelo-blue); }
-        .control-btn { font-family: inherit; padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 500; border: none; border-radius: 0.5rem; color: var(--bg-white); cursor: pointer; transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s; box-shadow: var(--shadow-md); background-color: var(--thelo-blue); }
-        .control-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lg); background-color: var(--thelo-blue-dark); }
-        .control-btn:disabled { background-color: #9ca3af !important; cursor: not-allowed; opacity: 0.7; }
-        #question-btn { background-color: var(--accent-yellow); }
-        #question-display { background-color: var(--thelo-bg); border: 1px dashed var(--thelo-border); border-radius: 0.75rem; padding: 1.5rem; min-height: 80px; display: flex; justify-content: center; align-items: center; text-align: center; font-size: 1.1rem; line-height: 1.6; color: var(--thelo-text); }
-        #timer-display { text-align: center; font-size: 2.5rem; font-weight: 700; color: var(--thelo-blue); height: 50px; }
-        #status-display { text-align: center; color: var(--thelo-text-light); font-style: italic; min-height: 24px; }
-        #feedback-container { margin-top: 1rem; border-top: 1px solid var(--thelo-border); padding-top: 1.5rem; }
-        #feedback-container h2 { margin: 0 0 1rem 0; }
-        .feedback-section { margin-bottom: 1.25rem; }
-        .feedback-section h3 { margin: 0 0 0.5rem 0; color: var(--thelo-blue); border-bottom: 2px solid var(--thelo-border); padding-bottom: 0.25rem; }
-        .feedback-section p { margin: 0; line-height: 1.7; }
-        .loader { border: 4px solid var(--thelo-bg); border-top: 4px solid var(--thelo-blue); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 0 auto; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+  <meta charset="UTF-8" />
+  <title>TOEFL Speaking Practice</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+    button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+    .row { margin: 12px 0; }
+    .timer { font-size: 18px; font-weight: 600; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+    code, pre { background: #f7f7f7; padding: 8px; border-radius: 6px; display: block; overflow-x: auto; }
+    .muted { color: #666; }
+    .ok { background: #111; color: #fff; }
+    .warn { background: #f59e0b; color: #111; }
+    .primary { background: #2563eb; color: #fff; }
+    .ghost { background: #f3f4f6; }
+    .pill { padding: 4px 8px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; }
+  </style>
 </head>
 <body>
+  <h1>TOEFL Speaking Practice</h1>
 
-    <div id="app-container">
-        <h1>TOEFL Speaking Practice</h1>
-        <button id="question-btn" class="control-btn">Get New Question</button>
-        <div id="question-display">Your question will appear here...</div>
-        <div id="timer-display"></div>
-        <div id="status-display">Please sign in to start.</div>
-        <div id="feedback-container"></div>
+  <div class="card">
+    <div class="row">
+      <button id="signin" class="ok">Sign in (Anonymous)</button>
+      <span id="authStatus" class="muted"></span>
+    </div>
+    <div class="row">
+      <button id="getQ" class="primary" disabled>Get Question</button>
+      <span id="qStatus" class="muted"></span>
+    </div>
+    <div class="row">
+      <div class="pill">Prep: 15s</div>
+      <div class="pill" style="margin-left:8px;">Speak: 45s</div>
+    </div>
+    <div id="question" class="row" style="font-size:18px;"></div>
+
+    <div class="row">
+      <div class="timer">Prep Time: <span id="prepTimer">--</span></div>
+      <div class="timer">Speak Time: <span id="speakTimer">--</span></div>
     </div>
 
-    <script>
-        const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const functions = firebase.functions();
+    <div class="row">
+      <button id="startPrep" class="ghost" disabled>Start Prep → Speak</button>
+      <button id="cancel" class="warn" disabled>Cancel</button>
+    </div>
 
-        const getQuestionBtn = document.getElementById('question-btn');
-        const questionDisplay = document.getElementById('question-display');
-        const timerDisplay = document.getElementById('timer-display');
-        const statusDisplay = document.getElementById('status-display');
-        const feedbackContainer = document.getElementById('feedback-container');
+    <div class="row">
+      <audio id="playback" controls style="width:100%; display:none;"></audio>
+    </div>
+  </div>
 
-        let mediaRecorder;
-        let audioChunks = [];
-        let currentQuestion = '';
+  <div class="card">
+    <h3>Feedback</h3>
+    <div id="feedbackText" class="row"></div>
+    <pre id="feedbackJson" style="display:none;"></pre>
+  </div>
 
-        getQuestionBtn.addEventListener('click', generateQuestion);
+  <div class="card">
+    <h3>Transcript</h3>
+    <pre id="transcriptBox"></pre>
+  </div>
 
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                statusDisplay.textContent = 'Ready to start.';
-                getQuestionBtn.disabled = false;
-            } else {
-                statusDisplay.innerHTML = 'Please sign in to use the app. If you are signed in on another tab, please refresh.';
-                getQuestionBtn.disabled = true;
-            }
-        });
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      getAuth, signInAnonymously, onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+    import {
+      getFunctions, httpsCallable, connectFunctionsEmulator
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 
-        function blobToBase64(blob) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
+    // TODO: replace with your Firebase project config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      appId: "YOUR_APP_ID",
+      // storageBucket, messagingSenderId optional for this demo
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const functions = getFunctions(app);
+    // If using emulator locally:
+    // connectFunctionsEmulator(functions, "localhost", 5001);
+
+    const $ = (id) => document.getElementById(id);
+    const btnSignIn = $("signin");
+    const authStatus = $("authStatus");
+    const btnGetQ = $("getQ");
+    const qStatus = $("qStatus");
+    const questionBox = $("question");
+    const btnStartPrep = $("startPrep");
+    const prepTimerEl = $("prepTimer");
+    const speakTimerEl = $("speakTimer");
+    const btnCancel = $("cancel");
+    const playback = $("playback");
+    const feedbackText = $("feedbackText");
+    const feedbackJson = $("feedbackJson");
+    const transcriptBox = $("transcriptBox");
+
+    let mediaRecorder;
+    let chunks = [];
+    let currentQuestion = "";
+    let cancelled = false;
+
+    // Auth
+    btnSignIn.onclick = async () => {
+      try {
+        await signInAnonymously(auth);
+      } catch (e) {
+        authStatus.textContent = "Sign-in failed.";
+        console.error(e);
+      }
+    };
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        authStatus.textContent = `Signed in (uid: ${user.uid})`;
+        btnGetQ.disabled = false;
+      } else {
+        authStatus.textContent = "Not signed in.";
+        btnGetQ.disabled = true;
+      }
+    });
+
+    // Callable functions
+    const getTOEFLQuestion = httpsCallable(functions, "getTOEFLQuestion");
+    const getTOEFLFeedback = httpsCallable(functions, "getTOEFLFeedback");
+
+    btnGetQ.onclick = async () => {
+      qStatus.textContent = "Loading question…";
+      questionBox.textContent = "";
+      feedbackText.textContent = "";
+      feedbackJson.style.display = "none";
+      transcriptBox.textContent = "";
+      playback.style.display = "none";
+      cancelled = false;
+
+      try {
+        const res = await getTOEFLQuestion({});
+        currentQuestion = res.data?.question || "";
+        questionBox.textContent = currentQuestion;
+        qStatus.textContent = "Ready.";
+        btnStartPrep.disabled = false;
+      } catch (e) {
+        qStatus.textContent = "Failed to load question.";
+        console.error(e);
+      }
+    };
+
+    btnCancel.onclick = () => {
+      cancelled = true;
+      stopRecordingIfAny();
+      btnStartPrep.disabled = false;
+      speakTimerEl.textContent = "--";
+      prepTimerEl.textContent = "--";
+    };
+
+    btnStartPrep.onclick = async () => {
+      if (!currentQuestion) {
+        alert("Get a question first.");
+        return;
+      }
+      btnStartPrep.disabled = true;
+      btnCancel.disabled = false;
+      cancelled = false;
+
+      // 1) 15s Prep timer
+      await runCountdown(prepTimerEl, 15);
+      if (cancelled) return;
+
+      // 2) Record 45s answer
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: pickMimeType() });
+      } catch (e) {
+        alert("Microphone permission denied or unsupported.");
+        btnStartPrep.disabled = false;
+        btnCancel.disabled = true;
+        return;
+      }
+
+      chunks = [];
+      mediaRecorder.ondataavailable = (evt) => { if (evt.data.size > 0) chunks.push(evt.data); };
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
+        const base64 = await blobToBase64(blob);
+        const audioUrl = URL.createObjectURL(blob);
+        playback.src = audioUrl;
+        playback.style.display = "block";
+
+        // 3) Send to backend for feedback
+        feedbackText.textContent = "Scoring your response…";
+        try {
+          const res = await getTOEFLFeedback({
+            audioBase64: base64,
+            audioType: mediaRecorder.mimeType,
+            currentQuestion
+          });
+          const fb = res.data || {};
+          // Show compact summary
+          feedbackText.innerHTML = `
+            <div><strong>Overall Score:</strong> ${fb.overall_score}</div>
+            <div><strong>Delivery:</strong> ${escapeHtml(fb.delivery)}</div>
+            <div><strong>Language Use:</strong> ${escapeHtml(fb.language_use)}</div>
+            <div><strong>Topic Development:</strong> ${escapeHtml(fb.topic_development)}</div>
+            <hr/>
+            <div class="muted">WPM: ${fb?.delivery_stats?.words_per_minute ?? "—"}, Pauses: ${fb?.delivery_stats?.pause_count ?? "—"}, Max pause: ${fb?.delivery_stats?.max_pause_seconds ?? "—"}s, Fillers: ${fb?.delivery_stats?.total_fillers ?? "—"}</div>
+          `;
+          transcriptBox.textContent = fb.transcript || "";
+          // Expandable raw JSON if you want
+          feedbackJson.textContent = JSON.stringify(fb, null, 2);
+          feedbackJson.style.display = "block";
+        } catch (e) {
+          console.error(e);
+          feedbackText.textContent = "Failed to score. Try again.";
+        } finally {
+          btnCancel.disabled = true;
+          btnStartPrep.disabled = false;
         }
-        
-        async function generateQuestion() {
-            // This function is unchanged and should work correctly
-            getQuestionBtn.disabled = true;
-            statusDisplay.textContent = 'Generating a new question...';
-            feedbackContainer.innerHTML = '';
-            questionDisplay.innerHTML = '<div class="loader"></div>';
-            try {
-                const getTOEFLQuestion = functions.httpsCallable('getTOEFLQuestion');
-                const result = await getTOEFLQuestion();
-                currentQuestion = result.data.question;
-                questionDisplay.textContent = currentQuestion;
-                statusDisplay.textContent = 'Get ready to prepare your answer.';
-                startPreparationTimer();
-            } catch (error) {
-                console.error("Firebase function error:", error);
-                statusDisplay.textContent = 'Failed to generate a question. Please try again.';
-                questionDisplay.textContent = 'Could not load question.';
-                getQuestionBtn.disabled = false;
-            }
-        }
-        
-        function startPreparationTimer() {
-            // This function is unchanged
-            let timeLeft = 15;
-            timerDisplay.textContent = `Prepare: ${timeLeft}s`;
-            const prepTimer = setInterval(() => {
-                timeLeft--;
-                timerDisplay.textContent = `Prepare: ${timeLeft}s`;
-                if (timeLeft <= 0) { clearInterval(prepTimer); startSpeakingTimerAndRecord(); }
-            }, 1000);
-        }
+      };
 
-        async function startSpeakingTimerAndRecord() {
-            // This function is unchanged
-            statusDisplay.textContent = 'Recording... Speak now!';
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.start();
-                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
-                mediaRecorder.onstop = getFeedback;
-            } catch (error) {
-                statusDisplay.textContent = 'Could not access microphone. Please grant permission.';
-                console.error("Microphone access error:", error);
-                getQuestionBtn.disabled = false;
-                return;
-            }
-            let timeLeft = 45;
-            timerDisplay.textContent = `Speak: ${timeLeft}s`;
-            const speakTimer = setInterval(() => {
-                timeLeft--;
-                timerDisplay.textContent = `Speak: ${timeLeft}s`;
-                if (timeLeft <= 0) {
-                    clearInterval(speakTimer);
-                    timerDisplay.textContent = '';
-                    statusDisplay.textContent = 'Time\'s up! Processing your response...';
-                    if (mediaRecorder.state === "recording") { mediaRecorder.stop(); }
-                }
-            }, 1000);
-        }
-        
-        async function getFeedback() {
-            feedbackContainer.innerHTML = '<div class="loader"></div>';
-            statusDisplay.textContent = 'Sending audio for analysis...';
-            
-            // ✨ UPDATE: Detect the audio type from the recorded data
-            const audioType = audioChunks[0]?.type || 'audio/webm';
-            const audioBlob = new Blob(audioChunks, { type: audioType });
-            audioChunks = [];
-            
-            if (audioBlob.size === 0) {
-                statusDisplay.textContent = 'Recording was empty. Please try speaking again.';
-                feedbackContainer.innerHTML = '<p>Could not get feedback because no audio was recorded.</p>';
-                getQuestionBtn.disabled = false;
-                return;
-            }
-            
-            const audioBase64 = await blobToBase64(audioBlob);
+      mediaRecorder.start();
+      await runCountdown(speakTimerEl, 45);
+      if (!cancelled) mediaRecorder.stop();
+      stopStream(mediaRecorder?.stream);
+      btnCancel.disabled = true;
+      btnStartPrep.disabled = false;
+    };
 
-            try {
-                const getTOEFLFeedback = functions.httpsCallable('getTOEFLFeedback');
-                
-                // ✨ UPDATE: Send the detected audioType to the server
-                const result = await getTOEFLFeedback({ 
-                    audioBase64: audioBase64,
-                    currentQuestion: currentQuestion,
-                    audioType: audioType 
-                });
-                
-                displayFeedback(result.data);
-                statusDisplay.textContent = 'Feedback complete. Ready for the next question.';
-
-            } catch (error) {
-                console.error("Firebase feedback function error:", error);
-                statusDisplay.textContent = `Error: ${error.message}`;
-                feedbackContainer.innerHTML = `<p>There was an issue getting feedback.</p>`;
-            }
-            
-            getQuestionBtn.disabled = false;
+    function stopRecordingIfAny() {
+      try {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
         }
+      } catch {}
+      stopStream(mediaRecorder?.stream);
+    }
 
-        function displayFeedback(feedback) {
-            // This function is unchanged
-            feedbackContainer.innerHTML = `
-                <h2>Feedback (Score: ${feedback.overall_score || 'N/A'} / 4.0)</h2>
-                <div class="feedback-section"><h3>Transcript</h3><p><em>"${feedback.transcript || 'No transcript available.'}"</em></p></div>
-                <div class="feedback-section"><h3>Delivery</h3><p>${feedback.delivery || 'No feedback available.'}</p></div>
-                <div class="feedback-section"><h3>Language Use</h3><p>${feedback.language_use || 'No feedback available.'}</p></div>
-                <div class="feedback-section"><h3>Topic Development</h3><p>${feedback.topic_development || 'No feedback available.'}</p></div>
-            `;
-        }
-    </script>
+    function stopStream(stream) {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+    }
+
+    async function runCountdown(el, seconds) {
+      return new Promise((resolve) => {
+        let t = seconds;
+        el.textContent = `${t}s`;
+        const id = setInterval(() => {
+          if (cancelled) { clearInterval(id); el.textContent = "--"; resolve(); return; }
+          t -= 1;
+          el.textContent = `${t}s`;
+          if (t <= 0) { clearInterval(id); resolve(); }
+        }, 1000);
+      });
+    }
+
+    function pickMimeType() {
+      const canWebm = MediaRecorder.isTypeSupported("audio/webm");
+      const canOgg = MediaRecorder.isTypeSupported("audio/ogg");
+      const canMp4 = MediaRecorder.isTypeSupported("audio/mp4");
+      if (canWebm) return "audio/webm";
+      if (canOgg) return "audio/ogg";
+      if (canMp4) return "audio/mp4";
+      return "audio/webm"; // fallback
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result); // includes data:...;base64,
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function escapeHtml(s) {
+      return (s ?? "").toString()
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+  </script>
 </body>
 </html>
