@@ -180,7 +180,8 @@
             
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                // FIX #1: REMOVED the specific mimeType to let the browser choose the most stable format.
+                mediaRecorder = new MediaRecorder(stream);
                 mediaRecorder.start();
 
                 mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
@@ -213,8 +214,16 @@
             feedbackContainer.innerHTML = '<div class="loader"></div>';
             statusDisplay.textContent = 'Sending audio for analysis...';
             
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const audioBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
             audioChunks = [];
+            
+            // FIX #2: ADDED a check to prevent sending an empty audio file.
+            if (audioBlob.size === 0) {
+                statusDisplay.textContent = 'Recording was empty. Please try speaking again.';
+                feedbackContainer.innerHTML = '<p>Could not get feedback because no audio was recorded.</p>';
+                getQuestionBtn.disabled = false;
+                return; // Stop the function here
+            }
             
             const audioBase64 = await blobToBase64(audioBlob);
 
