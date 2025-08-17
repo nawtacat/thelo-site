@@ -1385,6 +1385,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
     let isAuthReady = false;
 	  let selectedMcqIndex = null; // To store the selected MCQ option index
           let isTabletMode = false;
+	  let katexFontsLoaded = false; // <<< ADD THIS NEW FLAG
 	let isCalculatorActive = false;
 	let isReplayActive = false;
 		let mousePoints = []; // <<< ADD THIS LINE
@@ -1416,6 +1417,27 @@ let lastIframeUpdateTime = 0;
     let buttonVanishTimer = null;
     let stagesWithPointsAwarded = new Set();
     /* ========== Language Functions ========== */
+	  async function preloadKatexFonts() {
+    if (katexFontsLoaded || !document.fonts?.load) {
+        return; // Don't run again if already loaded or API is not supported
+    }
+
+    // These are the fonts your app uses. Add more if needed.
+    const KĀTEX_FONTS = [
+        '1em KaTeX_Main', '1em KaTeX_Math', '1em KaTeX_AMS',
+        '1em KaTeX_Size1', '1em KaTeX_Size2'
+    ];
+
+    try {
+        console.log("Preloading KaTeX fonts...");
+        // Wait for all font loading promises to resolve
+        await Promise.all(KĀTEX_FONTS.map(font => document.fonts.load(font)));
+        katexFontsLoaded = true;
+        console.log("KaTeX fonts loaded successfully.");
+    } catch (error) {
+        console.error("Could not preload KaTeX fonts:", error);
+    }
+}
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
     function updateAllUITexts() {
         const TXT = getCurrentUIText();
@@ -3075,6 +3097,46 @@ function handleNextCheckClick() {
     }
     // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
 // REPLACE your entire addChatMessage function with this one
+/**
+ * Finds simple math notations in a string and converts them to KaTeX HTML.
+ * Supports:
+ * - `sqrt(content)` -> rendered square root
+ * - `base^exponent` -> rendered power
+ * - `(base)^exponent` -> rendered power with parentheses
+ * @param {string} text - The input string, potentially containing math.
+ * @returns {string} An HTML string with math portions rendered by KaTeX.
+ */
+function parseAndRenderMath(text) {
+    if (!text || typeof text !== 'string') return '';
+
+    // This regex looks for one of three patterns using the OR | operator:
+    // 1. The full "sqrt(content)" expression, capturing the "content".
+    // 2. A parenthesized "(base)" followed by "^exponent", capturing "base" and "exponent".
+    // 3. A simple "base" word followed by "^exponent", capturing "base" and "exponent".
+    const mathRegex = /(\bsqrt\(([^)]+)\))|(\(([^)]+)\)\^(\w+))|(\b(\w+)\^(\w+)\b)/g;
+
+    return text.replace(mathRegex, (match, sqrtFull, sqrtContent, powerParenFull, powerParenBase, powerParenExp, powerWordFull, powerWordBase, powerWordExp) => {
+        try {
+            // Case 1: Matched sqrt(content)
+            if (sqrtFull) {
+                return katex.renderToString(`\\sqrt{${sqrtContent}}`, { throwOnError: false, displayMode: false });
+            }
+            // Case 2: Matched (base)^exponent
+            if (powerParenFull) {
+                return katex.renderToString(`{(${powerParenBase})}^{${powerParenExp}}`, { throwOnError: false, displayMode: false });
+            }
+            // Case 3: Matched base^exponent
+            if (powerWordFull) {
+                return katex.renderToString(`${powerWordBase}^{${powerWordExp}}`, { throwOnError: false, displayMode: false });
+            }
+        } catch (e) {
+            console.warn("KaTeX rendering failed for:", match, e);
+            return match; // In case of error, fall back to the original text.
+        }
+        return match; // Should not be reached, but good practice.
+    });
+}
+// REPLACE your entire addChatMessage function with this one
 
 function addChatMessage(sender, rawMsg) {
     if (isTabletMode) {
@@ -3102,26 +3164,29 @@ function addChatMessage(sender, rawMsg) {
         else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
         else if (isWelcome) emoji = '👋';
         else if (isChecking) emoji = '⏳';
+        
+        // ======================= THE CHANGE IS HERE =======================
+        // Use our new function to parse the message for math before displaying it.
+        const finalHTML = parseAndRenderMath(msg);
+        // ================================================================
 
         const bubble = document.createElement('div');
         bubble.className = 'ai-message'; // Starts with opacity: 0
-        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
+        
+        // And now we use the processed HTML instead of the raw message.
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${finalHTML}</span>`;
         chatArea.appendChild(bubble);
 
-        // ===================================================================
-        // ===== THE FIX: Forcing the browser to paint the initial state =====
-        // ===================================================================
+        // Force the browser to paint the initial state before animating
         requestAnimationFrame(() => {
-            // This nested timeout ensures the class addition happens in a separate
-            // task, after the browser has painted the invisible element.
             setTimeout(() => {
                 bubble.classList.add('show');
-                // Scroll into view after the animation starts.
                 chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-            }, 10); // A tiny delay is all that's needed.
+            }, 10);
         });
     }
-}    /**
+}
+	  /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
  * @param {string} topicId - The unique ID for the lesson (e.g., 'sat-linear-equations-one-var').
@@ -4085,17 +4150,21 @@ function initApp() {
 
     // REPLACE your entire auth.onAuthStateChanged function with this one.
 // This listener ensures the entire page, including KaTeX, is ready before the app starts.
-document.addEventListener('DOMContentLoaded', () => {
+// This listener ensures the entire page, including KaTeX, is ready before the app starts.
+document.addEventListener('DOMContentLoaded', async () => { // <<< Make this async
 
-    // Diagnostic check: This will tell us if KaTeX loaded correctly.
+    // Diagnostic check
     console.log('DOM is ready. Checking for KaTeX library:', typeof katex);
     if (typeof katex === 'undefined') {
         console.error('CRITICAL: KaTeX library failed to load before app start.');
-        // You could display an error to the user here.
-        return; // Stop the app from initializing if KaTeX is missing.
+        return;
     }
 
-    // The rest of the app initialization now happens safely inside this listener.
+    // ======================== THE FIX IS HERE ========================
+    // Await the font preloader before initializing anything else.
+    await preloadKatexFonts();
+    // ================================================================
+
     auth.onAuthStateChanged(user => {
         const finishInitialization = () => {
             if (!window.appInitialized) {
@@ -4111,7 +4180,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (user) {
             console.log("User authenticated with UID:", user.uid);
             const userDocRef = db.collection('thelo-students').doc(user.uid);
-            
+
             userDocRef.get().then(doc => {
                 if (doc.exists) {
                     userPoints = doc.data().points || 0;
