@@ -1,289 +1,322 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>TOEFL Speaking Practice</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
-    button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
-    .row { margin: 12px 0; }
-    .timer { font-size: 18px; font-weight: 600; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
-    code, pre { background: #f7f7f7; padding: 8px; border-radius: 6px; display: block; overflow-x: auto; }
-    .muted { color: #666; }
-    .ok { background: #111; color: #fff; }
-    .warn { background: #f59e0b; color: #111; }
-    .primary { background: #2563eb; color: #fff; }
-    .ghost { background: #f3f4f6; }
-    .pill { padding: 4px 8px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOEFL Speaking Practice</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            text-align: center;
+        }
+        #app-container {
+            background: #fff;
+            padding: 2rem 3rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 600px;
+        }
+        h1 {
+            color: #0d6efd;
+            margin-bottom: 1rem;
+        }
+        #prompt-container {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            min-height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.1rem;
+            color: #343a40;
+        }
+        #timers-container {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 1.5rem;
+            font-size: 1.2rem;
+            font-weight: 500;
+        }
+        .timer {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            width: 150px;
+        }
+        #prep-timer { background-color: #fff0c2; border: 2px solid #ffdf7e; }
+        #speak-timer { background-color: #d1e7dd; border: 2px solid #a3cfbb; }
+        .timer.active {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        #controls button {
+            font-size: 1rem;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.2s;
+            margin: 0 0.5rem;
+        }
+        #get-prompt-btn { background-color: #0d6efd; color: white; }
+        #start-btn { background-color: #198754; color: white; }
+        #get-prompt-btn:hover { background-color: #0b5ed7; }
+        #start-btn:hover { background-color: #157347; }
+        #get-prompt-btn:disabled, #start-btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        #feedback-container {
+            margin-top: 2rem;
+            text-align: left;
+            background: #e9ecef;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        #feedback-container h3 { margin-top: 0; color: #333; }
+        #feedback-container p, #feedback-container blockquote { margin: 0.5rem 0; }
+        blockquote {
+            border-left: 4px solid #adb5bd;
+            padding-left: 1rem;
+            font-style: italic;
+            color: #495057;
+        }
+    </style>
 </head>
 <body>
-  <h1>TOEFL Speaking Practice</h1>
 
-  <div class="card">
-    <div class="row">
-      <button id="signin" class="ok">Sign in (Anonymous)</button>
-      <span id="authStatus" class="muted"></span>
-    </div>
-    <div class="row">
-      <button id="getQ" class="primary" disabled>Get Question</button>
-      <span id="qStatus" class="muted"></span>
-    </div>
-    <div class="row">
-      <div class="pill">Prep: 15s</div>
-      <div class="pill" style="margin-left:8px;">Speak: 45s</div>
-    </div>
-    <div id="question" class="row" style="font-size:18px;"></div>
+<div id="app-container">
+    <h1>TOEFL Speaking Practice</h1>
+    <p>Get a prompt, prepare for 15 seconds, and speak for 45 seconds.</p>
 
-    <div class="row">
-      <div class="timer">Prep Time: <span id="prepTimer">--</span></div>
-      <div class="timer">Speak Time: <span id="speakTimer">--</span></div>
+    <div id="prompt-container">Click "Get New Prompt" to begin.</div>
+
+    <div id="timers-container">
+        <div class="timer" id="prep-timer">Prep Time: 15s</div>
+        <div class="timer" id="speak-timer">Speak Time: 45s</div>
     </div>
 
-    <div class="row">
-      <button id="startPrep" class="ghost" disabled>Start Prep → Speak</button>
-      <button id="cancel" class="warn" disabled>Cancel</button>
+    <div id="controls">
+        <button id="get-prompt-btn">Get New Prompt</button>
+        <button id="start-btn" disabled>Start Practice</button>
     </div>
 
-    <div class="row">
-      <audio id="playback" controls style="width:100%; display:none;"></audio>
+    <div id="feedback-container" style="display: none;">
+        <h3>Analysis</h3>
+        <p><strong>Feedback:</strong> <span id="feedback-text"></span></p>
+        <p><strong>Your Response:</strong></p>
+        <blockquote id="transcript-text"></blockquote>
     </div>
-  </div>
+</div>
 
-  <div class="card">
-    <h3>Feedback</h3>
-    <div id="feedbackText" class="row"></div>
-    <pre id="feedbackJson" style="display:none;"></pre>
-  </div>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-functions-compat.js"></script>
 
-  <div class="card">
-    <h3>Transcript</h3>
-    <pre id="transcriptBox"></pre>
-  </div>
-
-  <!-- Firebase SDKs -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import {
-      getAuth, signInAnonymously, onAuthStateChanged
-    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-    import {
-      getFunctions, httpsCallable, connectFunctionsEmulator
-    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
-
-    // TODO: replace with your Firebase project config
+<script>
+    // --- Firebase Configuration ---
+    // IMPORTANT: Replace with your project's Firebase configuration
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      appId: "YOUR_APP_ID",
-      // storageBucket, messagingSenderId optional for this demo
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+        appId: "YOUR_APP_ID"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const functions = getFunctions(app);
-    // If using emulator locally:
-    // connectFunctionsEmulator(functions, "localhost", 5001);
-
-    const $ = (id) => document.getElementById(id);
-    const btnSignIn = $("signin");
-    const authStatus = $("authStatus");
-    const btnGetQ = $("getQ");
-    const qStatus = $("qStatus");
-    const questionBox = $("question");
-    const btnStartPrep = $("startPrep");
-    const prepTimerEl = $("prepTimer");
-    const speakTimerEl = $("speakTimer");
-    const btnCancel = $("cancel");
-    const playback = $("playback");
-    const feedbackText = $("feedbackText");
-    const feedbackJson = $("feedbackJson");
-    const transcriptBox = $("transcriptBox");
-
-    let mediaRecorder;
-    let chunks = [];
-    let currentQuestion = "";
-    let cancelled = false;
-
-    // Auth
-    btnSignIn.onclick = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (e) {
-        authStatus.textContent = "Sign-in failed.";
-        console.error(e);
-      }
-    };
-
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        authStatus.textContent = `Signed in (uid: ${user.uid})`;
-        btnGetQ.disabled = false;
-      } else {
-        authStatus.textContent = "Not signed in.";
-        btnGetQ.disabled = true;
-      }
+    // --- Initialize Firebase ---
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const functions = firebase.functions();
+    
+    // --- Sign in an anonymous user for demonstration ---
+    auth.signInAnonymously().catch(error => {
+        console.error("Anonymous sign-in failed:", error);
+        alert("Could not connect to the service. Please refresh the page.");
     });
 
-    // Callable functions
-    const getTOEFLQuestion = httpsCallable(functions, "getTOEFLQuestion");
-    const getTOEFLFeedback = httpsCallable(functions, "getTOEFLFeedback");
 
-    btnGetQ.onclick = async () => {
-      qStatus.textContent = "Loading question…";
-      questionBox.textContent = "";
-      feedbackText.textContent = "";
-      feedbackJson.style.display = "none";
-      transcriptBox.textContent = "";
-      playback.style.display = "none";
-      cancelled = false;
+    // --- DOM Elements ---
+    const getPromptBtn = document.getElementById('get-prompt-btn');
+    const startBtn = document.getElementById('start-btn');
+    const promptContainer = document.getElementById('prompt-container');
+    const prepTimerEl = document.getElementById('prep-timer');
+    const speakTimerEl = document.getElementById('speak-timer');
+    const feedbackContainer = document.getElementById('feedback-container');
+    const feedbackText = document.getElementById('feedback-text');
+    const transcriptText = document.getElementById('transcript-text');
 
-      try {
-        const res = await getTOEFLQuestion({});
-        currentQuestion = res.data?.question || "";
-        questionBox.textContent = currentQuestion;
-        qStatus.textContent = "Ready.";
-        btnStartPrep.disabled = false;
-      } catch (e) {
-        qStatus.textContent = "Failed to load question.";
-        console.error(e);
-      }
-    };
+    // --- State Variables ---
+    let currentPrompt = '';
+    let mediaRecorder;
+    let audioChunks = [];
 
-    btnCancel.onclick = () => {
-      cancelled = true;
-      stopRecordingIfAny();
-      btnStartPrep.disabled = false;
-      speakTimerEl.textContent = "--";
-      prepTimerEl.textContent = "--";
-    };
+    // --- Cloud Function Callables ---
+    const getTOEFLSpeakingPrompt = functions.httpsCallable('getTOEFLSpeakingPrompt');
+    const analyzeTOEFLResponse = functions.httpsCallable('analyzeTOEFLResponse');
 
-    btnStartPrep.onclick = async () => {
-      if (!currentQuestion) {
-        alert("Get a question first.");
-        return;
-      }
-      btnStartPrep.disabled = true;
-      btnCancel.disabled = false;
-      cancelled = false;
 
-      // 1) 15s Prep timer
-      await runCountdown(prepTimerEl, 15);
-      if (cancelled) return;
+    // --- Event Listeners ---
+    getPromptBtn.addEventListener('click', fetchPrompt);
+    startBtn.addEventListener('click', startPractice);
 
-      // 2) Record 45s answer
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream, { mimeType: pickMimeType() });
-      } catch (e) {
-        alert("Microphone permission denied or unsupported.");
-        btnStartPrep.disabled = false;
-        btnCancel.disabled = true;
-        return;
-      }
-
-      chunks = [];
-      mediaRecorder.ondataavailable = (evt) => { if (evt.data.size > 0) chunks.push(evt.data); };
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
-        const base64 = await blobToBase64(blob);
-        const audioUrl = URL.createObjectURL(blob);
-        playback.src = audioUrl;
-        playback.style.display = "block";
-
-        // 3) Send to backend for feedback
-        feedbackText.textContent = "Scoring your response…";
+    // --- Core Functions ---
+    async function fetchPrompt() {
+        setLoadingState(true, 'Fetching prompt...');
+        feedbackContainer.style.display = 'none';
         try {
-          const res = await getTOEFLFeedback({
-            audioBase64: base64,
-            audioType: mediaRecorder.mimeType,
-            currentQuestion
-          });
-          const fb = res.data || {};
-          // Show compact summary
-          feedbackText.innerHTML = `
-            <div><strong>Overall Score:</strong> ${fb.overall_score}</div>
-            <div><strong>Delivery:</strong> ${escapeHtml(fb.delivery)}</div>
-            <div><strong>Language Use:</strong> ${escapeHtml(fb.language_use)}</div>
-            <div><strong>Topic Development:</strong> ${escapeHtml(fb.topic_development)}</div>
-            <hr/>
-            <div class="muted">WPM: ${fb?.delivery_stats?.words_per_minute ?? "—"}, Pauses: ${fb?.delivery_stats?.pause_count ?? "—"}, Max pause: ${fb?.delivery_stats?.max_pause_seconds ?? "—"}s, Fillers: ${fb?.delivery_stats?.total_fillers ?? "—"}</div>
-          `;
-          transcriptBox.textContent = fb.transcript || "";
-          // Expandable raw JSON if you want
-          feedbackJson.textContent = JSON.stringify(fb, null, 2);
-          feedbackJson.style.display = "block";
-        } catch (e) {
-          console.error(e);
-          feedbackText.textContent = "Failed to score. Try again.";
+            const result = await getTOEFLSpeakingPrompt();
+            currentPrompt = result.data.prompt;
+            promptContainer.textContent = currentPrompt;
+            startBtn.disabled = false;
+        } catch (error) {
+            console.error('Error fetching prompt:', error);
+            promptContainer.textContent = 'Could not fetch a prompt. Please try again.';
         } finally {
-          btnCancel.disabled = true;
-          btnStartPrep.disabled = false;
+            setLoadingState(false);
         }
-      };
-
-      mediaRecorder.start();
-      await runCountdown(speakTimerEl, 45);
-      if (!cancelled) mediaRecorder.stop();
-      stopStream(mediaRecorder?.stream);
-      btnCancel.disabled = true;
-      btnStartPrep.disabled = false;
-    };
-
-    function stopRecordingIfAny() {
-      try {
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
-          mediaRecorder.stop();
-        }
-      } catch {}
-      stopStream(mediaRecorder?.stream);
     }
 
-    function stopStream(stream) {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
+    async function startPractice() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Your browser does not support audio recording.');
+            return;
+        }
+
+        setLoadingState(true);
+        startBtn.disabled = true;
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                audioChunks = [];
+                const audioBase64 = await blobToBase64(audioBlob);
+                analyzeRecording(audioBase64);
+                // Stop all tracks to release the microphone
+                stream.getTracks().forEach(track => track.stop());
+            };
+            
+            runCountdown();
+
+        } catch (err) {
+            console.error('Error accessing microphone:', err);
+            alert('Could not access your microphone. Please check your browser permissions.');
+            setLoadingState(false);
+        }
     }
 
-    async function runCountdown(el, seconds) {
-      return new Promise((resolve) => {
-        let t = seconds;
-        el.textContent = `${t}s`;
-        const id = setInterval(() => {
-          if (cancelled) { clearInterval(id); el.textContent = "--"; resolve(); return; }
-          t -= 1;
-          el.textContent = `${t}s`;
-          if (t <= 0) { clearInterval(id); resolve(); }
+    function runCountdown() {
+        // Preparation Phase
+        let prepTime = 15;
+        prepTimerEl.textContent = `Prep Time: ${prepTime}s`;
+        prepTimerEl.classList.add('active');
+        const prepInterval = setInterval(() => {
+            prepTime--;
+            prepTimerEl.textContent = `Prep Time: ${prepTime}s`;
+            if (prepTime <= 0) {
+                clearInterval(prepInterval);
+                prepTimerEl.classList.remove('active');
+                
+                // Speaking Phase
+                mediaRecorder.start();
+                let speakTime = 45;
+                speakTimerEl.textContent = `Speak Time: ${speakTime}s`;
+                speakTimerEl.classList.add('active');
+                
+                const speakInterval = setInterval(() => {
+                    speakTime--;
+                    speakTimerEl.textContent = `Speak Time: ${speakTime}s`;
+                    if (speakTime <= 0) {
+                        clearInterval(speakInterval);
+                        speakTimerEl.classList.remove('active');
+                        mediaRecorder.stop();
+                    }
+                }, 1000);
+            }
         }, 1000);
-      });
+    }
+    
+    async function analyzeRecording(audioBase64) {
+        promptContainer.textContent = 'Analyzing your response... 🧠';
+        feedbackContainer.style.display = 'none';
+        
+        try {
+            const result = await analyzeTOEFLResponse({ audioBase64, prompt: currentPrompt });
+            const { feedback, transcript } = result.data;
+            
+            feedbackText.textContent = feedback;
+            transcriptText.textContent = transcript;
+            feedbackContainer.style.display = 'block';
+
+        } catch (error) {
+            console.error('Error analyzing response:', error);
+            feedbackText.textContent = 'Sorry, there was an error analyzing your response.';
+            transcriptText.textContent = 'Please try again.';
+            feedbackContainer.style.display = 'block';
+        } finally {
+            promptContainer.textContent = currentPrompt;
+            resetTimers();
+            setLoadingState(false);
+        }
     }
 
-    function pickMimeType() {
-      const canWebm = MediaRecorder.isTypeSupported("audio/webm");
-      const canOgg = MediaRecorder.isTypeSupported("audio/ogg");
-      const canMp4 = MediaRecorder.isTypeSupported("audio/mp4");
-      if (canWebm) return "audio/webm";
-      if (canOgg) return "audio/ogg";
-      if (canMp4) return "audio/mp4";
-      return "audio/webm"; // fallback
-    }
-
+    // --- Helper Functions ---
     function blobToBase64(blob) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result); // includes data:...;base64,
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                // Remove the data URL prefix (e.g., "data:audio/webm;base64,")
+                const base64String = reader.result.split(',')[1];
+                resolve(base64String);
+            };
+            reader.onerror = error => reject(error);
+        });
+    }
+    
+    function setLoadingState(isLoading, message = '') {
+        getPromptBtn.disabled = isLoading;
+        if (isLoading) {
+            getPromptBtn.textContent = 'Loading...';
+            startBtn.disabled = true;
+            if (message) promptContainer.textContent = message;
+        } else {
+            getPromptBtn.textContent = 'Get New Prompt';
+            getPromptBtn.disabled = false;
+            // Only enable start button if there's a prompt
+            if (currentPrompt) {
+                 startBtn.disabled = false;
+            }
+        }
     }
 
-    function escapeHtml(s) {
-      return (s ?? "").toString()
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;");
+    function resetTimers() {
+        prepTimerEl.textContent = 'Prep Time: 15s';
+        speakTimerEl.textContent = 'Speak Time: 45s';
     }
-  </script>
+</script>
+
 </body>
 </html>
