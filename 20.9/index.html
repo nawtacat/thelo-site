@@ -1383,7 +1383,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     /* ========== State Variables ========== */
     let isAuthReady = false;
-	  let animationFrameId = null;
 	  let selectedMcqIndex = null; // To store the selected MCQ option index
           let isTabletMode = false;
 	  let katexFontsLoaded = false; // <<< ADD THIS NEW FLAG
@@ -1879,6 +1878,7 @@ function handleDrawingStart(e) {
             e.preventDefault();
             return;
         }
+        // The UI-hiding logic has been REMOVED from here.
     }
 
     const currentTargetCanvas = e.currentTarget;
@@ -1888,17 +1888,13 @@ function handleDrawingStart(e) {
     if (!isThelobookActive && currentTargetCanvas !== canvas) return;
     if (!isStudentInputAllowed && !isThelobookActive) return;
 
+    const pos = getPos(e, currentTargetCanvas);
+    if (!pos) return;
     if (e.touches) e.preventDefault();
+
     drawing = true;
     if (!isThelobookActive) userDrawingOccurred = true;
 
-    const pos = getPos(e, currentTargetCanvas);
-    if (!pos) return;
-
-    mousePoints = []; // Clear any old points
-    lastPos = pos;    // Set the starting position
-
-    // Set line properties
     if (isThelobookActive) {
         activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
         activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
@@ -1907,18 +1903,20 @@ function handleDrawingStart(e) {
         activeCtx.globalCompositeOperation = 'source-over';
     }
 
-    // CRITICAL: Start the path here, and only here.
+    lastPos = pos;
     activeCtx.beginPath();
-    activeCtx.moveTo(lastPos.x, lastPos.y);
-
-    // Start the drawing loop
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    animationFrameId = requestAnimationFrame(drawLoop);
+    activeCtx.moveTo(pos.x, pos.y);
 }
-
+// THIS IS THE NEW, UPDATED FUNCTION
+/**
+ * Handles the drawing movement on the canvas.
+ * UPDATED: This version uses `lineTo` for maximum accuracy to prevent "missed strokes,"
+ * replacing the original's `quadraticCurveTo` smoothing which could "cut corners."
+ */
 function handleDrawingMove(e) {
     if (!drawing) return;
 
+    // --- Unchanged tablet UI hiding logic ---
     if (isTabletMode) {
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
         if (bottomBar && !bottomBar.classList.contains('bar-hidden-by-stylus')) {
@@ -1926,13 +1924,34 @@ function handleDrawingMove(e) {
         }
     }
 
-    if (e.touches) e.preventDefault();
-    const pos = getPos(e, e.currentTarget);
-    if (pos) {
-        mousePoints.push(pos);
-    }
-}
+    // --- Unchanged canvas and position setup ---
+    const currentTargetCanvas = e.currentTarget;
+    const activeCtx = isThelobookActive ? thelobookCtx : ctx;
+    if (!activeCtx) return;
 
+    const pos = getPos(e, currentTargetCanvas);
+    if (!pos) return;
+    if (e.touches) e.preventDefault();
+
+    // --- START: New, More Accurate Stroke Logic ---
+
+    // Draw a direct line from the last point to the current one.
+    // This is more precise than a curve and ensures every part of the
+    // physical stroke is represented digitally.
+    activeCtx.lineTo(pos.x, pos.y);
+    
+    // Render the segment to the screen immediately.
+    activeCtx.stroke();
+    
+    // To optimize performance and ensure the next line segment connects
+    // properly, we begin a new path and move the "pen" to the current point.
+    activeCtx.beginPath();
+    activeCtx.moveTo(pos.x, pos.y);
+
+    // --- END: New, More Accurate Stroke Logic ---
+
+    lastPos = pos;
+}
 function handleDrawingEnd(e) {
     if (isTabletMode) {
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
@@ -1944,45 +1963,14 @@ function handleDrawingEnd(e) {
     if (!drawing) return;
     drawing = false;
 
-    // The loop will run one last time after `drawing` becomes false,
-    // then it will stop itself.
-}
-
-function drawLoop() {
-    // If there are no new points to draw, exit for now
-    if (mousePoints.length === 0) {
-        // If we are still drawing, schedule the next frame
-        if (drawing) {
-            animationFrameId = requestAnimationFrame(drawLoop);
-        }
-        return;
-    }
-
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
 
-    // Grab all the points that have been collected since the last frame
-    const pointsToDraw = [...mousePoints];
-    mousePoints = []; // Clear the array for the next batch of points
-
-    // Loop through the new points and add them to the current path
-    for (const currentPos of pointsToDraw) {
-        const midPoint = { x: (lastPos.x + currentPos.x) / 2, y: (lastPos.y + currentPos.y) / 2 };
-        activeCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
-        lastPos = currentPos; // The new "last position" is the one we just processed
-    }
-
-    // Stroke the entire path that has been built up in this frame
+    activeCtx.lineTo(lastPos.x, lastPos.y);
     activeCtx.stroke();
-
-    // IMPORTANT: Move the "pen" to the last known position to prepare for the next frame
-    activeCtx.moveTo(lastPos.x, lastPos.y);
-
-    // If the user is still drawing, request the next animation frame
-    if (drawing) {
-        animationFrameId = requestAnimationFrame(drawLoop);
-    }
+    activeCtx.closePath();
 }
+    // REPLACE your old drawing functions with these three new versions
 function addBoardDrawListeners() {
         canvas.addEventListener('mousedown', handleDrawingStart);
         canvas.addEventListener('mousemove', handleDrawingMove);
