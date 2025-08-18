@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TOEFL Speaking AI Coach</title>
+    <title>Speaking Grader AI</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,188 +11,187 @@
 
     <style>
         :root {
-            --blue-primary: #2563eb;
-            --blue-dark: #1d4ed8;
-            --green-go: #16a34a;
-            --yellow-prep: #f59e0b;
-            --red-rec: #dc2626;
-            --bg-light: #f1f5f9;
+            --accent-color: #4f46e5; /* A deep indigo */
+            --accent-hover: #4338ca;
+            --success-color: #16a34a;
+            --prep-color: #d97706;
+            --bg-color: #f8fafc; /* Lighter slate gray */
             --card-bg: #ffffff;
-            --text-dark: #1e293b;
-            --text-light: #64748b;
+            --text-primary: #0f172a; /* Darker slate */
+            --text-secondary: #64748b;
             --border-color: #e2e8f0;
         }
 
         /* --- Base & Layout --- */
         * { box-sizing: border-box; }
-        html, body { height: 100%; }
 
         body {
-            font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Manrope', sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: var(--bg-light);
-            color: var(--text-dark);
+            background-color: var(--bg-color);
+            color: var(--text-primary);
             margin: 0;
             padding: 1rem;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
         .app-container {
             width: 100%;
             max-width: 700px;
-            padding: 2rem;
             text-align: center;
         }
         .header { margin-bottom: 2rem; }
         h1 {
-            font-size: 2.25rem;
+            font-size: 2rem;
             font-weight: 800;
-            color: var(--blue-primary);
             margin: 0 0 0.5rem 0;
         }
         .header p {
-            font-size: 1.125rem;
-            color: var(--text-light);
+            font-size: 1.1rem;
+            color: var(--text-secondary);
             margin: 0;
         }
 
-        /* --- Prompt Card --- */
-        .prompt-card {
+        /* --- Cards & Containers --- */
+        .card {
             background: var(--card-bg);
-            border-radius: 1.5rem;
+            border-radius: 1rem;
             padding: 2rem;
             border: 1px solid var(--border-color);
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
-            font-size: 1.2rem;
+            box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            margin-bottom: 2rem;
+            transition: all 0.3s ease-in-out;
+        }
+        .prompt-card {
+            font-size: 1.15rem;
             line-height: 1.7;
             min-height: 120px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-dark);
-            margin-bottom: 2rem;
+        }
+
+        /* --- Live Transcript --- */
+        #live-transcript-card {
+            text-align: left;
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: var(--text-secondary);
+            min-height: 150px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #live-transcript-card .interim {
+            color: #b0b8c4;
+        }
+        .hidden {
+            display: none !important;
         }
 
         /* --- Big Timer --- */
         .timer-container {
             margin-bottom: 2rem;
-            position: relative;
         }
         .timer-display {
-            font-size: clamp(6rem, 18vw, 9rem);
+            font-size: 7rem;
             font-weight: 800;
             line-height: 1;
             transition: color 0.3s ease;
         }
         .timer-label {
-            font-size: 1rem;
+            font-size: 0.9rem;
             font-weight: 600;
-            letter-spacing: 0.1em;
+            letter-spacing: 0.15em;
             text-transform: uppercase;
+            color: var(--text-secondary);
             transition: color 0.3s ease;
         }
         /* Timer States */
-        .timer-idle { color: var(--text-light); }
-        .timer-prep { color: var(--yellow-prep); }
-        .timer-speak { color: var(--green-go); }
-        .timer-speak.recording::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 180px;
-            height: 180px;
-            border-radius: 50%;
-            background-color: var(--red-rec);
-            opacity: 0.15;
-            transform: translate(-50%, -50%);
-            animation: pulse 1.5s infinite;
-            z-index: -1;
+        .timer-prep .timer-display, .timer-prep .timer-label { color: var(--prep-color); }
+        .timer-speak .timer-display, .timer-speak .timer-label { color: var(--success-color); }
+        .timer-speak .timer-label::before {
+            content: '●';
+            color: var(--accent-color);
+            margin-right: 0.75rem;
+            animation: rec-blink 1.5s infinite;
         }
-        @keyframes pulse {
-            0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.15; }
-            70% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
-            100% { transform: translate(-50%, -50%) scale(0.9); opacity: 0; }
-        }
+        @keyframes rec-blink { 50% { opacity: 0.2; } }
 
         /* --- Controls --- */
         .controls button {
             font-family: 'Manrope', sans-serif;
-            font-size: 1.125rem;
+            font-size: 1rem;
             font-weight: 600;
-            padding: 1rem 2rem;
-            border: none;
-            border-radius: 0.75rem;
+            padding: 0.8rem 1.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
             cursor: pointer;
             transition: all 0.2s ease;
-            margin: 0 0.5rem;
         }
         #get-prompt-btn {
-            background-color: var(--blue-primary);
-            color: white;
-        }
-        #get-prompt-btn:hover:not(:disabled) {
-            background-color: var(--blue-dark);
-            transform: translateY(-2px);
+            background-color: var(--card-bg);
+            color: var(--text-primary);
         }
         #start-btn {
-            background-color: var(--green-go);
+            background-color: var(--accent-color);
             color: white;
+            border-color: var(--accent-color);
         }
+        #get-prompt-btn:hover:not(:disabled) { background-color: #f9fafb; }
+        #start-btn:hover:not(:disabled) { background-color: var(--accent-hover); }
         button:disabled {
-            background-color: #9ca3af !important;
+            background-color: #e2e8f0 !important;
+            color: var(--text-secondary) !important;
+            border-color: #e2e8f0 !important;
             cursor: not-allowed;
-            transform: none !important;
         }
 
         /* --- Feedback Card --- */
         .feedback-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 1.5rem;
-            padding: 2rem;
-            margin-top: 2rem;
             text-align: left;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
             opacity: 0;
             transform: translateY(20px);
             transition: opacity 0.5s ease, transform 0.5s ease;
             visibility: hidden;
+            height: 0;
+            padding: 0 2rem;
+            overflow: hidden;
+            border: none;
         }
         .feedback-card.visible {
             opacity: 1;
             transform: translateY(0);
             visibility: visible;
+            height: auto;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
         }
-        .feedback-section { margin-bottom: 1.5rem; }
-        .feedback-section:last-child { margin-bottom: 0; }
+        .feedback-section:not(:last-child) { margin-bottom: 1.5rem; }
         .feedback-header {
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
         }
         .feedback-header h3 {
             margin: 0;
-            font-size: 1rem;
+            font-size: 0.8rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-light);
+            letter-spacing: 0.1em;
+            color: var(--text-secondary);
         }
         #feedback-text {
-            font-size: 1.05rem;
+            font-size: 1rem;
             line-height: 1.7;
-            color: var(--text-dark);
         }
         #transcript-text {
-            font-size: 1.05rem;
+            font-size: 1rem;
             line-height: 1.7;
-            color: var(--text-light);
+            color: var(--text-secondary);
             font-style: italic;
-            border-left: 3px solid var(--blue-primary);
-            padding-left: 1rem;
-            margin: 0;
         }
     </style>
 </head>
@@ -200,34 +199,38 @@
 
 <div class="app-container">
     <header class="header">
-        <h1>TOEFL Speaking AI Coach</h1>
-        <p>Hone your speaking skills for Test Day.</p>
+        <h1>Speaking Grader AI</h1>
+        <p>Your personal coach for fluent, confident speaking.</p>
     </header>
 
-    <div class="prompt-card" id="prompt-card">
-        Click "Get New Prompt" to begin your practice session.
+    <div class="card prompt-card" id="prompt-card">
+        Click "Get New Prompt" to begin.
+    </div>
+
+    <div class="card hidden" id="live-transcript-card">
+        <span id="final-transcript-span"></span><span id="interim-transcript-span" class="interim"></span>
     </div>
 
     <div class="timer-container">
-        <div class="timer-display timer-idle" id="timer-display">00</div>
-        <div class="timer-label timer-idle" id="timer-label">SECONDS</div>
+        <div class="timer-display" id="timer-display">15</div>
+        <div class="timer-label" id="timer-label">PREPARATION</div>
     </div>
 
     <div class="controls">
-        <button id="get-prompt-btn">Get New Prompt</button>
-        <button id="start-btn" disabled>Start Practice</button>
+        <button id="get-prompt-btn">New Prompt</button>
+        <button id="start-btn" disabled>Start</button>
     </div>
 
-    <div class="feedback-card" id="feedback-card">
+    <div class="card feedback-card" id="feedback-card">
         <div class="feedback-section">
             <div class="feedback-header">
-                <h3>🤖 AI COACH FEEDBACK</h3>
+                <h3>AI COACH FEEDBACK</h3>
             </div>
             <p id="feedback-text"></p>
         </div>
         <div class="feedback-section">
             <div class="feedback-header">
-                <h3>🎙️ YOUR RESPONSE</h3>
+                <h3>YOUR RESPONSE (TRANSCRIPT)</h3>
             </div>
             <p id="transcript-text"></p>
         </div>
@@ -262,13 +265,15 @@
     const promptCard = document.getElementById('prompt-card');
     const timerDisplay = document.getElementById('timer-display');
     const timerLabel = document.getElementById('timer-label');
+    const liveTranscriptCard = document.getElementById('live-transcript-card');
+    const finalTranscriptSpan = document.getElementById('final-transcript-span');
+    const interimTranscriptSpan = document.getElementById('interim-transcript-span');
     const feedbackCard = document.getElementById('feedback-card');
     const feedbackText = document.getElementById('feedback-text');
     const transcriptText = document.getElementById('transcript-text');
     
     let currentPrompt = '';
     let countdownInterval;
-    let finalTranscript = '';
 
     // --- Cloud Function Callables ---
     const getTOEFLSpeakingPrompt = functions.httpsCallable('getTOEFLSpeakingPrompt');
@@ -277,51 +282,57 @@
     // --- Initialize Web Speech API ---
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition;
+    let finalTranscript = '';
 
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.continuous = true;
-        recognition.interimResults = false; // We only care about the final transcript
+        recognition.interimResults = true; // Set to true for live transcription
         recognition.lang = 'en-US';
-        
+
         recognition.onresult = (event) => {
-            let transcript = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
+            let interimTranscript = '';
+            finalTranscript = ''; // Always rebuild the final transcript
+            for (let i = 0; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
-                    transcript += event.results[i][0].transcript + ' ';
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
                 }
             }
-            finalTranscript = transcript.trim();
+            finalTranscriptSpan.textContent = finalTranscript;
+            interimTranscriptSpan.textContent = interimTranscript;
         };
 
         recognition.onend = () => {
             setLoadingState(true, 'Analyzing your response...');
-            analyzeTranscript(finalTranscript);
+            analyzeTranscript(finalTranscript.trim());
         };
 
         recognition.onerror = (event) => {
             console.error('Speech recognition error:', event.error);
-            if (event.error !== 'no-speech') {
-              alert(`Speech recognition error: ${event.error}. Please ensure your microphone is enabled.`);
+            if (event.error !== 'no-speech' && event.error !== 'aborted') {
+              alert(`Speech recognition error: ${event.error}. Please check microphone permissions.`);
             }
             resetPractice();
         };
+
     } else {
-        alert("Sorry, your browser does not support Speech Recognition. Please use Google Chrome or Microsoft Edge.");
+        alert("Your browser does not support Speech Recognition. Please use the latest version of Google Chrome or Microsoft Edge.");
         getPromptBtn.disabled = true;
     }
-    
+
     // --- Core Functions ---
     getPromptBtn.addEventListener('click', async () => {
-        setLoadingState(true, 'Getting a new prompt...');
+        setLoadingState(true, 'Getting new prompt...');
         feedbackCard.classList.remove('visible');
+        liveTranscriptCard.classList.add('hidden');
         try {
             const result = await getTOEFLSpeakingPrompt();
             currentPrompt = result.data.prompt;
             promptCard.textContent = currentPrompt;
             startBtn.disabled = false;
         } catch (error) {
-            console.error('Error fetching prompt:', error);
             promptCard.textContent = 'Could not fetch a prompt. Please try again.';
         } finally {
             setLoadingState(false);
@@ -333,6 +344,8 @@
         if (!recognition) return;
         setLoadingState(true);
         finalTranscript = '';
+        finalTranscriptSpan.textContent = '';
+        interimTranscriptSpan.textContent = '';
         runCountdown();
     });
 
@@ -353,7 +366,7 @@
     function startSpeakingPhase() {
         let speakTime = 45;
         updateTimer(speakTime, 'speak', 'SPEAKING');
-        timerLabel.classList.add('recording');
+        liveTranscriptCard.classList.remove('hidden');
         recognition.start();
 
         countdownInterval = setInterval(() => {
@@ -361,12 +374,13 @@
             updateTimer(speakTime, 'speak', 'SPEAKING');
             if (speakTime <= 0) {
                 clearInterval(countdownInterval);
-                recognition.stop(); // Will trigger 'onend' which handles analysis
+                recognition.stop();
             }
         }, 1000);
     }
 
     async function analyzeTranscript(transcript) {
+        liveTranscriptCard.classList.add('hidden');
         try {
             const result = await analyzeTOEFLText({ text: transcript, prompt: currentPrompt });
             const { feedback, transcript: returnedTranscript } = result.data;
@@ -374,9 +388,7 @@
             feedbackText.textContent = feedback;
             transcriptText.textContent = `"${returnedTranscript}"`;
             feedbackCard.classList.add('visible');
-
         } catch (error) {
-            console.error('Error analyzing text:', error);
             feedbackText.textContent = 'Sorry, there was an error analyzing your response. Please try again.';
             transcriptText.textContent = 'Analysis could not be completed.';
             feedbackCard.classList.add('visible');
@@ -386,17 +398,15 @@
     }
 
     // --- UI & Helper Functions ---
-    function updateTimer(seconds, stateClass, labelText) {
+    function updateTimer(seconds, state, labelText) {
         timerDisplay.textContent = String(seconds).padStart(2, '0');
-        timerDisplay.className = `timer-display timer-${stateClass}`;
+        timerDisplay.parentElement.className = `timer-container timer-${state}`;
         timerLabel.textContent = labelText;
-        timerLabel.className = `timer-label timer-${stateClass}`;
     }
 
     function resetTimer() {
         clearInterval(countdownInterval);
-        updateTimer('00', 'idle', 'SECONDS');
-        timerLabel.classList.remove('recording');
+        updateTimer(15, 'idle', 'PREPARATION');
     }
     
     function resetPractice() {
@@ -411,6 +421,9 @@
             promptCard.textContent = message;
         }
     }
+
+    // Initialize on page load
+    resetTimer();
 </script>
 </body>
 </html>
