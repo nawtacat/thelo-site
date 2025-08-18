@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Manrope', sans-serif; background-color: #f1f5f9; margin: 0; padding: 2rem; }
+        .container { max-width: 1200px; margin: auto; }
+        .login-screen, .dashboard-screen { background-color: white; border-radius: 1rem; padding: 2rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .hidden { display: none; }
+        h1 { font-weight: 800; color: #1e293b; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; }
+        .stat-card { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 1.5rem; border-radius: 0.75rem; }
+        .stat-card h2 { margin: 0 0 0.5rem 0; font-size: 1rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card .value { font-size: 3rem; font-weight: 800; color: #4f46e5; }
+        .stat-card .loading { font-size: 1.5rem; color: #94a3b8; }
+        input { font-family: inherit; font-size: 1rem; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; margin-bottom: 1rem; width: 100%; box-sizing: border-box; }
+        button { font-family: inherit; font-size: 1rem; font-weight: 600; padding: 0.75rem 1.5rem; border: none; border-radius: 0.5rem; background-color: #4f46e5; color: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-screen">
+        <h1>Dashboard Login</h1>
+        <p>Please sign in to view analytics.</p>
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+        <button id="login-btn">Sign In</button>
+        <p id="login-error" style="color: #dc2626;"></p>
+    </div>
+
+    <div id="dashboard-screen" class="hidden">
+        <h1>TOEFL App Analytics</h1>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h2>Total Unique Users</h2>
+                <div class="value" id="total-users">…</div>
+            </div>
+            <div class="stat-card">
+                <h2>Daily Active Users (Today)</h2>
+                <div class="value" id="dau">…</div>
+            </div>
+            <div class="stat-card">
+                <h2>Prompts Requested</h2>
+                <div class="value" id="prompts">…</div>
+            </div>
+            <div class="stat-card">
+                <h2>Analyses Submitted</h2>
+                <div class="value" id="analyses">…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+<script>
+    const firebaseConfig = { 
+        apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", 
+        authDomain: "physmathacademy-722b3.firebaseapp.com", 
+        projectId: "physmathacademy-722b3",
+        // ... (the rest of your config object)
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    const loginScreen = document.getElementById('login-screen');
+    const dashboardScreen = document.getElementById('dashboard-screen');
+    const loginBtn = document.getElementById('login-btn');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginError = document.getElementById('login-error');
+
+    loginBtn.addEventListener('click', () => {
+        auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value)
+            .catch(error => {
+                loginError.textContent = error.message;
+            });
+    });
+
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            loginScreen.classList.add('hidden');
+            dashboardScreen.classList.remove('hidden');
+            loadAnalytics();
+        } else {
+            loginScreen.classList.remove('hidden');
+            dashboardScreen.classList.add('hidden');
+        }
+    });
+
+    async function loadAnalytics() {
+        try {
+            const snapshot = await db.collection('analytics').get();
+            const events = snapshot.docs.map(doc => doc.data());
+
+            // 1. Calculate Total Unique Users
+            const uniqueUserIds = new Set(events.map(e => e.userId));
+            document.getElementById('total-users').textContent = uniqueUserIds.size;
+
+            // 2. Calculate Daily Active Users (DAU)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Set to the beginning of today
+            
+            const todaysEvents = events.filter(e => e.timestamp.toDate() >= today);
+            const dailyUniqueUserIds = new Set(todaysEvents.map(e => e.userId));
+            document.getElementById('dau').textContent = dailyUniqueUserIds.size;
+            
+            // 3. Calculate Total Prompts Requested
+            const promptEvents = events.filter(e => e.type === 'prompt_requested');
+            document.getElementById('prompts').textContent = promptEvents.length;
+
+            // 4. Calculate Total Analyses Submitted
+            const analysisEvents = events.filter(e => e.type === 'analysis_submitted');
+            document.getElementById('analyses').textContent = analysisEvents.length;
+
+        } catch (error) {
+            console.error("Could not load analytics:", error);
+            alert("Error loading analytics. Check console and ensure you have admin permissions.");
+        }
+    }
+</script>
+
+</body>
+</html>
