@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TOEFL Speaking</title>
+    <title>Speaking Grader AI</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -202,7 +202,7 @@
 
 <div class="app-container">
     <header class="header">
-        <h1>TOEFL Speaking Practice</h1>
+        <h1>Speaking Grader AI</h1>
         <p>Your personal coach for fluent, confident speaking.</p>
     </header>
 
@@ -278,6 +278,7 @@
     let currentPrompt = '';
     let countdownInterval;
     let finalTranscript = '';
+    let isStopping = false; // --- STABILITY IMPROVEMENT ---
 
     // --- Cloud Function Callables ---
     const getTOEFLSpeakingPrompt = functions.httpsCallable('getTOEFLSpeakingPrompt');
@@ -292,40 +293,38 @@
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-US';
-
-        // ===== THE FIX FOR THE CRASH IS HERE =====
-        // This logic is now more stable and efficient.
+        
         recognition.onstart = () => {
-            finalTranscript = ''; // Reset transcript when recognition starts
+            finalTranscript = ''; // Reset on start
+            isStopping = false;
         };
 
+        // ===== CRITICAL FIX FOR ANDROID CRASH =====
         recognition.onresult = (event) => {
             let interimTranscript = '';
-            // Rebuild the final transcript from the beginning of the results array
-            // This is more robust than appending with +=
-            let finalAggregatedTranscript = ''; 
-            for (let i = 0; i < event.results.length; ++i) {
-                const transcriptPart = event.results[i][0].transcript;
+            // We only need to rebuild the final string from the event's results list.
+            // Using event.resultIndex ensures we only process new data.
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
-                    finalAggregatedTranscript += transcriptPart + ' ';
+                    finalTranscript += event.results[i][0].transcript + ' ';
                 } else {
-                    // Only the last part is the current interim part
-                    interimTranscript = transcriptPart;
+                    interimTranscript += event.results[i][0].transcript;
                 }
             }
-            finalTranscript = finalAggregatedTranscript;
             finalTranscriptSpan.textContent = finalTranscript;
             interimTranscriptSpan.textContent = interimTranscript;
         };
-        // =========================================
+        // ==========================================
 
         recognition.onend = () => {
-            // Use the final transcript that has been built during the onresult events
-            analyzeTranscript(finalTranscript.trim());
+            if (isStopping) {
+                analyzeTranscript(finalTranscript.trim());
+            }
         };
 
         recognition.onerror = (event) => {
             console.error('Speech recognition error:', event.error);
+            // Ignore 'aborted' error which can happen on programmatic stop
             if (event.error !== 'no-speech' && event.error !== 'aborted') {
               alert(`Speech recognition error: ${event.error}. Please check microphone permissions.`);
             }
@@ -388,6 +387,8 @@
             updateTimer(speakTime, 'speak', 'SPEAKING');
             if (speakTime <= 0) {
                 clearInterval(countdownInterval);
+                // --- STABILITY IMPROVEMENT ---
+                isStopping = true;
                 if (recognition) {
                     recognition.stop();
                 }
@@ -396,7 +397,6 @@
     }
 
     async function analyzeTranscript(transcript) {
-        setLoadingState(true, 'Analyzing your response...');
         liveTranscriptCard.classList.add('hidden');
         try {
             const result = await analyzeTOEFLText({ text: transcript, prompt: currentPrompt });
