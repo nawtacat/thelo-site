@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speaking Grader AI</title>
+    <title>TOEFL Speaking</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -78,13 +78,13 @@
             text-align: left;
             font-size: 1.1rem;
             line-height: 1.8;
-            color: var(--text-secondary);
+            color: var(--text-primary);
             min-height: 150px;
             max-height: 200px;
             overflow-y: auto;
         }
         #live-transcript-card .interim {
-            color: #b0b8c4;
+            color: #94a3b8; /* Lighter for interim text */
         }
         .hidden {
             display: none !important;
@@ -139,7 +139,7 @@
             color: white;
             border-color: var(--accent-color);
         }
-        #get-prompt-btn:hover:not(:disabled) { background-color: #f9fafb; }
+        #get-prompt-btn:hover:not(:disabled) { background-color: #f1f5f9; }
         #start-btn:hover:not(:disabled) { background-color: var(--accent-hover); }
         button:disabled {
             background-color: #e2e8f0 !important;
@@ -150,6 +150,7 @@
 
         /* --- Feedback Card --- */
         .feedback-card {
+            margin-top: 2rem;
             text-align: left;
             opacity: 0;
             transform: translateY(20px);
@@ -159,6 +160,8 @@
             padding: 0 2rem;
             overflow: hidden;
             border: none;
+            background: var(--card-bg);
+            box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
         }
         .feedback-card.visible {
             opacity: 1;
@@ -274,6 +277,7 @@
     
     let currentPrompt = '';
     let countdownInterval;
+    let finalTranscript = '';
 
     // --- Cloud Function Callables ---
     const getTOEFLSpeakingPrompt = functions.httpsCallable('getTOEFLSpeakingPrompt');
@@ -282,30 +286,41 @@
     // --- Initialize Web Speech API ---
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition;
-    let finalTranscript = '';
 
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.continuous = true;
-        recognition.interimResults = true; // Set to true for live transcription
+        recognition.interimResults = true;
         recognition.lang = 'en-US';
+
+        // ===== THE FIX FOR THE CRASH IS HERE =====
+        // This logic is now more stable and efficient.
+        recognition.onstart = () => {
+            finalTranscript = ''; // Reset transcript when recognition starts
+        };
 
         recognition.onresult = (event) => {
             let interimTranscript = '';
-            finalTranscript = ''; // Always rebuild the final transcript
+            // Rebuild the final transcript from the beginning of the results array
+            // This is more robust than appending with +=
+            let finalAggregatedTranscript = ''; 
             for (let i = 0; i < event.results.length; ++i) {
+                const transcriptPart = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
+                    finalAggregatedTranscript += transcriptPart + ' ';
                 } else {
-                    interimTranscript += event.results[i][0].transcript;
+                    // Only the last part is the current interim part
+                    interimTranscript = transcriptPart;
                 }
             }
+            finalTranscript = finalAggregatedTranscript;
             finalTranscriptSpan.textContent = finalTranscript;
             interimTranscriptSpan.textContent = interimTranscript;
         };
+        // =========================================
 
         recognition.onend = () => {
-            setLoadingState(true, 'Analyzing your response...');
+            // Use the final transcript that has been built during the onresult events
             analyzeTranscript(finalTranscript.trim());
         };
 
@@ -343,7 +358,6 @@
     startBtn.addEventListener('click', () => {
         if (!recognition) return;
         setLoadingState(true);
-        finalTranscript = '';
         finalTranscriptSpan.textContent = '';
         interimTranscriptSpan.textContent = '';
         runCountdown();
@@ -374,12 +388,15 @@
             updateTimer(speakTime, 'speak', 'SPEAKING');
             if (speakTime <= 0) {
                 clearInterval(countdownInterval);
-                recognition.stop();
+                if (recognition) {
+                    recognition.stop();
+                }
             }
         }, 1000);
     }
 
     async function analyzeTranscript(transcript) {
+        setLoadingState(true, 'Analyzing your response...');
         liveTranscriptCard.classList.add('hidden');
         try {
             const result = await analyzeTOEFLText({ text: transcript, prompt: currentPrompt });
