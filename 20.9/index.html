@@ -1891,24 +1891,31 @@ function handleDrawingStart(e) {
     if (e.touches) e.preventDefault();
     drawing = true;
     if (!isThelobookActive) userDrawingOccurred = true;
-    
+
     const pos = getPos(e, currentTargetCanvas);
     if (!pos) return;
-    
-    // Clear previous points and add the starting point
-    mousePoints = [pos];
-    
-    if (activeCtx.globalCompositeOperation !== 'destination-out') {
-        activeCtx.lineWidth = isThelobookActive ? THELOBOOK_PEN_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
-        activeCtx.globalCompositeOperation = 'source-over';
+
+    mousePoints = []; // Clear any old points
+    lastPos = pos;    // Set the starting position
+
+    // Set line properties
+    if (isThelobookActive) {
+        activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = isThelobookEraserActive ? 'destination-out' : 'source-over';
     } else {
-         activeCtx.lineWidth = THELOBOOK_ERASER_LINEWIDTH;
+        activeCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        activeCtx.globalCompositeOperation = 'source-over';
     }
+
+    // CRITICAL: Start the path here, and only here.
+    activeCtx.beginPath();
+    activeCtx.moveTo(lastPos.x, lastPos.y);
 
     // Start the drawing loop
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animationFrameId = requestAnimationFrame(drawLoop);
 }
+
 function handleDrawingMove(e) {
     if (!drawing) return;
 
@@ -1922,10 +1929,10 @@ function handleDrawingMove(e) {
     if (e.touches) e.preventDefault();
     const pos = getPos(e, e.currentTarget);
     if (pos) {
-        // Just capture the point, don't draw yet
         mousePoints.push(pos);
     }
 }
+
 function handleDrawingEnd(e) {
     if (isTabletMode) {
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
@@ -1937,20 +1944,16 @@ function handleDrawingEnd(e) {
     if (!drawing) return;
     drawing = false;
 
-    // Stop the drawing loop
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-    }
-    
-    // Clear the array for the next stroke
-    mousePoints = [];
-}    // REPLACE your old drawing functions with these three new versions
-	  function drawLoop() {
-    // If we have less than two points, there's nothing to draw yet
-    if (mousePoints.length < 2) {
+    // The loop will run one last time after `drawing` becomes false,
+    // then it will stop itself.
+}
+
+function drawLoop() {
+    // If there are no new points to draw, exit for now
+    if (mousePoints.length === 0) {
+        // If we are still drawing, schedule the next frame
         if (drawing) {
-             animationFrameId = requestAnimationFrame(drawLoop);
+            animationFrameId = requestAnimationFrame(drawLoop);
         }
         return;
     }
@@ -1958,27 +1961,24 @@ function handleDrawingEnd(e) {
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
 
-    activeCtx.beginPath();
-    // Move to the second-to-last captured point
-    activeCtx.moveTo(mousePoints[mousePoints.length - 2].x, mousePoints[mousePoints.length - 2].y);
+    // Grab all the points that have been collected since the last frame
+    const pointsToDraw = [...mousePoints];
+    mousePoints = []; // Clear the array for the next batch of points
 
-    // Process all but the very last point to ensure we have a next point for the midpoint calculation
-    for (let i = 0; i < mousePoints.length - 1; i++) {
-        const p1 = mousePoints[i];
-        const p2 = mousePoints[i + 1];
-        const midPoint = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-        
-        // Use a quadratic curve to the midpoint
-        activeCtx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
+    // Loop through the new points and add them to the current path
+    for (const currentPos of pointsToDraw) {
+        const midPoint = { x: (lastPos.x + currentPos.x) / 2, y: (lastPos.y + currentPos.y) / 2 };
+        activeCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
+        lastPos = currentPos; // The new "last position" is the one we just processed
     }
-    
-    // Draw the curve
+
+    // Stroke the entire path that has been built up in this frame
     activeCtx.stroke();
 
-    // Keep the last point in the array for the next frame's calculation
-    mousePoints = [mousePoints[mousePoints.length - 1]];
+    // IMPORTANT: Move the "pen" to the last known position to prepare for the next frame
+    activeCtx.moveTo(lastPos.x, lastPos.y);
 
-    // If still drawing, schedule the next frame
+    // If the user is still drawing, request the next animation frame
     if (drawing) {
         animationFrameId = requestAnimationFrame(drawLoop);
     }
