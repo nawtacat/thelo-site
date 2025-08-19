@@ -2760,15 +2760,35 @@ function renderStageUI(index, isResize = false) {
                     });
                     let drawingDataPromise;
                     if (currentStageData.drawingRecord) {
-                        if (!isResize || !currentStageDrawingData) {
-                            drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
-                        } else {
-                            drawingDataPromise = Promise.resolve(currentStageDrawingData);
-                        }
-                    } else {
-                        currentStageDrawingData = null;
-                        drawingDataPromise = Promise.resolve(null);
-                    }
+                        if (!isResize || !currentStageDrawingData) {
+                            // MODIFIED to handle 404 errors gracefully
+                            drawingDataPromise = fetch(currentStageData.drawingRecord)
+                                .then(response => {
+                                    if (!response.ok) {
+                                        console.warn(`Optional drawing record not found (status: ${response.status}), continuing without it.`);
+                                        return null; // Don't throw an error, just return null.
+                                    }
+                                    return response.json();
+                                })
+                                .then(json => {
+                                    if (!json || !json.strokes) {
+                                        if (json) console.warn("Drawing JSON is invalid.");
+                                        return null;
+                                    }
+                                    currentStageDrawingData = json;
+                                    return json;
+                                })
+                                .catch(error => {
+                                    console.error("Network error fetching drawing data:", error);
+                                    return null; // Also continue if there's a network error
+                                });
+                        } else {
+                            drawingDataPromise = Promise.resolve(currentStageDrawingData);
+                        }
+                    } else {
+                        currentStageDrawingData = null;
+                        drawingDataPromise = Promise.resolve(null);
+                    }
                     Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
                         if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
                         const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
