@@ -1908,22 +1908,23 @@ function handleDrawingStart(e) {
     activeCtx.moveTo(pos.x, pos.y);
 }
 // THIS IS THE NEW, UPDATED FUNCTION
+/**
+ * Handles the drawing movement on the canvas.
+ * UPDATED: This version uses `lineTo` for maximum accuracy to prevent "missed strokes,"
+ * replacing the original's `quadraticCurveTo` smoothing which could "cut corners."
+ */
 function handleDrawingMove(e) {
     if (!drawing) return;
 
-    // >>> ADD THIS NEW BLOCK OF CODE <<<
-    // This new logic hides the UI only when a stylus actively starts
-    // moving to draw a line, ignoring simple taps.
+    // --- Unchanged tablet UI hiding logic ---
     if (isTabletMode) {
-        // Clear any pending timer that would make the bar reappear
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-        // Hide the bar if it's not already hidden
         if (bottomBar && !bottomBar.classList.contains('bar-hidden-by-stylus')) {
             bottomBar.classList.add('bar-hidden-by-stylus');
         }
     }
-    // >>> END OF NEW BLOCK <<<
 
+    // --- Unchanged canvas and position setup ---
     const currentTargetCanvas = e.currentTarget;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
@@ -1932,11 +1933,22 @@ function handleDrawingMove(e) {
     if (!pos) return;
     if (e.touches) e.preventDefault();
 
-    const midPoint = { x: (lastPos.x + pos.x) / 2, y: (lastPos.y + pos.y) / 2 };
+    // --- START: New, More Accurate Stroke Logic ---
 
-    activeCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
+    // Draw a direct line from the last point to the current one.
+    // This is more precise than a curve and ensures every part of the
+    // physical stroke is represented digitally.
+    activeCtx.lineTo(pos.x, pos.y);
+    
+    // Render the segment to the screen immediately.
     activeCtx.stroke();
-    activeCtx.moveTo(midPoint.x, midPoint.y);
+    
+    // To optimize performance and ensure the next line segment connects
+    // properly, we begin a new path and move the "pen" to the current point.
+    activeCtx.beginPath();
+    activeCtx.moveTo(pos.x, pos.y);
+
+    // --- END: New, More Accurate Stroke Logic ---
 
     lastPos = pos;
 }
@@ -3462,7 +3474,8 @@ function logHandwritingAttempt(result) {
         problemText: "The user is writing a number to answer a question.",
         correctAnswer: String(currentStageData.correctAnswerOcr),
         customInstructions: `Analyze the user's handwritten number. The work is 'correct' ONLY IF the number in the image is clearly identifiable and matches the correct answer: ${currentStageData.correctAnswerOcr}. Otherwise, it is 'incorrect'.`,
-        language: currentLang // <<< UPDATED
+        language: currentLang, // <<< UPDATED
+		llmHints: currentStageData.llmHints || {}
     };
 
     try {
