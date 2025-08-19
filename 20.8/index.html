@@ -3542,7 +3542,32 @@ function logHandwritingAttempt(result) {
 }
 
 
+// REPLACE your old checkMathDrawing function with this entire block
 async function checkMathDrawing(isMcqContext = false) {
+    console.log("Starting the check..."); // 1. Confirms the button click is working
+
+    // --- NEW DIAGNOSTIC CODE ---
+    const user = auth.currentUser;
+    console.log("Current user object from Firebase Auth:", user); // 2. Checks if Firebase sees a logged-in user
+
+    if (!user) {
+        addChatMessage('AI', 'DEBUG: Firebase reports no user is signed in.');
+        console.error("Authentication check failed: auth.currentUser is null.");
+        return; // Stop the function here
+    }
+
+    try {
+        const idToken = await user.getIdToken(true); // 3. Tries to get a security token
+        console.log("Successfully retrieved a fresh ID Token. The user is authenticated.");
+    } catch (error) {
+        addChatMessage('AI', 'DEBUG: Could not get a security token for the user.');
+        console.error("getIdToken failed:", error);
+        return; // Stop the function here
+    }
+    // --- END DIAGNOSTIC CODE ---
+
+
+    // This is the rest of your original function. No changes needed below this line.
     if (!auth.currentUser) {
         console.error("User is not authenticated.");
         addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
@@ -3572,9 +3597,9 @@ async function checkMathDrawing(isMcqContext = false) {
     const TXT = getCurrentUIText();
     nextCheckBtn.disabled = true;
     nextCheckBtn.textContent = TXT.checking;
-    
+
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     try {
         let imageBase64;
         if (isMcqContext) {
@@ -3607,8 +3632,7 @@ async function checkMathDrawing(isMcqContext = false) {
         if (status === 'correct') {
             playRandomFeedback('approve');
             nextCheckBtn.classList.add('correct');
-            
-            // Add points for a correct math solution
+
             const pointsGained = 15;
             userPoints += pointsGained;
             sessionPoints += pointsGained;
@@ -3618,33 +3642,29 @@ async function checkMathDrawing(isMcqContext = false) {
             if (currentStageData.type === 'question_math_solution') {
                 nextCheckBtn.textContent = TXT.gotIt;
             }
-            // FIX: Re-enable the button so the user can click "Got It" to proceed.
             nextCheckBtn.disabled = false;
 
-        } else { // Handles 'incorrect' and 'clarification_needed'
+        } else {
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
-            
-            // FIX: Re-enable the button after a delay so the user can try again.
+
             setTimeout(() => {
                 nextCheckBtn.disabled = false;
                 nextCheckBtn.textContent = TXT.check;
                 nextCheckBtn.classList.remove('incorrect');
-            }, 2000); // 2-second delay to read feedback
+            }, 2000);
         }
 
     } catch (error) {
         console.error("Math analysis failed:", error);
         addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
         playRandomFeedback('disapprove');
-        
-        // FIX: Always re-enable the button on an error.
+
         nextCheckBtn.disabled = false;
         nextCheckBtn.textContent = TXT.check;
         nextCheckBtn.classList.remove('incorrect');
     }
-}
-	    /* ========== THELOBOOK FUNCTIONALITY ========== */
+}	    /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
         const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
