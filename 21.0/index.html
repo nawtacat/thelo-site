@@ -1116,20 +1116,23 @@ body.lang-en #headlineLayer .headline-box {
 #headlineLayer.visible {
   opacity: 1;
 }
-/* Sticky AI feedback (chat bubble + toast) */
-.ai-message.sticky { /* visual style can stay the same */ }
-.ai-message.exiting { opacity: 0; transform: translateY(10px); }
+/* ===== ADD THESE STYLES for Sticky & Swipable Toasts ===== */
 
-.toast-message.ai-feedback.sticky { /* no auto-hide */ }
-.toast-message.dragging { transition: none; }
-.toast-message.dismissed {
-  max-height: 0 !important;
-  opacity: 0 !important;
-  margin-top: 0 !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
+/* Add a subtle visual indicator for sticky toasts and prepare for interaction */
+.toast-message.toast-sticky {
+    cursor: grab;
+    /* Prevents the whole page from scrolling when swiping the toast */
+    touch-action: none;
+    /* A subtle indicator that this toast is persistent */
+    border-left: 4px solid var(--thelo-blue);
 }
 
+/* Class added during the swipe-down gesture */
+.toast-message.swiping {
+    /* Make transitions instant during the swipe for direct feedback */
+    transition: none;
+    cursor: grabbing;
+}
 </style>
 </head>
 <body>
@@ -2982,9 +2985,13 @@ setupStageContent();
         }
     });
 }
+	  // Add this function anywhere in your script
+function clearStickyToasts() {
+    document.querySelectorAll('.toast-sticky.show').forEach(removeToastElement);
+}
           function transitionToStage(newIndex) {
+			  clearStickyToasts();
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
-            selectedMcqIndex = null; // <-- ADD THIS LINE
 		  selectedMcqIndex = null; // <-- ADD THIS LINE
 		  if (isReplayActive) closeReplayPlayer();
     if (isThelobookActive) closeThelobook(true);
@@ -3308,70 +3315,52 @@ function parseAndRenderMath(text) {
     });
 }
 // REPLACE your entire addChatMessage function with this one
-
-/**
- * Adds a message either to chat (desktop) or as a toast (tablet).
- * @param {'AI'|'User'|string} sender
- * @param {string} html
- * @param {{ category?: 'feedback'|'info', sticky?: boolean, autoHideMs?: number }} opts
- */
-function addChatMessage(sender, html, opts = {}) {
-  const isFeedback = opts.category === 'feedback';     // mark AI feedback at callsite
-  const sticky = opts.sticky ?? (isFeedback && isTabletMode);
-  const autoHideMs = opts.autoHideMs ?? (sticky ? 0 : 6500);
-
-  if (isTabletMode) {
-    // ---- Tablet: use toast container ----
-    const host = document.getElementById('toast-container');
-    if (!host) return;
-
-    const toast = document.createElement('div');
-    toast.className = 'toast-message show' + (isFeedback ? ' ai-feedback' : '');
-    if (sticky) toast.classList.add('sticky');
-
-    // Minimal “AI” label for clarity (optional)
-    toast.innerHTML = `<span class="emoji">🤖</span><span>${html}</span>`;
-    host.appendChild(toast);
-
-    // Swipe-to-dismiss for sticky messages
-    if (sticky) {
-      addSwipeToDismiss(toast, { threshold: 60 });
+// REPLACE your existing addChatMessage function with this one
+function addChatMessage(sender, rawMsg, options = {}) {
+    if (isTabletMode) {
+        // On tablet, show a toast. Pass along the stickiness option.
+        showToast(rawMsg, {
+            duration: options.isSticky ? 999999 : 5000, // Long duration for sticky, normal for others
+            isSticky: !!options.isSticky
+        });
     } else {
-      // Auto-hide non-sticky toasts
-      setTimeout(() => {
-        toast.classList.add('exiting');
-        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
-      }, autoHideMs);
+        // Desktop/mobile terminal logic (UNCHANGED)
+        const chatArea = document.getElementById('chat');
+        if (!chatArea) return;
+
+        // ... (The entire 'else' block from your original function remains here) ...
+        const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
+        const TXT = getCurrentUIText();
+        let emoji = '🫧';
+
+        const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
+        const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
+        const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
+        const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
+        const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+
+        if(isWrong) emoji = '🤔';
+        else if (isCorrect || isPoints) emoji = '🎉';
+        else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
+        else if (isWelcome) emoji = '👋';
+        else if (isChecking) emoji = '⏳';
+
+        const finalHTML = parseAndRenderMath(msg);
+        const bubble = document.createElement('div');
+        bubble.className = 'ai-message';
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${finalHTML}</span>`;
+        chatArea.appendChild(bubble);
+
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                bubble.classList.add('show');
+                chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
+            }, 10);
+        });
     }
-    return toast;
-  }
-
-  // ---- Desktop: normal chat bubble ----
-  const chat = document.getElementById('chat');
-  if (!chat) return;
-
-  const bubble = document.createElement('div');
-  bubble.className = 'ai-message';
-  if (sender === 'AI') bubble.classList.add('show');
-  if (sticky) bubble.classList.add('sticky');
-
-  bubble.innerHTML = html;
-  chat.appendChild(bubble);
-  chat.scrollTop = chat.scrollHeight;
-
-  if (sticky) {
-    // Swipe-to-dismiss on touch laptops or iPad in desktop mode
-    addSwipeToDismiss(bubble, { threshold: 60 });
-  } else {
-    // Auto-hide not applied to chat bubbles normally (keep previous behavior)
-  }
-  return bubble;
 }
-function addAIFeedback(html) {
-  return addChatMessage('AI', html, { category: 'feedback', sticky: true });
-}
-
-    /**
+	  /**
  * Creates or updates a student's progress for a specific topic in Firestore.
  * @param {string} userId - The authenticated user's UID.
  * @param {string} topicId - The unique ID for the lesson (e.g., 'sat-linear-equations-one-var').
@@ -3423,68 +3412,109 @@ async function updateStudentProgress(userId, topicId, progressData) {
         }
         return message;
     }
-          /* ========== NEW: Toast Notification Logic ========== */
-function showToast(rawMsg, duration = 4000) {
+ /**
+ * Triggers the exit animation for a toast element and removes it from the DOM.
+ * This is a reusable helper function.
+ * @param {HTMLElement} toast - The toast element to remove.
+ */
+function removeToastElement(toast) {
+    // Prevent trying to remove a toast that's already exiting
+    if (!toast || toast.classList.contains('exiting')) return;
+
+    toast.classList.add('exiting');
+    toast.addEventListener('transitionend', () => {
+        toast.remove();
+    }, { once: true });
+}
+
+/* ========== MODIFIED: Toast Notification Logic ========== */
+function showToast(rawMsg, { duration = 4000, isSticky = false } = {}) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
-    // This part classifies the message to show the right icon
+    // This part classifies the message to show the right icon (UNCHANGED)
     const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
     const TXT = getCurrentUIText();
     let emoji = '🫧';
-    let type = 'info'; 
 
-    const isPoints  = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
-    const isWrong   = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
-    const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
-    const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
-    const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
-    const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
-
-    if (isWrong) { emoji = '🤔'; type = 'error'; }
-    else if (isCorrect || isPoints) { emoji = '🎉'; type = 'success'; }
-    else if (isWarning || msg.includes('🛑')) { emoji = '⚠️'; type = 'warning'; }
-    else if (isWelcome) { emoji = '👋'; }
-    else if (isChecking) { emoji = '⏳'; }
-
-    // This part creates the toast element
+    const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect));
+    const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)));
+    
+    if (isWrong) { emoji = '🤔'; }
+    else if (isCorrect) { emoji = '🎉'; }
+    else if (msg.includes('⚠️')) { emoji = '⚠️'; }
+    
     const toast = document.createElement('div');
     toast.className = `toast-message`;
     toast.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${msg}</span>`;
-    
-    // This is the inner function that handles removing the toast
-    const removeToast = () => {
-        // First, we add the 'exiting' class to trigger the CSS transition
-        toast.classList.add('exiting');
-        
-        // ===================================================================
-        // THE ONLY CHANGE IS ON THIS LINE:
-        // We now listen for 'transitionend' instead of 'animationend'.
-        // This tells the code to wait for our new collapse transition to finish.
-        toast.addEventListener('transitionend', () => {
-            toast.remove();
+
+    // --- LOGIC CHANGE IS HERE ---
+    if (isSticky) {
+        toast.classList.add('toast-sticky');
+        addSwipeToDismiss(toast); // Attach swipe handlers
+    } else {
+        // This is a normal, temporary toast
+        const timeoutId = setTimeout(() => removeToastElement(toast), duration);
+        // Allow clicking to dismiss non-sticky toasts early
+        toast.addEventListener('click', () => {
+            clearTimeout(timeoutId);
+            removeToastElement(toast);
         }, { once: true });
-        // ===================================================================
-    };
+    }
+    // --- END LOGIC CHANGE ---
 
-    // This sets the timer to automatically dismiss the toast
-    const timeoutId = setTimeout(removeToast, duration);
-
-    // This lets the user click the toast to dismiss it early
-    toast.addEventListener('click', () => {
-        clearTimeout(timeoutId);
-        removeToast();
-    }, { once: true });
-
-    // This adds the toast to the page
     container.appendChild(toast);
-
-    // This triggers the entry animation
     requestAnimationFrame(() => {
         toast.classList.add('show');
     });
 }
+	  /**
+ * Adds swipe-down-to-dismiss functionality to a given element.
+ * @param {HTMLElement} element - The DOM element to make swipable.
+ */
+function addSwipeToDismiss(element) {
+    let startY, currentY, isDragging = false;
+    const swipeThreshold = 50; // User must swipe at least 50px down to dismiss
 
+    element.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            startY = e.touches[0].clientY;
+            isDragging = true;
+            element.classList.add('swiping');
+        }
+    }, { passive: true });
+
+    element.addEventListener('touchmove', (e) => {
+        if (!isDragging || e.touches.length !== 1) return;
+
+        currentY = e.touches[0].clientY;
+        const deltaY = currentY - startY;
+
+        // Only allow swiping down
+        if (deltaY > 0) {
+            // Move the element and fade it out as the user swipes
+            element.style.transform = `translateY(${deltaY}px)`;
+            element.style.opacity = 1 - (deltaY / (window.innerHeight * 0.5));
+        }
+    }, { passive: true });
+
+    element.addEventListener('touchend', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        element.classList.remove('swiping');
+
+        const deltaY = currentY - startY;
+
+        // If swiped far enough, dismiss it
+        if (deltaY > swipeThreshold) {
+            removeToastElement(element);
+        } else {
+            // Otherwise, snap it back to its original position
+            element.style.transform = '';
+            element.style.opacity = '';
+        }
+    });
+}
 function checkTabletMode() {
     // This media query should match the one in your CSS
     const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
@@ -3584,19 +3614,6 @@ function showStreakCelebrationModal(streakCount, isNewRecord) {
 
     modal.classList.remove('modal-hidden');
 }	
-    function dismissStickyAIFeedback() {
-  // Toasts (tablet)
-  document.querySelectorAll('.toast-message.ai-feedback.sticky').forEach(el => {
-    el.classList.add('dismissed', 'exiting');
-    el.addEventListener('transitionend', () => { try { el.remove(); } catch {} }, { once: true });
-  });
-  // Chat bubbles (desktop)
-  document.querySelectorAll('.ai-message.sticky').forEach(el => {
-    el.classList.add('exiting');
-    el.addEventListener('transitionend', () => { try { el.remove(); } catch {} }, { once: true });
-  });
-}
-
 // ANALYTICS: Helper function to log handwriting check attempts
 function logHandwritingAttempt(result) {
     const user = auth.currentUser;
@@ -3614,48 +3631,6 @@ function logHandwritingAttempt(result) {
         });
     }
 }
-    function addSwipeToDismiss(el, { threshold = 60, onDismiss } = {}) {
-  let startY = 0, currentY = 0, dragging = false;
-
-  const onStart = (e) => {
-    const t = e.touches ? e.touches[0] : e;
-    startY = t.clientY;
-    currentY = startY;
-    dragging = true;
-    el.style.transition = 'none';
-  };
-  const onMove = (e) => {
-    if (!dragging) return;
-    const t = e.touches ? e.touches[0] : e;
-    currentY = t.clientY;
-    const dy = Math.max(0, currentY - startY);
-    el.style.transform = `translateY(${dy}px)`;
-    if (e.cancelable) e.preventDefault();
-  };
-  const endDrag = (dismiss) => {
-    dragging = false;
-    el.style.transition = '';
-    if (dismiss) {
-      el.classList.add('dismissed', 'exiting');
-      el.addEventListener('transitionend', () => {
-        try { el.remove(); } catch {}
-        if (onDismiss) onDismiss();
-      }, { once: true });
-    } else {
-      el.style.transform = '';
-    }
-  };
-  const onEnd = () => {
-    const dy = Math.max(0, currentY - startY);
-    endDrag(dy > threshold);
-  };
-
-  el.addEventListener('touchstart', onStart, { passive: false });
-  el.addEventListener('touchmove', onMove,  { passive: false });
-  el.addEventListener('touchend',  onEnd);
-  el.addEventListener('touchcancel', onEnd);
-}
-
 	async function checkHandwritingAnswer() {
     console.log("Auth state at time of call:", isAuthReady);
     if (!isAuthReady || !auth.currentUser) {
@@ -3712,7 +3687,7 @@ function logHandwritingAttempt(result) {
 
         const { status, feedback } = result.data;
         
-        addChatMessage('AI', `🔍 ${feedback}`); 
+        addChatMessage('AI', `🔍 ${feedback}`, { isSticky: true });
 
         if (status === 'correct') {
             logHandwritingAttempt('correct');
@@ -3833,7 +3808,7 @@ async function checkMathDrawing(isMcqContext = false) {
         const result = await analyzeMathDrawing(payload);
         const { status, feedback } = result.data;
 
-        addChatMessage('AI', `🔍 ${feedback}`);
+        addChatMessage('AI', `🔍 ${feedback}`, { isSticky: true });
 
         if (status === 'correct') {
             playRandomFeedback('approve');
