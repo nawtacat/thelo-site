@@ -1180,8 +1180,7 @@ const functions = firebase.app().functions('us-central1');
         .catch((error) => {
             console.error("Auth persistence error:", error.code, error.message);
         });
-    getKatexCSSWithEmbeddedFonts().catch(()=>{});
-ensureHeadlineFontsLoaded().catch(()=>{});
+    
     const INK_COLORS = { black: '#000000', blue: getComputedStyle(document.documentElement).getPropertyValue('--ink-blue').trim() || '#2563eb' };
 
     const UI_TEXT = {
@@ -4203,10 +4202,8 @@ function initApp() {
         window.appInitialized = false;
     }
 
-    // REPLACE your entire auth.onAuthStateChanged function with this one.
-// This listener ensures the entire page, including KaTeX, is ready before the app starts.
-// This listener ensures the entire page, including KaTeX, is ready before the app starts.
-document.addEventListener('DOMContentLoaded', async () => { // <<< Make this async
+// This is the new, complete listener for the end of your script
+document.addEventListener('DOMContentLoaded', async () => {
 
     // Diagnostic check
     console.log('DOM is ready. Checking for KaTeX library:', typeof katex);
@@ -4215,11 +4212,20 @@ document.addEventListener('DOMContentLoaded', async () => { // <<< Make this asy
         return;
     }
 
-    // ======================== THE FIX IS HERE ========================
-    // Await the font preloader before initializing anything else.
-    await preloadKatexFonts();
-    // ================================================================
+    console.log('Pre-loading all necessary fonts and assets before app initialization...');
 
+    // THE FIX: Wait for ALL font loading and CSS preparation promises to
+    // complete before proceeding. This prevents any race conditions.
+    await Promise.all([
+        preloadKatexFonts(),
+        getKatexCSSWithEmbeddedFonts(),
+        ensureHeadlineFontsLoaded()
+    ]);
+
+    console.log('All fonts and assets are ready. Initializing app.');
+
+    // Now that assets are guaranteed to be ready, set up the auth listener
+    // which in turn calls initApp().
     auth.onAuthStateChanged(user => {
         const finishInitialization = () => {
             if (!window.appInitialized) {
@@ -4258,7 +4264,6 @@ document.addEventListener('DOMContentLoaded', async () => { // <<< Make this asy
             finishInitialization();
         }
     });
-
 });
 // Add this function somewhere logical, e.g., near updateUserPointsInFirestore
 async function logDigitForTraining(recognizedValue, feedbackType) {
