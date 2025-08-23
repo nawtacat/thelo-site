@@ -160,16 +160,18 @@ body.lang-en {
     overflow: hidden;
     position: relative;
  }
- #boardWrap {
+	#boardWrap {
     position: relative;
     flex-grow: 1;
-    overflow: visible; /* Changed from hidden to visible */
+    overflow: visible;
     background-color: var(--thelo-bg);
     /* Grid background */
     background-image: linear-gradient(to right, var(--thelo-border) 1px, transparent 1px),
       linear-gradient(to bottom, var(--thelo-border) 1px, transparent 1px);
     background-size: 40px 40px;
- }
+    /* ADD THIS LINE for better palm rejection and gesture control */
+    touch-action: none;
+}
 
  /* ===== Canvases & Overlays ===== */
  #stageProgressBarContainer {
@@ -1864,23 +1866,16 @@ function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
     }
 }
     function getPos(e, targetCanvas) {
-        if (!targetCanvas) return null;
-        const rect = targetCanvas.getBoundingClientRect(); let clientX, clientY;
-        if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
-        else if (e.changedTouches && e.changedTouches.length > 0) { clientX = e.changedTouches[0].clientX; clientY = e.changedTouches[0].clientY; }
-        else { clientX = e.clientX; clientY = e.clientY; }
-        if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
-        return { x: clientX - rect.left, y: clientY - rect.top };
-    }
+    if (!targetCanvas) return null;
+    const rect = targetCanvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
 // THIS IS THE NEW, UPDATED FUNCTION
 function handleDrawingStart(e) {
-    if (isTabletMode && e.type.startsWith('touch')) {
-        const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
-        if (!isStylusPresent) {
-            e.preventDefault();
-            return;
-        }
-        // The UI-hiding logic has been REMOVED from here.
+    // This is the key change: ignore finger touches for drawing.
+    // This frees up touch events for UI navigation like pan and zoom later.
+    if (e.pointerType === 'touch') {
+        return;
     }
 
     const currentTargetCanvas = e.currentTarget;
@@ -1892,7 +1887,6 @@ function handleDrawingStart(e) {
 
     const pos = getPos(e, currentTargetCanvas);
     if (!pos) return;
-    if (e.touches) e.preventDefault();
 
     drawing = true;
     if (!isThelobookActive) userDrawingOccurred = true;
@@ -1974,21 +1968,13 @@ function handleDrawingEnd(e) {
 }
     // REPLACE your old drawing functions with these three new versions
 function addBoardDrawListeners() {
-        canvas.addEventListener('mousedown', handleDrawingStart);
-        canvas.addEventListener('mousemove', handleDrawingMove);
-        canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
-        canvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
-        canvas.addEventListener('touchend', handleDrawingEnd);
-        canvas.addEventListener('touchcancel', handleDrawingEnd);
-    }
-    function removeBoardDrawListeners() {
-        canvas.removeEventListener('mousedown', handleDrawingStart);
-        canvas.removeEventListener('mousemove', handleDrawingMove);
-        canvas.removeEventListener('touchstart', handleDrawingStart);
-        canvas.removeEventListener('touchmove', handleDrawingMove);
-        canvas.removeEventListener('touchend', handleDrawingEnd);
-        canvas.removeEventListener('touchcancel', handleDrawingEnd);
-    }
+    canvas.addEventListener('pointerdown', handleDrawingStart);
+    canvas.addEventListener('pointermove', handleDrawingMove);
+}
+function removeBoardDrawListeners() {
+    canvas.removeEventListener('pointerdown', handleDrawingStart);
+    canvas.removeEventListener('pointermove', handleDrawingMove);
+}
     function addThelobookDrawListeners() {
         if (thelobookDrawListenersAttached) return;
         thelobookCanvas.addEventListener('mousedown', handleDrawingStart);
@@ -2848,6 +2834,16 @@ function renderStageUI(index, isResize = false) {
 }
           function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
+			   const nextStageIndex = newIndex + 1;
+    if (nextStageIndex < lessonStages.length) {
+        const nextStageData = lessonStages[nextStageIndex];
+        if (nextStageData.image) {
+            // This creates an image element in memory and tells the browser to download the source.
+            // It will be cached, so when the next stage loads, it will be instant.
+            const preloadImg = new Image();
+            preloadImg.src = nextStageData.image;
+        }
+    }
 		  selectedMcqIndex = null; // <-- ADD THIS LINE
 		  if (isReplayActive) closeReplayPlayer();
     if (isThelobookActive) closeThelobook(true);
@@ -4119,11 +4115,11 @@ function initApp() {
         }
     });
     resizeCanvases();
-    addBoardDrawListeners();
-    window.addEventListener('mouseup', handleDrawingEnd);
-    window.addEventListener('mouseleave', handleDrawingEnd);
-    window.addEventListener('touchend', handleDrawingEnd);
-    window.addEventListener('touchcancel', handleDrawingEnd);
+    // Inside the initApp function...
+addBoardDrawListeners(); // We will update this function next
+// The 'pointerup' and 'pointercancel' on the window handle cases where the user drags off the canvas and releases.
+window.addEventListener('pointerup', handleDrawingEnd);
+window.addEventListener('pointercancel', handleDrawingEnd);
 
     const urlParams = new URLSearchParams(window.location.search);
     const lessonFileName = urlParams.get('lessonFile');
