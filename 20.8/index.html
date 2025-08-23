@@ -1108,6 +1108,14 @@ body.lang-en #headlineLayer .headline-box {
 
 /* Keep inline KaTeX aligned nicely with text */
 #headlineLayer .headline-box .katex { vertical-align: 0; }
+/* Fade in/out for headline */
+#headlineLayer {
+  opacity: 0;                                   /* start hidden */
+  transition: opacity var(--fade-duration) ease;
+}
+#headlineLayer.visible {
+  opacity: 1;
+}
 
 </style>
 </head>
@@ -2493,6 +2501,44 @@ function setHeadlineDOM(headline) {
 
   host.appendChild(box);
 }
+function waitTransitionOnce(el, prop = 'opacity', fallbackMs = 400) {
+  return new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => { if (!done) { done = true; resolve(); } }, fallbackMs);
+    const onEnd = (e) => {
+      if (e.target === el && (!prop || e.propertyName === prop)) {
+        el.removeEventListener('transitionend', onEnd);
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          resolve();
+        }
+      }
+    };
+    el.addEventListener('transitionend', onEnd);
+  });
+}
+
+async function setHeadlineWithFade(headline, { animate = true } = {}) {
+  const host = document.getElementById('headlineLayer');
+  if (!host) return;
+
+  if (animate) {
+    host.classList.remove('visible');            // fade out current
+    await waitTransitionOnce(host);
+  }
+
+  setHeadlineDOM(headline);                      // swap content while hidden
+
+  if (animate) {
+    // ensure browser applies DOM changes before we add the class
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => host.classList.add('visible')); // fade in new
+    });
+  } else {
+    host.classList.add('visible');               // show instantly (for resizes)
+  }
+}
 
 	function displayMcq(mcqDetails){
     const choices = mcqDetails.choices;
@@ -2740,9 +2786,9 @@ function renderStageUI(index, isResize = false) {
             }
         }
 
-       async function drawHeadlineText() {
+       async function drawHeadlineText(isResize = false) {
   const headlineText = (currentStageData && currentStageData.headline) ? currentStageData.headline : '';
-  setHeadlineDOM(headlineText);
+  await setHeadlineWithFade(headlineText, { animate: !isResize }); // animate on stage changes, not on resize
 }
 
 
@@ -2903,15 +2949,17 @@ function renderStageUI(index, isResize = false) {
             img.crossOrigin = "Anonymous";
             img.src = currentStageData.image;
             img.onload = async () => {
-                drawImageWithCorrectLayout(bgCtx, img, currentStageData);
-                await drawHeadlineText();
-                setupStageContent();
+               drawImageWithCorrectLayout(bgCtx, img, currentStageData);
+await drawHeadlineText(isResize);
+setupStageContent();
+
                 resolve();
             };
             img.onerror = async () => {
                 console.error("Failed to load stage image:", currentStageData.image);
-                await drawHeadlineText();
-                setupStageContent();
+                await drawHeadlineText(isResize);
+setupStageContent();
+
                 resolve();
             };
         } else {
