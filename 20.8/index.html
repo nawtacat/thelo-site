@@ -1075,6 +1075,40 @@ body.lang-en {
     box-shadow: var(--shadow-lg);
 }
   .mcq-option-btn .katex { vertical-align: middle; }
+	/* === Headline overlay (DOM, not canvas) === */
+#headlineLayer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 2;               /* Between background (z:1) and replay (z:2 by DOM order) */
+  pointer-events: none;     /* Never blocks drawing/taps */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  /* Previously padding*2 (27*2) + yNudge(+10) ≈ 54px */
+  padding-top: 54px;
+  box-sizing: border-box;
+}
+
+#headlineLayer .headline-box {
+  max-width: min(88%, 1000px);  /* matches your widthFraction ≈ 0.88 */
+  font: 20px 'Mardoto-Light', system-ui, -apple-system, sans-serif;
+  color: var(--thelo-text);
+  text-align: center;
+  line-height: 1.35;
+  padding: 0 8px;               /* tiny side pad so glyphs never clip */
+  margin: 0 auto;
+  white-space: normal;          /* allow wrapping */
+  word-break: normal;
+}
+
+body.lang-en #headlineLayer .headline-box {
+  font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+}
+
+/* Keep inline KaTeX aligned nicely with text */
+#headlineLayer .headline-box .katex { vertical-align: 0; }
+
 </style>
 </head>
 <body>
@@ -1086,9 +1120,11 @@ body.lang-en {
             <div id="boardWrap">
                 <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
                 <canvas id="backgroundCanvas"></canvas>
-                <canvas id="replayCanvas"></canvas>
-                <canvas id="board"></canvas>
-                <canvas id="thelobookCanvas"></canvas>
+<div id="headlineLayer" aria-hidden="true"></div> <!-- NEW -->
+<canvas id="replayCanvas"></canvas>
+<canvas id="board"></canvas>
+<canvas id="thelobookCanvas"></canvas>
+
 		<div id="calculatorOverlay" class="calculator-hidden">
                 <iframe id="calculatorFrame" src="about:blank" allow="clipboard-write"></iframe>
                 <button id="calculatorCloseBtn" title="Close Calculator">✕</button>
@@ -2428,6 +2464,35 @@ function renderMixedKaTeXInto(targetEl, src) {
     targetEl.appendChild(span);
   }
 }
+function setHeadlineDOM(headline) {
+  const host = document.getElementById('headlineLayer');
+  if (!host) return;
+  host.innerHTML = ''; // clear
+
+  if (!headline) return;
+
+  const box = document.createElement('div');
+  box.className = 'headline-box';
+
+  const parts = headline.split(/(\/K[\s\S]*?K\/)/g).filter(Boolean);
+  for (const part of parts) {
+    const isMath = part.startsWith('/K') && part.endsWith('K/');
+    if (!isMath) {
+      box.appendChild(document.createTextNode(part));
+      continue;
+    }
+    const expr = part.replace(/^\/K\s*/, '').replace(/\s*K\/$/, '');
+    const span = document.createElement('span');
+    try {
+      katex.render(expr, span, { throwOnError: false });
+    } catch {
+      span.textContent = expr; // graceful fallback
+    }
+    box.appendChild(span);
+  }
+
+  host.appendChild(box);
+}
 
 	function displayMcq(mcqDetails){
     const choices = mcqDetails.choices;
@@ -2675,20 +2740,11 @@ function renderStageUI(index, isResize = false) {
             }
         }
 
-        async function drawHeadlineText() {
-            const padding = 27;
-            let headlineCurrentY = padding * 2;
-            const headlineText = currentStageData.headline || '';
+       async function drawHeadlineText() {
+  const headlineText = (currentStageData && currentStageData.headline) ? currentStageData.headline : '';
+  setHeadlineDOM(headlineText);
+}
 
-            if (headlineText && bgCtx && bgCtx.canvas.width > 0) {
-                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-                bgCtx.font = `20px ${fontFamily}`;
-await ensureHeadlineFontsLoaded();
-await preloadKatexFonts(); // NEW: guarantee KaTeX_* faces are ready on iPad before measuring
-await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
-
-            }
-        }
 
         function setupStageContent() {
             const mcqDetails = currentStageData.optionsQuiz;
