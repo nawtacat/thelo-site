@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kaffetish</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,700;1,400&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+    </script>
+    
+    <style>
+        :root {
+            --bg: #FDFBF7;
+            --ink: #2C2B2A;
+            --accent: #FF3A44;
+            --subtle: #8A8886;
+            --border-color: #EAE8E4;
+            --shadow-color: rgba(44, 43, 42, 0.1);
+            --font-main: 'Lora', serif;
+            --font-ui: 'Poppins', sans-serif;
+        }
+
+        body.dark-mode {
+            --bg: #21201F;
+            --ink: #EAE8E4;
+            --subtle: #999591;
+            --border-color: #3A3837;
+            --shadow-color: rgba(0, 0, 0, 0.25);
+        }
+
+        ::selection { background-color: var(--accent); color: white; opacity: 0.9; }
+
+        body {
+            font-family: var(--font-ui);
+            background-color: var(--bg);
+            color: var(--ink);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            margin: 0;
+            padding-top: 60px;
+        }
+
+        .hidden { display: none !important; }
+
+        /* --- Header --- */
+        .app-header {
+            position: fixed; top: 0; left: 0; width: 100%; height: 60px;
+            background-color: color-mix(in srgb, var(--bg) 85%, transparent);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color); z-index: 1000;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+        .header-content {
+            max-width: 1200px; height: 100%; margin: 0 auto; padding: 0 24px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .logo {
+            font-size: 1.6rem; font-weight: 500; letter-spacing: -0.5px;
+            color: var(--accent); font-family: var(--font-main);
+        }
+        body.dark-mode .logo { color: var(--ink); }
+
+        .header-actions { display: flex; align-items: center; gap: 16px; }
+
+        .reader-controls { display: flex; align-items: center; gap: 24px; }
+        .reader-controls.hidden { display: none; }
+        .control-group { display: flex; align-items: center; gap: 8px; }
+        .book-title { font-weight: 500; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .page-indicator input {
+            width: 40px; text-align: center; font-size: 0.9rem; font-family: var(--font-ui);
+            padding: 6px; border: 1px solid var(--border-color); background-color: var(--bg);
+            color: var(--ink); border-radius: 6px; -moz-appearance: textfield;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .page-indicator input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
+        .page-indicator input::-webkit-outer-spin-button,
+        .page-indicator input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .page-indicator span { color: var(--subtle); }
+
+        .header-actions button, .reader-controls button {
+            background: transparent; border: none; color: var(--subtle); border-radius: 6px;
+            padding: 8px 10px; cursor: pointer; font-size: 1rem;
+            transition: color 0.2s ease, background-color 0.2s ease;
+        }
+        .header-actions button:hover, .reader-controls button:hover { color: var(--ink); background-color: color-mix(in srgb, var(--border-color) 60%, transparent); }
+        .reader-controls button:disabled { opacity: 0.4; cursor: not-allowed; background-color: transparent !important; color: var(--subtle) !important; }
+        .reader-controls #close-reader:hover { background-color: color-mix(in srgb, var(--accent) 80%, var(--bg)); color: white; }
+
+        /* --- Main Content & Views --- */
+        main { padding: 48px 24px; max-width: 1200px; margin: 0 auto; }
+
+        /* --- CHANGE 1: Library View Styles --- */
+        .library-view h2 {
+            font-family: var(--font-main);
+            font-size: 2.5rem;
+            font-weight: 500;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .library-view .library-subtitle {
+            text-align: center;
+            color: var(--subtle);
+            margin-bottom: 48px;
+            font-size: 1.1rem;
+        }
+        .book-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 32px;
+        }
+        .book-card {
+            cursor: pointer;
+            text-align: center;
+            transition: transform 0.2s ease-out;
+        }
+        .book-card:hover {
+            transform: translateY(-5px);
+        }
+        .book-cover {
+            width: 100%;
+            aspect-ratio: 2 / 3;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px var(--shadow-color);
+            margin-bottom: 12px;
+        }
+        .book-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .book-card-title {
+            font-weight: 500;
+            font-size: 1rem;
+            color: var(--ink);
+        }
+        .book-card-author {
+            font-size: 0.85rem;
+            color: var(--subtle);
+        }
+
+        .upload-view, .loading-view {
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            text-align: center; min-height: calc(100vh - 156px);
+        }
+        .dropzone {
+            width: min(600px, 90vw); padding: 60px 40px; border: 2px dashed var(--border-color);
+            border-radius: 16px; cursor: pointer;
+            transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+        }
+        .dropzone:hover { transform: scale(1.02); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+        .dropzone.dragover { border-color: var(--accent); border-style: solid; background-color: color-mix(in srgb, var(--accent) 10%, transparent); }
+        .drop-icon { font-size: 3rem; color: var(--accent); }
+        .drop-title { font-size: 1.5rem; margin: 16px 0 4px; }
+        .drop-subtitle { color: var(--subtle); }
+        .browse-link { color: var(--accent); text-decoration: none; font-weight: 500; }
+        .browse-link:hover { text-decoration: underline; }
+
+        .error-message { color: var(--accent); margin-top: 16px; font-weight: 500; }
+
+        .spinner {
+            width: 48px; height: 48px; border-radius: 50%;
+            border: 5px solid var(--border-color); border-top-color: var(--accent);
+            animation: spin 1s linear infinite; margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .page-container { filter: drop-shadow(0 10px 25px var(--shadow-color)); }
+        .page {
+            max-width: 75ch; margin: 0 auto;
+            background-color: var(--bg); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 4rem 5rem; position: relative;
+            transition: border-color 0.3s ease, background-color 0.3s ease;
+        }
+        
+        body.dark-mode .page { background-color: #2D2C2B; }
+
+        .content { font-family: var(--font-main); font-size: 1.15rem; line-height: 1.8; }
+        .content p { margin: 0 0 1.5em; }
+        .content p:last-child { margin-bottom: 0; }
+        
+        .fade-in { animation: fadeIn 250ms ease-out both; }
+        @keyframes fadeIn { from { opacity: 0.6; } to { opacity: 1; } }
+
+        .page-number {
+            position: absolute; bottom: 2rem; left: 50%; transform: translateX(-50%);
+            color: var(--subtle); font-size: 0.9rem;
+        }
+
+        .highlighted-text {
+            background-color: color-mix(in srgb, var(--accent) 25%, transparent);
+            border-radius: 3px;
+        }
+        body.dark-mode .highlighted-text {
+            background-color: color-mix(in srgb, var(--accent) 40%, transparent);
+        }
+
+        .selection-tooltip {
+            position: fixed; z-index: 2000; display: none; gap: 6px; padding: 6px;
+            background-color: var(--ink); color: var(--bg); border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+        .selection-tooltip button {
+            background: transparent; border: 0; color: var(--bg); padding: 8px 12px;
+            border-radius: 6px; cursor: pointer; font-size: 0.9rem;
+            font-family: var(--font-ui); transition: background-color 0.2s ease;
+        }
+        .selection-tooltip button:hover { background-color: rgba(255,255,255,0.15); }
+        .selection-tooltip i { margin-right: 6px; }
+
+        .ai-panel {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            width: min(700px, 90vw); background-color: color-mix(in srgb, var(--bg) 92%, transparent);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color); border-radius: 12px;
+            box-shadow: 0 20px 60px var(--shadow-color); z-index: 2100; padding: 16px 20px;
+            display: none; flex-direction: column; animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp { from { transform: translate(-50%, 40px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+        .ai-panel-content { flex-grow: 1; }
+        .ai-title { font-size: 1.1rem; font-weight: 500; margin: 0 0 12px; }
+        .ai-title i { color: var(--accent); }
+        .ai-text-content { max-height: 40vh; overflow-y: auto; font-size: 1rem; line-height: 1.7; padding-right: 10px; }
+        .ai-text-content .thinking { display: flex; align-items: center; gap: 10px; color: var(--subtle); }
+        .ai-text-content .thinking::after { content: "."; animation: dots 1.4s linear infinite; width: 1em; text-align: left; }
+        @keyframes dots { 0%, 20% { content: "."; } 40% { content: ".."; } 60% { content: "..."; } 90%, 100% { content: ""; } }
+
+        .ai-panel-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 4px; }
+        .ai-panel-actions button {
+            background: var(--border-color); color: var(--subtle); border: 0;
+            width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
+            transition: color 0.2s ease, background-color 0.2s ease;
+        }
+        .ai-panel-actions button:hover { color: var(--ink); background-color: color-mix(in srgb, var(--subtle) 30%, transparent); }
+
+        @media (max-width: 768px) {
+            .header-content { padding: 0 16px; }
+            .control-group.file-info, .control-group.settings-main { display: none; }
+            main { padding: 24px 16px; }
+            .page { padding: 2.5rem 1.5rem; }
+            .page-number { bottom: 1rem; }
+            .book-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 24px; }
+        }
+    </style>
+</head>
+
+<body>
+    <header id="app-header" class="app-header">
+        <div class="header-content">
+            <h1 class="logo">Kaffetish</h1>
+
+            <!-- --- CHANGE 2: Header now has two states: Library and Reader --- -->
+            <div id="library-actions" class="header-actions">
+                 <button id="upload-button" title="Upload your own PDF"><i class="fa-solid fa-upload"></i> Upload</button>
+                 <button id="mode-toggle-library" title="Toggle Theme"><i class="fa-solid fa-moon"></i></button>
+            </div>
+
+            <div id="reader-controls" class="reader-controls hidden">
+                <div class="control-group">
+                    <button id="back-to-library" title="Back to Library"><i class="fa-solid fa-arrow-left"></i> Library</button>
+                </div>
+                <div class="control-group file-info"> <span id="book-title" class="book-title"></span> </div>
+                <div class="control-group navigation">
+                    <button id="prev-page" title="Previous Page"><i class="fa-solid fa-arrow-left"></i></button>
+                    <div class="page-indicator">
+                        <input id="page-jump" type="number" min="1" />
+                        <span id="page-total">/ 0</span>
+                    </div>
+                    <button id="next-page" title="Next Page"><i class="fa-solid fa-arrow-right"></i></button>
+                </div>
+                <div class="control-group settings-main">
+                    <button id="font-decrease" title="Decrease Font Size"><i class="fa-solid fa-font" style="font-size: 0.8em;"></i></button>
+                    <button id="font-increase" title="Increase Font Size"><i class="fa-solid fa-font" style="font-size: 1.2em;"></i></button>
+                    <button id="mode-toggle-reader" title="Toggle Theme"><i class="fa-solid fa-sun"></i></button>
+                    <button id="tts-button" title="Read Aloud"><i id="tts-icon" class="fa-solid fa-play"></i></button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main id="main-content">
+        <!-- --- CHANGE 3: New Library View --- -->
+        <section id="library-view" class="library-view">
+            <h2>Public Domain Library</h2>
+            <p class="library-subtitle">Select a classic to start reading instantly.</p>
+            <div id="book-grid" class="book-grid">
+                <!-- Books will be dynamically inserted here -->
+            </div>
+        </section>
+
+        <section id="upload-view" class="upload-view hidden">
+            <div id="dropzone" class="dropzone">
+                <i class="fa-solid fa-file-arrow-up drop-icon"></i>
+                <h2 class="drop-title">Drop your PDF here</h2>
+                <p class="drop-subtitle">or <span class="browse-link">browse your files</span> to begin reading.</p>
+                <input type="file" id="pdf-file" accept=".pdf" class="hidden" />
+            </div>
+            <div id="error-message" class="error-message"></div>
+        </section>
+
+        <section id="loading-view" class="loading-view hidden">
+            <div class="spinner"></div>
+            <p id="loading-text">Brewing your document...</p>
+        </section>
+
+        <section id="reader-view" class="reader-view hidden">
+            <div class="page-container">
+                 <article class="page">
+                    <div id="page-content" class="content"></div>
+                    <div id="page-number" class="page-number"></div>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <div id="selection-tooltip" class="selection-tooltip">
+        <button id="btn-explain"><i class="fa-solid fa-wand-magic-sparkles"></i> Explain</button>
+        <button id="btn-highlight"><i class="fa-solid fa-marker"></i> Highlight</button>
+        <button id="btn-copy"><i class="fa-regular fa-copy"></i> Copy</button>
+    </div>
+
+    <div id="ai-panel" class="ai-panel">
+        <div class="ai-panel-content">
+            <h4 class="ai-title"><i class="fa-solid fa-star"></i> AI Explanation</h4>
+            <div id="ai-content" class="ai-text-content"></div>
+        </div>
+        <div class="ai-panel-actions">
+            <button id="ai-copy" title="Copy Explanation"><i class="fa-regular fa-copy"></i></button>
+            <button id="ai-close" title="Close Panel"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-functions.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain: "physmathacademy-722b3.firebaseapp.com",
+            projectId: "physmathacademy-722b3",
+            storageBucket: "physmathacademy-722b3.appspot.com",
+            messagingSenderId: "1093640992262",
+            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587",
+        };
+        
+        let app, auth, functions, explainBookTextFn;
+        
+        if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            functions = getFunctions(app, "us-central1");
+            onAuthStateChanged(auth, (user) => { if (!user) signInAnonymously(auth).catch(console.error); });
+            explainBookTextFn = httpsCallable(functions, "explainBookText");
+        } else {
+            console.warn("Firebase config is missing. The 'AI Explain' feature will be disabled.");
+        }
+
+        const DOM = {
+            body: document.body, header: document.getElementById('app-header'),
+            libraryActions: document.getElementById('library-actions'),
+            readerControls: document.getElementById('reader-controls'),
+            libraryView: document.getElementById('library-view'),
+            uploadView: document.getElementById('upload-view'),
+            readerView: document.getElementById('reader-view'), loadingView: document.getElementById('loading-view'),
+            loadingText: document.getElementById('loading-text'),
+            bookGrid: document.getElementById('book-grid'),
+            uploadButton: document.getElementById('upload-button'),
+            dropzone: document.getElementById('dropzone'), pdfFileInput: document.getElementById('pdf-file'),
+            errorMessage: document.getElementById('error-message'), pageContent: document.getElementById('page-content'),
+            pageNumber: document.getElementById('page-number'), bookTitle: document.getElementById('book-title'),
+            pageTotal: document.getElementById('page-total'), pageJumpInput: document.getElementById('page-jump'),
+            prevBtn: document.getElementById('prev-page'), nextBtn: document.getElementById('next-page'),
+            backToLibraryBtn: document.getElementById('back-to-library'),
+            modeToggleLibrary: document.getElementById('mode-toggle-library'),
+            modeToggleReader: document.getElementById('mode-toggle-reader'),
+            fontInc: document.getElementById('font-increase'), fontDec: document.getElementById('font-decrease'),
+            ttsBtn: document.getElementById('tts-button'), ttsIcon: document.getElementById('tts-icon'),
+            tooltip: document.getElementById('selection-tooltip'), tooltipExplain: document.getElementById('btn-explain'),
+            tooltipHighlight: document.getElementById('btn-highlight'), tooltipCopy: document.getElementById('btn-copy'),
+            aiPanel: document.getElementById('ai-panel'), aiContent: document.getElementById('ai-content'),
+            aiClose: document.getElementById('ai-close'), aiCopy: document.getElementById('ai-copy'),
+        };
+
+        const state = {
+            pdfDoc: null, totalPages: 0, currentPage: 1,
+            pagesHTML: [], isSpeaking: false, isRendering: false, lastSelectionText: "",
+            currentFontRem: parseFloat(localStorage.getItem("kaffetishFontRem") || "1.15"),
+            mode: "light", // Always default to light mode
+        };
+
+        // --- CHANGE 4: Public Domain Book Library Data ---
+        const libraryBooks = [
+            { title: "Pride and Prejudice", author: "Jane Austen", cover: "https://www.gutenberg.org/cache/epub/1342/pg1342.cover.medium.jpg", url: "https://www.gutenberg.org/ebooks/1342.pdf.noimages" },
+            { title: "Frankenstein", author: "Mary Shelley", cover: "https://www.gutenberg.org/cache/epub/84/pg84.cover.medium.jpg", url: "https://www.gutenberg.org/ebooks/84.pdf.noimages" },
+            { title: "A Tale of Two Cities", author: "Charles Dickens", cover: "https://www.gutenberg.org/cache/epub/98/pg98.cover.medium.jpg", url: "https://www.gutenberg.org/ebooks/98.pdf.noimages" },
+            { title: "The Adventures of Sherlock Holmes", author: "Arthur Conan Doyle", cover: "https://www.gutenberg.org/cache/epub/1661/pg1661.cover.medium.jpg", url: "https://www.gutenberg.org/ebooks/1661.pdf.noimages" },
+            { title: "Moby Dick", author: "Herman Melville", cover: "https://www.gutenberg.org/cache/epub/2701/pg2701.cover.medium.jpg", url: "https://www.gutenberg.org/ebooks/2701.pdf.noimages" },
+            { title: "The Great Gatsby", author: "F. Scott Fitzgerald", cover: "https://www.gutenberg.org/cache/epub/64317/pg64317.cover.medium.jpg", url: "https://www.gutenberg.org/ebooks/64317.pdf.noimages" },
+        ];
+
+        const debounce = (func, delay) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => func.apply(this, a), delay); }; };
+        const escapeHTML = (s) => s.replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+
+        function setMode(mode) {
+            state.mode = mode;
+            DOM.body.classList.toggle("dark-mode", mode === 'dark');
+            const iconClass = mode === 'light' ? 'fa-moon' : 'fa-sun';
+            DOM.modeToggleLibrary.querySelector('i').className = `fa-solid ${iconClass}`;
+            DOM.modeToggleReader.querySelector('i').className = `fa-solid ${iconClass}`;
+            localStorage.setItem("kaffetishMode", mode);
+        }
+
+        function setFontRem(rem) {
+            state.currentFontRem = Math.max(0.8, Math.min(2.0, rem));
+            DOM.pageContent.style.fontSize = `${state.currentFontRem}rem`;
+            localStorage.setItem("kaffetishFontRem", String(state.currentFontRem));
+        }
+
+        function showView(view) {
+            [DOM.libraryView, DOM.uploadView, DOM.readerView, DOM.loadingView].forEach(v => v.classList.add('hidden'));
+            view.classList.remove('hidden');
+            DOM.readerControls.classList.toggle('hidden', view !== DOM.readerView);
+            DOM.libraryActions.classList.toggle('hidden', view === DOM.readerView);
+        }
+
+        // --- CHANGE 5: Modified to handle both File objects and URLs ---
+        async function loadPdf(source, title) {
+            DOM.errorMessage.textContent = "";
+            showView(DOM.loadingView);
+            DOM.loadingText.textContent = `Loading ${title}...`;
+
+            try {
+                const pdfData = await (source instanceof File ? source.arrayBuffer() : fetch(source).then(res => res.arrayBuffer()));
+                await extractTextFromPdf(new Uint8Array(pdfData));
+                DOM.bookTitle.textContent = title.replace(/\.pdf$/i, "");
+                showView(DOM.readerView);
+            } catch (err) {
+                console.error("PDF Loading/Processing Error:", err);
+                DOM.errorMessage.textContent = "Could not load or process this PDF.";
+                showView(DOM.libraryView); // Go back to library on error
+            }
+        }
+
+        async function extractTextFromPdf(pdfData) {
+            const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
+            state.pdfDoc = pdfDoc; state.totalPages = pdfDoc.numPages;
+            state.pagesHTML = new Array(state.totalPages).fill(null); state.currentPage = 1;
+            await renderPage(state.currentPage);
+        }
+
+        function paragraphize(textContent) {
+            const items = textContent.items.map(it => ({ str: it.str, y: it.transform[5], height: it.height }));
+            if (items.length === 0) return "";
+            let paragraphs = [], currentPara = items[0].str, lastY = items[0].y, lastHeight = items[0].height;
+            for (let i = 1; i < items.length; i++) {
+                const item = items[i];
+                if (item.str.trim() === "") continue;
+                const yGap = Math.abs(lastY - item.y);
+                if (yGap > lastHeight * 1.5) { paragraphs.push(currentPara); currentPara = item.str; }
+                else { if (!/\s|-$/.test(currentPara)) currentPara += " "; currentPara += item.str; }
+                lastY = item.y; lastHeight = item.height || lastHeight;
+            }
+            paragraphs.push(currentPara);
+            return paragraphs.map(p => `<p>${escapeHTML(p.trim())}</p>`).join("\n");
+        }
+
+        async function renderPage(pageNum) {
+            if (pageNum < 1 || pageNum > state.totalPages || state.isRendering) return;
+            state.isRendering = true; state.currentPage = pageNum;
+            if (!state.pagesHTML[pageNum - 1]) {
+                try {
+                    const page = await state.pdfDoc.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+                    state.pagesHTML[pageNum - 1] = paragraphize(textContent);
+                } catch (e) {
+                    console.error(`Failed to render page ${pageNum}:`, e);
+                    state.pagesHTML[pageNum - 1] = "<p>Error loading this page.</p>";
+                }
+            }
+            DOM.pageContent.innerHTML = state.pagesHTML[pageNum - 1] || "<p>This page appears to be empty.</p>";
+            DOM.pageContent.classList.add("fade-in");
+            setTimeout(() => DOM.pageContent.classList.remove("fade-in"), 300);
+            DOM.pageNumber.textContent = `${pageNum} of ${state.totalPages}`;
+            DOM.pageTotal.textContent = `/ ${state.totalPages}`;
+            DOM.pageJumpInput.value = pageNum; DOM.pageJumpInput.max = state.totalPages;
+            DOM.prevBtn.disabled = pageNum <= 1; DOM.nextBtn.disabled = pageNum >= state.totalPages;
+            setFontRem(state.currentFontRem); stopTTS(); hideTooltip();
+            state.isRendering = false;
+        }
+
+        function closeReader() {
+            stopTTS(); showView(DOM.libraryView); DOM.pdfFileInput.value = "";
+            Object.assign(state, { pdfDoc: null, totalPages: 0, currentPage: 1, pagesHTML: [] });
+        }
+
+        function stopTTS() {
+            if (window.speechSynthesis?.speaking) window.speechSynthesis.cancel();
+            state.isSpeaking = false;
+            DOM.ttsIcon.classList.remove("fa-pause"); DOM.ttsIcon.classList.add("fa-play");
+        }
+
+        function speakText(txt) {
+            if (!txt || !window.speechSynthesis) return;
+            const u = new SpeechSynthesisUtterance(txt);
+            u.onend = stopTTS; u.onerror = stopTTS;
+            window.speechSynthesis.speak(u);
+            state.isSpeaking = true;
+            DOM.ttsIcon.classList.add("fa-pause"); DOM.ttsIcon.classList.remove("fa-play");
+        }
+
+        function handleSelection() {
+            const sel = window.getSelection();
+            if (!sel.anchorNode || !DOM.readerView.contains(sel.anchorNode)) { if (DOM.tooltip.style.display === "flex") hideTooltip(); return; }
+            const text = sel.toString().trim();
+            if (text) {
+                const rect = sel.getRangeAt(0).getBoundingClientRect();
+                state.lastSelectionText = text;
+                showTooltipAt(rect);
+            } else { hideTooltip(); }
+        }
+
+        function showTooltipAt(rect) {
+            DOM.tooltip.style.display = "flex"; const pad = 8;
+            DOM.tooltip.style.left = `${rect.left + rect.width / 2 - DOM.tooltip.offsetWidth / 2}px`;
+            DOM.tooltip.style.top = `${window.scrollY + rect.top - DOM.tooltip.offsetHeight - pad}px`;
+        }
+        
+        function hideTooltip() { DOM.tooltip.style.display = "none"; }
+
+        async function handleExplain() {
+            hideTooltip();
+            if (!state.lastSelectionText || state.lastSelectionText.length < 10) { flashAI("Please select a longer phrase to explain."); return; }
+            DOM.aiPanel.style.display = "flex"; DOM.aiContent.innerHTML = `<div class="thinking">Thinking</div>`;
+            try {
+                const { data } = await explainBookTextFn({ text: state.lastSelectionText });
+                DOM.aiContent.textContent = data?.explanation || "No explanation was returned.";
+            } catch (err) {
+                console.error("AI Explain Error:", err);
+                DOM.aiContent.textContent = "Sorry, the explanation failed. Please check your connection and try again.";
+            }
+        }
+        
+        function handleHighlight() {
+            const sel = window.getSelection();
+            if (!sel.isCollapsed) {
+                try {
+                    const range = sel.getRangeAt(0);
+                    const span = document.createElement("span");
+                    span.className = "highlighted-text";
+                    range.surroundContents(span);
+                    state.pagesHTML[state.currentPage - 1] = DOM.pageContent.innerHTML;
+                } catch (e) {
+                    console.error("Highlighting failed:", e);
+                    flashAI("Highlighting across multiple paragraphs is not supported.", 2500);
+                }
+            }
+            sel.removeAllRanges(); hideTooltip();
+        }
+
+        function flashAI(msg, duration = 2000) {
+            DOM.aiPanel.style.display = "flex"; DOM.aiContent.textContent = msg;
+            setTimeout(() => { if (DOM.aiContent.textContent === msg) DOM.aiPanel.style.display = "none"; }, duration);
+        }
+
+        // --- CHANGE 6: Function to build and display the library ---
+        function populateLibrary() {
+            DOM.bookGrid.innerHTML = ''; // Clear existing books
+            libraryBooks.forEach(book => {
+                const card = document.createElement('div');
+                card.className = 'book-card';
+                card.innerHTML = `
+                    <div class="book-cover">
+                        <img src="${book.cover}" alt="${book.title}" loading="lazy" onerror="this.onerror=null;this.src='https://placehold.co/400x600/FDFBF7/2C2B2A?text=Cover%0ANot%0AFound';">
+                    </div>
+                    <div class="book-card-title">${book.title}</div>
+                    <div class="book-card-author">${book.author}</div>
+                `;
+                card.addEventListener('click', () => loadPdf(book.url, book.title));
+                DOM.bookGrid.appendChild(card);
+            });
+        }
+
+        function setupEventListeners() {
+            DOM.uploadButton.addEventListener("click", () => showView(DOM.uploadView));
+            DOM.dropzone.addEventListener("click", () => DOM.pdfFileInput.click());
+            DOM.pdfFileInput.addEventListener("change", (e) => {
+                const file = e.target.files?.[0];
+                if (file) loadPdf(file, file.name);
+            });
+            ['dragenter', 'dragover'].forEach(evt => DOM.dropzone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); DOM.dropzone.classList.add("dragover"); }));
+            ['dragleave', 'drop'].forEach(evt => DOM.dropzone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); DOM.dropzone.classList.remove("dragover"); }));
+            DOM.dropzone.addEventListener("drop", (e) => {
+                const file = e.dataTransfer.files?.[0];
+                if (file) loadPdf(file, file.name);
+            });
+
+            DOM.prevBtn.addEventListener("click", () => renderPage(state.currentPage - 1));
+            DOM.nextBtn.addEventListener("click", () => renderPage(state.currentPage + 1));
+            DOM.pageJumpInput.addEventListener("change", () => { const p = parseInt(DOM.pageJumpInput.value, 10); if (!isNaN(p)) renderPage(p); });
+            DOM.backToLibraryBtn.addEventListener("click", closeReader);
+            
+            [DOM.modeToggleLibrary, DOM.modeToggleReader].forEach(btn => {
+                btn.addEventListener("click", () => setMode(state.mode === 'light' ? 'dark' : 'light'));
+            });
+
+            DOM.fontInc.addEventListener("click", () => setFontRem(state.currentFontRem + 0.1));
+            DOM.fontDec.addEventListener("click", () => setFontRem(state.currentFontRem - 0.1));
+            DOM.ttsBtn.addEventListener("click", () => { if (state.isSpeaking) stopTTS(); else speakText(DOM.pageContent.textContent.trim()); });
+
+            const debouncedSelectionHandler = debounce(handleSelection, 200);
+            document.addEventListener("selectionchange", debouncedSelectionHandler);
+            window.addEventListener("scroll", hideTooltip, { passive: true });
+            window.addEventListener("resize", hideTooltip);
+            
+            DOM.tooltipExplain.addEventListener("click", handleExplain);
+            DOM.tooltipHighlight.addEventListener("click", handleHighlight);
+            DOM.tooltipCopy.addEventListener("click", () => { if (state.lastSelectionText) navigator.clipboard.writeText(state.lastSelectionText); hideTooltip(); });
+
+            DOM.aiClose.addEventListener("click", () => DOM.aiPanel.style.display = "none");
+            DOM.aiCopy.addEventListener("click", () => { if (DOM.aiContent.textContent) navigator.clipboard.writeText(DOM.aiContent.textContent); flashAI("Copied to clipboard!"); });
+        }
+
+        function init() {
+            setMode(state.mode);
+            populateLibrary();
+            setupEventListeners();
+            showView(DOM.libraryView); // Start on the library view
+            if (!explainBookTextFn) {
+                DOM.tooltipExplain.style.display = "none";
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
