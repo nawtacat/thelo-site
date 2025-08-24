@@ -2,546 +2,804 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+  />
   <title>Vintage Article Reader — Premium</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;700&family=Lora:wght@500;700&display=swap" rel="stylesheet">
-  <!-- Font Awesome -->
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+  </script>
 
-  <!-- Firebase (Compat for CDN simplicity) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  $1
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,700;1,400&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Icons -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+  />
 
   <style>
     :root {
-      --paper-bg: #f7f1e3; /* cream */
-      --ink: #2e261b;      /* deep brown */
-      --accent: #a5854d;   /* gold-ish */
-      --edge-shadow: rgba(0,0,0,0.12);
+      --paper: #f5eeda;
+      --ink: #3a2d20;
+      --sepia: #efe8d6;
+      --darkbg: #1b1916;
+      --darkink: #e8e1d5;
+      --gutter: 24px;
     }
-    html, body { height: 100%; }
+
     body {
-      font-family: 'EB Garamond', serif;
-      background: radial-gradient(1200px 700px at 10% 10%, #fff7e8 0%, #f3ead6 35%, #e9dcc1 65%, #e7d7b8 100%);
+      font-family: "EB Garamond", serif;
+      background: var(--paper);
       color: var(--ink);
+      transition: background-color 0.25s, color 0.25s;
     }
 
-    /* THEMES */
-    body.theme-sepia { background: radial-gradient(1200px 700px at 10% 10%, #fff7e8 0%, #f3ead6 35%, #e9dcc1 65%, #e7d7b8 100%); color: #2e261b; }
-    body.theme-night { background: linear-gradient(180deg,#0e0f12,#181a1f); color: #e6e6e6; }
-    body.theme-night .page { background: #14161b; color: #dcdcdc; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 40px rgba(255,255,255,0.03);}    
-    body.theme-night .gutter:before { background: linear-gradient(90deg, transparent, rgba(0,0,0,.5), transparent); }
+    /* Subtle paper texture using layered gradients (no external images) */
+    .paper-texture {
+      background:
+        radial-gradient(1200px 800px at 50% 0%, rgba(255,255,255,0.6), rgba(255,255,255,0) 60%),
+        repeating-linear-gradient(90deg, rgba(0,0,0,0.02) 0px, rgba(0,0,0,0.02) 1px, transparent 1px, transparent 3px),
+        radial-gradient(1000px 600px at 50% 80%, rgba(0,0,0,0.06), rgba(0,0,0,0) 60%);
+    }
 
-    /* BOOK LAYOUT */
-    .book-wrap { position: relative; }
+    /* Book spread */
     .book {
-      position: relative;
-      width: min(1100px, 96vw);
-      min-height: 70vh;
-      margin: 0 auto;
-      padding: 48px 24px; /* breathing room around the spread */
+      perspective: 1200px;
     }
+
     .spread {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr var(--gutter) 1fr;
       gap: 0;
-      position: relative;
-      filter: drop-shadow(0 20px 40px var(--edge-shadow));
-      border-radius: 18px;
+      width: min(1200px, 95vw);
+      margin: 0 auto;
     }
+
+    .gutter {
+      width: var(--gutter);
+      background:
+        linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.05));
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.25);
+      border-radius: 6px;
+      opacity: 0.35;
+    }
+
     .page {
-      position: relative;
-      background: var(--paper-bg);
-      color: var(--ink);
-      padding: 40px 44px 64px 44px;
-      line-height: 1.85;
-      font-size: 1.12rem;
-      overflow: hidden;
-      box-shadow: inset 0 0 60px rgba(0,0,0,0.06);
-      background-image: radial-gradient(circle at 15% 10%, rgba(255,255,255,0.7), transparent 50%),
-                        radial-gradient(circle at 85% 90%, rgba(255,255,255,0.35), transparent 50%),
-                        repeating-linear-gradient(90deg, rgba(0,0,0,0.02) 0px, rgba(0,0,0,0.02) 2px, transparent 2px, transparent 8px);
-    }
-    .page.left { border-radius: 18px 0 0 18px; }
-    .page.right { border-radius: 0 18px 18px 0; }
-
-    .page h3 { font-family: 'Lora', serif; letter-spacing: .3px; }
-    .page p { margin: 0 0 1.05em 0; text-align: justify; hyphens: auto; }
-
-    /* Faux gutter */
-    .gutter { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); }
-    .gutter:before { content: ""; position: absolute; inset: 0; width: 42px; left: -20px; background: linear-gradient(90deg, transparent, rgba(0,0,0,.08), transparent); }
-
-    /* Page number */
-    .folio { position: absolute; font-variant-numeric: tabular-nums; bottom: 18px; opacity: .55; font-size: .9rem; }
-    .folio.left { left: 44px; }
-    .folio.right { right: 44px; }
-
-    /* Upload dropzone */
-    .dropzone {
-      border: 2px dashed rgba(0,0,0,.15);
+      background: var(--paper);
       border-radius: 14px;
-      transition: .25s ease;
-      background: rgba(255,255,255,.45);
+      box-shadow:
+        0 20px 40px rgba(0,0,0,0.18),
+        inset 0 0 1px rgba(0,0,0,0.3);
+      padding: 56px 46px 72px;
+      min-height: min(78vh, 1200px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .page.paper-texture:before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(0,0,0,0.07), rgba(0,0,0,0) 16%, rgba(0,0,0,0) 84%, rgba(0,0,0,0.07));
+      mix-blend-mode: multiply;
+      pointer-events: none;
+    }
+
+    .page-number {
+      position: absolute;
+      bottom: 16px;
+      right: 24px;
+      font-variant-numeric: oldstyle-nums;
+      opacity: 0.65;
+      font-size: 0.95rem;
+    }
+
+    .page h1, .page h2, .page h3 {
+      line-height: 1.25;
+    }
+
+    .content p {
+      line-height: 1.85;
+      font-size: 1.15rem;
+      margin: 0 0 1.15em;
+      hyphens: auto;
+    }
+
+    .fade-swap {
+      animation: fadeSwap 220ms ease-in-out both;
+    }
+
+    @keyframes fadeSwap {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Upload zone (drag & drop) */
+    .dropzone {
+      border: 2px dashed #b9a98a;
+      border-radius: 12px;
+      padding: 40px;
+      transition: background-color 0.25s, border-color 0.25s;
     }
     .dropzone.dragover {
-      border-color: var(--accent);
-      background: rgba(255, 248, 235, .85);
+      background-color: rgba(255,255,255,0.5);
+      border-color: #8c7754;
     }
 
-    /* Floating controls */
-    .controlbar { backdrop-filter: blur(8px); }
+    /* Modes */
+    .mode-light body,
+    body.mode-light {
+      background: var(--paper);
+      color: var(--ink);
+    }
+    body.mode-sepia {
+      background: var(--sepia);
+      color: #3a2d20;
+    }
+    body.mode-dark {
+      background: var(--darkbg);
+      color: var(--darkink);
+    }
+    body.mode-dark .page {
+      background: #23201c;
+      color: var(--darkink);
+      box-shadow:
+        0 20px 40px rgba(0,0,0,0.5),
+        inset 0 0 1px rgba(255,255,255,0.06);
+    }
+    body.mode-dark .gutter {
+      background: linear-gradient(180deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06));
+      opacity: 0.25;
+      box-shadow: inset 0 0 10px rgba(255,255,255,0.08);
+    }
 
     /* Selection tooltip */
-    .sel-tip { position: absolute; z-index: 60; transform: translate(-50%, -100%); }
-    .sel-tip.hidden { display: none; }
-
-    /* Slide-over panel */
-    .slide-over { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); z-index: 70; transform: translateX(100%); transition: transform .35s ease; }
-    .slide-over.open { transform: translateX(0); }
-
-    /* Subtle page turn animation */
-    .page-enter { animation: pageIn .45s ease; }
-    @keyframes pageIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
+    .selection-tooltip {
+      position: fixed;
+      z-index: 1000;
+      background: rgba(255,255,255,0.92);
+      color: #1f2937;
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      padding: 6px;
+      display: none;
+      gap: 6px;
+    }
+    body.mode-dark .selection-tooltip {
+      background: rgba(34,34,34,0.92);
+      color: #e5e7eb;
+      border-color: rgba(255,255,255,0.08);
+    }
+    .selection-tooltip button {
+      font-size: 0.9rem;
+      padding: 8px 10px;
+      border-radius: 8px;
     }
 
-    /* Hide native number spinners */
-    input[type=number]::-webkit-outer-spin-button,
-    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-    input[type=number] { -moz-appearance: textfield; }
+    /* AI panel (bottom sheet) */
+    .ai-panel {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 20px;
+      width: min(800px, 92vw);
+      background: rgba(255,255,255,0.95);
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 14px;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.35);
+      padding: 14px 16px;
+      z-index: 1100;
+      display: none;
+    }
+    body.mode-dark .ai-panel {
+      background: rgba(30,30,30,0.96);
+      border-color: rgba(255,255,255,0.08);
+      color: #e7e5df;
+    }
+    .ai-panel h4 {
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: 0.2px;
+    }
+    .ai-panel .ai-content {
+      max-height: 40vh;
+      overflow: auto;
+      line-height: 1.7;
+    }
+
+    /* Responsive: single-page on narrow screens */
+    @media (max-width: 900px) {
+      .spread {
+        grid-template-columns: 1fr;
+      }
+      .gutter { display: none; }
+      .page { min-height: auto; }
+    }
   </style>
 </head>
-<body class="theme-sepia">
-  <div id="app" class="min-h-screen">
 
-    <!-- Upload View -->
-    <section id="upload-view" class="min-h-[88vh] flex items-center justify-center p-6">
-      <div class="max-w-3xl w-full text-center">
-        <h1 class="text-3xl md:text-5xl font-bold mb-3" style="font-family:'Lora',serif;">Vintage Article Reader</h1>
-        <p class="text-slate-700/80 mb-8">Upload a PDF and enjoy a premium, two‑page reading experience. Select any passage to get an instant AI explanation.</p>
-
-        <label for="pdf-file" id="dropzone" class="dropzone block p-10 cursor-pointer">
-          <div class="flex flex-col items-center justify-center gap-3">
-            <i class="fa-solid fa-book-open text-4xl opacity-70"></i>
-            <div class="text-lg font-medium">Click to upload a PDF or drag & drop</div>
-            <div class="text-sm text-slate-600">We’ll extract the text for a clean reading view.</div>
-          </div>
-          <input type="file" id="pdf-file" accept="application/pdf" class="hidden" />
-        </label>
-
-        <div id="loading-indicator" class="hidden mt-6">
-          <div class="mx-auto w-14 h-14 rounded-full border-4 border-slate-300 border-t-[4px] border-t-[var(--accent)] animate-spin"></div>
-          <p class="mt-3 text-slate-700">Extracting text, please wait…</p>
-        </div>
-        <p id="error-message" class="text-red-700 mt-4 font-semibold"></p>
-      </div>
-    </section>
-
-    <!-- Reader View -->
-    <section id="reader-view" class="hidden">
-      <header class="max-w-[1100px] mx-auto px-4 pt-8">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <button id="close-reader" class="w-10 h-10 rounded-lg bg-white/70 hover:bg-white shadow flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
-            <h2 id="book-title" class="text-xl md:text-2xl font-bold truncate" style="font-family:'Lora',serif;"></h2>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button id="theme-toggle" class="px-3 h-10 rounded-lg bg-white/70 hover:bg-white shadow text-sm">Theme</button>
-            <button id="open-explain" class="px-3 h-10 rounded-lg bg-white/70 hover:bg-white shadow text-sm"><i class="fa-regular fa-lightbulb mr-1"></i>Explain</button>
-          </div>
-        </div>
-      </header>
-
-      <div class="book-wrap py-6">
-        <div class="book">
-          <div class="spread relative">
-            <div class="gutter"></div>
-
-            <article id="page-left" class="page left page-enter">
-              <h3 id="chapter-left" class="text-base tracking-wide mb-3 opacity-70"></h3>
-              <div id="content-left" class="select-text"></div>
-              <div class="folio left"><span id="folio-left">–</span></div>
-            </article>
-
-            <article id="page-right" class="page right page-enter">
-              <h3 id="chapter-right" class="text-base tracking-wide mb-3 opacity-70"></h3>
-              <div id="content-right" class="select-text"></div>
-              <div class="folio right"><span id="folio-right">–</span></div>
-            </article>
-
-            <!-- Selection tooltip -->
-            <div id="sel-tip" class="sel-tip hidden">
-              <button id="explain-btn" class="px-3 py-1.5 rounded-md bg-yellow-100 text-yellow-900 border border-yellow-300 shadow text-sm">
-                <i class="fa-regular fa-lightbulb mr-1"></i>Explain
-              </button>
-            </div>
-          </div>
-        </div>
+<body class="min-h-screen">
+  <!-- Top controls -->
+  <header class="sticky top-0 z-50 backdrop-blur-md bg-white/60 dark:bg-black/20 border-b border-black/10">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-2">
+      <button id="close-reader" title="Close" class="w-9 h-9 rounded-lg bg-slate-200 hover:bg-red-500 hover:text-white flex items-center justify-center">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div class="grow truncate">
+        <div id="book-title" class="font-semibold truncate">Vintage Article Reader</div>
+        <div id="book-sub" class="text-sm text-slate-600 truncate">Upload a PDF to begin</div>
       </div>
 
-      <!-- Controls -->
-      <div class="controlbar fixed bottom-4 left-1/2 -translate-x-1/2 w-[min(760px,92vw)] bg-white/80 dark:bg-neutral-900/70 p-3 rounded-xl shadow-2xl flex items-center justify-between gap-2 z-50">
-        <div class="flex items-center gap-2">
-          <button id="prev-page" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 disabled:opacity-40"><i class="fa-solid fa-chevron-left"></i></button>
-          <div class="flex items-center gap-1">
-            <input id="page-jump" type="number" class="w-14 text-center bg-slate-100 rounded-md p-2 border border-slate-300" />
-            <span id="page-indicator" class="text-slate-700 font-semibold"></span>
-          </div>
-          <button id="next-page" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 disabled:opacity-40"><i class="fa-solid fa-chevron-right"></i></button>
+      <div class="flex items-center gap-2">
+        <button id="font-decrease" class="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm">-A</button>
+        <button id="font-increase" class="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm">+A</button>
+
+        <select id="mode-select" class="px-2 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm">
+          <option value="light">Light</option>
+          <option value="sepia" selected>Sepia</option>
+          <option value="dark">Dark</option>
+        </select>
+
+        <button id="prev-page" title="Previous" class="w-9 h-9 rounded-lg bg-slate-200 hover:bg-slate-300 flex items-center justify-center">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <div class="flex items-center gap-1">
+          <input id="page-jump" type="number" class="w-14 text-center rounded-md bg-slate-100 border border-slate-300 py-1" />
+          <span id="page-indicator" class="text-slate-600 font-medium">/ 0</span>
         </div>
-        <div class="flex items-center gap-2">
-          <button id="tts-button" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-blue-500 hover:text-white"><i id="tts-icon" class="fa-solid fa-play"></i></button>
-          <button id="font-decrease" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 text-lg">-A</button>
-          <button id="font-increase" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 text-lg">+A</button>
-        </div>
+        <button id="next-page" title="Next" class="w-9 h-9 rounded-lg bg-slate-200 hover:bg-slate-300 flex items-center justify-center">
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+
+        <button id="tts-button" title="Read Aloud" class="w-9 h-9 rounded-lg bg-slate-200 hover:bg-blue-500 hover:text-white flex items-center justify-center">
+          <i id="tts-icon" class="fa-solid fa-play"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Upload view -->
+  <main id="upload-view" class="max-w-3xl mx-auto px-4 py-12">
+    <div class="bg-white/55 paper-texture rounded-2xl p-8 shadow-xl text-center">
+      <h1 class="text-4xl font-bold mb-2">Vintage Article Reader</h1>
+      <p class="text-slate-700 mb-6">Drop a PDF here or click to upload. We’ll extract text and render it as a beautiful book.</p>
+
+      <label for="pdf-file" id="dropzone" class="dropzone cursor-pointer block">
+        <i class="fa-solid fa-file-arrow-up text-4xl text-gray-500 mb-3"></i>
+        <div class="font-semibold text-slate-700">Click to upload a PDF</div>
+        <div class="text-slate-500 text-sm mt-1">…or drag & drop your file</div>
+        <input type="file" id="pdf-file" accept=".pdf" class="hidden" />
+      </label>
+
+      <div id="loading" class="hidden mt-6">
+        <div class="mx-auto w-14 h-14 rounded-full border-8 border-slate-200 border-t-slate-500 animate-spin"></div>
+        <p class="text-slate-600 mt-3">Extracting text, please wait…</p>
       </div>
 
-      <!-- Slide-over: AI Explain -->
-      <aside id="explain-panel" class="slide-over bg-white/95 dark:bg-neutral-900 text-slate-900 dark:text-slate-100 shadow-2xl">
-        <div class="h-full flex flex-col">
-          <div class="p-4 border-b border-slate-200/70 flex items-center justify-between">
-            <div class="font-semibold"><i class="fa-regular fa-lightbulb mr-2"></i>AI Explanation</div>
-            <button id="close-explain" class="w-8 h-8 rounded-md bg-slate-100 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
-          </div>
-          <div id="explain-body" class="p-4 overflow-y-auto text-[1.05rem] leading-7">
-            <p class="opacity-70">Select text on the page and click <span class="font-semibold">Explain</span> to get a simple breakdown here.</p>
-          </div>
-        </div>
-      </aside>
+      <p id="error-message" class="text-red-700 mt-4 font-semibold"></p>
+    </div>
+  </main>
 
-    </section>
+  <!-- Reader -->
+  <section id="reader-view" class="hidden book py-8">
+    <div class="spread">
+      <article id="left-page" class="page paper-texture">
+        <div class="content prose prose-slate max-w-none"></div>
+        <div class="page-number"></div>
+      </article>
+      <div class="gutter"></div>
+      <article id="right-page" class="page paper-texture">
+        <div class="content prose prose-slate max-w-none"></div>
+        <div class="page-number"></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- Selection tooltip -->
+  <div id="selection-tooltip" class="selection-tooltip">
+    <button id="btn-explain" class="bg-blue-600 text-white hover:bg-blue-700">
+      <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Explain
+    </button>
+    <button id="btn-copy" class="bg-slate-200 hover:bg-slate-300">
+      <i class="fa-regular fa-copy mr-1"></i> Copy
+    </button>
   </div>
 
-  <script>
-    // -------------------- PDF.js setup --------------------
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+  <!-- AI panel -->
+  <div id="ai-panel" class="ai-panel">
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <h4><i class="fa-solid fa-sparkles mr-2"></i>AI Explanation</h4>
+        <div id="ai-content" class="ai-content text-[1.05rem]"></div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="ai-copy" class="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm">
+          <i class="fa-regular fa-copy mr-1"></i> Copy
+        </button>
+        <button id="ai-close" class="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm">
+          <i class="fa-solid fa-xmark mr-1"></i> Close
+        </button>
+      </div>
+    </div>
+  </div>
 
-    // -------------------- DOM --------------------
-    const uploadView = document.getElementById('upload-view');
-    const readerView = document.getElementById('reader-view');
-    const pdfFileInput = document.getElementById('pdf-file');
-    const dropzone = document.getElementById('dropzone');
-    const closeReaderBtn = document.getElementById('close-reader');
-    const bookTitle = document.getElementById('book-title');
-    const loadingIndicator = document.getElementById('loading-indicator');
-    const errorMessage = document.getElementById('error-message');
+  <!-- Firebase (module) + App logic -->
+  <script type="module">
+    // ---------- Firebase (CDN, modular) ----------
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signInAnonymously,
+    } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+    import {
+      getFunctions,
+      httpsCallable,
+    } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-functions.js";
 
-    const pageLeft = document.getElementById('content-left');
-    const pageRight = document.getElementById('content-right');
-    const folioLeft = document.getElementById('folio-left');
-    const folioRight = document.getElementById('folio-right');
-
-    const prevPageBtn = document.getElementById('prev-page');
-    const nextPageBtn = document.getElementById('next-page');
-    const pageJumpInput = document.getElementById('page-jump');
-    const pageIndicator = document.getElementById('page-indicator');
-
-    const ttsButton = document.getElementById('tts-button');
-    const ttsIcon = document.getElementById('tts-icon');
-    const fontDec = document.getElementById('font-decrease');
-    const fontInc = document.getElementById('font-increase');
-
-    const themeToggle = document.getElementById('theme-toggle');
-    const explainToggle = document.getElementById('open-explain');
-    const explainPanel = document.getElementById('explain-panel');
-    const closeExplain = document.getElementById('close-explain');
-    const explainBody = document.getElementById('explain-body');
-
-    const selTip = document.getElementById('sel-tip');
-    const explainBtn = document.getElementById('explain-btn');
-
-    // -------------------- State --------------------
-    let pdfDoc = null;
-    let allPagesText = [];
-    let currentLeftPage = 1; // Left page number (1-indexed)
-    let totalPages = 0;
-    let currentFontSize = parseFloat(localStorage.getItem('vr_font') || '1.12');
-    let isSpeaking = false;
-    let selectedTextCache = '';
-
-    // Theme state
-    const savedTheme = localStorage.getItem('vr_theme') || 'sepia';
-    setTheme(savedTheme);
-
-    // -------------------- Firebase Init --------------------
+    // Use best-known values (fill from your console if any differ)
     const firebaseConfig = {
       apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
       authDomain: "physmathacademy-722b3.firebaseapp.com",
-      databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com",
       projectId: "physmathacademy-722b3",
-      storageBucket: "physmathacademy-722b3.firebasestorage.app",
+      storageBucket: "physmathacademy-722b3.appspot.com",
       messagingSenderId: "1093640992262",
       appId: "1:1093640992262:web:35b1bf4d2364bcf745f587",
-      measurementId: "G-CGVKKTJXLB"
     };
-    try {
-      if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-        try { firebase.analytics(); } catch (e) { console.warn('Analytics init (optional):', e.message); }
-      }
-    } catch (e) {
-      console.warn('Fire
-    pdfFileInput.addEventListener('change', handleFileSelect);
 
-    ;['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, (e) => {
-      e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover');
-    }));
-    ;['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, (e) => {
-      e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover');
-    }));
-    dropzone.addEventListener('drop', (e) => {
-      const file = e.dataTransfer.files?.[0];
-      if (file) processPdfFile(file);
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const functions = getFunctions(app, "us-central1");
+
+    // Auto anonymous sign-in (meets explainBookText auth requirement)
+    onAuthStateChanged(auth, (user) => {
+      if (!user) signInAnonymously(auth).catch(console.error);
     });
 
-    function handleFileSelect(e) {
-      const file = e.target.files[0];
-      if (file) processPdfFile(file);
+    const explainBookTextFn = httpsCallable(functions, "explainBookText");
+
+    // ---------- DOM ----------
+    const uploadView = document.getElementById("upload-view");
+    const readerView = document.getElementById("reader-view");
+    const dropzone = document.getElementById("dropzone");
+    const pdfFileInput = document.getElementById("pdf-file");
+    const loadingIndicator = document.getElementById("loading");
+    const errorMessage = document.getElementById("error-message");
+
+    const leftPage = document.querySelector("#left-page .content");
+    const rightPage = document.querySelector("#right-page .content");
+    const leftNum = document.querySelector("#left-page .page-number");
+    const rightNum = document.querySelector("#right-page .page-number");
+
+    const bookTitle = document.getElementById("book-title");
+    const bookSub = document.getElementById("book-sub");
+    const pageIndicator = document.getElementById("page-indicator");
+    const pageJumpInput = document.getElementById("page-jump");
+    const prevBtn = document.getElementById("prev-page");
+    const nextBtn = document.getElementById("next-page");
+    const closeBtn = document.getElementById("close-reader");
+    const modeSelect = document.getElementById("mode-select");
+    const fontInc = document.getElementById("font-increase");
+    const fontDec = document.getElementById("font-decrease");
+
+    const ttsBtn = document.getElementById("tts-button");
+    const ttsIcon = document.getElementById("tts-icon");
+
+    const tooltip = document.getElementById("selection-tooltip");
+    const tooltipExplain = document.getElementById("btn-explain");
+    const tooltipCopy = document.getElementById("btn-copy");
+    const aiPanel = document.getElementById("ai-panel");
+    const aiContent = document.getElementById("ai-content");
+    const aiClose = document.getElementById("ai-close");
+    const aiCopy = document.getElementById("ai-copy");
+
+    // ---------- State ----------
+    let pdfDoc = null;
+    let totalPages = 0;
+    let currentPage = 1; // 1-based left page (odd)
+    let pagesHTML = [];  // array of HTML strings per page (already paragraphized)
+    let isSpeaking = false;
+    let currentFontRem = parseFloat(localStorage.getItem("bookFontRem") || "1.15");
+    let mode = localStorage.getItem("bookMode") || "sepia";
+
+    // ---------- Helpers ----------
+    function setMode(m) {
+      mode = m;
+      document.body.classList.remove("mode-light", "mode-sepia", "mode-dark");
+      document.body.classList.add(`mode-${m}`);
+      localStorage.setItem("bookMode", m);
+    }
+    setMode(mode);
+    modeSelect.value = mode;
+
+    function setFontRem(rem) {
+      currentFontRem = Math.min(2.2, Math.max(0.9, rem));
+      [leftPage, rightPage].forEach((el) => {
+        el.style.fontSize = `${currentFontRem}rem`;
+      });
+      localStorage.setItem("bookFontRem", String(currentFontRem));
+    }
+    setFontRem(currentFontRem);
+
+    function show(el) { el.classList.remove("hidden"); }
+    function hide(el) { el.classList.add("hidden"); }
+
+    function clampPage(p) {
+      if (p < 1) return 1;
+      if (p > totalPages) return totalPages;
+      return p;
     }
 
-    function processPdfFile(file) {
-      if (file.type !== 'application/pdf') {
-        errorMessage.textContent = 'Please select a valid PDF file.'; return;
+    function leftFor(p) {
+      // Ensure left is odd; if even, go back one
+      return p % 2 === 1 ? p : p - 1;
+    }
+
+    function setBookHeader(name) {
+      bookTitle.textContent = name.replace(/\.pdf$/i, "");
+      bookSub.textContent = "Two-page vintage reading experience";
+    }
+
+    // ---------- Drag & Drop ----------
+    dropzone.addEventListener("click", () => pdfFileInput.click());
+    ["dragenter","dragover"].forEach(evt => dropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.add("dragover");
+    }));
+    ["dragleave","drop"].forEach(evt => dropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.remove("dragover");
+    }));
+    dropzone.addEventListener("drop", (e) => {
+      const file = e.dataTransfer.files?.[0];
+      if (file) handleFile(file);
+    });
+    pdfFileInput.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (file) handleFile(file);
+    });
+
+    // ---------- File handling ----------
+    function handleFile(file) {
+      if (file.type !== "application/pdf") {
+        errorMessage.textContent = "Please select a valid PDF file.";
+        return;
       }
-      errorMessage.textContent = '';
-      loadingIndicator.classList.remove('hidden');
-      const fr = new FileReader();
-      fr.onload = function() {
-        const bytes = new Uint8Array(this.result);
-        extractTextFromPdf(bytes, file.name);
+      errorMessage.textContent = "";
+      setBookHeader(file.name);
+      hide(uploadView);
+      show(loadingIndicator);
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const buf = new Uint8Array(reader.result);
+        extractTextFromPdf(buf);
       };
-      fr.readAsArrayBuffer(file);
+      reader.readAsArrayBuffer(file);
     }
 
-    // -------------------- PDF text extraction --------------------
-    async function extractTextFromPdf(pdfData, fileName) {
+    async function extractTextFromPdf(pdfData) {
       try {
         pdfDoc = await pdfjsLib.getDocument(pdfData).promise;
         totalPages = pdfDoc.numPages;
 
-        const promises = [];
+        const pagePromises = [];
         for (let i = 1; i <= totalPages; i++) {
-          promises.push(pdfDoc.getPage(i).then(p => p.getTextContent()));
+          pagePromises.push(pdfDoc.getPage(i).then((page) => page.getTextContent()));
         }
-        const allText = await Promise.all(promises);
+        const textContents = await Promise.all(pagePromises);
 
-        allPagesText = allText.map(tc => tc.items.map(it => it.str).join(' '));
+        // Paragraph reconstruction using item coordinates
+        pagesHTML = textContents.map((tc) => paragraphize(tc));
+        currentPage = 1;
+        renderSpread(currentPage);
 
-        bookTitle.textContent = fileName.replace(/\.pdf$/i, '');
-        currentLeftPage = 1;
-        renderSpread(currentLeftPage);
-
-        loadingIndicator.classList.add('hidden');
-        uploadView.classList.add('hidden');
-        readerView.classList.remove('hidden');
+        hide(loadingIndicator);
+        show(readerView);
+        pageIndicator.textContent = `/ ${totalPages}`;
+        pageJumpInput.value = currentPage;
       } catch (err) {
-        console.error('PDF extract error', err);
-        errorMessage.textContent = 'Could not process the PDF. It may be scanned or text-less.';
-        loadingIndicator.classList.add('hidden');
+        console.error(err);
+        show(uploadView);
+        hide(loadingIndicator);
+        errorMessage.textContent = "Could not process this PDF (it may be scanned images or corrupted).";
       }
     }
 
-    // -------------------- Rendering --------------------
-    function renderSpread(leftPageNum) {
-      // clamp left page to [1, totalPages]
-      leftPageNum = Math.max(1, Math.min(totalPages, parseInt(leftPageNum)));
-      currentLeftPage = leftPageNum;
+    function paragraphize(textContent) {
+      // Gather items with x,y,str
+      const items = textContent.items.map((it) => {
+        const tr = it.transform;
+        const x = tr[4];
+        const y = tr[5];
+        return { x, y, str: it.str };
+      });
+      // Sort: y DESC (top to bottom), then x ASC (left to right)
+      items.sort((a, b) => (b.y - a.y) || (a.x - b.x));
 
-      stopReadAloud();
+      // Group by line (y within threshold)
+      const yThreshold = 3.5;
+      const lines = [];
+      let current = [];
+      for (let i = 0; i < items.length; i++) {
+        if (!current.length) {
+          current.push(items[i]);
+        } else {
+          const dy = Math.abs(items[i].y - current[0].y);
+          if (dy <= yThreshold) current.push(items[i]);
+          else {
+            lines.push(current);
+            current = [items[i]];
+          }
+        }
+      }
+      if (current.length) lines.push(current);
 
-      const leftText = allPagesText[leftPageNum - 1] || '';
-      const rightText = (leftPageNum + 1 <= totalPages) ? allPagesText[leftPageNum] : '';
+      // Sort items in each line by x
+      const lineStrings = lines.map((line) =>
+        line.sort((a, b) => a.x - b.x)
+            .map((t) => t.str)
+            .join(" ")
+            .replace(/\s{2,}/g, " ")
+            .trim()
+      ).filter(Boolean);
 
-      pageLeft.style.fontSize = pageRight.style.fontSize = `${currentFontSize}rem`;
-      pageLeft.innerHTML = `<p>${escapeHtml(leftText)}</p>`;
-      pageRight.innerHTML = rightText ? `<p>${escapeHtml(rightText)}</p>` : `<p class="opacity-60">(No content)</p>`;
+      // Paragraph breaks when vertical gap between successive lines is big
+      const paraGap = 16; // tweak if needed
+      const paras = [];
+      let buffer = [];
+      for (let i = 0; i < lines.length; i++) {
+        buffer.push(lineStrings[i]);
+        const next = lines[i + 1];
+        if (!next) break;
+        const gap = Math.abs(lines[i][0].y - next[0].y);
+        if (gap > paraGap) {
+          paras.push(buffer.join(" "));
+          buffer = [];
+        }
+      }
+      if (buffer.length) paras.push(buffer.join(" "));
 
-      folioLeft.textContent = `${leftPageNum}`;
-      folioRight.textContent = (leftPageNum + 1 <= totalPages) ? `${leftPageNum + 1}` : '–';
-
-      updateNavUI();
-      window.getSelection()?.removeAllRanges();
-      hideSelTip();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Fallback if paragraph detection yields nothing
+      const finalParas = paras.length ? paras : lineStrings;
+      return finalParas.map((p) => `<p>${escapeHTML(p)}</p>`).join("\n");
     }
 
-    function updateNavUI() {
+    function escapeHTML(s) {
+      return s.replace(/[&<>"']/g, (m) => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]
+      ));
+    }
+
+    // ---------- Rendering ----------
+    function renderSpread(startPage) {
+      startPage = leftFor(clampPage(startPage));
+      const leftIdx = startPage - 1;
+      const rightIdx = startPage < totalPages ? startPage : null;
+
+      leftPage.innerHTML = (pagesHTML[leftIdx] || "<p></p>");
+      leftPage.parentElement.classList.add("fade-swap");
+      setTimeout(() => leftPage.parentElement.classList.remove("fade-swap"), 230);
+
+      leftNum.textContent = String(startPage);
+
+      if (rightIdx && pagesHTML[rightIdx]) {
+        rightPage.innerHTML = pagesHTML[rightIdx];
+        rightNum.textContent = String(startPage + 1);
+        rightPage.parentElement.style.visibility = "visible";
+      } else {
+        rightPage.innerHTML = "";
+        rightNum.textContent = "";
+        rightPage.parentElement.style.visibility = "hidden";
+      }
+
       pageIndicator.textContent = `/ ${totalPages}`;
-      pageJumpInput.value = currentLeftPage;
-      prevPageBtn.disabled = currentLeftPage <= 1;
-      nextPageBtn.disabled = currentLeftPage >= (totalPages - 1);
+      pageJumpInput.value = startPage;
+      prevBtn.disabled = startPage <= 1;
+      nextBtn.disabled = startPage >= totalPages || startPage + 1 >= totalPages;
+      setFontRem(currentFontRem);
+      stopTTS();
+      hideTooltip();
     }
 
-    // -------------------- Navigation --------------------
-    prevPageBtn.addEventListener('click', () => {
-      if (currentLeftPage > 1) renderSpread(currentLeftPage - 2 < 1 ? 1 : currentLeftPage - 2);
+    // ---------- Navigation ----------
+    prevBtn.addEventListener("click", () => {
+      currentPage = leftFor(currentPage - 2);
+      renderSpread(currentPage);
+      window.scrollTo(0, 0);
     });
-    nextPageBtn.addEventListener('click', () => {
-      if (currentLeftPage + 2 <= totalPages) renderSpread(currentLeftPage + 2);
-      else if (currentLeftPage + 1 <= totalPages) renderSpread(currentLeftPage + 1);
+    nextBtn.addEventListener("click", () => {
+      currentPage = leftFor(currentPage + 2);
+      renderSpread(currentPage);
+      window.scrollTo(0, 0);
     });
-    pageJumpInput.addEventListener('change', () => {
-      const n = parseInt(pageJumpInput.value);
-      if (!Number.isFinite(n) || n < 1 || n > totalPages) { pageJumpInput.value = currentLeftPage; return; }
-      // Align jump to show n on left; if n is even, we show n-1 as left
-      const left = (n % 2 === 0) ? n - 1 : n;
-      renderSpread(left);
+    pageJumpInput.addEventListener("change", () => {
+      const p = parseInt(pageJumpInput.value, 10);
+      if (!isNaN(p)) {
+        currentPage = leftFor(clampPage(p));
+        renderSpread(currentPage);
+      } else {
+        pageJumpInput.value = currentPage;
+      }
     });
-
-    closeReaderBtn.addEventListener('click', () => {
-      stopReadAloud();
-      uploadView.classList.remove('hidden');
-      readerView.classList.add('hidden');
-      pdfFileInput.value = '';
-      allPagesText = [];
+    closeBtn.addEventListener("click", () => {
+      stopTTS();
+      show(uploadView);
+      hide(readerView);
+      pdfFileInput.value = "";
+      pagesHTML = [];
       pdfDoc = null;
-      selectedTextCache = '';
-      explainBody.innerHTML = `<p class="opacity-70">Select text on the page and click <span class="font-semibold">Explain</span> to get a simple breakdown here.</p>`;
+      currentPage = 1;
+      totalPages = 0;
+      pageIndicator.textContent = "/ 0";
+      bookSub.textContent = "Upload a PDF to begin";
     });
 
-    // -------------------- Font + TTS --------------------
-    fontInc.addEventListener('click', () => { currentFontSize = Math.min(2.6, currentFontSize + 0.1); localStorage.setItem('vr_font', currentFontSize); renderSpread(currentLeftPage); });
-    fontDec.addEventListener('click', () => { currentFontSize = Math.max(0.85, currentFontSize - 0.1); localStorage.setItem('vr_font', currentFontSize); renderSpread(currentLeftPage); });
+    // ---------- Modes & Font ----------
+    modeSelect.addEventListener("change", () => setMode(modeSelect.value));
+    fontInc.addEventListener("click", () => setFontRem(currentFontRem + 0.1));
+    fontDec.addEventListener("click", () => setFontRem(currentFontRem - 0.1));
 
-    ttsButton.addEventListener('click', toggleReadAloud);
-
-    function toggleReadAloud() {
+    // ---------- TTS (Web Speech) ----------
+    function stopTTS() {
+      if (window.speechSynthesis?.speaking) {
+        window.speechSynthesis.cancel();
+      }
+      isSpeaking = false;
+      ttsIcon.classList.remove("fa-pause");
+      ttsIcon.classList.add("fa-play");
+    }
+    function speakText(txt) {
+      if (!txt || !window.speechSynthesis) return;
+      const u = new SpeechSynthesisUtterance(txt);
+      u.onend = () => {
+        isSpeaking = false;
+        ttsIcon.classList.remove("fa-pause");
+        ttsIcon.classList.add("fa-play");
+      };
+      window.speechSynthesis.speak(u);
+    }
+    ttsBtn.addEventListener("click", () => {
       if (isSpeaking) {
         window.speechSynthesis.pause();
-        ttsIcon.classList.remove('fa-pause');
-        ttsIcon.classList.add('fa-play');
         isSpeaking = false;
-      } else {
-        const text = [pageLeft.textContent || '', pageRight.textContent || ''].join(' ');
-        if (!text.trim()) return;
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.onend = () => { isSpeaking = false; ttsIcon.classList.remove('fa-pause'); ttsIcon.classList.add('fa-play'); };
-        // (Optional) language detection could be added here
-        window.speechSynthesis.speak(utter);
-        ttsIcon.classList.remove('fa-play');
-        ttsIcon.classList.add('fa-pause');
+        ttsIcon.classList.remove("fa-pause");
+        ttsIcon.classList.add("fa-play");
+        return;
+      }
+      if (window.speechSynthesis?.paused) {
+        window.speechSynthesis.resume();
         isSpeaking = true;
+        ttsIcon.classList.remove("fa-play");
+        ttsIcon.classList.add("fa-pause");
+        return;
       }
-    }
-    function stopReadAloud() {
-      if (window.speechSynthesis.speaking) { window.speechSynthesis.cancel(); }
-      isSpeaking = false;
-      ttsIcon.classList.remove('fa-pause');
-      ttsIcon.classList.add('fa-play');
-    }
-
-    // -------------------- Theme --------------------
-    themeToggle.addEventListener('click', () => {
-      const next = document.body.classList.contains('theme-sepia') ? 'night' : document.body.classList.contains('theme-night') ? 'sepia' : 'sepia';
-      setTheme(next);
+      const leftTxt = leftPage.textContent || "";
+      const rightTxt = rightPage.parentElement.style.visibility !== "hidden"
+        ? (rightPage.textContent || "")
+        : "";
+      const combined = [leftTxt, rightTxt].join("\n\n").trim();
+      if (combined) {
+        speakText(combined);
+        isSpeaking = true;
+        ttsIcon.classList.remove("fa-play");
+        ttsIcon.classList.add("fa-pause");
+      }
     });
-    function setTheme(name) {
-      document.body.classList.remove('theme-sepia','theme-night');
-      if (name === 'night') document.body.classList.add('theme-night'); else document.body.classList.add('theme-sepia');
-      localStorage.setItem('vr_theme', name);
-    }
 
-    // -------------------- Selection → AI Explain --------------------
-    const spreadEl = document.querySelector('.spread');
+    // ---------- Selection Tooltip & AI Explain ----------
+    let lastSelectionText = "";
 
-    function getSelectionRect() {
+    function getSelectionTextAndRect() {
       const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return null;
-      const range = sel.getRangeAt(0).cloneRange();
-      if (range.collapsed) return null;
+      if (!sel || sel.isCollapsed) return { text: "", rect: null };
+      const text = sel.toString().trim();
+      if (!text) return { text: "", rect: null };
+      const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
-      if (!rect || (rect.width === 0 && rect.height === 0)) return null;
-      return rect;
+      return { text, rect };
     }
 
-    function showSelTip(rect) {
-      selTip.classList.remove('hidden');
-      const top = window.scrollY + rect.top - 8;  // above selection
-      const left = window.scrollX + rect.left + rect.width/2;
-      selTip.style.top = `${top}px`;
-      selTip.style.left = `${left}px`;
-    }
-    function hideSelTip() { selTip.classList.add('hidden'); }
-
-    function validSelectionText() {
-      const txt = (window.getSelection()?.toString() || '').trim();
-      if (txt.length >= 10) return txt;
-      return '';
+    function positionTooltip(rect) {
+      const pad = 8;
+      const x = rect.left + rect.width / 2;
+      const y = rect.top - 10;
+      tooltip.style.left = Math.max(10, x - tooltip.offsetWidth / 2) + "px";
+      tooltip.style.top = Math.max(10, y - tooltip.offsetHeight - pad) + "px";
     }
 
-    // Listen on both pages
-    ;['mouseup','touchend','keyup'].forEach(evt => {
-      pageLeft.addEventListener(evt, onMaybeSelect);
-      pageRight.addEventListener(evt, onMaybeSelect);
+    function showTooltipAt(rect) {
+      tooltip.style.display = "flex";
+      positionTooltip(rect);
+    }
+
+    function hideTooltip() {
+      tooltip.style.display = "none";
+    }
+
+    function inReader(target) {
+      return readerView.contains(target);
+    }
+
+    document.addEventListener("mouseup", (e) => {
+      if (!inReader(e.target)) { hideTooltip(); return; }
+      const { text, rect } = getSelectionTextAndRect();
+      lastSelectionText = text;
+      if (text && rect && text.length >= 1) {
+        showTooltipAt(rect);
+      } else { hideTooltip(); }
+    });
+    document.addEventListener("keyup", (e) => {
+      if (!inReader(e.target)) return;
+      const { text, rect } = getSelectionTextAndRect();
+      lastSelectionText = text;
+      if (text && rect) showTooltipAt(rect);
+      else hideTooltip();
+    });
+    window.addEventListener("scroll", () => { if (tooltip.style.display === "flex") hideTooltip(); });
+
+    tooltipCopy.addEventListener("click", async () => {
+      if (!lastSelectionText) return;
+      try {
+        await navigator.clipboard.writeText(lastSelectionText);
+        flashAI("Copied selection to clipboard.");
+      } catch { /* ignore */ }
+      hideTooltip();
     });
 
-    function onMaybeSelect() {
-      const txt = validSelectionText();
-      if (!txt) { hideSelTip(); selectedTextCache = ''; return; }
-      const rect = getSelectionRect();
-      if (!rect) { hideSelTip(); selectedTextCache = ''; return; }
-      selectedTextCache = txt;
-      showSelTip(rect);
-    }
+    tooltipExplain.addEventListener("click", async () => {
+      hideTooltip();
+      if (!lastSelectionText || lastSelectionText.length < 10) {
+        flashAI("Select at least ~10 characters for a meaningful explanation.");
+        return;
+      }
+      aiPanel.style.display = "block";
+      aiContent.innerHTML = `<div class="flex items-center gap-2 text-slate-600"><div class="w-5 h-5 rounded-full border-4 border-slate-300 border-t-slate-600 animate-spin"></div> <span>Thinking…</span></div>`;
 
-    // Explain actions
-    explainBtn.addEventListener('click', async () => {
-      hideSelTip();
-      if (!selectedTextCache) return;
-      openExplainPanel();
-      setExplainLoading();
       try {
-        if (!explainCallable) throw new Error('Explain function not available. Check Firebase config/auth.');
-        const { data } = await explainCallable({ text: selectedTextCache });
-        const msg = (data && data.explanation) ? data.explanation : 'No explanation available.';
-        renderExplanation(selectedTextCache, msg);
+        const { data } = await explainBookTextFn({ text: lastSelectionText });
+        const explanation = (data && data.explanation) ? data.explanation : "No explanation was returned.";
+        aiContent.textContent = explanation;
       } catch (err) {
-        renderExplanation(selectedTextCache, `We couldn’t get an explanation right now. ${err?.message || ''}`);
+        console.error(err);
+        aiContent.textContent = "Sorry, the explanation failed. Please try again.";
       }
     });
 
-    explainToggle.addEventListener('click', openExplainPanel);
-    closeExplain.addEventListener('click', () => { explainPanel.classList.remove('open'); });
-
-    function openExplainPanel() { explainPanel.classList.add('open'); }
-    function setExplainLoading() {
-      explainBody.innerHTML = `
-        <div class="animate-pulse">
-          <div class="h-4 bg-slate-200 rounded w-2/3 mb-3"></div>
-          <div class="h-4 bg-slate-200 rounded w-full mb-2"></div>
-          <div class="h-4 bg-slate-200 rounded w-[90%] mb-2"></div>
-          <div class="h-4 bg-slate-200 rounded w-3/4"></div>
-        </div>`;
-    }
-    function renderExplanation(selection, explanation) {
-      explainBody.innerHTML = `
-        <div class="mb-3">
-          <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">Selected Text</div>
-          <blockquote class="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-[0.98rem]">${escapeHtml(selection)}</blockquote>
-        </div>
-        <div class="mt-4">
-          <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">Explanation</div>
-          <div class="leading-7">${escapeHtml(explanation)}</div>
-        </div>`;
+    function flashAI(msg) {
+      aiPanel.style.display = "block";
+      aiContent.textContent = msg;
+      setTimeout(() => {
+        if (aiContent.textContent === msg) aiPanel.style.display = "none";
+      }, 1800);
     }
 
-    // -------------------- Utilities --------------------
-    function escapeHtml(str) {
-      return (str || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    }
+    aiClose.addEventListener("click", () => { aiPanel.style.display = "none"; });
+    aiCopy.addEventListener("click", async () => {
+      const txt = aiContent.textContent || "";
+      if (!txt) return;
+      try {
+        await navigator.clipboard.writeText(txt);
+        flashAI("Explanation copied.");
+      } catch { /* ignore */ }
+    });
 
   </script>
 </body>
