@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Vintage Article Reader — Premium</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;700&family=Lora:wght@500;700&display=swap" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+
+  <!-- Firebase (Compat for CDN simplicity) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+
+  <style>
+    :root {
+      --paper-bg: #f7f1e3; /* cream */
+      --ink: #2e261b;      /* deep brown */
+      --accent: #a5854d;   /* gold-ish */
+      --edge-shadow: rgba(0,0,0,0.12);
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: 'EB Garamond', serif;
+      background: radial-gradient(1200px 700px at 10% 10%, #fff7e8 0%, #f3ead6 35%, #e9dcc1 65%, #e7d7b8 100%);
+      color: var(--ink);
+    }
+
+    /* THEMES */
+    body.theme-sepia { background: radial-gradient(1200px 700px at 10% 10%, #fff7e8 0%, #f3ead6 35%, #e9dcc1 65%, #e7d7b8 100%); color: #2e261b; }
+    body.theme-night { background: linear-gradient(180deg,#0e0f12,#181a1f); color: #e6e6e6; }
+    body.theme-night .page { background: #14161b; color: #dcdcdc; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 40px rgba(255,255,255,0.03);}    
+    body.theme-night .gutter:before { background: linear-gradient(90deg, transparent, rgba(0,0,0,.5), transparent); }
+
+    /* BOOK LAYOUT */
+    .book-wrap { position: relative; }
+    .book {
+      position: relative;
+      width: min(1100px, 96vw);
+      min-height: 70vh;
+      margin: 0 auto;
+      padding: 48px 24px; /* breathing room around the spread */
+    }
+    .spread {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      position: relative;
+      filter: drop-shadow(0 20px 40px var(--edge-shadow));
+      border-radius: 18px;
+    }
+    .page {
+      position: relative;
+      background: var(--paper-bg);
+      color: var(--ink);
+      padding: 40px 44px 64px 44px;
+      line-height: 1.85;
+      font-size: 1.12rem;
+      overflow: hidden;
+      box-shadow: inset 0 0 60px rgba(0,0,0,0.06);
+      background-image: radial-gradient(circle at 15% 10%, rgba(255,255,255,0.7), transparent 50%),
+                        radial-gradient(circle at 85% 90%, rgba(255,255,255,0.35), transparent 50%),
+                        repeating-linear-gradient(90deg, rgba(0,0,0,0.02) 0px, rgba(0,0,0,0.02) 2px, transparent 2px, transparent 8px);
+    }
+    .page.left { border-radius: 18px 0 0 18px; }
+    .page.right { border-radius: 0 18px 18px 0; }
+
+    .page h3 { font-family: 'Lora', serif; letter-spacing: .3px; }
+    .page p { margin: 0 0 1.05em 0; text-align: justify; hyphens: auto; }
+
+    /* Faux gutter */
+    .gutter { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); }
+    .gutter:before { content: ""; position: absolute; inset: 0; width: 42px; left: -20px; background: linear-gradient(90deg, transparent, rgba(0,0,0,.08), transparent); }
+
+    /* Page number */
+    .folio { position: absolute; font-variant-numeric: tabular-nums; bottom: 18px; opacity: .55; font-size: .9rem; }
+    .folio.left { left: 44px; }
+    .folio.right { right: 44px; }
+
+    /* Upload dropzone */
+    .dropzone {
+      border: 2px dashed rgba(0,0,0,.15);
+      border-radius: 14px;
+      transition: .25s ease;
+      background: rgba(255,255,255,.45);
+    }
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(255, 248, 235, .85);
+    }
+
+    /* Floating controls */
+    .controlbar { backdrop-filter: blur(8px); }
+
+    /* Selection tooltip */
+    .sel-tip { position: absolute; z-index: 60; transform: translate(-50%, -100%); }
+    .sel-tip.hidden { display: none; }
+
+    /* Slide-over panel */
+    .slide-over { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); z-index: 70; transform: translateX(100%); transition: transform .35s ease; }
+    .slide-over.open { transform: translateX(0); }
+
+    /* Subtle page turn animation */
+    .page-enter { animation: pageIn .45s ease; }
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Hide native number spinners */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+  </style>
+</head>
+<body class="theme-sepia">
+  <div id="app" class="min-h-screen">
+
+    <!-- Upload View -->
+    <section id="upload-view" class="min-h-[88vh] flex items-center justify-center p-6">
+      <div class="max-w-3xl w-full text-center">
+        <h1 class="text-3xl md:text-5xl font-bold mb-3" style="font-family:'Lora',serif;">Vintage Article Reader</h1>
+        <p class="text-slate-700/80 mb-8">Upload a PDF and enjoy a premium, two‑page reading experience. Select any passage to get an instant AI explanation.</p>
+
+        <label for="pdf-file" id="dropzone" class="dropzone block p-10 cursor-pointer">
+          <div class="flex flex-col items-center justify-center gap-3">
+            <i class="fa-solid fa-book-open text-4xl opacity-70"></i>
+            <div class="text-lg font-medium">Click to upload a PDF or drag & drop</div>
+            <div class="text-sm text-slate-600">We’ll extract the text for a clean reading view.</div>
+          </div>
+          <input type="file" id="pdf-file" accept="application/pdf" class="hidden" />
+        </label>
+
+        <div id="loading-indicator" class="hidden mt-6">
+          <div class="mx-auto w-14 h-14 rounded-full border-4 border-slate-300 border-t-[4px] border-t-[var(--accent)] animate-spin"></div>
+          <p class="mt-3 text-slate-700">Extracting text, please wait…</p>
+        </div>
+        <p id="error-message" class="text-red-700 mt-4 font-semibold"></p>
+      </div>
+    </section>
+
+    <!-- Reader View -->
+    <section id="reader-view" class="hidden">
+      <header class="max-w-[1100px] mx-auto px-4 pt-8">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <button id="close-reader" class="w-10 h-10 rounded-lg bg-white/70 hover:bg-white shadow flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            <h2 id="book-title" class="text-xl md:text-2xl font-bold truncate" style="font-family:'Lora',serif;"></h2>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="theme-toggle" class="px-3 h-10 rounded-lg bg-white/70 hover:bg-white shadow text-sm">Theme</button>
+            <button id="open-explain" class="px-3 h-10 rounded-lg bg-white/70 hover:bg-white shadow text-sm"><i class="fa-regular fa-lightbulb mr-1"></i>Explain</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="book-wrap py-6">
+        <div class="book">
+          <div class="spread relative">
+            <div class="gutter"></div>
+
+            <article id="page-left" class="page left page-enter">
+              <h3 id="chapter-left" class="text-base tracking-wide mb-3 opacity-70"></h3>
+              <div id="content-left" class="select-text"></div>
+              <div class="folio left"><span id="folio-left">–</span></div>
+            </article>
+
+            <article id="page-right" class="page right page-enter">
+              <h3 id="chapter-right" class="text-base tracking-wide mb-3 opacity-70"></h3>
+              <div id="content-right" class="select-text"></div>
+              <div class="folio right"><span id="folio-right">–</span></div>
+            </article>
+
+            <!-- Selection tooltip -->
+            <div id="sel-tip" class="sel-tip hidden">
+              <button id="explain-btn" class="px-3 py-1.5 rounded-md bg-yellow-100 text-yellow-900 border border-yellow-300 shadow text-sm">
+                <i class="fa-regular fa-lightbulb mr-1"></i>Explain
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controlbar fixed bottom-4 left-1/2 -translate-x-1/2 w-[min(760px,92vw)] bg-white/80 dark:bg-neutral-900/70 p-3 rounded-xl shadow-2xl flex items-center justify-between gap-2 z-50">
+        <div class="flex items-center gap-2">
+          <button id="prev-page" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 disabled:opacity-40"><i class="fa-solid fa-chevron-left"></i></button>
+          <div class="flex items-center gap-1">
+            <input id="page-jump" type="number" class="w-14 text-center bg-slate-100 rounded-md p-2 border border-slate-300" />
+            <span id="page-indicator" class="text-slate-700 font-semibold"></span>
+          </div>
+          <button id="next-page" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 disabled:opacity-40"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="tts-button" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-blue-500 hover:text-white"><i id="tts-icon" class="fa-solid fa-play"></i></button>
+          <button id="font-decrease" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 text-lg">-A</button>
+          <button id="font-increase" class="w-10 h-10 rounded-lg bg-slate-200 hover:bg-slate-300 text-lg">+A</button>
+        </div>
+      </div>
+
+      <!-- Slide-over: AI Explain -->
+      <aside id="explain-panel" class="slide-over bg-white/95 dark:bg-neutral-900 text-slate-900 dark:text-slate-100 shadow-2xl">
+        <div class="h-full flex flex-col">
+          <div class="p-4 border-b border-slate-200/70 flex items-center justify-between">
+            <div class="font-semibold"><i class="fa-regular fa-lightbulb mr-2"></i>AI Explanation</div>
+            <button id="close-explain" class="w-8 h-8 rounded-md bg-slate-100 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div id="explain-body" class="p-4 overflow-y-auto text-[1.05rem] leading-7">
+            <p class="opacity-70">Select text on the page and click <span class="font-semibold">Explain</span> to get a simple breakdown here.</p>
+          </div>
+        </div>
+      </aside>
+
+    </section>
+  </div>
+
+  <script>
+    // -------------------- PDF.js setup --------------------
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+
+    // -------------------- DOM --------------------
+    const uploadView = document.getElementById('upload-view');
+    const readerView = document.getElementById('reader-view');
+    const pdfFileInput = document.getElementById('pdf-file');
+    const dropzone = document.getElementById('dropzone');
+    const closeReaderBtn = document.getElementById('close-reader');
+    const bookTitle = document.getElementById('book-title');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const errorMessage = document.getElementById('error-message');
+
+    const pageLeft = document.getElementById('content-left');
+    const pageRight = document.getElementById('content-right');
+    const folioLeft = document.getElementById('folio-left');
+    const folioRight = document.getElementById('folio-right');
+
+    const prevPageBtn = document.getElementById('prev-page');
+    const nextPageBtn = document.getElementById('next-page');
+    const pageJumpInput = document.getElementById('page-jump');
+    const pageIndicator = document.getElementById('page-indicator');
+
+    const ttsButton = document.getElementById('tts-button');
+    const ttsIcon = document.getElementById('tts-icon');
+    const fontDec = document.getElementById('font-decrease');
+    const fontInc = document.getElementById('font-increase');
+
+    const themeToggle = document.getElementById('theme-toggle');
+    const explainToggle = document.getElementById('open-explain');
+    const explainPanel = document.getElementById('explain-panel');
+    const closeExplain = document.getElementById('close-explain');
+    const explainBody = document.getElementById('explain-body');
+
+    const selTip = document.getElementById('sel-tip');
+    const explainBtn = document.getElementById('explain-btn');
+
+    // -------------------- State --------------------
+    let pdfDoc = null;
+    let allPagesText = [];
+    let currentLeftPage = 1; // Left page number (1-indexed)
+    let totalPages = 0;
+    let currentFontSize = parseFloat(localStorage.getItem('vr_font') || '1.12');
+    let isSpeaking = false;
+    let selectedTextCache = '';
+
+    // Theme state
+    const savedTheme = localStorage.getItem('vr_theme') || 'sepia';
+    setTheme(savedTheme);
+
+    // -------------------- Firebase Init --------------------
+    // TODO: Replace with your project config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      appId: "YOUR_APP_ID"
+    };
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    } catch (e) {
+      console.warn('Firebase init error (fill config):', e.message);
+    }
+
+    let explainCallable = null;
+    firebase.auth().onAuthStateChanged(async (user) => {
+      try {
+        if (!user) await firebase.auth().signInAnonymously();
+        const fns = firebase.app().functions('us-central1');
+        explainCallable = fns.httpsCallable('explainBookText');
+      } catch (err) {
+        console.warn('Auth/Functions init issue:', err.message);
+      }
+    });
+
+    // -------------------- Upload handlers --------------------
+    pdfFileInput.addEventListener('change', handleFileSelect);
+
+    ;['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover');
+    }));
+    ;['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover');
+    }));
+    dropzone.addEventListener('drop', (e) => {
+      const file = e.dataTransfer.files?.[0];
+      if (file) processPdfFile(file);
+    });
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (file) processPdfFile(file);
+    }
+
+    function processPdfFile(file) {
+      if (file.type !== 'application/pdf') {
+        errorMessage.textContent = 'Please select a valid PDF file.'; return;
+      }
+      errorMessage.textContent = '';
+      loadingIndicator.classList.remove('hidden');
+      const fr = new FileReader();
+      fr.onload = function() {
+        const bytes = new Uint8Array(this.result);
+        extractTextFromPdf(bytes, file.name);
+      };
+      fr.readAsArrayBuffer(file);
+    }
+
+    // -------------------- PDF text extraction --------------------
+    async function extractTextFromPdf(pdfData, fileName) {
+      try {
+        pdfDoc = await pdfjsLib.getDocument(pdfData).promise;
+        totalPages = pdfDoc.numPages;
+
+        const promises = [];
+        for (let i = 1; i <= totalPages; i++) {
+          promises.push(pdfDoc.getPage(i).then(p => p.getTextContent()));
+        }
+        const allText = await Promise.all(promises);
+
+        allPagesText = allText.map(tc => tc.items.map(it => it.str).join(' '));
+
+        bookTitle.textContent = fileName.replace(/\.pdf$/i, '');
+        currentLeftPage = 1;
+        renderSpread(currentLeftPage);
+
+        loadingIndicator.classList.add('hidden');
+        uploadView.classList.add('hidden');
+        readerView.classList.remove('hidden');
+      } catch (err) {
+        console.error('PDF extract error', err);
+        errorMessage.textContent = 'Could not process the PDF. It may be scanned or text-less.';
+        loadingIndicator.classList.add('hidden');
+      }
+    }
+
+    // -------------------- Rendering --------------------
+    function renderSpread(leftPageNum) {
+      // clamp left page to [1, totalPages]
+      leftPageNum = Math.max(1, Math.min(totalPages, parseInt(leftPageNum)));
+      currentLeftPage = leftPageNum;
+
+      stopReadAloud();
+
+      const leftText = allPagesText[leftPageNum - 1] || '';
+      const rightText = (leftPageNum + 1 <= totalPages) ? allPagesText[leftPageNum] : '';
+
+      pageLeft.style.fontSize = pageRight.style.fontSize = `${currentFontSize}rem`;
+      pageLeft.innerHTML = `<p>${escapeHtml(leftText)}</p>`;
+      pageRight.innerHTML = rightText ? `<p>${escapeHtml(rightText)}</p>` : `<p class="opacity-60">(No content)</p>`;
+
+      folioLeft.textContent = `${leftPageNum}`;
+      folioRight.textContent = (leftPageNum + 1 <= totalPages) ? `${leftPageNum + 1}` : '–';
+
+      updateNavUI();
+      window.getSelection()?.removeAllRanges();
+      hideSelTip();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function updateNavUI() {
+      pageIndicator.textContent = `/ ${totalPages}`;
+      pageJumpInput.value = currentLeftPage;
+      prevPageBtn.disabled = currentLeftPage <= 1;
+      nextPageBtn.disabled = currentLeftPage >= (totalPages - 1);
+    }
+
+    // -------------------- Navigation --------------------
+    prevPageBtn.addEventListener('click', () => {
+      if (currentLeftPage > 1) renderSpread(currentLeftPage - 2 < 1 ? 1 : currentLeftPage - 2);
+    });
+    nextPageBtn.addEventListener('click', () => {
+      if (currentLeftPage + 2 <= totalPages) renderSpread(currentLeftPage + 2);
+      else if (currentLeftPage + 1 <= totalPages) renderSpread(currentLeftPage + 1);
+    });
+    pageJumpInput.addEventListener('change', () => {
+      const n = parseInt(pageJumpInput.value);
+      if (!Number.isFinite(n) || n < 1 || n > totalPages) { pageJumpInput.value = currentLeftPage; return; }
+      // Align jump to show n on left; if n is even, we show n-1 as left
+      const left = (n % 2 === 0) ? n - 1 : n;
+      renderSpread(left);
+    });
+
+    closeReaderBtn.addEventListener('click', () => {
+      stopReadAloud();
+      uploadView.classList.remove('hidden');
+      readerView.classList.add('hidden');
+      pdfFileInput.value = '';
+      allPagesText = [];
+      pdfDoc = null;
+      selectedTextCache = '';
+      explainBody.innerHTML = `<p class="opacity-70">Select text on the page and click <span class="font-semibold">Explain</span> to get a simple breakdown here.</p>`;
+    });
+
+    // -------------------- Font + TTS --------------------
+    fontInc.addEventListener('click', () => { currentFontSize = Math.min(2.6, currentFontSize + 0.1); localStorage.setItem('vr_font', currentFontSize); renderSpread(currentLeftPage); });
+    fontDec.addEventListener('click', () => { currentFontSize = Math.max(0.85, currentFontSize - 0.1); localStorage.setItem('vr_font', currentFontSize); renderSpread(currentLeftPage); });
+
+    ttsButton.addEventListener('click', toggleReadAloud);
+
+    function toggleReadAloud() {
+      if (isSpeaking) {
+        window.speechSynthesis.pause();
+        ttsIcon.classList.remove('fa-pause');
+        ttsIcon.classList.add('fa-play');
+        isSpeaking = false;
+      } else {
+        const text = [pageLeft.textContent || '', pageRight.textContent || ''].join(' ');
+        if (!text.trim()) return;
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.onend = () => { isSpeaking = false; ttsIcon.classList.remove('fa-pause'); ttsIcon.classList.add('fa-play'); };
+        // (Optional) language detection could be added here
+        window.speechSynthesis.speak(utter);
+        ttsIcon.classList.remove('fa-play');
+        ttsIcon.classList.add('fa-pause');
+        isSpeaking = true;
+      }
+    }
+    function stopReadAloud() {
+      if (window.speechSynthesis.speaking) { window.speechSynthesis.cancel(); }
+      isSpeaking = false;
+      ttsIcon.classList.remove('fa-pause');
+      ttsIcon.classList.add('fa-play');
+    }
+
+    // -------------------- Theme --------------------
+    themeToggle.addEventListener('click', () => {
+      const next = document.body.classList.contains('theme-sepia') ? 'night' : document.body.classList.contains('theme-night') ? 'sepia' : 'sepia';
+      setTheme(next);
+    });
+    function setTheme(name) {
+      document.body.classList.remove('theme-sepia','theme-night');
+      if (name === 'night') document.body.classList.add('theme-night'); else document.body.classList.add('theme-sepia');
+      localStorage.setItem('vr_theme', name);
+    }
+
+    // -------------------- Selection → AI Explain --------------------
+    const spreadEl = document.querySelector('.spread');
+
+    function getSelectionRect() {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return null;
+      const range = sel.getRangeAt(0).cloneRange();
+      if (range.collapsed) return null;
+      const rect = range.getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+      return rect;
+    }
+
+    function showSelTip(rect) {
+      selTip.classList.remove('hidden');
+      const top = window.scrollY + rect.top - 8;  // above selection
+      const left = window.scrollX + rect.left + rect.width/2;
+      selTip.style.top = `${top}px`;
+      selTip.style.left = `${left}px`;
+    }
+    function hideSelTip() { selTip.classList.add('hidden'); }
+
+    function validSelectionText() {
+      const txt = (window.getSelection()?.toString() || '').trim();
+      if (txt.length >= 10) return txt;
+      return '';
+    }
+
+    // Listen on both pages
+    ;['mouseup','touchend','keyup'].forEach(evt => {
+      pageLeft.addEventListener(evt, onMaybeSelect);
+      pageRight.addEventListener(evt, onMaybeSelect);
+    });
+
+    function onMaybeSelect() {
+      const txt = validSelectionText();
+      if (!txt) { hideSelTip(); selectedTextCache = ''; return; }
+      const rect = getSelectionRect();
+      if (!rect) { hideSelTip(); selectedTextCache = ''; return; }
+      selectedTextCache = txt;
+      showSelTip(rect);
+    }
+
+    // Explain actions
+    explainBtn.addEventListener('click', async () => {
+      hideSelTip();
+      if (!selectedTextCache) return;
+      openExplainPanel();
+      setExplainLoading();
+      try {
+        if (!explainCallable) throw new Error('Explain function not available. Check Firebase config/auth.');
+        const { data } = await explainCallable({ text: selectedTextCache });
+        const msg = (data && data.explanation) ? data.explanation : 'No explanation available.';
+        renderExplanation(selectedTextCache, msg);
+      } catch (err) {
+        renderExplanation(selectedTextCache, `We couldn’t get an explanation right now. ${err?.message || ''}`);
+      }
+    });
+
+    explainToggle.addEventListener('click', openExplainPanel);
+    closeExplain.addEventListener('click', () => { explainPanel.classList.remove('open'); });
+
+    function openExplainPanel() { explainPanel.classList.add('open'); }
+    function setExplainLoading() {
+      explainBody.innerHTML = `
+        <div class="animate-pulse">
+          <div class="h-4 bg-slate-200 rounded w-2/3 mb-3"></div>
+          <div class="h-4 bg-slate-200 rounded w-full mb-2"></div>
+          <div class="h-4 bg-slate-200 rounded w-[90%] mb-2"></div>
+          <div class="h-4 bg-slate-200 rounded w-3/4"></div>
+        </div>`;
+    }
+    function renderExplanation(selection, explanation) {
+      explainBody.innerHTML = `
+        <div class="mb-3">
+          <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">Selected Text</div>
+          <blockquote class="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-[0.98rem]">${escapeHtml(selection)}</blockquote>
+        </div>
+        <div class="mt-4">
+          <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">Explanation</div>
+          <div class="leading-7">${escapeHtml(explanation)}</div>
+        </div>`;
+    }
+
+    // -------------------- Utilities --------------------
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    }
+
+  </script>
+</body>
+</html>
