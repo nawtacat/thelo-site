@@ -82,34 +82,61 @@
         .page-indicator input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .page-indicator span { color: var(--subtle); }
 
-        .reader-controls button {
+        .reader-controls button, .reader-controls a.button {
             background: transparent; border: none; color: var(--subtle); border-radius: 6px;
             padding: 8px 10px; cursor: pointer; font-size: 1rem;
             transition: color 0.2s ease, background-color 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
-        .reader-controls button:hover { color: var(--ink); background-color: color-mix(in srgb, var(--border-color) 60%, transparent); }
+        .reader-controls button:hover, .reader-controls a.button:hover { color: var(--ink); background-color: color-mix(in srgb, var(--border-color) 60%, transparent); }
         .reader-controls button:disabled { opacity: 0.4; cursor: not-allowed; background-color: transparent !important; color: var(--subtle) !important; }
         .reader-controls #back-to-library:hover { background-color: color-mix(in srgb, var(--accent) 80%, var(--bg)); color: white; }
 
         main { padding: 48px 24px; }
 
-        .upload-view, .loading-view {
+        /* --- CHANGE 1: Redesigned the fallback view --- */
+        .fallback-view, .loading-view {
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             text-align: center; min-height: calc(100vh - 156px);
         }
-
-        .dropzone {
-            width: min(600px, 90vw); padding: 60px 40px; border: 2px dashed var(--border-color);
-            border-radius: 16px; cursor: pointer;
-            transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+        .fallback-content {
+            max-width: 500px;
         }
-        .dropzone:hover { transform: scale(1.02); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
-        .dropzone.dragover { border-color: var(--accent); border-style: solid; background-color: color-mix(in srgb, var(--accent) 10%, transparent); }
-        .drop-icon { font-size: 3rem; color: var(--accent); }
-        .drop-title { font-size: 1.5rem; margin: 16px 0 4px; }
-        .drop-subtitle { color: var(--subtle); }
-        .browse-link { color: var(--accent); text-decoration: none; font-weight: 500; }
-        .browse-link:hover { text-decoration: underline; }
+        .fallback-icon {
+            font-size: 3.5rem;
+            color: var(--accent);
+            margin-bottom: 24px;
+        }
+        .fallback-title {
+            font-size: 1.75rem;
+            font-family: var(--font-main);
+            margin: 0 0 8px 0;
+        }
+        .fallback-text {
+            color: var(--subtle);
+            margin-bottom: 24px;
+            line-height: 1.7;
+        }
+        .library-link {
+            display: inline-block;
+            background-color: var(--accent);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 24px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        .library-link:hover {
+            background-color: color-mix(in srgb, var(--accent) 85%, black);
+            transform: scale(1.03);
+        }
+        .library-link i {
+            margin-right: 8px;
+        }
 
         .error-message { color: var(--accent); margin-top: 16px; font-weight: 500; }
 
@@ -217,22 +244,24 @@
                     <button id="font-increase" title="Increase Font Size"><i class="fa-solid fa-font" style="font-size: 1.2em;"></i></button>
                     <button id="mode-toggle" title="Toggle Theme"><i id="mode-icon" class="fa-solid fa-moon"></i></button>
                     <button id="tts-button" title="Read Aloud"><i id="tts-icon" class="fa-solid fa-play"></i></button>
-                    <!-- --- CHANGE 1: This button now goes back to the library --- -->
-                    <button id="back-to-library" title="Back to Library"><i class="fa-solid fa-xmark"></i></button>
+                    <!-- --- CHANGE 2: This is now a link back to the library --- -->
+                    <a id="back-to-library" class="button" href="library.html" title="Back to Library"><i class="fa-solid fa-book-open"></i></a>
                 </div>
             </div>
         </div>
     </header>
 
     <main id="main-content">
-        <section id="upload-view" class="upload-view">
-            <div id="dropzone" class="dropzone">
-                <i class="fa-solid fa-file-arrow-up drop-icon"></i>
-                <h2 class="drop-title">Drop your PDF here</h2>
-                <p class="drop-subtitle">or <span class="browse-link">browse your files</span> to begin reading.</p>
-                <input type="file" id="pdf-file" accept=".pdf" class="hidden" />
+        <!-- --- CHANGE 3: The old upload view is now the fallback view --- -->
+        <section id="fallback-view" class="fallback-view">
+            <div class="fallback-content">
+                <div class="fallback-icon"><i class="fa-solid fa-book-sparkles"></i></div>
+                <h2 class="fallback-title">No Book Loaded</h2>
+                <p class="fallback-text" id="fallback-text">
+                    It looks like there was an issue loading your book, or no book was selected. Please return to the library to choose a title.
+                </p>
+                <a href="library.html" class="library-link"><i class="fa-solid fa-arrow-left"></i> Back to Library</a>
             </div>
-            <div id="error-message" class="error-message"></div>
         </section>
 
         <section id="loading-view" class="loading-view hidden">
@@ -295,11 +324,12 @@
 
         const DOM = {
             body: document.body, header: document.getElementById('app-header'),
-            readerControls: document.getElementById('reader-controls'), uploadView: document.getElementById('upload-view'),
+            readerControls: document.getElementById('reader-controls'), 
+            fallbackView: document.getElementById('fallback-view'), // Changed from uploadView
+            fallbackText: document.getElementById('fallback-text'),
             readerView: document.getElementById('reader-view'), loadingView: document.getElementById('loading-view'),
             loadingText: document.getElementById('loading-text'),
-            dropzone: document.getElementById('dropzone'), pdfFileInput: document.getElementById('pdf-file'),
-            errorMessage: document.getElementById('error-message'), pageContent: document.getElementById('page-content'),
+            pageContent: document.getElementById('page-content'),
             pageNumber: document.getElementById('page-number'), bookTitle: document.getElementById('book-title'),
             pageTotal: document.getElementById('page-total'), pageJumpInput: document.getElementById('page-jump'),
             prevBtn: document.getElementById('prev-page'), nextBtn: document.getElementById('next-page'),
@@ -339,31 +369,28 @@
         }
 
         function showView(view) {
-            [DOM.uploadView, DOM.readerView, DOM.loadingView].forEach(v => v.classList.add('hidden'));
+            [DOM.fallbackView, DOM.readerView, DOM.loadingView].forEach(v => v.classList.add('hidden'));
             view.classList.remove('hidden');
+            // Only show reader controls if the reader view is active
             DOM.readerControls.classList.toggle('hidden', view !== DOM.readerView);
         }
 
-        // --- CHANGE 2: Renamed function for clarity ---
-        async function loadPdfFromSource(source, title) {
-            DOM.errorMessage.textContent = "";
+        async function loadPdfFromUrl(sourceUrl, title) {
             showView(DOM.loadingView);
             DOM.loadingText.textContent = `Loading ${title}...`;
 
             try {
-                // The source can be a File object (from upload) or a URL string (from library)
-                const pdfData = await (source instanceof File ? source.arrayBuffer() : fetch(source).then(res => {
-                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-                    return res.arrayBuffer();
-                }));
+                const response = await fetch(sourceUrl);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const pdfData = await response.arrayBuffer();
+                
                 await extractTextFromPdf(new Uint8Array(pdfData));
                 DOM.bookTitle.textContent = title.replace(/\.pdf$/i, "");
                 showView(DOM.readerView);
             } catch (err) {
                 console.error("PDF Loading/Processing Error:", err);
-                DOM.errorMessage.textContent = "Could not load or process this PDF. It may be invalid or the link may be broken.";
-                // Show the upload view as a fallback on error
-                showView(DOM.uploadView);
+                DOM.fallbackText.textContent = `There was an error loading the book "${title}". The link may be broken or the file may be corrupted.`;
+                showView(DOM.fallbackView);
             }
         }
 
@@ -412,13 +439,6 @@
             DOM.prevBtn.disabled = pageNum <= 1; DOM.nextBtn.disabled = pageNum >= state.totalPages;
             setFontRem(state.currentFontRem); stopTTS(); hideTooltip();
             state.isRendering = false;
-        }
-
-        // --- CHANGE 3: This function now navigates to the library page ---
-        function returnToLibrary() {
-            stopTTS();
-            // Assuming your library page is named 'library.html' in the same directory
-            window.location.href = 'library.html';
         }
 
         function stopTTS() {
@@ -491,22 +511,9 @@
         }
 
         function setupEventListeners() {
-            DOM.dropzone.addEventListener("click", () => DOM.pdfFileInput.click());
-            DOM.pdfFileInput.addEventListener("change", (e) => {
-                const file = e.target.files?.[0];
-                if (file) loadPdfFromSource(file, file.name);
-            });
-            ['dragenter', 'dragover'].forEach(evt => DOM.dropzone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); DOM.dropzone.classList.add("dragover"); }));
-            ['dragleave', 'drop'].forEach(evt => DOM.dropzone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); DOM.dropzone.classList.remove("dragover"); }));
-            DOM.dropzone.addEventListener("drop", (e) => {
-                const file = e.dataTransfer.files?.[0];
-                if (file) loadPdfFromSource(file, file.name);
-            });
-
             DOM.prevBtn.addEventListener("click", () => renderPage(state.currentPage - 1));
             DOM.nextBtn.addEventListener("click", () => renderPage(state.currentPage + 1));
             DOM.pageJumpInput.addEventListener("change", () => { const p = parseInt(DOM.pageJumpInput.value, 10); if (!isNaN(p)) renderPage(p); });
-            DOM.backToLibraryBtn.addEventListener("click", returnToLibrary);
             
             DOM.modeToggle.addEventListener("click", () => setMode(state.mode === 'light' ? 'dark' : 'light'));
             DOM.fontInc.addEventListener("click", () => setFontRem(state.currentFontRem + 0.1));
@@ -526,28 +533,23 @@
             DOM.aiCopy.addEventListener("click", () => { if (DOM.aiContent.textContent) navigator.clipboard.writeText(DOM.aiContent.textContent); flashAI("Copied to clipboard!"); });
         }
 
-        /**
-         * --- CHANGE 4: New function to check URL for a book to load ---
-         * This is the key logic that connects the library page to the reader.
-         */
-        function loadBookFromURL() {
+        function loadBookFromURLParams() {
             const params = new URLSearchParams(window.location.search);
             const bookUrl = params.get('url');
-            const bookTitle = params.get('title') || 'My Document';
+            const bookTitle = params.get('title') || 'Document';
 
             if (bookUrl) {
-                // If a book URL is found, load it immediately.
-                loadPdfFromSource(decodeURIComponent(bookUrl), decodeURIComponent(bookTitle));
+                loadPdfFromUrl(decodeURIComponent(bookUrl), decodeURIComponent(bookTitle));
             } else {
-                // Otherwise, show the default upload screen.
-                showView(DOM.uploadView);
+                showView(DOM.fallbackView);
             }
         }
 
         function init() {
-            setMode(state.mode);
+            const savedMode = localStorage.getItem("kaffetishMode") || 'light';
+            setMode(savedMode);
             setupEventListeners();
-            loadBookFromURL(); // Check for a book on page load
+            loadBookFromURLParams();
             if (!explainBookTextFn) {
                 DOM.tooltipExplain.style.display = "none";
             }
