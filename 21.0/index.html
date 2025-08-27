@@ -3787,6 +3787,8 @@ function logHandwritingAttempt(result) {
 
 
 // REPLACE your old checkMathDrawing function with this entire block
+// REPLACE your current checkMathDrawing function with this corrected version
+
 async function checkMathDrawing(isMcqContext = false) {
     if (!auth.currentUser) {
         console.error("User is not authenticated.");
@@ -3834,9 +3836,15 @@ async function checkMathDrawing(isMcqContext = false) {
             imageBase64 = compositeCanvas.toDataURL("image/png");
         }
 
+        // ======================== THE FIX IS HERE ========================
+        // We ensure the AI gets the headline text, which is no longer in the image.
+        const problemDescription = currentStageData.headline || currentStageData.problemText || "No problem text provided.";
+        // ===============================================================
+
         const payload = {
             imageBase64: imageBase64,
-            problemText: currentStageData.problemText || "No problem text provided.",
+            // Use the new variable that includes the headline
+            problemText: problemDescription,
             correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
             solutionSteps: currentStageData.solutionSteps || "",
             customInstructions: currentStageData.customInstructions || "",
@@ -3858,12 +3866,11 @@ async function checkMathDrawing(isMcqContext = false) {
             updatePointsDisplay();
             updateUserPointsInFirestore(pointsGained);
             
-            // This is the updated part
             if (currentStageData.type === 'question_math_solution') {
                 nextCheckBtn.textContent = TXT.gotIt;
             }
             nextCheckBtn.disabled = false;
-
+            return 'correct';
         } else {
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
@@ -3873,6 +3880,7 @@ async function checkMathDrawing(isMcqContext = false) {
                 nextCheckBtn.textContent = TXT.check;
                 nextCheckBtn.classList.remove('incorrect');
             }, 2000);
+            return 'incorrect';
         }
 
     } catch (error) {
@@ -3883,9 +3891,9 @@ async function checkMathDrawing(isMcqContext = false) {
         nextCheckBtn.disabled = false;
         nextCheckBtn.textContent = TXT.check;
         nextCheckBtn.classList.remove('incorrect');
+        throw error;
     }
-}
-	  /* ========== THELOBOOK FUNCTIONALITY ========== */
+}	  /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
         const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
