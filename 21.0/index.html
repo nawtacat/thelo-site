@@ -3786,10 +3786,12 @@ function logHandwritingAttempt(result) {
 }
 
 
-// REPLACE your old checkMathDrawing function with this entire block
-// REPLACE your current checkMathDrawing function with this corrected version
+// REPLACE your current checkMathDrawing function with this final version
 
 async function checkMathDrawing(isMcqContext = false) {
+    const TXT = getCurrentUIText();
+
+    // --- Authentication and Blank Canvas Checks ---
     if (!auth.currentUser) {
         console.error("User is not authenticated.");
         addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
@@ -3802,7 +3804,6 @@ async function checkMathDrawing(isMcqContext = false) {
         addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
         throw new Error("Token refresh failed.");
     }
-
     try {
         const blankCanvasCheck = document.createElement('canvas');
         blankCanvasCheck.width = canvas.width;
@@ -3816,10 +3817,17 @@ async function checkMathDrawing(isMcqContext = false) {
         throw e;
     }
 
-    const TXT = getCurrentUIText();
+    // --- Safeguard for missing correct answer ---
+    if (!currentStageData.correctAnswer) {
+        console.error("CRITICAL: No 'correctAnswer' provided for this stage. Cannot perform check.", currentStageData);
+        addChatMessage('AI', '⚠️ Configuration error: The correct answer for this stage is missing, so I cannot check your work.');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        return;
+    }
+    
     nextCheckBtn.disabled = true;
     nextCheckBtn.textContent = TXT.checking;
-
     await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
@@ -3836,20 +3844,20 @@ async function checkMathDrawing(isMcqContext = false) {
             imageBase64 = compositeCanvas.toDataURL("image/png");
         }
 
-        // ======================== THE FIX IS HERE ========================
-        // We ensure the AI gets the headline text, which is no longer in the image.
         const problemDescription = currentStageData.headline || currentStageData.problemText || "No problem text provided.";
-        // ===============================================================
 
+        // ======================== THE FIX IS HERE ========================
         const payload = {
             imageBase64: imageBase64,
-            // Use the new variable that includes the headline
             problemText: problemDescription,
-            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
+            correctAnswer: currentStageData.correctAnswer,
             solutionSteps: currentStageData.solutionSteps || "",
             customInstructions: currentStageData.customInstructions || "",
-            language: currentLang
+            language: currentLang,
+            // ADD THIS LINE to send the hints object to the backend
+            llmHints: currentStageData.llmHints || {} 
         };
+        // ===============================================================
 
         const analyzeMathDrawing = functions.httpsCallable('analyzeMathDrawing');
         const result = await analyzeMathDrawing(payload);
@@ -3860,12 +3868,10 @@ async function checkMathDrawing(isMcqContext = false) {
         if (status === 'correct') {
             playRandomFeedback('approve');
             nextCheckBtn.classList.add('correct');
-
             const pointsGained = 15;
             sessionPoints += pointsGained;
             updatePointsDisplay();
             updateUserPointsInFirestore(pointsGained);
-            
             if (currentStageData.type === 'question_math_solution') {
                 nextCheckBtn.textContent = TXT.gotIt;
             }
@@ -3874,7 +3880,6 @@ async function checkMathDrawing(isMcqContext = false) {
         } else {
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
-
             setTimeout(() => {
                 nextCheckBtn.disabled = false;
                 nextCheckBtn.textContent = TXT.check;
@@ -3887,13 +3892,13 @@ async function checkMathDrawing(isMcqContext = false) {
         console.error("Math analysis failed:", error);
         addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
         playRandomFeedback('disapprove');
-
         nextCheckBtn.disabled = false;
         nextCheckBtn.textContent = TXT.check;
         nextCheckBtn.classList.remove('incorrect');
         throw error;
     }
-}	  /* ========== THELOBOOK FUNCTIONALITY ========== */
+}
+	  /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
         const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
