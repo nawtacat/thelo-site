@@ -3787,66 +3787,73 @@ function logHandwritingAttempt(result) {
 
 
 // REPLACE your current checkMathDrawing function with this final version
+// REPLACE your checkMathDrawing function with this complete, new version.
 
 async function checkMathDrawing(isMcqContext = false) {
     const TXT = getCurrentUIText();
 
-    // --- Authentication and Blank Canvas Checks ---
+    // --- Safeguard Checks (Authentication, Blank Canvas, Missing Answer) ---
     if (!auth.currentUser) {
-        console.error("User is not authenticated.");
         addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
         throw new Error("User not authenticated.");
     }
     try {
         await auth.currentUser.getIdToken(true);
     } catch (error) {
-        console.error("Token refresh failed:", error);
         addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
         throw new Error("Token refresh failed.");
+    }
+    if (!currentStageData.correctAnswer) {
+        console.error("CRITICAL: No 'correctAnswer' provided for this stage. Cannot check.", currentStageData);
+        addChatMessage('AI', '⚠️ Configuration error: The correct answer is missing for this stage.');
+        return;
     }
     try {
         const blankCanvasCheck = document.createElement('canvas');
         blankCanvasCheck.width = canvas.width;
         blankCanvasCheck.height = canvas.height;
         if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
-            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
+            addChatMessage('AI', "I can't check your work because nothing has been drawn yet.");
             throw new Error("No drawing found on canvas.");
         }
     } catch (e) {
-        console.error("Blank canvas check failed:", e.message);
-        throw e;
+        return; // Stop function if canvas is blank
     }
 
-    // --- Safeguard for missing correct answer ---
-    if (!currentStageData.correctAnswer) {
-        console.error("CRITICAL: No 'correctAnswer' provided for this stage. Cannot perform check.", currentStageData);
-        addChatMessage('AI', '⚠️ Configuration error: The correct answer for this stage is missing, so I cannot check your work.');
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        return;
-    }
-    
+    // --- Disable UI ---
     nextCheckBtn.disabled = true;
     nextCheckBtn.textContent = TXT.checking;
-    await new Promise(resolve => setTimeout(resolve, 100));
+    addChatMessage('AI', 'Analyzing your work...');
 
     try {
-        let imageBase64;
-        if (isMcqContext) {
-            imageBase64 = canvas.toDataURL("image/png");
-        } else {
-            const compositeCanvas = document.createElement('canvas');
-            compositeCanvas.width = canvas.width;
-            compositeCanvas.height = canvas.height;
-            const compositeCtx = compositeCanvas.getContext('2d');
-            compositeCtx.drawImage(backgroundCanvas, 0, 0);
-            compositeCtx.drawImage(canvas, 0, 0);
-            imageBase64 = compositeCanvas.toDataURL("image/png");
-        }
+        // --- Image Composition ---
+        // Create the composite image that the AI will see.
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = canvas.width;
+        compositeCanvas.height = canvas.height;
+        const compositeCtx = compositeCanvas.getContext('2d');
+        
+        // Step 1: Draw a solid white background to ensure no transparency issues.
+        compositeCtx.fillStyle = 'white';
+        compositeCtx.fillRect(0, 0, compositeCanvas.width, compositeCanvas.height);
+        
+        // Step 2: Draw the background canvas (which has problem images, etc.).
+        compositeCtx.drawImage(backgroundCanvas, 0, 0);
+        
+        // Step 3: Draw the user's ink on top.
+        compositeCtx.drawImage(canvas, 0, 0);
+        
+        const imageBase64 = compositeCanvas.toDataURL("image/png");
+
+        // =====================================================================
+        // !! CRITICAL DEBUGGING STEP !!
+        // This will display the exact image being sent to the AI in the chat.
+        addChatMessage('AI', 'DEBUG: This is the exact image being sent for analysis:');
+        addChatImage(imageBase64);
+        // =====================================================================
 
         const problemDescription = currentStageData.headline || currentStageData.problemText || "No problem text provided.";
 
-        // ======================== THE FIX IS HERE ========================
         const payload = {
             imageBase64: imageBase64,
             problemText: problemDescription,
@@ -3854,10 +3861,8 @@ async function checkMathDrawing(isMcqContext = false) {
             solutionSteps: currentStageData.solutionSteps || "",
             customInstructions: currentStageData.customInstructions || "",
             language: currentLang,
-            // ADD THIS LINE to send the hints object to the backend
-            llmHints: currentStageData.llmHints || {} 
+            llmHints: currentStageData.llmHints || {}
         };
-        // ===============================================================
 
         const analyzeMathDrawing = functions.httpsCallable('analyzeMathDrawing');
         const result = await analyzeMathDrawing(payload);
@@ -3876,7 +3881,6 @@ async function checkMathDrawing(isMcqContext = false) {
                 nextCheckBtn.textContent = TXT.gotIt;
             }
             nextCheckBtn.disabled = false;
-            return 'correct';
         } else {
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
@@ -3885,7 +3889,6 @@ async function checkMathDrawing(isMcqContext = false) {
                 nextCheckBtn.textContent = TXT.check;
                 nextCheckBtn.classList.remove('incorrect');
             }, 2000);
-            return 'incorrect';
         }
 
     } catch (error) {
@@ -3894,8 +3897,6 @@ async function checkMathDrawing(isMcqContext = false) {
         playRandomFeedback('disapprove');
         nextCheckBtn.disabled = false;
         nextCheckBtn.textContent = TXT.check;
-        nextCheckBtn.classList.remove('incorrect');
-        throw error;
     }
 }
 	  /* ========== THELOBOOK FUNCTIONALITY ========== */
