@@ -3788,30 +3788,6 @@ function logHandwritingAttempt(result) {
 
 // REPLACE your old checkMathDrawing function with this entire block
 async function checkMathDrawing(isMcqContext = false) {
-    console.log("Starting the check..."); // 1. Confirms the button click is working
-
-    // --- NEW DIAGNOSTIC CODE ---
-    const user = auth.currentUser;
-    console.log("Current user object from Firebase Auth:", user); // 2. Checks if Firebase sees a logged-in user
-
-    if (!user) {
-        addChatMessage('AI', 'DEBUG: Firebase reports no user is signed in.');
-        console.error("Authentication check failed: auth.currentUser is null.");
-        return; // Stop the function here
-    }
-
-    try {
-        const idToken = await user.getIdToken(true); // 3. Tries to get a security token
-        console.log("Successfully retrieved a fresh ID Token. The user is authenticated.");
-    } catch (error) {
-        addChatMessage('AI', 'DEBUG: Could not get a security token for the user.');
-        console.error("getIdToken failed:", error);
-        return; // Stop the function here
-    }
-    // --- END DIAGNOSTIC CODE ---
-
-
-    // This is the rest of your original function. No changes needed below this line.
     if (!auth.currentUser) {
         console.error("User is not authenticated.");
         addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
@@ -3871,26 +3847,24 @@ async function checkMathDrawing(isMcqContext = false) {
         const result = await analyzeMathDrawing(payload);
         const { status, feedback } = result.data;
 
-        addChatMessage('AI', `🔍 ${feedback}`, { isSticky: true });
+        addChatMessage('AI', `🔍 ${feedback}`);
 
         if (status === 'correct') {
-    playRandomFeedback('approve');
-    nextCheckBtn.classList.add('correct');
+            playRandomFeedback('approve');
+            nextCheckBtn.classList.add('correct');
 
-    const pointsGained = 15;
-    userPoints += pointsGained;
-    sessionPoints += pointsGained;
-    updatePointsDisplay();
-    updateUserPointsInFirestore(pointsGained);
+            const pointsGained = 15;
+            sessionPoints += pointsGained;
+            updatePointsDisplay();
+            updateUserPointsInFirestore(pointsGained);
+            
+            // This is the updated part
+            if (currentStageData.type === 'question_math_solution') {
+                nextCheckBtn.textContent = TXT.gotIt;
+            }
+            nextCheckBtn.disabled = false;
 
-    // This makes the button say "Correct!" and disables it during the transition
-    nextCheckBtn.textContent = TXT.correct; 
-    nextCheckBtn.disabled = true;
-
-    // This now automatically moves to the next stage after 2.5 seconds
-    setTimeout(nextStage, 2500); 
-
-} else {
+        } else {
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
 
@@ -3910,7 +3884,8 @@ async function checkMathDrawing(isMcqContext = false) {
         nextCheckBtn.textContent = TXT.check;
         nextCheckBtn.classList.remove('incorrect');
     }
-}	    /* ========== THELOBOOK FUNCTIONALITY ========== */
+}
+	  /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
         const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
