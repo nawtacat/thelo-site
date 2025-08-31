@@ -1196,6 +1196,9 @@ body.lang-en {
   height: 35px; /* Adjust the logo size as needed */
   width: auto; /* Makes the logo subtle and less distracting */
 }
+	html, body {
+  cursor: none !important;
+}
 </style>
 </head>
 <body>
@@ -2549,106 +2552,37 @@ function renderMixedKaTeXInto(targetEl, src) {
   }
 }
 
-	// REPLACE your existing displayMcq function with this one.
+	function displayMcq(mcqDetails){
+    const choices = mcqDetails.choices;
+    if (!mcqOptionsContainer || !mcqDetails ||
+        !Array.isArray(choices) || choices.length === 0) return;
+    if (isPageGridVisible) closePageGridView();
 
-function displayMcq(mcqDetails){
-    const choices = mcqDetails.choices;
-    if (!mcqOptionsContainer || !mcqDetails ||
-        !Array.isArray(choices) || choices.length === 0) return;
-    if (isPageGridVisible) closePageGridView();
+    mcqOptionsContainer.innerHTML = '';
 
-    mcqOptionsContainer.innerHTML = '';
+    /* ===== Smart‑layout ===== */
+    const isShort = choices.every(choice => choice.length < 10);
+    mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
 
-    /* ===== Smart‑layout (Unchanged) ===== */
-    const isShort = choices.every(choice => choice.length < 10);
-    mcqOptionsContainer.className = isShort ? 'short-options' : 'long-options';
-    const isSideBySide = !!(currentStageData && currentStageData.image);
-    mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
+    /* <<—‑‑‑  ADD THESE TWO LINES  ‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑‑>> */
+    const isSideBySide = !!(currentStageData && currentStageData.image);
+    mcqOptionsContainer.classList.toggle('side-by-side', isSideBySide);
+    /* --------------------------------------------------- */
 
-    choices.forEach((optionText, index) => {
-        const optionButton = document.createElement('button');
-        optionButton.classList.add('mcq-option-btn');
-        renderMixedKaTeXInto(optionButton, optionText);
-        optionButton.dataset.index = index;
+    choices.forEach((optionText, index) => {
+        const optionButton = document.createElement('button');
+        optionButton.classList.add('mcq-option-btn');
+        renderMixedKaTeXInto(optionButton, optionText);
+        optionButton.dataset.index = index;
+        optionButton.addEventListener(
+            'click',
+            () => handleMcqOptionClick(index, mcqDetails)
+        );
+        mcqOptionsContainer.appendChild(optionButton);
+    });
 
-        // ===== NEW: Logic for Hold-to-Select =====
-        let pressTimer = null;
-        let isDrawingThroughButton = false;
-
-        // On mouse down, start a timer and start drawing immediately.
-        optionButton.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            isDrawingThroughButton = true;
-            drawing = true; // Use the global drawing flag
-            userDrawingOccurred = true;
-
-            // Manually start the drawing sequence on the main canvas (ctx)
-            lastPos = getPos(e, canvas); // Get position relative to the main canvas
-            if (!lastPos) return;
-
-			// Configure the drawing context for a new stroke
-            ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.strokeStyle = INK_COLORS.blue;
-            ctx.beginPath();
-            ctx.moveTo(lastPos.x, lastPos.y);
-
-            // Start the hold-to-select timer
-            pressTimer = setTimeout(() => {
-                // Hold successful: Select the option
-                isDrawingThroughButton = false;
-                drawing = false;
-                
-                // End the tiny drawing stroke that might have started
-                ctx.closePath();
-                
-                // Execute the original selection logic
-                handleMcqOptionClick(index, mcqDetails);
-
-            }, 1000); // 1-second delay
-        });
-
-        // When the mouse is released, ALWAYS clear the timer.
-        // If this happens before 1s, the selection logic is never called.
-        const handleMouseUpOrLeave = (e) => {
-            clearTimeout(pressTimer);
-            if (isDrawingThroughButton) {
-                if (drawing) {
-                    // Manually end the drawing stroke on the main canvas
-                    ctx.lineTo(lastPos.x, lastPos.y);
-                    ctx.stroke();
-                    ctx.closePath();
-                }
-            }
-            isDrawingThroughButton = false;
-            drawing = false; // Reset the global flag
-        };
-        
-        optionButton.addEventListener('mouseup', handleMouseUpOrLeave);
-        // Also clear if the user's mouse leaves the button while held down
-        optionButton.addEventListener('mouseleave', handleMouseUpOrLeave);
-
-        // If the mouse moves while held down, continue the drawing stroke.
-        optionButton.addEventListener('mousemove', (e) => {
-            if (!isDrawingThroughButton || !drawing) return;
-
-            // Manually continue the drawing stroke on the main canvas
-            const pos = getPos(e, canvas);
-            if (!pos) return;
-            
-            const midPoint = { x: (lastPos.x + pos.x) / 2, y: (lastPos.y + pos.y) / 2 };
-            ctx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
-            ctx.stroke();
-            ctx.moveTo(midPoint.x, midPoint.y);
-            lastPos = pos;
-        });
-        // ==========================================
-
-        mcqOptionsContainer.appendChild(optionButton);
-    });
-
-    mcqOptionsContainer.style.display = 'flex';
-    mcqOptionsContainer.style.opacity = '1';
+    mcqOptionsContainer.style.display = 'flex';
+    mcqOptionsContainer.style.opacity = '1';
 }
 
 	
@@ -4447,55 +4381,56 @@ function initApp() {
 
     // REPLACE your entire auth.onAuthStateChanged function with this one.
 // This listener ensures the entire page, including KaTeX, is ready before the app starts.
+// This listener ensures the entire page, including KaTeX, is ready before the app starts.
 document.addEventListener('DOMContentLoaded', () => {
 
-    // Diagnostic check: This will tell us if KaTeX loaded correctly.
-    console.log('DOM is ready. Checking for KaTeX library:', typeof katex);
-    if (typeof katex === 'undefined') {
-        console.error('CRITICAL: KaTeX library failed to load before app start.');
-        // You could display an error to the user here.
-        return; // Stop the app from initializing if KaTeX is missing.
-    }
+    // Diagnostic check: This will tell us if KaTeX loaded correctly.
+    console.log('DOM is ready. Checking for KaTeX library:', typeof katex);
+    if (typeof katex === 'undefined') {
+        console.error('CRITICAL: KaTeX library failed to load before app start.');
+        // You could display an error to the user here.
+        return; // Stop the app from initializing if KaTeX is missing.
+    }
 
-    // The rest of the app initialization now happens safely inside this listener.
-    auth.onAuthStateChanged(user => {
-        const finishInitialization = () => {
-            if (!window.appInitialized) {
-                window.appInitialized = true;
-                initApp();
-            } else {
-                updateAllUITexts();
-            }
-            isAuthReady = true;
-            console.log("Authentication is now ready.");
-        };
+    // The rest of the app initialization now happens safely inside this listener.
+    auth.onAuthStateChanged(user => {
+        const finishInitialization = () => {
+            if (!window.appInitialized) {
+                window.appInitialized = true;
+                initApp();
+            } else {
+                updateAllUITexts();
+            }
+            isAuthReady = true;
+            console.log("Authentication is now ready.");
+        };
 
-        if (user) {
-            console.log("User authenticated with UID:", user.uid);
-            const userDocRef = db.collection('thelo-students').doc(user.uid);
-            
-            userDocRef.get().then(doc => {
-                if (doc.exists) {
-                    userPoints = doc.data().points || 0;
-                } else {
-                    userPoints = 0;
-                    console.log("No points document found for user, starting at 0.");
-                }
-                updatePointsDisplay();
-                finishInitialization();
-            }).catch(error => {
-                console.error("Error fetching user points:", error);
-                userPoints = 0;
-                updatePointsDisplay();
-                finishInitialization();
-            });
-        } else {
-            userPoints = 0;
-            updatePointsDisplay();
-            console.log("User not authenticated.");
-            finishInitialization();
-        }
-    });
+        if (user) {
+            console.log("User authenticated with UID:", user.uid);
+            const userDocRef = db.collection('thelo-students').doc(user.uid);
+            
+            userDocRef.get().then(doc => {
+                if (doc.exists) {
+                    userPoints = doc.data().points || 0;
+                } else {
+                    userPoints = 0;
+                    console.log("No points document found for user, starting at 0.");
+                }
+                updatePointsDisplay();
+                finishInitialization();
+            }).catch(error => {
+                console.error("Error fetching user points:", error);
+                userPoints = 0;
+                updatePointsDisplay();
+                finishInitialization();
+            });
+        } else {
+            userPoints = 0;
+            updatePointsDisplay();
+            console.log("User not authenticated.");
+            finishInitialization();
+        }
+    });
 
 });
 // Add this function somewhere logical, e.g., near updateUserPointsInFirestore
