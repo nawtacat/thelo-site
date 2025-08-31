@@ -4379,59 +4379,81 @@ function initApp() {
         window.appInitialized = false;
     }
 
-    // REPLACE your entire auth.onAuthStateChanged function with this one.
-// This listener ensures the entire page, including KaTeX, is ready before the app starts.
-// This listener ensures the entire page, including KaTeX, is ready before the app starts.
-document.addEventListener('DOMContentLoaded', () => {
+  // This listener ensures the entire page, including all styles and fonts, is ready before the app starts.
+document.addEventListener('DOMContentLoaded', async () => {
 
-    // Diagnostic check: This will tell us if KaTeX loaded correctly.
-    console.log('DOM is ready. Checking for KaTeX library:', typeof katex);
-    if (typeof katex === 'undefined') {
-        console.error('CRITICAL: KaTeX library failed to load before app start.');
-        // You could display an error to the user here.
-        return; // Stop the app from initializing if KaTeX is missing.
-    }
+    // Helper function to programmatically load KaTeX CSS
+    let isKatexCssInjected = false;
+    async function ensureKatexCssIsLoaded() {
+        if (isKatexCssInjected) return;
+        // This re-uses your existing function that cleverly embeds the fonts!
+        const cssText = await getKatexCSSWithEmbeddedFonts();
+        const style = document.createElement('style');
+        style.textContent = cssText;
+        document.head.appendChild(style);
+        isKatexCssInjected = true;
+        console.log('KaTeX CSS has been injected into the document head.');
+    }
 
-    // The rest of the app initialization now happens safely inside this listener.
-    auth.onAuthStateChanged(user => {
-        const finishInitialization = () => {
-            if (!window.appInitialized) {
-                window.appInitialized = true;
-                initApp();
-            } else {
-                updateAllUITexts();
-            }
-            isAuthReady = true;
-            console.log("Authentication is now ready.");
-        };
+    // --- Start of App Initialization ---
 
-        if (user) {
-            console.log("User authenticated with UID:", user.uid);
-            const userDocRef = db.collection('thelo-students').doc(user.uid);
-            
-            userDocRef.get().then(doc => {
-                if (doc.exists) {
-                    userPoints = doc.data().points || 0;
-                } else {
-                    userPoints = 0;
-                    console.log("No points document found for user, starting at 0.");
-                }
-                updatePointsDisplay();
-                finishInitialization();
-            }).catch(error => {
-                console.error("Error fetching user points:", error);
-                userPoints = 0;
-                updatePointsDisplay();
-                finishInitialization();
-            });
-        } else {
-            userPoints = 0;
-            updatePointsDisplay();
-            console.log("User not authenticated.");
-            finishInitialization();
-        }
-    });
+    console.log('DOM is ready. Checking for KaTeX library:', typeof katex);
+    if (typeof katex === 'undefined') {
+        console.error('CRITICAL: KaTeX library failed to load before app start.');
+        return;
+    }
 
+    try {
+        // 1. Force the CSS to load and be injected first.
+        await ensureKatexCssIsLoaded();
+
+        // 2. Now, wait for the browser to acknowledge all fonts are ready.
+        await document.fonts.ready;
+        console.log('All fonts are confirmed ready.');
+
+        // 3. Proceed with app initialization, confident that everything is loaded.
+        auth.onAuthStateChanged(user => {
+            const finishInitialization = () => {
+                if (!window.appInitialized) {
+                    window.appInitialized = true;
+                    initApp();
+                } else {
+                    updateAllUITexts();
+                }
+                isAuthReady = true;
+                console.log("Authentication is now ready.");
+            };
+
+            if (user) {
+                console.log("User authenticated with UID:", user.uid);
+                const userDocRef = db.collection('thelo-students').doc(user.uid);
+
+                userDocRef.get().then(doc => {
+                    if (doc.exists) {
+                        userPoints = doc.data().points || 0;
+                    } else {
+                        userPoints = 0;
+                        console.log("No points document found for user, starting at 0.");
+                    }
+                    updatePointsDisplay();
+                    finishInitialization();
+                }).catch(error => {
+                    console.error("Error fetching user points:", error);
+                    userPoints = 0;
+                    updatePointsDisplay();
+                    finishInitialization();
+                });
+            } else {
+                userPoints = 0;
+                updatePointsDisplay();
+                console.log("User not authenticated.");
+                finishInitialization();
+            }
+        });
+
+    } catch (error) {
+        console.error('Styles or fonts failed to load, app initialization aborted:', error);
+    }
 });
 // Add this function somewhere logical, e.g., near updateUserPointsInFirestore
 async function logDigitForTraining(recognizedValue, feedbackType) {
