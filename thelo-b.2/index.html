@@ -1532,6 +1532,7 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     /* ========== State Variables ========== */
     let isAuthReady = false;
+	  let isInitialStageRendered = false;
 	  let selectedMcqIndex = null; // To store the selected MCQ option index
           let isTabletMode = false;
 	let isCalculatorActive = false;
@@ -2977,11 +2978,11 @@ function renderStageUI(index, isResize = false) {
         }
     });
 }
-          function transitionToStage(newIndex) {
+         function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
-		  hideFeedback(); // ADD THIS LINE
-		  selectedMcqIndex = null; // <-- ADD THIS LINE
-		  if (isReplayActive) closeReplayPlayer();
+    hideFeedback();
+    selectedMcqIndex = null;
+    if (isReplayActive) closeReplayPlayer();
     if (isThelobookActive) closeThelobook(true);
     if (isPageGridVisible) closePageGridView();
 
@@ -3002,19 +3003,31 @@ function renderStageUI(index, isResize = false) {
     if (replayCanvas) replayCanvas.classList.add('fade-out');
     if (mcqOptionsContainer) mcqOptionsContainer.style.opacity = 0;
 
-    // --- KEY CHANGE: Replace setTimeout with .then() ---
     const fadeDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000;
-    
+
     setTimeout(() => {
         currentStageIndex = newIndex;
-        // renderStageUI now returns a promise. We wait for it to resolve.
         renderStageUI(currentStageIndex, false).then(() => {
-            // This code now runs ONLY AFTER the stage content (including images) is ready.
             backgroundCanvas.classList.remove('fade-out');
             if (replayCanvas) replayCanvas.classList.remove('fade-out');
             isTransitioning = false;
+
+            // --- START: KaTeX First-Stage Fix ---
+            // If this is the very first time we are rendering stage 0,
+            // trigger a corrective redraw after a tiny delay.
+            if (newIndex === 0 && !isInitialStageRendered) {
+                isInitialStageRendered = true; // Set flag so this only runs ONCE
+                setTimeout(() => {
+                    // Check if the user is still on the first stage before redrawing.
+                    if (currentStageIndex === 0) {
+                        console.log("Forcing corrective re-render of stage 0 for KaTeX.");
+                        renderStageUI(0, false);
+                    }
+                }, 50); // A 50ms delay is imperceptible but effective.
+            }
+            // --- END: KaTeX First-Stage Fix ---
         });
-    }, fadeDuration); // We still wait for the fade-out to finish before preparing the new scene.
+    }, fadeDuration);
 }
     function nextStage() { transitionToStage(currentStageIndex + 1); }
     function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
