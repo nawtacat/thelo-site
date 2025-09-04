@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Armenian:wght@400;700&family=Roboto:wght@700;800&display=swap" rel="stylesheet">
 
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     
@@ -32,6 +33,14 @@
                 linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
                 linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
             background-size: 40px 40px;
+        }
+        /* Armenian Font Overrides */
+        html[lang="hy"] body {
+            font-family: 'Noto Serif Armenian', serif;
+        }
+        html[lang="hy"] h1, html[lang="hy"] h2, html[lang="hy"] h3, html[lang="hy"] h4, html[lang="hy"] h5, html[lang="hy"] h6,
+        html[lang="hy"] .font-semibold, html[lang="hy"] .font-bold, html[lang="hy"] .font-extrabold {
+            font-family: 'Roboto', sans-serif;
         }
         h1, h2, h3, h4, h5, h6 { font-weight: 800; }
         .anim-target {
@@ -71,8 +80,11 @@
             background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
             background-repeat: no-repeat;
         }
-        #replay-feedback { transform: translate(-50%, 49px); }
-
+        #replay-feedback { 
+            transform: translate(-50%, 49px);
+            max-width: 90%; /* prevent extreme squeezing on small screens */
+            box-sizing: border-box;
+        }
     </style>
 </head>
 
@@ -361,7 +373,7 @@
         }), { threshold: 0.1 });
         document.querySelectorAll('.anim-target').forEach(el => animationObserver.observe(el));
 
-        // Drawing Replay Logic (no changes needed here)
+        // Drawing Replay Logic
         const setupDrawingReplay = () => {
             const canvas = document.getElementById('replayCanvas');
             const feedbackEl = document.getElementById('replay-feedback');
@@ -421,19 +433,38 @@
                         animationFrameId = null;
                         setTimeout(() => {
                             try {
-                                const container = canvas.parentElement;
-                                const rect = container.getBoundingClientRect();
-                                const lastStroke = data.strokes.reduce((a, b) => (a.endTime > b.endTime ? a : b));
-                                const lastPt = lastStroke.points[lastStroke.points.length - 1];
-                                const xPx = lastPt.normX * rect.width;
-                                const yPx = lastPt.normY * rect.height;
+                                // ** MOBILE FEEDBACK FIX STARTS HERE **
+                                if (window.innerWidth < 768) {
+                                    // On mobile, center the feedback box in the canvas
+                                    feedbackEl.style.left = '50%';
+                                    feedbackEl.style.top = '50%';
+                                    feedbackEl.style.transform = 'translate(-50%, -50%)';
+                                } else {
+                                    // On desktop, position near the last drawn point
+                                    const container = canvas.parentElement;
+                                    const rect = container.getBoundingClientRect();
+                                    const lastStroke = data.strokes.reduce((a, b) => (a.endTime > b.endTime ? a : b));
+                                    const lastPt = lastStroke.points[lastStroke.points.length - 1];
+                                    const xPx = lastPt.normX * rect.width;
+                                    const yPx = lastPt.normY * rect.height;
+                                    feedbackEl.style.left = `${xPx}px`;
+                                    feedbackEl.style.top = `${yPx}px`;
+                                    feedbackEl.style.transform = ''; // Let the CSS rule apply
+                                }
                                 feedbackEl.style.right = 'auto';
                                 feedbackEl.style.bottom = 'auto';
-                                feedbackEl.style.left = `${xPx}px`;
-                                feedbackEl.style.top  = `${yPx}px`;
                                 feedbackEl.classList.remove('opacity-0');
                                 feedbackEl.classList.add('opacity-100');
-                            } catch (e) { console.error('Could not place feedback:', e); feedbackEl.classList.remove('opacity-0'); feedbackEl.classList.add('opacity-100'); }
+                                // ** MOBILE FEEDBACK FIX ENDS HERE **
+                            } catch (e) { 
+                                console.error('Could not place feedback:', e); 
+                                // Fallback positioning
+                                feedbackEl.style.left = '50%';
+                                feedbackEl.style.top = '50%';
+                                feedbackEl.style.transform = 'translate(-50%, -50%)';
+                                feedbackEl.classList.remove('opacity-0');
+                                feedbackEl.classList.add('opacity-100');
+                            }
                         }, 500);
                     }
                 };
