@@ -3162,106 +3162,106 @@ async function displayLessonComplete() {
    REPLACE your current handleNextCheckClick() with everything below
    ------------------------------------------------------------------ */
 function handleNextCheckClick() {
-  // Guard clauses ­– block interaction during transitions or modals
-  if (
-    isTransitioning ||
-    isLessonLoading ||
-    isThelobookActive ||
-    isPageGridVisible
-  ) return;
+  // Guard clauses ­– block interaction during transitions or modals
+  if (
+    isTransitioning ||
+    isLessonLoading ||
+    isThelobookActive ||
+    isPageGridVisible
+  ) return;
 
-  const TXT = getCurrentUIText();
+  const TXT = getCurrentUIText();
 
-  /* ─────────────────── 1. “Start” button ─────────────────── */
-  if (currentStageIndex === -1 && lessonStages.length > 0) {
-    hideFeedback();
-    lessonStartTime = Date.now();
+  /* ─────────────────── 1. “Start” button ─────────────────── */
+  if (currentStageIndex === -1 && lessonStages.length > 0) {
+    // The obsolete hideFeedback() call has been removed from here.
+    lessonStartTime = Date.now();
 
-    // analytics
-    const user       = auth.currentUser;
-    const lessonFile = new URLSearchParams(location.search).get('lessonFile');
-    if (user && lessonFile) {
-      db.collection('analytics_events').add({
-        type      : 'lesson_started',
-        userId    : user.uid,
-        lessonId  : lessonFile.replace('.json', ''),
-        courseId  : 'sat-math-prep',
-        timestamp : firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-    transitionToStage(0);
-    return;
-  }
+    // analytics
+    const user       = auth.currentUser;
+    const lessonFile = new URLSearchParams(location.search).get('lessonFile');
+    if (user && lessonFile) {
+      db.collection('analytics_events').add({
+        type      : 'lesson_started',
+        userId    : user.uid,
+        lessonId  : lessonFile.replace('.json', ''),
+        courseId  : 'sat-math-prep',
+        timestamp : firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    transitionToStage(0);
+    return;
+  }
 
-  /* ─────────────────── 2. MCQ stages ─────────────────── */
-  const mcq = currentStageData.optionsQuiz;
-  const isMCQStage =
-    currentStageData.type === 'explanation_with_mcq' &&
-    mcq &&
-    Array.isArray(mcq.choices) &&
-    mcq.choices.length > 0;
+  /* ─────────────────── 2. MCQ stages ─────────────────── */
+  const mcq = currentStageData.optionsQuiz;
+  const isMCQStage =
+    currentStageData.type === 'explanation_with_mcq' &&
+    mcq &&
+    Array.isArray(mcq.choices) &&
+    mcq.choices.length > 0;
 
-  if (isMCQStage) {
-    if (selectedMcqIndex === null) {
-      addChatMessage('AI', '⚠️ Please select an answer before checking.');
-      return;
-    }
+  if (isMCQStage) {
+    if (selectedMcqIndex === null) {
+      showOnCanvasFeedback('⚠️ Please select an answer first.');
+      return;
+    }
 
-    // freeze UI while checking
-    const buttons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
-    buttons.forEach(b => (b.disabled = true));
-    nextCheckBtn.disabled = true;
+    // freeze UI while checking
+    const buttons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
+    buttons.forEach(b => (b.disabled = true));
+    nextCheckBtn.disabled = true;
 
-    const correct = selectedMcqIndex === mcq.correctIndex;
+    const correct = selectedMcqIndex === mcq.correctIndex;
 
-    if (correct) {
-      addChatMessage('AI', `🎉 ${mcq.feedbackCorrect || TXT.correct}`);
-      playRandomFeedback('approve');
-      setTimeout(nextStage, 2500);
-    } else {
-      addChatMessage('AI', '🤔 That option looks off – let me check your work…');
-      setTimeout(async () => {
-        try {
-          await checkMathDrawing(true); // MCQ context
-        } finally {
-          buttons.forEach(b => (b.disabled = false));
-          nextCheckBtn.disabled = false;
-        }
-      }, 1500);
-    }
-    return;
-  }
+    if (correct) {
+      addChatMessage('AI', `🎉 ${mcq.feedbackCorrect || TXT.correct}`);
+      playRandomFeedback('approve');
+      setTimeout(nextStage, 2500);
+    } else {
+      addChatMessage('AI', '🤔 That option looks off – let me check your work…');
+      setTimeout(async () => {
+        try {
+          await checkMathDrawing(true); // MCQ context
+        } finally {
+          buttons.forEach(b => (b.disabled = false));
+          nextCheckBtn.disabled = false;
+        }
+      }, 1500);
+    }
+    return;
+  }
 
-  /* ─────────────────── 3. “Got It” / info stages ─────────────────── */
-  if (nextCheckBtn.textContent === TXT.gotIt) {
-    if (!stagesWithPointsAwarded.has(currentStageIndex)) {
-      stagesWithPointsAwarded.add(currentStageIndex);
+  /* ─────────────────── 3. “Got It” / info stages ─────────────────── */
+  if (nextCheckBtn.textContent === TXT.gotIt) {
+    if (!stagesWithPointsAwarded.has(currentStageIndex)) {
+      stagesWithPointsAwarded.add(currentStageIndex);
 
-      stopCurrentStageAudio();
-      const pts = Math.floor(Math.random() * 4) + 6; // 6-9 pts
-      userPoints     += pts;
-      sessionPoints  += pts;
-      updateUserPointsInFirestore(pts);
-      updatePointsDisplay();
-      addChatMessage('AI', formatAIMessage('pointsGained', { points: pts }));
-      if (window.userInteracted) {
-        gotItSoundPlayer.currentTime = 0;
-        gotItSoundPlayer.play().catch(() => {});
-      }
-    }
-    if (isReplayActive) closeReplayPlayer();
-    nextStage();
-    return;
-  }
+      stopCurrentStageAudio();
+      const pts = Math.floor(Math.random() * 4) + 6; // 6-9 pts
+      userPoints     += pts;
+      sessionPoints  += pts;
+      updateUserPointsInFirestore(pts);
+      updatePointsDisplay();
+      addChatMessage('AI', formatAIMessage('pointsGained', { points: pts }));
+      if (window.userInteracted) {
+        gotItSoundPlayer.currentTime = 0;
+        gotItSoundPlayer.play().catch(() => {});
+      }
+    }
+    if (isReplayActive) closeReplayPlayer();
+    nextStage();
+    return;
+  }
 
-  /* ─────────────────── 4. Question stages ─────────────────── */
-  if (currentStageData.type === 'question_handwriting') {
-    checkHandwritingAnswer();
-  } else if (currentStageData.type === 'question_math_solution') {
-    checkMathDrawing();
-  } else {
-    nextStage();
-  }
+  /* ─────────────────── 4. Question stages ─────────────────── */
+  if (currentStageData.type === 'question_handwriting') {
+    checkHandwritingAnswer();
+  } else if (currentStageData.type === 'question_math_solution') {
+    checkMathDrawing();
+  } else {
+    nextStage();
+  }
 }
 /* ------------------------------------------------------------------ */
 
