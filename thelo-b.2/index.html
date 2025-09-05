@@ -1492,6 +1492,8 @@ let minimapCtx = null;
 	  const feedbackCanvas = document.getElementById('feedbackCanvas');
 let feedbackCtx = null; // Will be initialized in setupContexts
 let feedbackAnimationId = null; // To manage animations
+	  let lastFeedbackMessage = '';
+let lastFeedbackFontSize = 0;
 	  const feedbackOverlay = document.getElementById('feedbackOverlay');
 const feedbackEmoji = document.getElementById('feedbackEmoji');
 const feedbackText = document.getElementById('feedbackText');
@@ -2992,7 +2994,7 @@ function renderStageUI(index, isResize = false) {
 }
       function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
-    // The obsolete hideFeedback() call has been removed from here.
+    hideOnCanvasFeedback(); // Clear feedback when moving to the next stage
     selectedMcqIndex = null;
     if (isReplayActive) closeReplayPlayer();
     if (isThelobookActive) closeThelobook(true);
@@ -3497,28 +3499,26 @@ function showToast(rawMsg, duration = 4000) {
 
 
 /**
- * Displays an animated feedback message with dynamic font sizing directly on the canvas.
+ * Displays and makes persistent a feedback message with dynamic font sizing.
  * @param {string} message - The text to display.
- * @param {number} [duration=3000] - How long the message stays fully visible in ms.
  * @param {string} [type='info'] - 'info' for general feedback, 'success' for celebratory.
  */
-function showOnCanvasFeedback(message, duration = 3000, type = 'info') {
+function showOnCanvasFeedback(message, type = 'info') {
     if (!feedbackCtx) return;
 
     // --- Configuration ---
     const FADE_TIME = 400;
-    const MAX_WIDTH_PERCENTAGE = 0.70; // Use 70% of the canvas width
+    const MAX_WIDTH_PERCENTAGE = 0.70;
     const TEXT_COLOR = '#111827';
     const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
     
     let maxFontSize = 48;
-    let minFontSize = 20; // Don't let the font get too small
+    let minFontSize = 20;
     let EMOJI = '';
 
     if (type === 'success') {
         maxFontSize = 72;
         EMOJI = '🎉 ';
-        duration = 2000;
     }
 
     const finalMessage = EMOJI + message;
@@ -3526,50 +3526,98 @@ function showOnCanvasFeedback(message, duration = 3000, type = 'info') {
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
     const maxWidth = canvasWidth * MAX_WIDTH_PERCENTAGE;
 
-    // --- Dynamic Font Sizing Logic ---
+    // --- Dynamic Font Sizing ---
     let currentFontSize = maxFontSize;
-    feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`; // Set initial font for measurement
-
-    // Decrease font size until the text fits within the max width
+    feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
     while (feedbackCtx.measureText(finalMessage).width > maxWidth && currentFontSize > minFontSize) {
-        currentFontSize--; // Decrease by 1px
+        currentFontSize--;
         feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
     }
-    // --- End of Dynamic Sizing Logic ---
+
+    // --- Store message for the hide function ---
+    lastFeedbackMessage = finalMessage;
+    lastFeedbackFontSize = currentFontSize;
 
     if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
     let startTime = null;
     
+    // --- Animation Loop (Fade IN only) ---
     const animate = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
 
         feedbackCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-        let currentOpacity = 0;
+        let currentOpacity = 1.0;
         if (elapsed < FADE_TIME) {
             currentOpacity = elapsed / FADE_TIME;
-        } else if (elapsed > duration && elapsed < duration + FADE_TIME) {
-            currentOpacity = 1 - (elapsed - duration) / FADE_TIME;
-        } else if (elapsed >= duration + FADE_TIME) {
-            return; // Stop animation
         } else {
-            currentOpacity = 1;
+            // Animation is done, draw one last time at full opacity and stop
+            currentOpacity = 1.0;
         }
 
         feedbackCtx.globalAlpha = currentOpacity;
-        feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`; // Use the calculated font size
+        feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
         feedbackCtx.fillStyle = TEXT_COLOR;
         feedbackCtx.textAlign = 'center';
         feedbackCtx.textBaseline = 'middle';
-
         feedbackCtx.fillText(finalMessage, canvasWidth / 2, canvasHeight / 2);
-
         feedbackCtx.globalAlpha = 1.0;
-        feedbackAnimationId = requestAnimationFrame(animate);
+
+        if (elapsed < FADE_TIME) {
+            feedbackAnimationId = requestAnimationFrame(animate);
+        } else {
+            cancelAnimationFrame(feedbackAnimationId);
+            feedbackAnimationId = null;
+        }
     };
     
     feedbackAnimationId = requestAnimationFrame(animate);
+}
+	  /**
+ * Fades out and clears the persistent feedback message from the canvas.
+ */
+function hideOnCanvasFeedback() {
+    if (!feedbackCtx || !lastFeedbackMessage) return;
+
+    const FADE_TIME = 400;
+    const canvasWidth = feedbackCanvas.width / devicePixelRatio;
+    const canvasHeight = feedbackCanvas.height / devicePixelRatio;
+    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+
+    if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
+    let startTime = null;
+
+    const animateFadeOut = (timestamp) => {
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+
+        feedbackCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        
+        let currentOpacity = 1.0;
+        if (elapsed < FADE_TIME) {
+            currentOpacity = 1.0 - (elapsed / FADE_TIME);
+        } else {
+            // Animation finished, clear globals and stop
+            lastFeedbackMessage = '';
+            lastFeedbackFontSize = 0;
+            cancelAnimationFrame(feedbackAnimationId);
+            feedbackAnimationId = null;
+            return;
+        }
+
+        feedbackCtx.globalAlpha = currentOpacity;
+        feedbackCtx.font = `900 ${lastFeedbackFontSize}px ${FONT_FAMILY}`;
+        feedbackCtx.fillStyle = '#111827';
+        feedbackCtx.textAlign = 'center';
+        feedbackCtx.textBaseline = 'middle';
+        feedbackCtx.fillText(lastFeedbackMessage, canvasWidth / 2, canvasHeight / 2);
+        feedbackCtx.globalAlpha = 1.0;
+
+        feedbackAnimationId = requestAnimationFrame(animateFadeOut);
+    };
+
+    feedbackAnimationId = requestAnimationFrame(animateFadeOut);
 }
 function checkTabletMode() {
     // This media query should match the one in your CSS
