@@ -1199,6 +1199,16 @@ body.lang-en {
 	html, body {
   cursor: none !important;
 }
+	/* ===== NEW: On-Canvas Feedback ===== */
+#feedbackCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5; /* Above the drawing board, below UI controls */
+    pointer-events: none; /* Allows drawing to pass through */
+}
 </style>
 </head>
 <body>
@@ -1210,7 +1220,7 @@ body.lang-en {
                 <div id="stageProgressBarContainer"><div id="stageProgressFill"></div></div>
                 <canvas id="backgroundCanvas"></canvas>
                 <canvas id="replayCanvas"></canvas>
-                <canvas id="board"></canvas>
+                <canvas id="feedbackCanvas"></canvas>
 		    <canvas id="boardCapture" style="display:none"></canvas>
                 <canvas id="thelobookCanvas"></canvas>
 		<div id="calculatorOverlay" class="calculator-hidden">
@@ -1478,6 +1488,9 @@ function getPreviousWeekIdentifier(weekId) {
 	  const minimapContainer = document.getElementById('minimapContainer');
 const minimapCanvas = document.getElementById('minimapCanvas');
 let minimapCtx = null;
+	  const feedbackCanvas = document.getElementById('feedbackCanvas');
+let feedbackCtx = null; // Will be initialized in setupContexts
+let feedbackAnimationId = null; // To manage animations
 	  const feedbackOverlay = document.getElementById('feedbackOverlay');
 const feedbackEmoji = document.getElementById('feedbackEmoji');
 const feedbackText = document.getElementById('feedbackText');
@@ -1637,202 +1650,200 @@ let lastIframeUpdateTime = 0;
         // MODIFIED: This now uses sessionPoints for the on-screen display.
         if (pointsDisplayElement) pointsDisplayElement.textContent = `${TXT.achievementsPrefix}${sessionPoints}`;
     }
-    async function loadLesson(lessonJsonPath) {
-    if (isLessonLoading) return;
-    isLessonLoading = true;
-    if (prevBtn) prevBtn.disabled = true;
-    if (dashboardBtn) dashboardBtn.style.display = 'none';
-    if (isThelobookActive) closeThelobook(false);
-    if (isPageGridVisible) closePageGridView();
+  async function loadLesson(lessonJsonPath) {
+    if (isLessonLoading) return;
+    isLessonLoading = true;
+    if (prevBtn) prevBtn.disabled = true;
+    if (dashboardBtn) dashboardBtn.style.display = 'none';
+    if (isThelobookActive) closeThelobook(false);
+    if (isPageGridVisible) closePageGridView();
 
-    try {
-        const response = await fetch(lessonJsonPath);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status} fetching ${lessonJsonPath}`);
-        lessonStagesRoot = await response.json();
-        if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
-        const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
-        setLanguage(lessonLang);
-        let TXT = getCurrentUIText();
-        lessonStages = lessonStagesRoot.stages;
-	showFeedback(formatAIMessage('welcome'));
-        // The single, correct welcome message call:
+    try {
+        const response = await fetch(lessonJsonPath);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status} fetching ${lessonJsonPath}`);
+        lessonStagesRoot = await response.json();
+        if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
+        const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
+        setLanguage(lessonLang);
+        let TXT = getCurrentUIText();
+        lessonStages = lessonStagesRoot.stages;
+	    showOnCanvasFeedback(TXT.welcome);
+        sessionPoints = 0;
+        updatePointsDisplay();
+        
+        // Reset the tracking for which stages have awarded points
+        stagesWithPointsAwarded = new Set();
 
-        sessionPoints = 0;
-        updatePointsDisplay();
-        
-        // Reset the tracking for which stages have awarded points
-        stagesWithPointsAwarded = new Set();
+        document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
+        console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
 
-        document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
-        console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
+        // Reset stage-related variables
+        currentStageIndex = -1;
+        currentStageData = null;
+        isStudentInputAllowed = false;
+        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+        if (currentStageAudio && !currentStageAudio.paused) {
+            currentStageAudio.pause();
+            currentStageAudio.onloadedmetadata = null;
+            currentStageAudio.onended = null;
+        }
+        currentStageAudio = null;
+        isMediaScrubbingActive = false;
+        if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+        if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+        if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width, replayCanvas.height);
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        thelobookPages = [];
+        currentThelobookPageIndex = 0;
+        updateThelobookPageControls();
 
-        // Reset stage-related variables
-        currentStageIndex = -1;
-        currentStageData = null;
-        isStudentInputAllowed = false;
-        if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-        currentReplayAnimationId = null;
-        if (currentStageAudio && !currentStageAudio.paused) {
-            currentStageAudio.pause();
-            currentStageAudio.onloadedmetadata = null;
-            currentStageAudio.onended = null;
-        }
-        currentStageAudio = null;
-        isMediaScrubbingActive = false;
-        if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-        if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
-        if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width, replayCanvas.height);
-        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        thelobookPages = [];
-        currentThelobookPageIndex = 0;
-        updateThelobookPageControls();
+    } catch (error) {
+        console.error("Error loading lesson:", error);
+        let TXT = getCurrentUIText();
+        addChatMessage('AI', `${formatAIMessage('error')}: ${error.message}`);
+    } finally {
+        isLessonLoading = false;
 
-    } catch (error) {
-        console.error("Error loading lesson:", error);
-        let TXT = getCurrentUIText();
-        addChatMessage('AI', `${formatAIMessage('error')}: ${error.message}`);
-    } finally {
-        isLessonLoading = false;
+        // NEW, ROBUST BUTTON LOGIC:
+        if (lessonStages && lessonStages.length > 0) {
+            // Success! Lesson loaded.
+            if (nextCheckBtn) {
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = getCurrentUIText().start;
+            }
+        } else {
+            // Failure! Lesson did not load.
+            if (nextCheckBtn) {
+                nextCheckBtn.textContent = getCurrentUIText().error;
+                nextCheckBtn.disabled = true;
+            }
+        }
 
-        // NEW, ROBUST BUTTON LOGIC:
-        if (lessonStages && lessonStages.length > 0) {
-            // Success! Lesson loaded.
-            if (nextCheckBtn) {
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = getCurrentUIText().start;
-            }
-        } else {
-            // Failure! Lesson did not load.
-            if (nextCheckBtn) {
-                nextCheckBtn.textContent = getCurrentUIText().error;
-                nextCheckBtn.disabled = true;
-            }
-        }
+        if (!UI_TEXT[currentLang]) currentLang = 'hy';
+        updateAllUITexts();
 
-        if (!UI_TEXT[currentLang]) currentLang = 'hy';
-        updateAllUITexts();
-
-        // Hide the loading overlay
-        if (loadingOverlay) {
-            loadingOverlay.classList.add('hidden');
-            // Set display to none after the fade-out transition completes
-            setTimeout(() => {
-                if(loadingOverlay) loadingOverlay.style.display = 'none';
-            }, 500); // This duration MUST match your CSS transition duration
-        }
-    }
+        // Hide the loading overlay
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('hidden');
+            // Set display to none after the fade-out transition completes
+            setTimeout(() => {
+                if(loadingOverlay) loadingOverlay.style.display = 'none';
+            }, 500); // This duration MUST match your CSS transition duration
+        }
+    }
 }
 function resizeCanvases() {
-    clearTimeout(window.resizeTimeout);
-    window.resizeTimeout = setTimeout(() => {
-        checkTabletMode();
-        if (!boardWrapper) return;
+    clearTimeout(window.resizeTimeout);
+    window.resizeTimeout = setTimeout(() => {
+        checkTabletMode();
+        if (!boardWrapper) return;
 
-        // Save the current drawing before it gets erased by the resize.
-        let userDrawingData = null;
-        if (userDrawingOccurred && canvas.width > 0 && canvas.height > 0) {
-            userDrawingData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        }
+        // Save the current drawing before it gets erased by the resize.
+        let userDrawingData = null;
+        if (userDrawingOccurred && canvas.width > 0 && canvas.height > 0) {
+            userDrawingData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        }
 
-        const rect = boardWrapper.getBoundingClientRect();
-        const cssWidth = Math.max(1, Math.floor(rect.width));
-        const cssHeight = Math.max(1, Math.floor(rect.height));
-        devicePixelRatio = window.devicePixelRatio || 1;
-        const internalWidth = Math.floor(cssWidth * devicePixelRatio);
-        const internalHeight = Math.floor(cssHeight * devicePixelRatio);
+        const rect = boardWrapper.getBoundingClientRect();
+        const cssWidth = Math.max(1, Math.floor(rect.width));
+        const cssHeight = Math.max(1, Math.floor(rect.height));
+        devicePixelRatio = window.devicePixelRatio || 1;
+        const internalWidth = Math.floor(cssWidth * devicePixelRatio);
+        const internalHeight = Math.floor(cssHeight * devicePixelRatio);
 
-        // This loop erases the canvases when it sets the new width/height.
-        [backgroundCanvas, replayCanvas, canvas, thelobookCanvas].forEach(c => {
-            if (c) {
-                c.width = internalWidth;
-                c.height = internalHeight;
-                c.style.width = `${cssWidth}px`;
-                c.style.height = `${cssHeight}px`;
-            }
-        });
-        
-        setupContexts();
+        // This loop erases the canvases when it sets the new width/height.
+        [backgroundCanvas, replayCanvas, canvas, thelobookCanvas, feedbackCanvas].forEach(c => {
+            if (c) {
+                c.width = internalWidth;
+                c.height = internalHeight;
+                c.style.width = `${cssWidth}px`;
+                c.style.height = `${cssHeight}px`;
+            }
+        });
+        
+        setupContexts();
 
-        // Restore the saved drawing onto the newly resized canvas.
-        if (userDrawingData) {
-            ctx.putImageData(userDrawingData, 0, 0);
-        }
+        // Restore the saved drawing onto the newly resized canvas.
+        if (userDrawingData) {
+            ctx.putImageData(userDrawingData, 0, 0);
+        }
 
-        // Redraw the rest of the UI.
-        if (currentStageIndex >= 0 && lessonStages.length > 0) renderStageUI(currentStageIndex, true);
-        
-        if (isThelobookActive) {
-            setTimeout(() => {
-                if (isThelobookActive) loadThelobookPageDrawing(currentThelobookPageIndex);
-            }, 50);
-        }
-        
-        if(isPageGridVisible) renderPageGridBatch(currentPageGridBatch, false);
+        // Redraw the rest of the UI.
+        if (currentStageIndex >= 0 && lessonStages.length > 0) renderStageUI(currentStageIndex, true);
+        
+        if (isThelobookActive) {
+            setTimeout(() => {
+                if (isThelobookActive) loadThelobookPageDrawing(currentThelobookPageIndex);
+            }, 50);
+        }
+        
+        if(isPageGridVisible) renderPageGridBatch(currentPageGridBatch, false);
 
-    }, 150);
-	// At the end of the resizeCanvases function
-if (minimapCanvas) {
-    const minimapRect = minimapCanvas.getBoundingClientRect();
-    minimapCanvas.width = minimapRect.width * devicePixelRatio;
-    minimapCanvas.height = minimapRect.height * devicePixelRatio;
+    // At the end of the resizeCanvases function
+    if (minimapCanvas) {
+        const minimapRect = minimapCanvas.getBoundingClientRect();
+        minimapCanvas.width = minimapRect.width * devicePixelRatio;
+        minimapCanvas.height = minimapRect.height * devicePixelRatio;
+    }
+
+    // The call to setupContexts() should be after this new block
+    setupContexts();
+    }, 150);
 }
-
-// The call to setupContexts() should be after this new block
-setupContexts();
-}    
-	  function setupContexts() {
-    if (!backgroundCanvas || !replayCanvas || !canvas || !thelobookCanvas) return;
-    
-    replayCtx = replayCanvas.getContext('2d'); 
-    thelobookCtx = thelobookCanvas.getContext('2d');
-    
-    [bgCtx, replayCtx, ctx, thelobookCtx].forEach(context => {
-        if (context) { 
-            context.resetTransform(); 
-            context.scale(devicePixelRatio, devicePixelRatio); 
-        }
-    });
-    
-    bgCtx.lineWidth = 2; 
-    bgCtx.strokeStyle = '#333'; 
-    bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-    
-    const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-    bgCtx.font = `20px ${fontFamily}`; 
-    bgCtx.textAlign = 'center'; 
-    bgCtx.textBaseline = 'top';
-    
-    if (replayCtx) { 
-        replayCtx.lineCap = 'round'; 
-        replayCtx.lineJoin = 'round'; 
+	 function setupContexts() {
+    if (!backgroundCanvas || !replayCanvas || !canvas || !thelobookCanvas) return;
+    
+    replayCtx = replayCanvas.getContext('2d'); 
+    thelobookCtx = thelobookCanvas.getContext('2d');
+    
+    [bgCtx, replayCtx, ctx, thelobookCtx, feedbackCtx].forEach(context => {
+        if (context) { 
+            context.resetTransform(); 
+            context.scale(devicePixelRatio, devicePixelRatio); 
+        }
+    });
+    
+    bgCtx.lineWidth = 2; 
+    bgCtx.strokeStyle = '#333'; 
+    bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+    
+    const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+    bgCtx.font = `20px ${fontFamily}`; 
+    bgCtx.textAlign = 'center'; 
+    bgCtx.textBaseline = 'top';
+    
+    if (replayCtx) { 
+        replayCtx.lineCap = 'round'; 
+        replayCtx.lineJoin = 'round'; 
+    }
+    
+    ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH; 
+    ctx.lineCap = 'round'; 
+    ctx.lineJoin = 'round'; 
+    ctx.strokeStyle = INK_COLORS.blue; // Hardcoded to blue
+    
+    if (thelobookCtx) {
+        thelobookCtx.lineCap = 'round'; 
+        thelobookCtx.lineJoin = 'round';
+    }
+    if (minimapCanvas) {
+        minimapCtx = minimapCanvas.getContext('2d');
+        if (minimapCtx) {
+            minimapCtx.scale(devicePixelRatio, devicePixelRatio);
+            minimapCtx.lineWidth = 2; // A bit thinner for the smaller view
+            minimapCtx.lineCap = 'round';
+            minimapCtx.lineJoin = 'round';
+            minimapCtx.strokeStyle = INK_COLORS.blue;
+        }
+    }
+    if (feedbackCanvas) {
+        feedbackCtx = feedbackCanvas.getContext('2d');
     }
-    
-    ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH; 
-    ctx.lineCap = 'round'; 
-    ctx.lineJoin = 'round'; 
-    ctx.strokeStyle = INK_COLORS.blue; // Hardcoded to blue
-    
-    if (thelobookCtx) {
-        thelobookCtx.lineCap = 'round'; 
-        thelobookCtx.lineJoin = 'round';
-    }
-		  if (minimapCanvas) {
-        minimapCtx = minimapCanvas.getContext('2d');
-        if (minimapCtx) {
-            minimapCtx.scale(devicePixelRatio, devicePixelRatio);
-            minimapCtx.lineWidth = 2; // A bit thinner for the smaller view
-            minimapCtx.lineCap = 'round';
-            minimapCtx.lineJoin = 'round';
-            minimapCtx.strokeStyle = INK_COLORS.blue;
-        }
-    }
-
-    
-    
-    updateColorIndicator();
+    
+    updateColorIndicator();
 }
-
     function calculateDrawingDuration(drawingData){
         if (!drawingData || !drawingData.strokes || drawingData.strokes.length === 0) return 0;
         let maxTime = 0;
@@ -3497,35 +3508,87 @@ function showToast(rawMsg, duration = 4000) {
  * @param {string} rawMsg  –  HTML-allowed message (e.g. "🎉 <strong>Correct!</strong>")
  * @param {number} duration – how long to stay visible (ms)
  */
-function showFeedback(rawMsg, duration = 4000) {
-    const overlay = document.getElementById('feedbackOverlay');
-    const textEl = document.getElementById('feedbackText');
-    const emojiEl = document.getElementById('feedbackEmoji');
-    if (!overlay || !textEl || !emojiEl) return;
 
-    /* pick an emoji based on message content */
-    let emoji = '🫧';
-    if (/🎉|✅|correct/i.test(rawMsg)) emoji = '🎉';
-    else if (/🤔|incorrect|wrong/i.test(rawMsg)) emoji = '🤔';
-    else if (/⚠️|error|warning/i.test(rawMsg)) emoji = '⚠️';
-    emojiEl.textContent = emoji;
-    textEl.innerHTML = rawMsg;
 
-    overlay.classList.remove('feedback-hidden'); // Just show it.
+/**
+ * Displays an animated feedback message directly on a dedicated canvas layer.
+ * @param {string} message - The text to display.
+ * @param {number} [duration=3000] - How long the message stays fully visible in ms.
+ */
+function showOnCanvasFeedback(message, duration = 3000) {
+    if (!feedbackCtx) return;
+
+    // --- Configuration ---
+    const FADE_TIME = 400; // ms for fade in/out
+    const FONT_SIZE = 24;
+    const PADDING = 20;
+    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+    const BG_COLOR = 'rgba(37, 99, 235, 0.9)'; // --thelo-blue with alpha
+    const TEXT_COLOR = '#FFFFFF';
+    const BORDER_RADIUS = 12;
+
+    const canvasWidth = feedbackCanvas.width / devicePixelRatio;
+    const canvasHeight = feedbackCanvas.height / devicePixelRatio;
+
+    // --- Helper to draw a rounded rectangle ---
+    const drawRoundedRect = (x, y, w, h, r) => {
+        feedbackCtx.beginPath();
+        feedbackCtx.moveTo(x + r, y);
+        feedbackCtx.arcTo(x + w, y, x + w, y + h, r);
+        feedbackCtx.arcTo(x + w, y + h, x, y + h, r);
+        feedbackCtx.arcTo(x, y + h, x, y, r);
+        feedbackCtx.arcTo(x, y, x + w, y, r);
+        feedbackCtx.closePath();
+        feedbackCtx.fill();
+    };
+
+    // --- Prepare Text and measure dimensions ---
+    feedbackCtx.font = `500 ${FONT_SIZE}px ${FONT_FAMILY}`;
+    const textMetrics = feedbackCtx.measureText(message);
+    const boxWidth = textMetrics.width + PADDING * 2;
+    const boxHeight = FONT_SIZE + PADDING * 2;
+    const x = (canvasWidth - boxWidth) / 2;
+    const y = canvasHeight - boxHeight - 80; // Position near the bottom bar
+
+    let startTime = null;
+    let currentOpacity = 0;
+
+    // --- Animation Loop ---
+    const animate = (timestamp) => {
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+
+        feedbackCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        
+        if (elapsed < FADE_TIME) {
+            currentOpacity = elapsed / FADE_TIME;
+        } else {
+            currentOpacity = 1;
+        }
+        
+        feedbackCtx.globalAlpha = currentOpacity;
+        feedbackCtx.fillStyle = BG_COLOR;
+        drawRoundedRect(x, y, boxWidth, boxHeight, BORDER_RADIUS);
+
+        feedbackCtx.fillStyle = TEXT_COLOR;
+        feedbackCtx.textAlign = 'center';
+        feedbackCtx.textBaseline = 'middle';
+        feedbackCtx.fillText(message, x + boxWidth / 2, y + boxHeight / 2);
+        
+        feedbackCtx.globalAlpha = 1.0;
+
+        if (elapsed < FADE_TIME) {
+            feedbackAnimationId = requestAnimationFrame(animate);
+        }
+    };
+    
+    if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
+    feedbackAnimationId = requestAnimationFrame(animate);
+
+    setTimeout(() => {
+        feedbackCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+    }, duration + FADE_TIME);
 }
-	  // ---------- helper to force-hide the overlay ----------
-function hideFeedback() {
-  const overlay = document.getElementById('feedbackOverlay');
-  if (!overlay) return;
-  overlay.classList.add('feedback-hidden');
-  // clear timer if one is running
-  if (typeof feedbackTimer !== 'undefined' && feedbackTimer) {
-      clearTimeout(feedbackTimer);
-      feedbackTimer = null;
-  }
-}
-
-
 function checkTabletMode() {
     // This media query should match the one in your CSS
     const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
@@ -3643,201 +3706,195 @@ function logHandwritingAttempt(result) {
     }
 }
 	async function checkHandwritingAnswer() {
-    console.log("Auth state at time of call:", isAuthReady);
-    if (!isAuthReady || !auth.currentUser) {
-        addChatMessage('AI', formatAIMessage('authErrorVision'));
-        console.error("User is not authenticated. Cannot call AI function.");
-        return;
-    }
+    console.log("Auth state at time of call:", isAuthReady);
+    if (!isAuthReady || !auth.currentUser) {
+        addChatMessage('AI', formatAIMessage('authErrorVision'));
+        console.error("User is not authenticated. Cannot call AI function.");
+        return;
+    }
 
-    try {
-        await auth.currentUser.getIdToken(true); // Refresh token to ensure validity
-    } catch (error) {
-        console.error("Token refresh failed:", error);
-        addChatMessage('AI', "Authentication error. Please try logging in again.");
-        return;
-    }
-    
-    if (isThelobookActive || isPageGridVisible || nextCheckBtn.disabled || isTransitioning) return;
+    try {
+        await auth.currentUser.getIdToken(true); // Refresh token to ensure validity
+    } catch (error) {
+        console.error("Token refresh failed:", error);
+        addChatMessage('AI', "Authentication error. Please try logging in again.");
+        return;
+    }
+    
+    if (isThelobookActive || isPageGridVisible || nextCheckBtn.disabled || isTransitioning) return;
 
-    const TXT = getCurrentUIText();
-    nextCheckBtn.disabled = true;
-    nextCheckBtn.textContent = TXT.checking;
-    showFeedback(formatAIMessage('checkingAI')); 
-    addChatMessage('AI', formatAIMessage('checkingAI'));
-    showFeedback(formatAIMessage('checkingAI'));  
-    let base64ImageData;
-    try {
-        const blankCanvas = document.createElement('canvas');
-        blankCanvas.width = canvas.width;
-        blankCanvas.height = canvas.height;
-            const imageDataUrl = captureCanvas.toDataURL('image/png');   // ← ✅ new
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
+    showOnCanvasFeedback(TXT.checking);
+    
+    let base64ImageData;
+    try {
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = canvas.width;
+        blankCanvas.height = canvas.height;
+        const imageDataUrl = captureCanvas.toDataURL('image/png');
 
-	
-        if (imageDataUrl === blankCanvas.toDataURL()) {
-            throw new Error("BLANK_ANSWER");
-        }
-        base64ImageData = imageDataUrl; // Send the full Data URI
-    } catch (error) {
-        addChatMessage('AI', formatAIMessage('drawActivityWarning'));
-        playRandomFeedback('disapprove');
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        return;
-    }
-    
-    const payload = {
-        imageBase64: base64ImageData,
-        problemText: "The user is writing a number to answer a question.",
-        correctAnswer: String(currentStageData.correctAnswerOcr),
-        customInstructions: `Analyze the user's handwritten number. The work is 'correct' ONLY IF the number in the image is clearly identifiable and matches the correct answer: ${currentStageData.correctAnswerOcr}. Otherwise, it is 'incorrect'.`,
-        language: currentLang // <<< UPDATED
-    };
+        if (imageDataUrl === blankCanvas.toDataURL()) {
+            throw new Error("BLANK_ANSWER");
+        }
+        base64ImageData = imageDataUrl; // Send the full Data URI
+    } catch (error) {
+        addChatMessage('AI', formatAIMessage('drawActivityWarning'));
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        return;
+    }
+    
+    const payload = {
+        imageBase64: base64ImageData,
+        problemText: "The user is writing a number to answer a question.",
+        correctAnswer: String(currentStageData.correctAnswerOcr),
+        customInstructions: `Analyze the user's handwritten number. The work is 'correct' ONLY IF the number in the image is clearly identifiable and matches the correct answer: ${currentStageData.correctAnswerOcr}. Otherwise, it is 'incorrect'.`,
+        language: currentLang
+    };
 
-    try {
-        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-        const result = await analyzeMathDrawing(payload);
+    try {
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
+        const { status, feedback } = result.data;
+        
+        showOnCanvasFeedback(feedback);
+        
+        if (status === 'correct') {
+            logHandwritingAttempt('correct');
+            const pointsGained = 10;
+            playRandomFeedback('approve');
+            userPoints += pointsGained;
+            sessionPoints += pointsGained;
+            updatePointsDisplay();
+            updateUserPointsInFirestore(pointsGained);
+            nextCheckBtn.classList.add('correct');
+            nextCheckBtn.textContent = TXT.correct;
+            setTimeout(nextStage, 2500);
+        } else { 
+            logHandwritingAttempt('incorrect');
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+            
+            setTimeout(() => {
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                nextCheckBtn.classList.remove('incorrect');
+            }, 1000);
+        }
 
-        const { status, feedback } = result.data;
-        
-        addChatMessage('AI', `🔍 ${feedback}`); 
-	showFeedback(`🔍 ${feedback}`);    
-        if (status === 'correct') {
-            logHandwritingAttempt('correct');
-            const pointsGained = 10;
-            playRandomFeedback('approve');
-            userPoints += pointsGained;
-            sessionPoints += pointsGained;
-            updatePointsDisplay();
-            updateUserPointsInFirestore(pointsGained);
-            nextCheckBtn.classList.add('correct');
-            nextCheckBtn.textContent = TXT.correct;
-
-            setTimeout(nextStage, 2500);
-        } else { 
-            logHandwritingAttempt('incorrect');
-            playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-            
-            setTimeout(() => {
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = TXT.check;
-                nextCheckBtn.classList.remove('incorrect');
-            }, 1000);
-        }
-
-    } catch (error) {
-        console.error("Function call to analyzeMathDrawing failed:", error);
-        addChatMessage('AI', formatAIMessage('apiErrorGeneral', { errorMessage: error.message }));
-        playRandomFeedback('disapprove');
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-    }
+    } catch (error) {
+        console.error("Function call to analyzeMathDrawing failed:", error);
+        addChatMessage('AI', formatAIMessage('apiErrorGeneral', { errorMessage: error.message }));
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+    }
 }
 
-
 async function checkMathDrawing(isMcqContext = false) {
-    if (!auth.currentUser) {
-        console.error("User is not authenticated.");
-        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
-        throw new Error("User not authenticated.");
-    }
-    try {
-        await auth.currentUser.getIdToken(true);
-    } catch (error) {
-        console.error("Token refresh failed:", error);
-        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
-        throw new Error("Token refresh failed.");
-    }
+    if (!auth.currentUser) {
+        console.error("User is not authenticated.");
+        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
+        throw new Error("User not authenticated.");
+    }
+    try {
+        await auth.currentUser.getIdToken(true);
+    } catch (error) {
+        console.error("Token refresh failed:", error);
+        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
+        throw new Error("Token refresh failed.");
+    }
 
-    try {
-        const blankCanvasCheck = document.createElement('canvas');
-        blankCanvasCheck.width = canvas.width;
-        blankCanvasCheck.height = canvas.height;
-        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
-            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
-            throw new Error("No drawing found on canvas.");
-        }
-    } catch (e) {
-        console.error("Blank canvas check failed:", e.message);
-        throw e;
-    }
+    try {
+        const blankCanvasCheck = document.createElement('canvas');
+        blankCanvasCheck.width = canvas.width;
+        blankCanvasCheck.height = canvas.height;
+        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
+            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
+            throw new Error("No drawing found on canvas.");
+        }
+    } catch (e) {
+        console.error("Blank canvas check failed:", e.message);
+        throw e;
+    }
 
-    const TXT = getCurrentUIText();
-    nextCheckBtn.disabled = true;
-    nextCheckBtn.textContent = TXT.checking;
-    
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    try {
-        let imageBase64;
-        if (isMcqContext) {
-            imageBase64 = canvas.toDataURL("image/png");
-        } else {
-            const compositeCanvas = document.createElement('canvas');
-            compositeCanvas.width = canvas.width;
-            compositeCanvas.height = canvas.height;
-            const compositeCtx = compositeCanvas.getContext('2d');
-            compositeCtx.drawImage(backgroundCanvas, 0, 0);
-            compositeCtx.drawImage(canvas, 0, 0);
-            imageBase64 = compositeCanvas.toDataURL("image/png");
-        }
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+        let imageBase64;
+        if (isMcqContext) {
+            imageBase64 = canvas.toDataURL("image/png");
+        } else {
+            const compositeCanvas = document.createElement('canvas');
+            compositeCanvas.width = canvas.width;
+            compositeCanvas.height = canvas.height;
+            const compositeCtx = compositeCanvas.getContext('2d');
+            compositeCtx.drawImage(backgroundCanvas, 0, 0);
+            compositeCtx.drawImage(canvas, 0, 0);
+            imageBase64 = compositeCanvas.toDataURL("image/png");
+        }
 
-        const payload = {
-            imageBase64: imageBase64,
-            problemText: currentStageData.problemText || "No problem text provided.",
-            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
-            solutionSteps: currentStageData.solutionSteps || "",
-            customInstructions: currentStageData.customInstructions || "",
-            language: currentLang
-        };
+        const payload = {
+            imageBase64: imageBase64,
+            problemText: currentStageData.problemText || "No problem text provided.",
+            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
+            solutionSteps: currentStageData.solutionSteps || "",
+            customInstructions: currentStageData.customInstructions || "",
+            language: currentLang
+        };
 
-        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-        const result = await analyzeMathDrawing(payload);
-        const { status, feedback } = result.data;
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
+        const { status, feedback } = result.data;
 	
-        addChatMessage('AI', `🔍 ${feedback}`);
-	showFeedback(`🔍 ${feedback}`);
+        showOnCanvasFeedback(feedback);
 
-        if (status === 'correct') {
-            playRandomFeedback('approve');
-            nextCheckBtn.classList.add('correct');
-            
-            // Add points for a correct math solution
-            const pointsGained = 15;
-            userPoints += pointsGained;
-            sessionPoints += pointsGained;
-            updatePointsDisplay();
-            updateUserPointsInFirestore(pointsGained);
+        if (status === 'correct') {
+            playRandomFeedback('approve');
+            nextCheckBtn.classList.add('correct');
+            
+            // Add points for a correct math solution
+            const pointsGained = 15;
+            userPoints += pointsGained;
+            sessionPoints += pointsGained;
+            updatePointsDisplay();
+            updateUserPointsInFirestore(pointsGained);
 
-            if (currentStageData.type === 'question_math_solution') {
-                nextCheckBtn.textContent = TXT.gotIt;
-            }
-            // FIX: Re-enable the button so the user can click "Got It" to proceed.
-            nextCheckBtn.disabled = false;
+            if (currentStageData.type === 'question_math_solution') {
+                nextCheckBtn.textContent = TXT.gotIt;
+            }
+            // FIX: Re-enable the button so the user can click "Got It" to proceed.
+            nextCheckBtn.disabled = false;
 
-        } else { // Handles 'incorrect' and 'clarification_needed'
-            playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-            
-            // FIX: Re-enable the button after a delay so the user can try again.
-            setTimeout(() => {
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = TXT.check;
-                nextCheckBtn.classList.remove('incorrect');
-            }, 2000); // 2-second delay to read feedback
-        }
+        } else { // Handles 'incorrect' and 'clarification_needed'
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+            
+            // FIX: Re-enable the button after a delay so the user can try again.
+            setTimeout(() => {
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                nextCheckBtn.classList.remove('incorrect');
+            }, 2000); // 2-second delay to read feedback
+        }
 
-    } catch (error) {
-        console.error("Math analysis failed:", error);
-        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
-        playRandomFeedback('disapprove');
-        
-        // FIX: Always re-enable the button on an error.
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        nextCheckBtn.classList.remove('incorrect');
-    }
+    } catch (error) {
+        console.error("Math analysis failed:", error);
+        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
+        playRandomFeedback('disapprove');
+        
+        // FIX: Always re-enable the button on an error.
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        nextCheckBtn.classList.remove('incorrect');
+    }
 }
 	    /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
