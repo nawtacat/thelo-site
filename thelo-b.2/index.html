@@ -3500,80 +3500,65 @@ function showToast(rawMsg, duration = 4000) {
  * Displays an animated feedback message directly on a dedicated canvas layer.
  * @param {string} message - The text to display.
  * @param {number} [duration=3000] - How long the message stays fully visible in ms.
+ * @param {string} [type='info'] - 'info' for general feedback, 'success' for celebratory.
  */
-function showOnCanvasFeedback(message, duration = 3000) {
+function showOnCanvasFeedback(message, duration = 3000, type = 'info') {
     if (!feedbackCtx) return;
 
     // --- Configuration ---
     const FADE_TIME = 400; // ms for fade in/out
-    const FONT_SIZE = 24;
-    const PADDING = 20;
-    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-    const BG_COLOR = 'rgba(37, 99, 235, 0.9)'; // --thelo-blue with alpha
-    const TEXT_COLOR = '#FFFFFF';
-    const BORDER_RADIUS = 12;
+    let FONT_SIZE = 48;
+    const TEXT_COLOR = '#111827'; // A dark, near-black color
+    let EMOJI = '';
 
+    // Adjust styling based on the type of feedback
+    if (type === 'success') {
+        FONT_SIZE = 72; // Make success messages larger
+        EMOJI = '🎉 '; // Add a celebratory emoji before the text
+        duration = 2000; // Make success messages more punchy
+    }
+    
+    // The message is now the emoji prepended to the actual AI feedback
+    const finalMessage = EMOJI + message;
+
+    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
     const canvasWidth = feedbackCanvas.width / devicePixelRatio;
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
 
-    // --- Helper to draw a rounded rectangle ---
-    const drawRoundedRect = (x, y, w, h, r) => {
-        feedbackCtx.beginPath();
-        feedbackCtx.moveTo(x + r, y);
-        feedbackCtx.arcTo(x + w, y, x + w, y + h, r);
-        feedbackCtx.arcTo(x + w, y + h, x, y + h, r);
-        feedbackCtx.arcTo(x, y + h, x, y, r);
-        feedbackCtx.arcTo(x, y, x + w, y, r);
-        feedbackCtx.closePath();
-        feedbackCtx.fill();
-    };
-
-    // --- Prepare Text and measure dimensions ---
-    feedbackCtx.font = `500 ${FONT_SIZE}px ${FONT_FAMILY}`;
-    const textMetrics = feedbackCtx.measureText(message);
-    const boxWidth = textMetrics.width + PADDING * 2;
-    const boxHeight = FONT_SIZE + PADDING * 2;
-    const x = (canvasWidth - boxWidth) / 2;
-    const y = canvasHeight - boxHeight - 80; // Position near the bottom bar
-
+    if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
     let startTime = null;
-    let currentOpacity = 0;
-
-    // --- Animation Loop ---
+    
     const animate = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
 
         feedbackCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-        
-        if (elapsed < FADE_TIME) {
-            currentOpacity = elapsed / FADE_TIME;
-        } else {
-            currentOpacity = 1;
-        }
-        
-        feedbackCtx.globalAlpha = currentOpacity;
-        feedbackCtx.fillStyle = BG_COLOR;
-        drawRoundedRect(x, y, boxWidth, boxHeight, BORDER_RADIUS);
 
+        let currentOpacity = 0;
+        if (elapsed < FADE_TIME) {
+            currentOpacity = elapsed / FADE_TIME; // Fade in
+        } else if (elapsed > duration && elapsed < duration + FADE_TIME) {
+            currentOpacity = 1 - (elapsed - duration) / FADE_TIME; // Fade out
+        } else if (elapsed >= duration + FADE_TIME) {
+            return; // Stop animation
+        } else {
+            currentOpacity = 1; // Fully visible
+        }
+
+        feedbackCtx.globalAlpha = currentOpacity;
+        feedbackCtx.font = `900 ${FONT_SIZE}px ${FONT_FAMILY}`; // Heavy font weight
         feedbackCtx.fillStyle = TEXT_COLOR;
         feedbackCtx.textAlign = 'center';
         feedbackCtx.textBaseline = 'middle';
-        feedbackCtx.fillText(message, x + boxWidth / 2, y + boxHeight / 2);
-        
-        feedbackCtx.globalAlpha = 1.0;
 
-        if (elapsed < FADE_TIME) {
-            feedbackAnimationId = requestAnimationFrame(animate);
-        }
+        // Draw the text with no background or shadow
+        feedbackCtx.fillText(finalMessage, canvasWidth / 2, canvasHeight / 2);
+
+        feedbackCtx.globalAlpha = 1.0;
+        feedbackAnimationId = requestAnimationFrame(animate);
     };
     
-    if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
     feedbackAnimationId = requestAnimationFrame(animate);
-
-    setTimeout(() => {
-        feedbackCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-    }, duration + FADE_TIME);
 }
 function checkTabletMode() {
     // This media query should match the one in your CSS
@@ -3724,7 +3709,7 @@ function logHandwritingAttempt(result) {
         if (imageDataUrl === blankCanvas.toDataURL()) {
             throw new Error("BLANK_ANSWER");
         }
-        base64ImageData = imageDataUrl; // Send the full Data URI
+        base64ImageData = imageDataUrl;
     } catch (error) {
         addChatMessage('AI', formatAIMessage('drawActivityWarning'));
         playRandomFeedback('disapprove');
@@ -3746,7 +3731,11 @@ function logHandwritingAttempt(result) {
         const result = await analyzeMathDrawing(payload);
         const { status, feedback } = result.data;
         
-        showOnCanvasFeedback(feedback);
+        if (status === 'correct') {
+            showOnCanvasFeedback(feedback, undefined, 'success');
+        } else {
+            showOnCanvasFeedback(feedback);
+        }
         
         if (status === 'correct') {
             logHandwritingAttempt('correct');
@@ -3779,7 +3768,6 @@ function logHandwritingAttempt(result) {
         nextCheckBtn.textContent = TXT.check;
     }
 }
-
 async function checkMathDrawing(isMcqContext = false) {
     if (!auth.currentUser) {
         console.error("User is not authenticated.");
@@ -3840,13 +3828,16 @@ async function checkMathDrawing(isMcqContext = false) {
         const result = await analyzeMathDrawing(payload);
         const { status, feedback } = result.data;
 	
-        showOnCanvasFeedback(feedback);
+        if (status === 'correct') {
+            showOnCanvasFeedback(feedback, undefined, 'success');
+        } else {
+            showOnCanvasFeedback(feedback);
+        }
 
         if (status === 'correct') {
             playRandomFeedback('approve');
             nextCheckBtn.classList.add('correct');
             
-            // Add points for a correct math solution
             const pointsGained = 15;
             userPoints += pointsGained;
             sessionPoints += pointsGained;
@@ -3856,19 +3847,17 @@ async function checkMathDrawing(isMcqContext = false) {
             if (currentStageData.type === 'question_math_solution') {
                 nextCheckBtn.textContent = TXT.gotIt;
             }
-            // FIX: Re-enable the button so the user can click "Got It" to proceed.
             nextCheckBtn.disabled = false;
 
-        } else { // Handles 'incorrect' and 'clarification_needed'
+        } else {
             playRandomFeedback('disapprove');
             nextCheckBtn.classList.add('incorrect');
             
-            // FIX: Re-enable the button after a delay so the user can try again.
             setTimeout(() => {
                 nextCheckBtn.disabled = false;
                 nextCheckBtn.textContent = TXT.check;
                 nextCheckBtn.classList.remove('incorrect');
-            }, 2000); // 2-second delay to read feedback
+            }, 2000);
         }
 
     } catch (error) {
@@ -3876,7 +3865,6 @@ async function checkMathDrawing(isMcqContext = false) {
         addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
         playRandomFeedback('disapprove');
         
-        // FIX: Always re-enable the button on an error.
         nextCheckBtn.disabled = false;
         nextCheckBtn.textContent = TXT.check;
         nextCheckBtn.classList.remove('incorrect');
