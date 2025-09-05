@@ -1699,17 +1699,19 @@ let lastIframeUpdateTime = 0;
         setLanguage(lessonLang);
         let TXT = getCurrentUIText();
         lessonStages = lessonStagesRoot.stages;
+
+        // FIX: Wait for the font to be loaded before showing the welcome message
+        await ensureHeadlineFontsLoaded();
 	    showOnCanvasFeedback(TXT.welcome);
+
         sessionPoints = 0;
         updatePointsDisplay();
         
-        // Reset the tracking for which stages have awarded points
         stagesWithPointsAwarded = new Set();
 
         document.title = lessonStagesRoot.lessonTitle || TXT[`titleDefault${currentLang.charAt(0).toUpperCase() + currentLang.slice(1)}`];
         console.log(`Lesson loaded: ${lessonStages.length} stages. Language: ${currentLang}`);
 
-        // Reset stage-related variables
         currentStageIndex = -1;
         currentStageData = null;
         isStudentInputAllowed = false;
@@ -1738,15 +1740,12 @@ let lastIframeUpdateTime = 0;
     } finally {
         isLessonLoading = false;
 
-        // NEW, ROBUST BUTTON LOGIC:
         if (lessonStages && lessonStages.length > 0) {
-            // Success! Lesson loaded.
             if (nextCheckBtn) {
                 nextCheckBtn.disabled = false;
                 nextCheckBtn.textContent = getCurrentUIText().start;
             }
         } else {
-            // Failure! Lesson did not load.
             if (nextCheckBtn) {
                 nextCheckBtn.textContent = getCurrentUIText().error;
                 nextCheckBtn.disabled = true;
@@ -1756,13 +1755,11 @@ let lastIframeUpdateTime = 0;
         if (!UI_TEXT[currentLang]) currentLang = 'hy';
         updateAllUITexts();
 
-        // Hide the loading overlay
         if (loadingOverlay) {
             loadingOverlay.classList.add('hidden');
-            // Set display to none after the fade-out transition completes
             setTimeout(() => {
                 if(loadingOverlay) loadingOverlay.style.display = 'none';
-            }, 500); // This duration MUST match your CSS transition duration
+            }, 500);
         }
     }
 }
