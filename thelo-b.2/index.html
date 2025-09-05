@@ -3027,10 +3027,8 @@ function renderStageUI(index, isResize = false) {
 	  function transitionToStage(newIndex) {
     if (isTransitioning || isLessonLoading || !lessonStages.length) return;
     
-    // FIX: Only hide feedback if we are NOT transitioning to the first stage from the start screen
-    if (currentStageIndex !== -1) {
-        hideOnCanvasFeedback();
-    }
+    // All feedback is now hidden either by the 'A' key or by advancing a stage.
+    hideOnCanvasFeedback();
 
     selectedMcqIndex = null;
     if (isReplayActive) closeReplayPlayer();
@@ -3190,7 +3188,8 @@ function handleNextCheckClick() {
 
   /* ─────────────────── 1. “Start” button ─────────────────── */
   if (currentStageIndex === -1 && lessonStages.length > 0) {
-    // The obsolete hideFeedback() call has been removed from here.
+    // FIX: Explicitly hide the welcome message when starting the lesson
+    hideOnCanvasFeedback(); 
     lessonStartTime = Date.now();
 
     // analytics
@@ -3223,7 +3222,6 @@ function handleNextCheckClick() {
       return;
     }
 
-    // freeze UI while checking
     const buttons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
     buttons.forEach(b => (b.disabled = true));
     nextCheckBtn.disabled = true;
@@ -3238,7 +3236,7 @@ function handleNextCheckClick() {
       addChatMessage('AI', '🤔 That option looks off – let me check your work…');
       setTimeout(async () => {
         try {
-          await checkMathDrawing(true); // MCQ context
+          await checkMathDrawing(true);
         } finally {
           buttons.forEach(b => (b.disabled = false));
           nextCheckBtn.disabled = false;
@@ -3252,9 +3250,8 @@ function handleNextCheckClick() {
   if (nextCheckBtn.textContent === TXT.gotIt) {
     if (!stagesWithPointsAwarded.has(currentStageIndex)) {
       stagesWithPointsAwarded.add(currentStageIndex);
-
       stopCurrentStageAudio();
-      const pts = Math.floor(Math.random() * 4) + 6; // 6-9 pts
+      const pts = Math.floor(Math.random() * 4) + 6;
       userPoints     += pts;
       sessionPoints  += pts;
       updateUserPointsInFirestore(pts);
@@ -3279,7 +3276,7 @@ function handleNextCheckClick() {
     nextStage();
   }
 }
-/* ------------------------------------------------------------------ */
+	  /* ------------------------------------------------------------------ */
 
 	  function addChatImage(url) {
     const wrapper = Object.assign(document.createElement('div'), {
@@ -3526,7 +3523,6 @@ function showToast(rawMsg, duration = 4000) {
  * @param {number} duration – how long to stay visible (ms)
  */
 
-
 function showOnCanvasFeedback(message, type = 'info') {
     if (!feedbackCtx) return;
 
@@ -3540,12 +3536,10 @@ function showOnCanvasFeedback(message, type = 'info') {
     let maxFontSize = 48;
     let minFontSize = 20;
     let EMOJI = '';
-    let duration = 3000;
 
     if (type === 'success') {
         maxFontSize = 72;
         EMOJI = '🎉 ';
-        duration = 2000;
     }
 
     const finalMessage = EMOJI + message;
@@ -3553,12 +3547,10 @@ function showOnCanvasFeedback(message, type = 'info') {
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
     const maxWidth = canvasWidth * MAX_WIDTH_PERCENTAGE;
 
-    // --- Helper function to wrap text into lines ---
     const wrapText = (ctx, text, maxWidth) => {
         const words = text.split(' ');
         let lines = [];
         let currentLine = words[0] || '';
-
         for (let i = 1; i < words.length; i++) {
             const word = words[i];
             const width = ctx.measureText(currentLine + " " + word).width;
@@ -3573,7 +3565,6 @@ function showOnCanvasFeedback(message, type = 'info') {
         return lines;
     };
     
-    // --- Dynamic Font Sizing Logic ---
     let currentFontSize = maxFontSize;
     let lines = [];
     
@@ -3595,8 +3586,8 @@ function showOnCanvasFeedback(message, type = 'info') {
     const totalTextHeight = lines.length * lineHeight;
     let startY = (canvasHeight / 2) - (totalTextHeight / 2);
 
-    // --- Store message details for the hide function ---
-    lastFeedbackDetails = { lines, lineHeight, startY, fontSize: currentFontSize };
+    // FIX: Store the font family along with other details
+    lastFeedbackDetails = { lines, lineHeight, startY, fontSize: currentFontSize, fontFamily: FONT_FAMILY };
 
     if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
     let startTime = null;
@@ -3604,28 +3595,17 @@ function showOnCanvasFeedback(message, type = 'info') {
     const animate = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
-
         feedbackCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-        let currentOpacity = 1.0;
-        if (elapsed < FADE_TIME) {
-            currentOpacity = elapsed / FADE_TIME;
-        } else {
-            currentOpacity = 1.0;
-        }
-
+        let currentOpacity = (elapsed < FADE_TIME) ? (elapsed / FADE_TIME) : 1.0;
         feedbackCtx.globalAlpha = currentOpacity;
         feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
         feedbackCtx.fillStyle = TEXT_COLOR;
         feedbackCtx.textAlign = 'center';
         feedbackCtx.textBaseline = 'top';
-
         for (let i = 0; i < lines.length; i++) {
             feedbackCtx.fillText(lines[i], canvasWidth / 2, startY + (i * lineHeight));
         }
-        
         feedbackCtx.globalAlpha = 1.0;
-
         if (elapsed < FADE_TIME) {
             feedbackAnimationId = requestAnimationFrame(animate);
         } else {
@@ -3642,11 +3622,10 @@ function hideOnCanvasFeedback() {
     const FADE_TIME = 400;
     const canvasWidth = feedbackCanvas.width / devicePixelRatio;
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
-    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
     const TEXT_COLOR = '#111827';
     
-    // Retrieve details from the last message shown
-    const { lines, lineHeight, startY, fontSize } = lastFeedbackDetails;
+    // FIX: Retrieve the exact font family that was used to show the message
+    const { lines, lineHeight, startY, fontSize, fontFamily } = lastFeedbackDetails;
 
     if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
     let startTime = null;
@@ -3661,19 +3640,18 @@ function hideOnCanvasFeedback() {
         if (elapsed < FADE_TIME) {
             currentOpacity = 1.0 - (elapsed / FADE_TIME);
         } else {
-            lastFeedbackDetails = null; // Clear the stored details
+            lastFeedbackDetails = null;
             cancelAnimationFrame(feedbackAnimationId);
             feedbackAnimationId = null;
             return;
         }
 
         feedbackCtx.globalAlpha = currentOpacity;
-        feedbackCtx.font = `900 ${fontSize}px ${FONT_FAMILY}`;
+        feedbackCtx.font = `900 ${fontSize}px ${fontFamily}`; // Use the stored font family
         feedbackCtx.fillStyle = TEXT_COLOR;
         feedbackCtx.textAlign = 'center';
         feedbackCtx.textBaseline = 'top';
         
-        // Redraw each line with decreasing opacity
         for (let i = 0; i < lines.length; i++) {
             feedbackCtx.fillText(lines[i], canvasWidth / 2, startY + (i * lineHeight));
         }
@@ -3685,7 +3663,7 @@ function hideOnCanvasFeedback() {
 
     feedbackAnimationId = requestAnimationFrame(animateFadeOut);
 }
-function checkTabletMode() {
+	  function checkTabletMode() {
     // This media query should match the one in your CSS
     const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
     const landscapeQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (min-height: 500px)');
