@@ -1492,8 +1492,7 @@ let minimapCtx = null;
 	  const feedbackCanvas = document.getElementById('feedbackCanvas');
 let feedbackCtx = null; // Will be initialized in setupContexts
 let feedbackAnimationId = null; // To manage animations
-	  let lastFeedbackMessage = '';
-let lastFeedbackFontSize = 0;
+	  let lastFeedbackDetails = null;
 	  const feedbackOverlay = document.getElementById('feedbackOverlay');
 const feedbackEmoji = document.getElementById('feedbackEmoji');
 const feedbackText = document.getElementById('feedbackText');
@@ -3499,7 +3498,7 @@ function showToast(rawMsg, duration = 4000) {
 
 
 /**
- * Displays and makes persistent a feedback message with dynamic font sizing.
+ * Displays an animated feedback message with dynamic font sizing and word wrapping.
  * @param {string} message - The text to display.
  * @param {string} [type='info'] - 'info' for general feedback, 'success' for celebratory.
  */
@@ -3511,14 +3510,17 @@ function showOnCanvasFeedback(message, type = 'info') {
     const MAX_WIDTH_PERCENTAGE = 0.70;
     const TEXT_COLOR = '#111827';
     const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
-    
+    const LINE_HEIGHT_MULTIPLIER = 1.2;
+
     let maxFontSize = 48;
     let minFontSize = 20;
     let EMOJI = '';
+    let duration = 3000; // Default duration for info
 
     if (type === 'success') {
         maxFontSize = 72;
         EMOJI = '🎉 ';
+        duration = 2000;
     }
 
     const finalMessage = EMOJI + message;
@@ -3526,22 +3528,57 @@ function showOnCanvasFeedback(message, type = 'info') {
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
     const maxWidth = canvasWidth * MAX_WIDTH_PERCENTAGE;
 
-    // --- Dynamic Font Sizing ---
-    let currentFontSize = maxFontSize;
-    feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
-    while (feedbackCtx.measureText(finalMessage).width > maxWidth && currentFontSize > minFontSize) {
-        currentFontSize--;
-        feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
-    }
+    // --- Helper function to wrap text into lines ---
+    const wrapText = (ctx, text, maxWidth) => {
+        const words = text.split(' ');
+        let lines = [];
+        let currentLine = words[0];
 
-    // --- Store message for the hide function ---
-    lastFeedbackMessage = finalMessage;
-    lastFeedbackFontSize = currentFontSize;
+        for (let i = 1; i < words.length; i++) {
+            const word = words[i];
+            const width = ctx.measureText(currentLine + " " + word).width;
+            if (width < maxWidth) {
+                currentLine += " " + word;
+            } else {
+                lines.push(currentLine);
+                currentLine = word;
+            }
+        }
+        lines.push(currentLine);
+        return lines;
+    };
+    
+    // --- Dynamic Font Sizing Logic ---
+    let currentFontSize = maxFontSize;
+    let lines = [];
+    
+    // Decrease font size until the text fits
+    do {
+        feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
+        lines = wrapText(feedbackCtx, finalMessage, maxWidth);
+        // This check is a failsafe for very long single words
+        const longestWord = finalMessage.split(' ').reduce((a, b) => a.length > b.length ? a : b, '');
+        if (feedbackCtx.measureText(longestWord).width > maxWidth) {
+             currentFontSize--;
+        } else {
+            break; // Font size is okay for the longest word, wrapping will handle the rest
+        }
+    } while (currentFontSize > minFontSize)
+    
+    // Recalculate lines with the final font size
+    feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
+    lines = wrapText(feedbackCtx, finalMessage, maxWidth);
+    
+    const lineHeight = currentFontSize * LINE_HEIGHT_MULTIPLIER;
+    const totalTextHeight = lines.length * lineHeight;
+    let startY = (canvasHeight / 2) - (totalTextHeight / 2);
+
+    // --- Store message details for the hide function ---
+    lastFeedbackMessage = { lines, lineHeight, startY, fontSize: currentFontSize };
 
     if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
     let startTime = null;
     
-    // --- Animation Loop (Fade IN only) ---
     const animate = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
@@ -3552,7 +3589,6 @@ function showOnCanvasFeedback(message, type = 'info') {
         if (elapsed < FADE_TIME) {
             currentOpacity = elapsed / FADE_TIME;
         } else {
-            // Animation is done, draw one last time at full opacity and stop
             currentOpacity = 1.0;
         }
 
@@ -3560,8 +3596,13 @@ function showOnCanvasFeedback(message, type = 'info') {
         feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
         feedbackCtx.fillStyle = TEXT_COLOR;
         feedbackCtx.textAlign = 'center';
-        feedbackCtx.textBaseline = 'middle';
-        feedbackCtx.fillText(finalMessage, canvasWidth / 2, canvasHeight / 2);
+        feedbackCtx.textBaseline = 'top'; // Use 'top' for multi-line drawing
+
+        // Draw each line of the wrapped text
+        for (let i = 0; i < lines.length; i++) {
+            feedbackCtx.fillText(lines[i], canvasWidth / 2, startY + (i * lineHeight));
+        }
+        
         feedbackCtx.globalAlpha = 1.0;
 
         if (elapsed < FADE_TIME) {
@@ -3573,17 +3614,23 @@ function showOnCanvasFeedback(message, type = 'info') {
     };
     
     feedbackAnimationId = requestAnimationFrame(animate);
-}
-	  /**
+}	  /**
  * Fades out and clears the persistent feedback message from the canvas.
  */
+/**
+ * Fades out and clears the persistent multi-line feedback message.
+ */
 function hideOnCanvasFeedback() {
-    if (!feedbackCtx || !lastFeedbackMessage) return;
+    if (!feedbackCtx || !lastFeedbackDetails) return;
 
     const FADE_TIME = 400;
     const canvasWidth = feedbackCanvas.width / devicePixelRatio;
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
     const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+    const TEXT_COLOR = '#111827';
+    
+    // Retrieve details from the last message shown
+    const { lines, lineHeight, startY, fontSize } = lastFeedbackDetails;
 
     if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
     let startTime = null;
@@ -3591,27 +3638,30 @@ function hideOnCanvasFeedback() {
     const animateFadeOut = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
-
+        
         feedbackCtx.clearRect(0, 0, canvasWidth, canvasHeight);
         
         let currentOpacity = 1.0;
         if (elapsed < FADE_TIME) {
             currentOpacity = 1.0 - (elapsed / FADE_TIME);
         } else {
-            // Animation finished, clear globals and stop
-            lastFeedbackMessage = '';
-            lastFeedbackFontSize = 0;
+            lastFeedbackDetails = null; // Clear the stored details
             cancelAnimationFrame(feedbackAnimationId);
             feedbackAnimationId = null;
             return;
         }
 
         feedbackCtx.globalAlpha = currentOpacity;
-        feedbackCtx.font = `900 ${lastFeedbackFontSize}px ${FONT_FAMILY}`;
-        feedbackCtx.fillStyle = '#111827';
+        feedbackCtx.font = `900 ${fontSize}px ${FONT_FAMILY}`;
+        feedbackCtx.fillStyle = TEXT_COLOR;
         feedbackCtx.textAlign = 'center';
-        feedbackCtx.textBaseline = 'middle';
-        feedbackCtx.fillText(lastFeedbackMessage, canvasWidth / 2, canvasHeight / 2);
+        feedbackCtx.textBaseline = 'top';
+        
+        // Redraw each line with decreasing opacity
+        for (let i = 0; i < lines.length; i++) {
+            feedbackCtx.fillText(lines[i], canvasWidth / 2, startY + (i * lineHeight));
+        }
+
         feedbackCtx.globalAlpha = 1.0;
 
         feedbackAnimationId = requestAnimationFrame(animateFadeOut);
