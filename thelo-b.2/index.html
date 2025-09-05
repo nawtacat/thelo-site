@@ -4225,119 +4225,104 @@ function closeCalculator() {
     resumeMediaState();
 }
 function handleKeyDown(event) {
-    // 1. Universal Replay Seeking with Arrow Keys
-    // This block MUST come first to override other key bindings when a replay is active.
-    if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-        event.preventDefault();
-        isMediaScrubbingActive = true;
-        if (currentReplayAnimationId) {
-            cancelAnimationFrame(currentReplayAnimationId);
-            currentReplayAnimationId = null;
+    // 1. Universal Replay Seeking with Arrow Keys
+    // This block MUST come first to override other key bindings when a replay is active.
+    if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault();
+        isMediaScrubbingActive = true;
+        if (currentReplayAnimationId) {
+            cancelAnimationFrame(currentReplayAnimationId);
+            currentReplayAnimationId = null;
+        }
+        const step = 5;
+        const diff = event.key === 'ArrowLeft' ? -step : step;
+        let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, currentStageTotalDuration));
+        internalPlaybackTime = newTime;
+        if (currentStageAudio) {
+            const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
+            currentStageAudio.currentTime = audioTargetTime;
+            if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) {
+                currentStageAudio.play().catch(() => {});
+            }
+        }
+        if (isReplayActive && replayFrame && replayFrame.contentWindow) {
+            replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*');
+        }
+        if (currentStageDrawingData && replayCtx) {
+            renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+        }
+        updateMediaProgressBar(newTime, currentStageTotalDuration);
+        lastFrameTimestampForManualAdvance = 0;
+        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+        return;
+    }
+
+    // 2. Ignore inputs when modifier keys are pressed or in text fields
+    if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) {
+        return;
+    }
+    
+    // 3. Define state for the current stage
+    const mcqDetails = currentStageData ? currentStageData.optionsQuiz : null;
+    const isMcqActive = !!(currentStageData && currentStageData.type === "explanation_with_mcq" && mcqDetails && mcqDetails.choices);
+
+    // 4. Handle Spacebar Press
+    if (event.key === ' ') {
+        event.preventDefault(); 
+        if (dashboardBtn && dashboardBtn.classList.contains('visible')) {
+            dashboardBtn.click();
+            return; 
         }
-        const step = 5;
-        const diff = event.key === 'ArrowLeft' ? -step : step;
-        let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, currentStageTotalDuration));
-        internalPlaybackTime = newTime;
-        if (currentStageAudio) {
-            const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
-            currentStageAudio.currentTime = audioTargetTime;
-            if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) {
-                currentStageAudio.play().catch(() => {});
-            }
+        if (nextCheckBtn && !nextCheckBtn.disabled) {
+            handleNextCheckClick();
         }
-        if (isReplayActive && replayFrame && replayFrame.contentWindow) {
-            replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*');
-        }
-        if (currentStageDrawingData && replayCtx) {
-            renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
-        }
-        updateMediaProgressBar(newTime, currentStageTotalDuration);
-        lastFrameTimestampForManualAdvance = 0;
-        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-        return;
     }
+    
+    // 5. Handle all other keyboard shortcuts
+    if (isPageGridVisible) {
+        if (event.key.toLowerCase() === 'c') changePageGridBatch(1);
+        if (event.key.toLowerCase() === 'x') changePageGridBatch(-1);
+        if (event.key === 'Escape') closePageGridView();
+        return;
+    }
+    if (isCalculatorActive) {
+        if (event.key.toLowerCase() === 'f' || event.key === 'Escape') closeCalculator();
+        return;
+    }
+    
+    if (isThelobookActive) {
+        if (event.key.toLowerCase() === 'b' || event.key === 'Escape') closeThelobook(true);
+        if (event.key.toLowerCase() === 'e') toggleThelobookEraser();
+        if (event.key.toLowerCase() === 'c') clearUserCanvas();
+        return;
+    }
 
-    // 2. Ignore inputs when modifier keys are pressed or in text fields
-    if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName.toUpperCase())) {
-        return;
-    }
-    
-    // 3. Define state for the current stage
-    const mcqDetails = currentStageData ? currentStageData.optionsQuiz : null;
-    const isMcqActive = !!(currentStageData && currentStageData.type === "explanation_with_mcq" && mcqDetails && mcqDetails.choices);
-
-    // 4. Handle Spacebar Press
-    // >>> REPLACE THE OLD BLOCK WITH THIS NEW, SIMPLIFIED ONE <<<
-if (event.key === ' ') {
-    event.preventDefault(); // Prevent the default action (like scrolling)
-
-    // First, check if the lesson is complete and the dashboard button is shown.
-    if (dashboardBtn && dashboardBtn.classList.contains('visible')) {
-        dashboardBtn.click();
-        return; // Done
-    }
-
-    // For ALL other cases (Start, Got It, Check MCQ, etc.),
-    // we simply trigger the main button's click handler if it's enabled.
-    // This removes duplicated logic and makes the spacebar behave
-    // exactly like a mouse click on the primary button.
-    if (nextCheckBtn && !nextCheckBtn.disabled) {
-        handleNextCheckClick();
-    }
-}
-    
-    // 5. Handle all other keyboard shortcuts
-
-    // Page Grid View Controls
-    if (isPageGridVisible) {
-        if (event.key.toLowerCase() === 'c') changePageGridBatch(1);
-        if (event.key.toLowerCase() === 'x') changePageGridBatch(-1);
-        if (event.key === 'Escape') closePageGridView();
-        return;
-    }
-
-    // Calculator Controls
-    if (isCalculatorActive) {
-        if (event.key.toLowerCase() === 'f' || event.key === 'Escape') closeCalculator();
-        return;
-    }
-    
-    // Thelobook (Notebook) Controls
-    if (isThelobookActive) {
-        if (event.key.toLowerCase() === 'b' || event.key === 'Escape') closeThelobook(true);
-        if (event.key.toLowerCase() === 'e') toggleThelobookEraser();
-        if (event.key.toLowerCase() === 'c') clearUserCanvas();
-        return;
-    }
-
-    // General app controls (only run if no overlays are active)
-    if (currentStageIndex >= 0 && !isTransitioning && !isLessonLoading && currentStageData) {
-        switch (event.key.toLowerCase()) {
-            case 'b':
-                openThelobook();
-                event.preventDefault();
-                break;
-            case 'f':
-                openCalculator();
-                event.preventDefault();
-                break;
+    // General app controls (only run if no overlays are active)
+    if (currentStageIndex >= 0 && !isTransitioning && !isLessonLoading && currentStageData) {
+        switch (event.key.toLowerCase()) {
+            case 'b':
+                openThelobook();
+                event.preventDefault();
+                break;
+            case 'f':
+                openCalculator();
+                event.preventDefault();
+                break;
 			case 'a':
-            // Check if the feedback overlay is currently visible
-            if (feedbackOverlay && !feedbackOverlay.classList.contains('feedback-hidden')) {
-                hideFeedback();
-                event.preventDefault(); // Prevents typing 'a' if in an input field
-            }
-            break;
-            case 'c':
-                if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled) {
-                    clearUserCanvas();
-                    event.preventDefault();
-                }
-                break;
-        }
-    }
-}	// Prevent zooming via keyboard and mouse wheel
-window.addEventListener('keydown', function(e) {
+                // This now calls the new hide function to clear on-canvas feedback
+                hideOnCanvasFeedback();
+                event.preventDefault();
+                break;
+            case 'c':
+                if (isStudentInputAllowed && !isMcqActive && clearBtn && clearBtn.style.display !== 'none' && !clearBtn.disabled) {
+                    clearUserCanvas();
+                    event.preventDefault();
+                }
+                break;
+        }
+    }
+}
+	  window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
   }
