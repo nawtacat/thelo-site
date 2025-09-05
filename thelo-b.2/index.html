@@ -3497,7 +3497,7 @@ function showToast(rawMsg, duration = 4000) {
 
 
 /**
- * Displays an animated feedback message directly on a dedicated canvas layer.
+ * Displays an animated feedback message with dynamic font sizing directly on the canvas.
  * @param {string} message - The text to display.
  * @param {number} [duration=3000] - How long the message stays fully visible in ms.
  * @param {string} [type='info'] - 'info' for general feedback, 'success' for celebratory.
@@ -3506,24 +3506,36 @@ function showOnCanvasFeedback(message, duration = 3000, type = 'info') {
     if (!feedbackCtx) return;
 
     // --- Configuration ---
-    const FADE_TIME = 400; // ms for fade in/out
-    let FONT_SIZE = 48;
-    const TEXT_COLOR = '#111827'; // A dark, near-black color
+    const FADE_TIME = 400;
+    const MAX_WIDTH_PERCENTAGE = 0.70; // Use 70% of the canvas width
+    const TEXT_COLOR = '#111827';
+    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+    
+    let maxFontSize = 48;
+    let minFontSize = 20; // Don't let the font get too small
     let EMOJI = '';
 
-    // Adjust styling based on the type of feedback
     if (type === 'success') {
-        FONT_SIZE = 72; // Make success messages larger
-        EMOJI = '🎉 '; // Add a celebratory emoji before the text
-        duration = 2000; // Make success messages more punchy
+        maxFontSize = 72;
+        EMOJI = '🎉 ';
+        duration = 2000;
     }
-    
-    // The message is now the emoji prepended to the actual AI feedback
-    const finalMessage = EMOJI + message;
 
-    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Mardoto-Light', system-ui, sans-serif";
+    const finalMessage = EMOJI + message;
     const canvasWidth = feedbackCanvas.width / devicePixelRatio;
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
+    const maxWidth = canvasWidth * MAX_WIDTH_PERCENTAGE;
+
+    // --- Dynamic Font Sizing Logic ---
+    let currentFontSize = maxFontSize;
+    feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`; // Set initial font for measurement
+
+    // Decrease font size until the text fits within the max width
+    while (feedbackCtx.measureText(finalMessage).width > maxWidth && currentFontSize > minFontSize) {
+        currentFontSize--; // Decrease by 1px
+        feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
+    }
+    // --- End of Dynamic Sizing Logic ---
 
     if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
     let startTime = null;
@@ -3536,22 +3548,21 @@ function showOnCanvasFeedback(message, duration = 3000, type = 'info') {
 
         let currentOpacity = 0;
         if (elapsed < FADE_TIME) {
-            currentOpacity = elapsed / FADE_TIME; // Fade in
+            currentOpacity = elapsed / FADE_TIME;
         } else if (elapsed > duration && elapsed < duration + FADE_TIME) {
-            currentOpacity = 1 - (elapsed - duration) / FADE_TIME; // Fade out
+            currentOpacity = 1 - (elapsed - duration) / FADE_TIME;
         } else if (elapsed >= duration + FADE_TIME) {
             return; // Stop animation
         } else {
-            currentOpacity = 1; // Fully visible
+            currentOpacity = 1;
         }
 
         feedbackCtx.globalAlpha = currentOpacity;
-        feedbackCtx.font = `900 ${FONT_SIZE}px ${FONT_FAMILY}`; // Heavy font weight
+        feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`; // Use the calculated font size
         feedbackCtx.fillStyle = TEXT_COLOR;
         feedbackCtx.textAlign = 'center';
         feedbackCtx.textBaseline = 'middle';
 
-        // Draw the text with no background or shadow
         feedbackCtx.fillText(finalMessage, canvasWidth / 2, canvasHeight / 2);
 
         feedbackCtx.globalAlpha = 1.0;
