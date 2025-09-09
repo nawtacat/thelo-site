@@ -2302,7 +2302,7 @@ async function ensureHeadlineFontsLoaded() {
   } catch (_) { /* ignore */ }
 }
 
-// REPLACE your entire existing renderComplexHeadline function with this one.
+// A complete replacement for your renderComplexHeadline function
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   if (!headline || !bgCtx) return;
 
@@ -2318,12 +2318,17 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       .trim() || '#111827';
 
   const katexCSS = await getKatexCSSWithEmbeddedFonts();
+
+  // ======================= FONT FIX ==========================
+  // THIS IS THE CRUCIAL PART THAT FORCES THE DEDICATED MATH FONT.
+  // It must be included in the SVG's style definition.
   const extraRules = `
 .katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
 .katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
 .katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
 .katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
 `;
+  // ===================== END OF FONT FIX =======================
 
   const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || [])
     .filter(Boolean)
@@ -2359,7 +2364,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
     try {
       const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
 
-      const style = document.createElement('style');
+      const style = document.createElement('style');
       style.textContent = katexCSS;
       measureHost.appendChild(style);
 
@@ -2369,27 +2374,22 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       tmp.innerHTML = html;
       measureHost.appendChild(tmp);
 
-      // ======================= THE FIX IS HERE =======================
+      // --- CLIPPING FIX (from previous answer) ---
       const katexEl = tmp.querySelector('.katex') || tmp;
-      // Force inline-block for more reliable measurements from the browser
       katexEl.style.display = 'inline-block';
-
       const rect = katexEl.getBoundingClientRect();
-      // scrollWidth is often more accurate for measuring overflowing content
       const scrollW = katexEl.scrollWidth;
-
-      // Use the LARGER of the two measurements to be safe, plus a more generous pad
       const measuredWidth = Math.max(rect.width, scrollW);
-      const PAD = 4; // CHANGED: Increased padding for more safety margin
+      const PAD = 4;
       const w = Math.ceil(measuredWidth) + PAD;
       const h = Math.ceil(rect.height) + PAD;
-      // ===================== END OF FIX ==============================
+      // --- END OF CLIPPING FIX ---
 
       tmp.remove();
 
       const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-          <style>${katexCSS}\n${extraRules}</style>
+                    <style>${katexCSS}\n${extraRules}</style>
           <foreignObject width="100%" height="100%">
             <div xmlns="http://www.w3.org/1999/xhtml"
                  style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;padding-right:${PAD/2}px;">
@@ -2469,7 +2469,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   bgCtx.textBaseline = prevBase || 'top';
   bgCtx.fillStyle = prevFill || fontColor;
 }
-
 
 	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
