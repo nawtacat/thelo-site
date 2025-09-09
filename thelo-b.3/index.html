@@ -2274,7 +2274,7 @@ async function getKatexCSSWithEmbeddedFonts() {
     const url = `${base}/fonts/${name}`;
     const res = await fetch(url);
     const b64 = abToBase64(await res.arrayBuffer());
-    const dataURL = `url(data:font/woff2;base64,${b64}) format("woff2")`;
+    const dataUrl = 'data:image/svg+xml;base64,' + btoa(encodeURIComponent(svg).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
     css = css.replace(
       new RegExp(`url\\([^)]*${name}[^)]*\\)\\s*format\\("woff2"\\)`, 'g'),
       dataURL
@@ -2302,11 +2302,7 @@ async function ensureHeadlineFontsLoaded() {
   } catch (_) { /* ignore */ }
 }
 
-// Mixed text + KaTeX headline renderer (SVG with embedded KaTeX fonts)
-// - Segments delimited by /K ... K/ are rendered with KaTeX
-// - Lines are wrapped to widthFraction of the canvas and centered per line
-// - Adds 2px pad in SVG to prevent right-edge clipping of last glyphs
-// REPLACE your existing renderComplexHeadline function with this corrected version
+// REPLACE your function with this version to fix both font and symbol rendering
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   if (!headline || !bgCtx) return;
 
@@ -2321,10 +2317,8 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       .getPropertyValue('--thelo-text')
       .trim() || '#111827';
 
-  // KaTeX CSS with embedded fonts (so data-URL SVG can render the same as DOM)
   const katexCSS = await getKatexCSSWithEmbeddedFonts();
 
-  // Extra font-family overrides to keep headline matching MCQs
   const extraRules = `
 .katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
 .katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
@@ -2332,7 +2326,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
 .katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
 `;
 
-  // ---- parse headline into segments: /K ... K/ => math
   const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || [])
     .filter(Boolean)
     .map(p =>
@@ -2341,7 +2334,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
         : { type: 'text', content: p }
     );
 
-  // A hidden host for measuring KaTeX DOM sizes (one per call)
   const measureHost = document.createElement('div');
   measureHost.style.position = 'absolute';
   measureHost.style.visibility = 'hidden';
@@ -2349,7 +2341,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   measureHost.style.top = '-9999px';
   document.body.appendChild(measureHost);
 
-  // ---- tokenize with measurements ----
   const tokens = [];
   for (const seg of segments) {
     if (seg.type === 'text') {
@@ -2366,27 +2357,24 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       continue;
     }
 
-    // math segment
     try {
       const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
 
-       const style = document.createElement('style');
- style.textContent = katexCSS;          // the CSS you built with embedded fonts
- measureHost.appendChild(style);
+      const style = document.createElement('style');
+     style.textContent = katexCSS;
+     measureHost.appendChild(style);
 
- const tmp = document.createElement('div');
- tmp.style.color = fontColor;
- tmp.style.fontSize = `${mathFontSize}px`;
- tmp.innerHTML = html;
- measureHost.appendChild(tmp);
+     const tmp = document.createElement('div');
+     tmp.style.color = fontColor;
+     tmp.style.fontSize = `${mathFontSize}px`;
+     tmp.innerHTML = html;
+     measureHost.appendChild(tmp);
 
       const katexEl = tmp.querySelector('.katex') || tmp;
       const rect = katexEl.getBoundingClientRect();
 
-      // remove measured node (keep host)
       tmp.remove();
 
-      // Pad & round to avoid clipping last glyphs
       const PAD = 2;
       const w = Math.ceil(rect.width) + PAD;
       const h = Math.ceil(rect.height) + PAD;
@@ -2402,9 +2390,9 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
           </foreignObject>
         </svg>`;
 
-      // ***** THIS IS THE FIX *****
-      const dataUrl = 'data:image/svg+xml;base64,' + btoa(svg);
-      // **************************
+      // ***** THIS IS THE CORRECTED LINE THAT FIXES BOTH ISSUES *****
+      const dataUrl = 'data:image/svg+xml;base64,' + btoa(encodeURIComponent(svg).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
+      // ***************************************************************
 
       const image = new Image();
       image.src = dataUrl;
@@ -2412,16 +2400,13 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
 
       tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
     } catch (e) {
-      // graceful fallback to text measurement
       const w = bgCtx.measureText(seg.content).width;
       tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
     }
   }
 
-  // cleanup measure host
   measureHost.remove();
 
-  // ---- build lines to fit available width ----
   const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
   const maxWidth = canvasW * widthFraction;
   const lineGap = 8;
@@ -2430,7 +2415,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   let line = { tokens: [], width: 0, height: fontSize };
 
   for (const t of tokens) {
-    // allow scaling down oversized math to fit
     let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
 
     if (t.type === 'math' && width > maxWidth) {
@@ -2454,7 +2438,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   }
   if (line.tokens.length) lines.push(line);
 
-  // ---- render lines, centered horizontally ----
   const prevAlign = bgCtx.textAlign;
   const prevBase = bgCtx.textBaseline;
   const prevFill = bgCtx.fillStyle;
@@ -2478,7 +2461,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
     curY += L.height + lineGap;
   }
 
-  // restore ctx
   bgCtx.textAlign = prevAlign || 'center';
   bgCtx.textBaseline = prevBase || 'top';
   bgCtx.fillStyle = prevFill || fontColor;
