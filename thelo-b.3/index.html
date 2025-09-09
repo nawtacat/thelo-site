@@ -3186,14 +3186,11 @@ async function displayLessonComplete() {
  * This function is the central point for evaluating all interactive stages.
  */
 function handleNextCheckClick() {
-    // Guard clauses – block interaction during transitions or modals
     if (isTransitioning || isLessonLoading || isThelobookActive || isPageGridVisible) {
         return;
     }
-
     const TXT = getCurrentUIText();
 
-    /* ─────────────────── 1. “Start” button ─────────────────── */
     if (currentStageIndex === -1 && lessonStages.length > 0) {
         hideOnCanvasFeedback();
         lessonStartTime = Date.now();
@@ -3212,7 +3209,6 @@ function handleNextCheckClick() {
         return;
     }
 
-    /* ─────────────────── 2. MCQ stages (with feedback) ─────────────────── */
     const mcq = currentStageData.optionsQuiz;
     const isMCQStage =
         currentStageData.type === 'explanation_with_mcq' &&
@@ -3221,15 +3217,14 @@ function handleNextCheckClick() {
         mcq.choices.length > 0;
 
     if (isMCQStage) {
-        document.body.classList.remove('mcq-active'); // Always remove keyboard mode class on check
+        document.body.classList.remove('mcq-active');
 
-        // If the button shows "Next", the user answered correctly and is now advancing.
         if (nextCheckBtn.textContent === TXT.next || nextCheckBtn.textContent === TXT.gotIt) {
-            nextStage(); // This calls transitionToStage() for a smooth fade
+            nextStage();
             return;
         }
 
-        if (selectedMcqIndex === null) { return; } // Should not happen in keyboard mode
+        if (selectedMcqIndex === null) { return; }
 
         const buttons = mcqOptionsContainer.querySelectorAll('.mcq-option-btn');
         nextCheckBtn.disabled = true;
@@ -3242,17 +3237,9 @@ function handleNextCheckClick() {
             selectedButton.classList.add('correct');
             addChatMessage('AI', `🎉 ${mcq.feedbackCorrect || TXT.correct}`);
             playRandomFeedback('approve');
+            
+            // The options now remain visible.
 
-            // --- IMPROVEMENT: Smoothly hide MCQ options on correct answer ---
-            if (mcqOptionsContainer) {
-                mcqOptionsContainer.style.transition = 'opacity 0.3s ease-out';
-                mcqOptionsContainer.style.opacity = 0;
-                setTimeout(() => {
-                    if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
-                }, 300);
-            }
-
-            // Change button to "Next" and re-enable it for manual advance
             nextCheckBtn.textContent = TXT.next;
             nextCheckBtn.classList.add('correct');
             nextCheckBtn.disabled = false;
@@ -3260,9 +3247,6 @@ function handleNextCheckClick() {
         } else { // Incorrect answer
             selectedButton.classList.remove('selected');
             selectedButton.classList.add('incorrect');
-            
-            // We do NOT reveal the correct answer, as per your request.
-            
             addChatMessage('AI', `🤔 ${mcq.feedbackIncorrect || TXT.incorrect}`);
             playRandomFeedback('disapprove');
 
@@ -3270,15 +3254,14 @@ function handleNextCheckClick() {
                 buttons.forEach(b => {
                     b.classList.remove('incorrect');
                 });
-                document.body.classList.add('mcq-active'); // Re-enable keyboard mode
-                updateMcqSelectionVisuals(0); // Reset selection to first option
-                nextCheckBtn.disabled = false; // Re-enable check button for another try
+                document.body.classList.add('mcq-active');
+                // The selection is NOT reset, allowing you to navigate from your last choice.
+                nextCheckBtn.disabled = false;
             }, 2000);
         }
         return;
     }
 
-    /* ─────────────────── 3. “Got It” / info stages ─────────────────── */
     if (nextCheckBtn.textContent === TXT.gotIt) {
         if (!stagesWithPointsAwarded.has(currentStageIndex)) {
             stagesWithPointsAwarded.add(currentStageIndex);
@@ -3299,7 +3282,6 @@ function handleNextCheckClick() {
         return;
     }
 
-    /* ─────────────────── 4. Question stages ─────────────────── */
     if (currentStageData.type === 'question_handwriting') {
         checkHandwritingAnswer();
     } else if (currentStageData.type === 'question_math_solution') {
@@ -3307,8 +3289,7 @@ function handleNextCheckClick() {
     } else {
         nextStage();
     }
-}	  /* ------------------------------------------------------------------ */
-
+}
 	  function addChatImage(url) {
     const wrapper = Object.assign(document.createElement('div'), {
         className: 'ai-message chat-image-container'
