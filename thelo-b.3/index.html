@@ -1477,34 +1477,6 @@ ensureHeadlineFontsLoaded().catch(()=>{});
     };
 
     let currentLang = 'en';
-	  /**
- * Proactively preloads all essential KaTeX fonts to prevent rendering race conditions.
- * Returns a promise that resolves once all fonts are loaded and ready.
- */
-async function preloadKatexFonts() {
-    console.log("Starting KaTeX font preloading...");
-    const KĀTEX_FONT_BASE = 'https://cdn.jsdelivr/npm/katex@0.16.10/dist/fonts/';
-    const FONT_FACES = [
-        // Name,           Weight, Style,    File
-        ['KaTeX_Main',     '400',  'normal', 'KaTeX_Main-Regular.woff2'],
-        ['KaTeX_Main',     '700',  'normal', 'KaTeX_Main-Bold.woff2'],
-        ['KaTeX_Math',     '400',  'italic', 'KaTeX_Math-Italic.woff2'],
-        ['KaTeX_AMS',      '400',  'normal', 'KaTeX_AMS-Regular.woff2'],
-        ['KaTeX_Size1',    '400',  'normal', 'KaTeX_Size1-Regular.woff2'],
-        ['KaTeX_Size2',    '400',  'normal', 'KaTeX_Size2-Regular.woff2'],
-        ['KaTeX_Main',     '400',  'italic', 'KaTeX_Main-Italic.woff2']
-    ];
-
-    const fontPromises = FONT_FACES.map(async ([family, weight, style, file]) => {
-        const font = new FontFace(family, `url(${KĀTEX_FONT_BASE}${file})`, { style, weight });
-        await font.load();
-        document.fonts.add(font);
-    });
-
-    // Wait for all fonts to be loaded, with a safety timeout
-    await Promise.all(fontPromises);
-    console.log("All KaTeX fonts have been preloaded and are ready.");
-}
     /* ========================================================================= */
 /* ===== ADD THIS BLOCK: For Weekly Streak Calculation ===================== */
 /* ========================================================================= */
@@ -4540,18 +4512,37 @@ function initApp() {
 
   // This listener ensures the entire page, including all styles and fonts, is ready before the app starts.
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('DOM is ready. Checking for KaTeX library...');
+
+    // Helper function to programmatically load KaTeX CSS
+    let isKatexCssInjected = false;
+    async function ensureKatexCssIsLoaded() {
+        if (isKatexCssInjected) return;
+        // This re-uses your existing function that cleverly embeds the fonts!
+        const cssText = await getKatexCSSWithEmbeddedFonts();
+        const style = document.createElement('style');
+        style.textContent = cssText;
+        document.head.appendChild(style);
+        isKatexCssInjected = true;
+        console.log('KaTeX CSS has been injected into the document head.');
+    }
+
+    // --- Start of App Initialization ---
+
+    console.log('DOM is ready. Checking for KaTeX library:', typeof katex);
     if (typeof katex === 'undefined') {
         console.error('CRITICAL: KaTeX library failed to load before app start.');
         return;
     }
 
     try {
-        // --- THIS IS THE KEY CHANGE ---
-        // 1. Proactively load and wait for all KaTeX fonts first.
-        await preloadKatexFonts();
+        // 1. Force the CSS to load and be injected first.
+        await ensureKatexCssIsLoaded();
 
-        // 2. Now that fonts are guaranteed to be ready, initialize the app.
+        // 2. Now, wait for the browser to acknowledge all fonts are ready.
+        await document.fonts.ready;
+        console.log('All fonts are confirmed ready.');
+
+        // 3. Proceed with app initialization, confident that everything is loaded.
         auth.onAuthStateChanged(user => {
             const finishInitialization = () => {
                 if (!window.appInitialized) {
@@ -4565,14 +4556,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
 
             if (user) {
-                // ... (the rest of your user-handling logic remains exactly the same)
                 console.log("User authenticated with UID:", user.uid);
                 const userDocRef = db.collection('thelo-students').doc(user.uid);
+
                 userDocRef.get().then(doc => {
                     if (doc.exists) {
                         userPoints = doc.data().points || 0;
                     } else {
                         userPoints = 0;
+                        console.log("No points document found for user, starting at 0.");
                     }
                     updatePointsDisplay();
                     finishInitialization();
@@ -4591,10 +4583,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
     } catch (error) {
-        console.error('Font preloading failed, app initialization aborted:', error);
+        console.error('Styles or fonts failed to load, app initialization aborted:', error);
     }
 });
-	  // Add this function somewhere logical, e.g., near updateUserPointsInFirestore
+// Add this function somewhere logical, e.g., near updateUserPointsInFirestore
 async function logDigitForTraining(recognizedValue, feedbackType) {
     const user = auth.currentUser;
     if (!user) {
