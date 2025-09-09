@@ -2302,173 +2302,185 @@ async function ensureHeadlineFontsLoaded() {
   } catch (_) { /* ignore */ }
 }
 
-// A complete replacement for your renderComplexHeadline function
+// Mixed text + KaTeX headline renderer (SVG with embedded KaTeX fonts)
+// - Segments delimited by /K ... K/ are rendered with KaTeX
+// - Lines are wrapped to widthFraction of the canvas and centered per line
+// - Adds 2px pad in SVG to prevent right-edge clipping of last glyphs
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
-  if (!headline || !bgCtx) return;
+  if (!headline || !bgCtx) return;
 
-  // ---- config ----
-  const widthFraction = Math.min(Math.max(opts.widthFraction ?? 0.88, 0.5), 0.98);
-  const yNudge = opts.yNudge ?? -14;
-  const fontSize = 20;
-  const mathFontSize = 22;
+  // ---- config ----
+  const widthFraction = Math.min(Math.max(opts.widthFraction ?? 0.88, 0.5), 0.98);
+  const yNudge = opts.yNudge ?? -14;
+  const fontSize = 20;
+  const mathFontSize = 22;
 
-  const fontColor =
-    getComputedStyle(document.documentElement)
-      .getPropertyValue('--thelo-text')
-      .trim() || '#111827';
+  const fontColor =
+    getComputedStyle(document.documentElement)
+      .getPropertyValue('--thelo-text')
+      .trim() || '#111827';
 
-  const katexCSS = await getKatexCSSWithEmbeddedFonts();
+  // KaTeX CSS with embedded fonts (so data-URL SVG can render the same as DOM)
+  const katexCSS = await getKatexCSSWithEmbeddedFonts();
 
-  // ======================= FONT FIX ==========================
-  // THIS IS THE CRUCIAL PART THAT FORCES THE DEDICATED MATH FONT.
-  // It must be included in the SVG's style definition.
-  const extraRules = `
+  // Extra font-family overrides to keep headline matching MCQs
+  const extraRules = `
 .katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
 .katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
 .katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
 .katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
 `;
-  // ===================== END OF FONT FIX =======================
 
-  const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || [])
-    .filter(Boolean)
-    .map(p =>
-      p.startsWith('/K') && p.endsWith('K/')
-        ? { type: 'math', content: p.replace(/^\/K\s*/, '').replace(/\s*K\/$/, '') }
-        : { type: 'text', content: p }
-    );
+  // ---- parse headline into segments: /K ... K/ => math
+  const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || [])
+    .filter(Boolean)
+    .map(p =>
+      p.startsWith('/K') && p.endsWith('K/')
+        ? { type: 'math', content: p.replace(/^\/K\s*/, '').replace(/\s*K\/$/, '') }
+        : { type: 'text', content: p }
+    );
 
-  const measureHost = document.createElement('div');
-  measureHost.style.position = 'absolute';
-  measureHost.style.visibility = 'hidden';
-  measureHost.style.left = '-9999px';
-  measureHost.style.top = '-9999px';
-  document.body.appendChild(measureHost);
+  // A hidden host for measuring KaTeX DOM sizes (one per call)
+  const measureHost = document.createElement('div');
+  measureHost.style.position = 'absolute';
+  measureHost.style.visibility = 'hidden';
+  measureHost.style.left = '-9999px';
+  measureHost.style.top = '-9999px';
+  document.body.appendChild(measureHost);
 
-  const tokens = [];
-  for (const seg of segments) {
-    if (seg.type === 'text') {
-      const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
-      for (const p of parts) {
-        tokens.push({
-          type: 'text',
-          content: p,
-          width: bgCtx.measureText(p).width,
-          height: fontSize,
-          isSpace: /^\s+$/.test(p)
-        });
-      }
-      continue;
-    }
+  // ---- tokenize with measurements ----
+  const tokens = [];
+  for (const seg of segments) {
+    if (seg.type === 'text') {
+      const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
+      for (const p of parts) {
+        tokens.push({
+          type: 'text',
+          content: p,
+          width: bgCtx.measureText(p).width,
+          height: fontSize,
+          isSpace: /^\s+$/.test(p)
+        });
+      }
+      continue;
+    }
 
-    try {
-      const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
+    // math segment
+    try {
+      const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
 
-      const style = document.createElement('style');
-      style.textContent = katexCSS;
-      measureHost.appendChild(style);
+       const style = document.createElement('style');
+ style.textContent = katexCSS;          // the CSS you built with embedded fonts
+ measureHost.appendChild(style);
 
-      const tmp = document.createElement('div');
-      tmp.style.color = fontColor;
-      tmp.style.fontSize = `${mathFontSize}px`;
-      tmp.innerHTML = html;
-      measureHost.appendChild(tmp);
+ const tmp = document.createElement('div');
+ tmp.style.color = fontColor;
+ tmp.style.fontSize = `${mathFontSize}px`;
+ tmp.innerHTML = html;
+ measureHost.appendChild(tmp);
 
-      // --- CLIPPING FIX (from previous answer) ---
       const katexEl = tmp.querySelector('.katex') || tmp;
-      katexEl.style.display = 'inline-block';
       const rect = katexEl.getBoundingClientRect();
-      const scrollW = katexEl.scrollWidth;
-      const measuredWidth = Math.max(rect.width, scrollW);
-      const PAD = 4;
-      const w = Math.ceil(measuredWidth) + PAD;
+
+      // remove measured node (keep host)
+      tmp.remove();
+
+      // Pad & round to avoid clipping last glyphs
+      const PAD = 2;
+      const w = Math.ceil(rect.width) + PAD;
       const h = Math.ceil(rect.height) + PAD;
-      // --- END OF CLIPPING FIX ---
 
-      tmp.remove();
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+          <style>${katexCSS}\n${extraRules}</style>
+          <foreignObject width="100%" height="100%">
+            <div xmlns="http://www.w3.org/1999/xhtml"
+                 style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;padding-right:${PAD/2}px;">
+              ${html}
+            </div>
+          </foreignObject>
+        </svg>`;
 
-      const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-                    <style>${katexCSS}\n${extraRules}</style>
-          <foreignObject width="100%" height="100%">
-            <div xmlns="http://www.w3.org/1999/xhtml"
-                 style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;padding-right:${PAD/2}px;">
-              ${html}
-            </div>
-          </foreignObject>
-        </svg>`;
+      const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+      const image = new Image();
+      image.src = dataUrl;
+      await image.decode();
 
-      const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
-      const image = new Image();
-      image.src = dataUrl;
-      await image.decode();
+      tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
+    } catch (e) {
+      // graceful fallback to text measurement
+      const w = bgCtx.measureText(seg.content).width;
+      tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
+    }
+  }
 
-      tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
-    } catch (e) {
-      const w = bgCtx.measureText(seg.content).width;
-      tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
-    }
-  }
+  // cleanup measure host
+  measureHost.remove();
 
-  measureHost.remove();
+  // ---- build lines to fit available width ----
+  const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
+  const maxWidth = canvasW * widthFraction;
+  const lineGap = 8;
 
-  // ---- The rest of the function remains unchanged ----
-  const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
-  const maxWidth = canvasW * widthFraction;
-  const lineGap = 8;
+  const lines = [];
+  let line = { tokens: [], width: 0, height: fontSize };
 
-  const lines = [];
-  let line = { tokens: [], width: 0, height: fontSize };
+  for (const t of tokens) {
+    // allow scaling down oversized math to fit
+    let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
 
-  for (const t of tokens) {
-    let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
-    if (t.type === 'math' && width > maxWidth) {
-      const s = maxWidth / width;
-      width = Math.floor(width * s);
-      height = Math.floor(height * s);
-      drawW = t.drawW * s;
-      drawH = t.drawH * s;
-    }
-    const tok = { ...t, width, height, drawW, drawH };
-    if (line.tokens.length && line.width + width > maxWidth) {
-      lines.push(line);
-      line = { tokens: [], width: 0, height: fontSize };
-    }
-    if (!(line.tokens.length === 0 && tok.isSpace)) {
-      line.tokens.push(tok);
-      line.width += width;
-      if (height > line.height) line.height = height;
-    }
-  }
-  if (line.tokens.length) lines.push(line);
+    if (t.type === 'math' && width > maxWidth) {
+      const s = maxWidth / width;
+      width = Math.floor(width * s);
+      height = Math.floor(height * s);
+      drawW = t.drawW * s;
+      drawH = t.drawH * s;
+    }
+    const tok = { ...t, width, height, drawW, drawH };
 
-  const prevAlign = bgCtx.textAlign;
-  const prevBase = bgCtx.textBaseline;
-  const prevFill = bgCtx.fillStyle;
+    if (line.tokens.length && line.width + width > maxWidth) {
+      lines.push(line);
+      line = { tokens: [], width: 0, height: fontSize };
+    }
+    if (!(line.tokens.length === 0 && tok.isSpace)) {
+      line.tokens.push(tok);
+      line.width += width;
+      if (height > line.height) line.height = height;
+    }
+  }
+  if (line.tokens.length) lines.push(line);
 
-  bgCtx.fillStyle = fontColor;
-  bgCtx.textAlign = 'left';
-  bgCtx.textBaseline = 'top';
+  // ---- render lines, centered horizontally ----
+  const prevAlign = bgCtx.textAlign;
+  const prevBase = bgCtx.textBaseline;
+  const prevFill = bgCtx.fillStyle;
 
-  let curY = y + yNudge;
-  for (const L of lines) {
-    let x = (canvasW - L.width) / 2;
-    for (const t of L.tokens) {
-      const topY = curY + (L.height - t.height) / 2;
-      if (t.type === 'text') {
-        bgCtx.fillText(t.content, x, topY);
-      } else {
-        bgCtx.drawImage(t.image, x, topY, t.drawW, t.drawH);
-      }
-      x += t.width;
-    }
-    curY += L.height + lineGap;
-  }
+  bgCtx.fillStyle = fontColor;
+  bgCtx.textAlign = 'left';
+  bgCtx.textBaseline = 'top';
 
-  bgCtx.textAlign = prevAlign || 'center';
-  bgCtx.textBaseline = prevBase || 'top';
-  bgCtx.fillStyle = prevFill || fontColor;
+  let curY = y + yNudge;
+  for (const L of lines) {
+    let x = (canvasW - L.width) / 2;
+    for (const t of L.tokens) {
+      const topY = curY + (L.height - t.height) / 2;
+      if (t.type === 'text') {
+        bgCtx.fillText(t.content, x, topY);
+      } else {
+        bgCtx.drawImage(t.image, x, topY, t.drawW, t.drawH);
+      }
+      x += t.width;
+    }
+    curY += L.height + lineGap;
+  }
+
+  // restore ctx
+  bgCtx.textAlign = prevAlign || 'center';
+  bgCtx.textBaseline = prevBase || 'top';
+  bgCtx.fillStyle = prevFill || fontColor;
 }
+
+
 
 	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
