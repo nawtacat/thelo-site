@@ -3456,25 +3456,31 @@ async function displayLessonComplete() {
     }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
 
     // --- DATABASE OPERATIONS IN THE BACKGROUND ---
-    const user = auth.currentUser;
-    const urlParams = new URLSearchParams(window.location.search);
-    const lessonFileName = urlParams.get('lessonFile');
+    // --- DATABASE OPERATIONS IN THE BACKGROUND ---
+const user = auth.currentUser;
+const urlParams = new URLSearchParams(window.location.search);
+const lessonFileName = urlParams.get('lessonFile');
 
-    if (user && lessonFileName) {
-        // Log analytics
-        if (lessonStartTime) {
-            const timeToCompleteSeconds = Math.round((Date.now() - lessonStartTime) / 1000);
-            db.collection("analytics_events").add({
-                type: "lesson_completed",
-                userId: user.uid,
-                lessonId: lessonFileName.replace('.json', ''),
-                courseId: "sat-math-prep",
-                timeToCompleteSeconds: timeToCompleteSeconds,
-                sessionScore: sessionPoints,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(e => console.error("Analytics event logging error:", e));
-            lessonStartTime = null;
-        }
+if (user && lessonFileName) {
+    // Log analytics if a lesson was just completed
+    if (lessonStartTime) {
+        const timeToCompleteSeconds = Math.round((Date.now() - lessonStartTime) / 1000);
+        db.collection("analytics_events").add({
+            type: "lesson_completed",
+            userId: user.uid,
+            lessonId: lessonFileName.replace('.json', ''),
+            courseId: "sat-math-prep",
+            timeToCompleteSeconds: timeToCompleteSeconds,
+            sessionScore: sessionPoints,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(e => console.error("Analytics event logging error:", e));
+        lessonStartTime = null;
+    }
+
+    // Use the new unified loader: auto-detects lesson vs. test
+    loadContent(lessonFileName);
+}
+
 
         // Update progress and streak
         try {
