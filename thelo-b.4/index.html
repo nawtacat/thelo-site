@@ -1851,24 +1851,24 @@ let lastIframeUpdateTime = 0;
  * Fetches and initializes the test environment.
  */
 async function loadTest(testJsonPath) {
-    try {
-        const response = await fetch(testJsonPath);
-        if (!response.ok) throw new Error("Test file not found.");
-        currentTestData = await response.json();
-        testQuestions = currentTestData.questions;
+    try {
+        const response = await fetch(testJsonPath);
+        if (!response.ok) throw new Error("Test file not found.");
+        currentTestData = await response.json();
+        testQuestions = currentTestData.questions;
 
-        studentAnswers = new Array(testQuestions.length).fill(null);
-        currentQuestionIndex = 0;
+        studentAnswers = new Array(testQuestions.length).fill(null);
+        currentQuestionIndex = 0;
 
-        setupTestUI();
-        renderTestQuestion(currentQuestionIndex);
-        startTimer(currentTestData.durationMinutes);
-    } catch (error) {
-        console.error("Error loading test:", error);
-        showOnCanvasFeedback("Failed to load the test file.");
-    }
+        setupTestUI();
+        await renderTestQuestion(currentQuestionIndex); // <-- FIX IS HERE
+        startTimer(currentTestData.durationMinutes);
+
+    } catch (error) {
+        console.error("Error loading test:", error);
+        showOnCanvasFeedback("Failed to load the test file.");
+    }
 }
-
 function setupTestUI() {
     // Hide elements not used in tests
     const chatCol = document.getElementById('chatCol');
@@ -1976,19 +1976,18 @@ async function renderTestQuestion(index) { // <-- NOTE: This function is now asy
 /**
  * Saves current work and navigates to a new question.
  */
-function navigateToQuestion(direction) {
-    // 1. Save current work
-    studentAnswers[currentQuestionIndex] = canvas.toDataURL('image/png');
+async function navigateToQuestion(direction) { // <-- BECOMES ASYNC
+    // 1. Save current work
+    studentAnswers[currentQuestionIndex] = canvas.toDataURL('image/png');
 
-    // 2. Update index
-    const newIndex = currentQuestionIndex + direction;
-    if (newIndex < 0 || newIndex >= testQuestions.length) return;
-    currentQuestionIndex = newIndex;
-    
-    // 3. Render new question
-    renderTestQuestion(currentQuestionIndex);
+    // 2. Update index
+    const newIndex = currentQuestionIndex + direction;
+    if (newIndex < 0 || newIndex >= testQuestions.length) return;
+    currentQuestionIndex = newIndex;
+    
+    // 3. Render new question and wait for it to finish
+    await renderTestQuestion(currentQuestionIndex); // <-- FIX IS HERE
 }
-
 /**
  * Submits the entire test for grading.
  */
