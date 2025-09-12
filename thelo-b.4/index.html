@@ -1927,38 +1927,52 @@ function startTimer(durationMinutes) {
 /**
  * Renders a specific test question on the canvas.
  */
-function renderTestQuestion(index) {
-    clearUserCanvas(); // Clear student's drawing canvas
-    bgCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height); // Clear background
+async function renderTestQuestion(index) { // <-- NOTE: This function is now async
+    clearUserCanvas(); // Clear student's drawing canvas
+    bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio); // Clear background
 
-    const question = testQuestions[index];
-    if (question.image) {
-        const img = new Image();
-        img.src = question.image;
-        img.onload = () => {
-            // Your existing logic to draw a centered image can be used here
-            const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-            const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
-            const scale = Math.min((canvasWidth * 0.8) / img.width, (canvasHeight * 0.8) / img.height);
-            const w = img.width * scale;
-            const h = img.height * scale;
-            bgCtx.drawImage(img, (canvasWidth - w) / 2, (canvasHeight - h) / 2, w, h);
-        };
-    }
+    const question = testQuestions[index];
 
-    // Reload student's previous work for this question
-    if (studentAnswers[index]) {
-        const savedImage = new Image();
-        savedImage.src = studentAnswers[index];
-        savedImage.onload = () => ctx.drawImage(savedImage, 0, 0, canvas.width, canvas.height);
-    }
+    // First, draw the question text (headline)
+    if (question.headline) {
+        // We are reusing the powerful headline renderer from Lesson Mode
+        await renderComplexHeadline(bgCtx, question.headline, 60);
+    }
+    
+    // Then, draw the question's background image (if it exists)
+    if (question.image) {
+        const img = new Image();
+        img.src = question.image;
+        img.onload = () => {
+            const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
+            const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
+            const scale = Math.min((canvasWidth * 0.8) / img.width, (canvasHeight * 0.8) / img.height);
+            const w = img.width * scale;
+            const h = img.height * scale;
+            // Position image below the headline
+            bgCtx.drawImage(img, (canvasWidth - w) / 2, (canvasHeight - h) / 2 + 30, w, h);
+        };
+    }
 
-    // Update UI
-    document.getElementById('questionIndicator').textContent = `Question ${index + 1} of ${testQuestions.length}`;
-    document.getElementById('prevQuestionBtn').disabled = (index === 0);
-    document.getElementById('nextQuestionBtn').disabled = (index === testQuestions.length - 1);
+    // Reload student's previous work for this question
+    if (studentAnswers[index]) {
+        const savedImage = new Image();
+        savedImage.src = studentAnswers[index];
+        // Use a promise to ensure the headline renders before the drawing
+        await new Promise(resolve => {
+            savedImage.onload = () => {
+                ctx.drawImage(savedImage, 0, 0, canvas.width, canvas.height);
+                resolve();
+            };
+            savedImage.onerror = resolve; // Don't hang if image fails
+        });
+    }
+
+    // Update UI
+    document.getElementById('questionIndicator').textContent = `Question ${index + 1} of ${testQuestions.length}`;
+    document.getElementById('prevQuestionBtn').disabled = (index === 0);
+    document.getElementById('nextQuestionBtn').disabled = (index === testQuestions.length - 1);
 }
-
 /**
  * Saves current work and navigates to a new question.
  */
