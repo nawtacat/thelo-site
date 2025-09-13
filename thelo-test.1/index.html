@@ -399,8 +399,107 @@
     //  KaTeX and Headline Rendering Functions (Unchanged)
     // ===================================================================
     let katexCSSInlined = null;
-    function abToBase64(ab){const CHUNK=8192;const bytes=new Uint8Array(ab);let binary="";for(let i=0;i<bytes.length;i+=CHUNK){binary+=String.fromCharCode(...bytes.subarray(i,i+CHUNK))}return btoa(binary)}async function getKatexCSSWithEmbeddedFonts(){if(katexCSSInlined)return katexCSSInlined;const base="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist";let css=await(await fetch(`${base}/katex.min.css`)).text();const fonts=["KaTeX_Main-Regular.woff2","KaTeX_Main-Italic.woff2","KaTeX_Main-Bold.woff2","KaTeX_Math-Italic.woff2","KaTeX_AMS-Regular.woff2","KaTeX_Size1-Regular.woff2","KaTeX_Size2-Regular.woff2"];for(const name of fonts){const url=`${base}/fonts/${name}`;const res=await fetch(url);const b64=abToBase64(await res.arrayBuffer());const dataURL=`url(data:font/woff2;base64,${b64}) format("woff2")`;css=css.replace(new RegExp(`url\\([^)]*${name}[^)]*\\)\\s*format\\("woff2"\\)`,"g"),dataURL)}katexCSSInlined=css;return katexCSSInlined}async function ensureHeadlineFontsLoaded(){try{if(document.fonts&&document.fonts.load){await Promise.race([async()=>{await document.fonts.load(`24px "Manrope"`);await document.fonts.ready}(),new Promise(res=>setTimeout(res,800))])}}catch(_){}}async function renderComplexHeadline(bgCtx,headline,y,opts={}){if(!headline||!bgCtx)return;const widthFraction=.88,yNudge=-14,fontSize=24,mathFontSize=26;const fontColor=getComputedStyle(document.documentElement).getPropertyValue("--thelo-text").trim()||"#111827";const katexCSS=await getKatexCSSWithEmbeddedFonts();const extraRules=`.katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }`;const segments=(headline.split(/(\/K[\s\S]*?K\/)/g)||[]).filter(Boolean).map(p=>p.startsWith("/K")&&p.endsWith("K/")?{type:"math",content:p.replace(/^\/K\s*/,"").replace(/\s*K\/$/,"")}:{type:"text",content:p});const measureHost=document.createElement("div");measureHost.style.cssText="position:absolute;visibility:hidden;left:-9999px;top:-9999px;";document.body.appendChild(measureHost);const tokens=[];for(const seg of segments){if(seg.type==="text"){const parts=seg.content.match(/(\s+|[^\s]+)/g)||[];for(const p of parts){tokens.push({type:"text",content:p,width:bgCtx.measureText(p).width,height:fontSize,isSpace:/^\s+$/.test(p)})}continue}try{const html=katex.renderToString(seg.content,{throwOnError:!1,output:"html"});const style=document.createElement("style");style.textContent=katexCSS;measureHost.appendChild(style);const tmp=document.createElement("div");tmp.style.color=fontColor;tmp.style.fontSize=`${mathFontSize}px`;tmp.innerHTML=html;measureHost.appendChild(tmp);const rect=(tmp.querySelector(".katex")||tmp).getBoundingClientRect();tmp.remove();const PAD=2;const w=Math.ceil(rect.width)+PAD;const h=Math.ceil(rect.height)+PAD;const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><style>${katexCSS}\n${extraRules}</style><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;padding-right:${PAD/2}px;">${html}</div></foreignObject></svg>`;const dataUrl="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(svg)));const image=new Image;image.src=dataUrl;await image.decode();tokens.push({type:"math",image,width:w,height:h,drawW:w,drawH:h})}catch(e){tokens.push({type:"text",content:seg.content,width:bgCtx.measureText(seg.content).width,height:fontSize,isSpace:!1})}}measureHost.remove();const canvasW=bgCtx.canvas.width/devicePixelRatio;const maxWidth=canvasW*widthFraction;const lines=[];let line={tokens:[],width:0,height:fontSize};for(const t of tokens){let width=t.width,height=t.height,drawW=t.drawW??t.width,drawH=t.drawH??t.height;if(t.type==="math"&&width>maxWidth){const s=maxWidth/width;width=Math.floor(width*s);height=Math.floor(height*s);drawW*=s;drawH*=s}const tok={...t,width,height,drawW,drawH};if(line.tokens.length&&line.width+width>maxWidth){lines.push(line);line={tokens:[],width:0,height:fontSize}}if(!(line.tokens.length===0&&tok.isSpace)){line.tokens.push(tok);line.width+=width;if(height>line.height)line.height=height}}if(line.tokens.length)lines.push(line);const prevAlign=bgCtx.textAlign;const prevBase=bgCtx.textBaseline;const prevFill=bgCtx.fillStyle;bgCtx.fillStyle=fontColor;bgCtx.textAlign="left";bgCtx.textBaseline="top";let curY=y+yNudge;for(const L of lines){let x=(canvasW-L.width)/2;for(const t of L.tokens){const topY=curY+(L.height-t.height)/2;if(t.type==="text")bgCtx.fillText(t.content,x,topY);else bgCtx.drawImage(t.image,x,topY,t.drawW,t.drawH);x+=t.width}curY+=L.height+8}bgCtx.textAlign=prevAlign;bgCtx.textBaseline=prevBase;bgCtx.fillStyle=prevFill}
-    
+
+    function abToBase64(ab) {
+        const CHUNK = 0x8000;
+        const bytes = new Uint8Array(ab);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+        }
+        return btoa(binary);
+    }
+
+    async function getKatexCSSWithEmbeddedFonts() {
+        if (katexCSSInlined) return katexCSSInlined;
+        const base = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist';
+        let css = await (await fetch(`${base}/katex.min.css`)).text();
+        const fonts = ['KaTeX_Main-Regular.woff2', 'KaTeX_Main-Italic.woff2', 'KaTeX_Main-Bold.woff2', 'KaTeX_Math-Italic.woff2', 'KaTeX_AMS-Regular.woff2', 'KaTeX_Size1-Regular.woff2', 'KaTeX_Size2-Regular.woff2'];
+        for (const name of fonts) {
+            const url = `${base}/fonts/${name}`;
+            const res = await fetch(url);
+            const b64 = abToBase64(await res.arrayBuffer());
+            const dataURL = `url(data:font/woff2;base64,${b64}) format("woff2")`;
+            css = css.replace(new RegExp(`url\\([^)]*${name}[^)]*\\)\\s*format\\("woff2"\\)`, 'g'), dataURL);
+        }
+        katexCSSInlined = css;
+        return katexCSSInlined;
+    }
+
+    async function ensureHeadlineFontsLoaded() {
+        try {
+            if (document.fonts && document.fonts.load) {
+                await Promise.race([
+                    (async () => {
+                        await document.fonts.load(`24px "Manrope"`);
+                        await document.fonts.ready;
+                    })(),
+                    new Promise(res => setTimeout(res, 800))
+                ]);
+            }
+        } catch (_) {}
+    }
+
+    async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
+        if (!headline || !bgCtx) return;
+        const widthFraction = 0.88, yNudge = -14, fontSize = 24, mathFontSize = 26;
+        const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
+        const katexCSS = await getKatexCSSWithEmbeddedFonts();
+        const extraRules = `.katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }`;
+        const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || []).filter(Boolean).map(p => p.startsWith('/K') && p.endsWith('K/') ? { type: 'math', content: p.replace(/^\/K\s*/, '').replace(/\s*K\/$/, '') } : { type: 'text', content: p });
+        const measureHost = document.createElement('div');
+        measureHost.style.cssText = 'position:absolute;visibility:hidden;left:-9999px;top:-9999px;';
+        document.body.appendChild(measureHost);
+        const tokens = [];
+        for (const seg of segments) {
+            if (seg.type === 'text') {
+                const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
+                for (const p of parts) {
+                    tokens.push({ type: 'text', content: p, width: bgCtx.measureText(p).width, height: fontSize, isSpace: /^\s+$/.test(p) });
+                }
+                continue;
+            }
+            try {
+                const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
+                const style = document.createElement('style'); style.textContent = katexCSS; measureHost.appendChild(style);
+                const tmp = document.createElement('div'); tmp.style.color = fontColor; tmp.style.fontSize = `${mathFontSize}px`; tmp.innerHTML = html; measureHost.appendChild(tmp);
+                const rect = (tmp.querySelector('.katex') || tmp).getBoundingClientRect();
+                tmp.remove();
+                const PAD = 2; const w = Math.ceil(rect.width) + PAD; const h = Math.ceil(rect.height) + PAD;
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><style>${katexCSS}\n${extraRules}</style><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;padding-right:${PAD/2}px;">${html}</div></foreignObject></svg>`;
+                const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+                const image = new Image(); image.src = dataUrl; await image.decode();
+                tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
+            } catch (e) {
+                tokens.push({ type: 'text', content: seg.content, width: bgCtx.measureText(seg.content).width, height: fontSize, isSpace: false });
+            }
+        }
+        measureHost.remove();
+        const canvasW = bgCtx.canvas.width / devicePixelRatio;
+        const maxWidth = canvasW * widthFraction;
+        const lines = []; let line = { tokens: [], width: 0, height: fontSize };
+        for (const t of tokens) {
+            let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
+            if (t.type === 'math' && width > maxWidth) { const s = maxWidth / width; width = Math.floor(width * s); height = Math.floor(height * s); drawW *= s; drawH *= s; }
+            const tok = { ...t, width, height, drawW, drawH };
+            if (line.tokens.length && line.width + width > maxWidth) { lines.push(line); line = { tokens: [], width: 0, height: fontSize }; }
+            if (!(line.tokens.length === 0 && tok.isSpace)) { line.tokens.push(tok); line.width += width; if (height > line.height) line.height = height; }
+        }
+        if (line.tokens.length) lines.push(line);
+        const prevAlign = bgCtx.textAlign; const prevBase = bgCtx.textBaseline; const prevFill = bgCtx.fillStyle;
+        bgCtx.fillStyle = fontColor; bgCtx.textAlign = 'left'; bgCtx.textBaseline = 'top';
+        let curY = y + yNudge;
+        for (const L of lines) {
+            let x = (canvasW - L.width) / 2;
+            for (const t of L.tokens) {
+                const topY = curY + (L.height - t.height) / 2;
+                if (t.type === 'text') bgCtx.fillText(t.content, x, topY); else bgCtx.drawImage(t.image, x, topY, t.drawW, t.drawH);
+                x += t.width;
+            }
+            curY += L.height + 8;
+        }
+        bgCtx.textAlign = prevAlign; bgCtx.textBaseline = prevBase; bgCtx.fillStyle = prevFill;
+    }
     // ===================================================================
     //  Main Application Logic
     // ===================================================================
