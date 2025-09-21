@@ -648,77 +648,88 @@
     }
 
     async function handleSubmitClick() {
-        if (currentStageIndex === -1) {
-            startTest();
-            return;
-        }
-        if (!userDrawingOccurred) {
-            // ✅ MODIFIED: Use translated alert text
-            alert(UI_TEXT[currentLang].provideSolution);
-            return;
-        }
-        
-        const texts = UI_TEXT[currentLang] || UI_TEXT.en;
-        submitBtn.disabled = true;
-        submitBtn.textContent = texts.checking;
-        
-        const user = auth.currentUser;
-        if (!user) {
-            alert("You must be signed in to submit a test.");
-            submitBtn.disabled = false; 
-            updateAllUITexts();
-            return;
-        }
-
-        let base64ImageData;
-        try {
-            const box = getBoundingBox(ctx);
-            if (!box) throw new Error("No drawing found to capture.");
-            const cropCanvas = document.createElement('canvas');
-            cropCanvas.width = box.width; cropCanvas.height = box.height;
-            const cropCtx = cropCanvas.getContext('2d');
-            cropCtx.fillStyle = '#FFFFFF'; cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-            cropCtx.drawImage(canvas, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-            base64ImageData = cropCanvas.toDataURL("image/png");
-        } catch (e) {
-            console.error("Image capture error:", e);
-            alert("Error capturing your solution. Please ensure something is drawn.");
-            submitBtn.disabled = false; 
-            updateAllUITexts();
-            return;
-        }
-
-        try {
-            const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-            
-            // ✅ FIX: Always send the full question text for detailed analysis
-            const payload = {
-                imageBase64: base64ImageData,
-                problemText: currentStageData.headline || "A math problem.",
-                correctAnswer: String(currentStageData.correctAnswer),
-                language: currentLang
-            };
-            
-            const result = await analyzeMathDrawing(payload);
-            const { status, feedback } = result.data;
-            
-            testResults.push({
-                question: currentStageData.headline,
-                correctAnswer: currentStageData.correctAnswer,
-                solutionImage: base64ImageData,
-                status: status,
-                feedback: feedback,
-            });
-            
-            transitionToStage(currentStageIndex + 1);
-        } catch (error) {
-            console.error("AI analysis failed:", error);
-            alert("There was an error checking your answer. Please try again.");
-            submitBtn.disabled = false;
-            updateAllUITexts();
-        }
+    // 1. Handle the initial "Start Test" button click
+    if (currentStageIndex === -1) {
+        startTest();
+        return;
     }
 
+    // 2. Check if the user has drawn anything before submitting
+    if (!userDrawingOccurred) {
+        alert(UI_TEXT[currentLang].provideSolution); // Uses translated alert
+        return;
+    }
+
+    // 3. Update UI to show that the answer is being checked
+    const texts = UI_TEXT[currentLang] || UI_TEXT.en;
+    submitBtn.disabled = true;
+    submitBtn.textContent = texts.checking;
+
+    // 4. Ensure a user is signed in
+    const user = auth.currentUser;
+    if (!user) {
+        alert("You must be signed in to submit a test.");
+        submitBtn.disabled = false;
+        updateAllUITexts(); // Resets button text based on language
+        return;
+    }
+
+    // 5. Capture the user's drawing as a Base64 image
+    let base64ImageData;
+    try {
+        const box = getBoundingBox(ctx);
+        if (!box) throw new Error("No drawing found to capture.");
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = box.width;
+        cropCanvas.height = box.height;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.fillStyle = '#FFFFFF';
+        cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+        cropCtx.drawImage(canvas, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+        base64ImageData = cropCanvas.toDataURL("image/png");
+    } catch (e) {
+        console.error("Image capture error:", e);
+        alert("Error capturing your solution. Please ensure something is drawn.");
+        submitBtn.disabled = false;
+        updateAllUITexts();
+        return;
+    }
+
+    // 6. Call the backend AI function with the correct payload
+    try {
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+
+        // ✅ THE CRITICAL UPDATE IS HERE:
+        // This payload now includes the full problem text and the correct language ('en' or 'hy').
+        const payload = {
+            imageBase64: base64ImageData,
+            problemText: currentStageData.headline || "A math problem.",
+            correctAnswer: String(currentStageData.correctAnswer),
+            language: currentLang
+        };
+
+        const result = await analyzeMathDrawing(payload);
+        const { status, feedback } = result.data; // Feedback is now translated by the AI
+
+        // Store the detailed, translated result
+        testResults.push({
+            question: currentStageData.headline,
+            correctAnswer: currentStageData.correctAnswer,
+            solutionImage: base64ImageData,
+            status: status,
+            feedback: feedback,
+        });
+
+        // Move to the next question
+        transitionToStage(currentStageIndex + 1);
+
+    } catch (error) {
+        console.error("AI analysis failed:", error);
+        alert("There was an error checking your answer. Please try again.");
+        submitBtn.disabled = false;
+        updateAllUITexts(); // Correctly resets button text on error
+    }
+}
     async function finishTest() {
         clearInterval(timerInterval);
         const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
