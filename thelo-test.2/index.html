@@ -415,31 +415,38 @@
     let currentLang = 'en'; // ✅ ADD: new variable to track language
 
     /* ========== UI Text ========== */
-    const UI_TEXT = {
-        en: {
-            start: "Start Test",
-            submit: "Submit Answer",
-            checking: "Checking...",
-            prev: "Previous",
-            clear: "Clear",
-            testComplete: "Test Complete!",
-            score: "Score:",
-            timeTaken: "Time Taken:",
-            provideSolution: "Please provide a solution before submitting.",
-        },
-        hy: {
-            start: "Սկսել թեստը",
-            submit: "Ուղարկել",
-            checking: "Ստուգվում է...",
-            prev: "Նախորդ",
-            clear: "Մաքրել",
-            testComplete: "Թեստն ավարտված է։",
-            score: "Միավոր:",
-            timeTaken: "Ժամանակ:",
-            provideSolution: "Խնդրում ենք լուծումը գրել նոր ուղարկել։",
-        }
-    };
-    
+const UI_TEXT = {
+    en: {
+        start: "Start Test",
+        submit: "Submit Answer",
+        checking: "Checking...",
+        prev: "Previous",
+        clear: "Clear",
+        testComplete: "Test Complete!",
+        score: "Score:",
+        timeTaken: "Time Taken:",
+        provideSolution: "Please provide a solution before submitting.",
+        question: "Question", // ✅ ADDED
+        aiFeedback: "AI Feedback:", // ✅ ADDED
+        generatingFeedback: "Generating detailed feedback...", // ✅ ADDED
+        analysisError: "Could not submit for analysis." // ✅ ADDED
+    },
+    hy: {
+        start: "Սկսել թեստը",
+        submit: "Ուղարկել",
+        checking: "Ստուգվում է...",
+        prev: "Նախորդ",
+        clear: "Մաքրել",
+        testComplete: "Թեստն ավարտված է",
+        score: "Միավոր:",
+        timeTaken: "Ժամանակ:",
+        provideSolution: "Խնդրում ենք լուծումը գրել նոր ուղարկել։",
+        question: "Հարց", // ✅ ADDED
+        aiFeedback: "Արհեստական բանականության վերլուծություն:", // ✅ ADDED
+        generatingFeedback: "Ստեղծվում է մանրամասն վերլուծություն...", // ✅ ADDED
+        analysisError: "Չհաջողվեց ուղարկել վերլուծության։" // ✅ ADDED
+    }
+};
     // ===================================================================
     //  KaTeX and Headline Rendering Functions (Unchanged)
     // ===================================================================
@@ -731,75 +738,78 @@
     }
 }
     async function finishTest() {
-        clearInterval(timerInterval);
-        const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
-        document.getElementById('lessonArea').style.display = 'none';
+    clearInterval(timerInterval);
+    const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
+    document.getElementById('lessonArea').style.display = 'none';
 
-        const texts = UI_TEXT[currentLang] || UI_TEXT.en; // Get current language texts
+    const texts = UI_TEXT[currentLang] || UI_TEXT.en;
 
-        const correctAnswers = testResults.filter(r => r.status === 'correct').length;
-        const totalQuestions = testData.stages.length;
-        const scorePercentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+    const correctAnswers = testResults.filter(r => r.status === 'correct').length;
+    const totalQuestions = testData.stages.length;
+    const scorePercentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
 
-        // ✅ MODIFIED: Use translated strings for the results screen
-        document.querySelector('#resultsHeader h1').textContent = texts.testComplete;
-        document.getElementById('resultsScore').textContent = `${texts.score} ${correctAnswers} / ${totalQuestions} (${scorePercentage}%)`;
-        const minutes = Math.floor(timeTaken / 60).toString().padStart(2, '0');
-        const seconds = (timeTaken % 60).toString().padStart(2, '0');
-        document.getElementById('resultsTime').textContent = `${texts.timeTaken} ${minutes}:${seconds}`;
+    document.querySelector('#resultsHeader h1').textContent = texts.testComplete;
+    document.getElementById('resultsScore').textContent = `${texts.score} ${correctAnswers} / ${totalQuestions} (${scorePercentage}%)`;
+    const minutes = Math.floor(timeTaken / 60).toString().padStart(2, '0');
+    const seconds = (timeTaken % 60).toString().padStart(2, '0');
+    document.getElementById('resultsTime').textContent = `${texts.timeTaken} ${minutes}:${seconds}`;
 
-        const feedbackList = document.getElementById('resultsFeedbackList');
-        feedbackList.innerHTML = '';
+    const feedbackList = document.getElementById('resultsFeedbackList');
+    feedbackList.innerHTML = '';
 
-        testResults.forEach((result, index) => {
-            const item = document.createElement('div');
-            item.className = 'feedback-item';
-            const statusClass = result.status === 'correct' ? 'status-correct' : 'status-incorrect';
+    testResults.forEach((result, index) => {
+        const item = document.createElement('div');
+        item.className = 'feedback-item';
+        const statusClass = result.status === 'correct' ? 'status-correct' : 'status-incorrect';
+        
+        // ✅ FULLY TRANSLATED TEMPLATE
+        item.innerHTML = `
+            <div class="feedback-item-header">
+                <h3>${texts.question} ${index + 1}</h3>
+                <span class="${statusClass}">${result.status}</span>
+            </div>
+            <p id="feedback-placeholder-${index}">
+                <strong>${texts.aiFeedback}</strong> 
+                <span style="color: #9ca3af;">${texts.generatingFeedback}</span>
+            </p>
+        `;
+        feedbackList.appendChild(item);
+    });
+
+    resultsScreen.style.display = 'flex';
+    const user = auth.currentUser;
+
+    if (user) {
+        try {
+            const submitTestResults = firebase.functions().httpsCallable('submitTestResults');
             
-            item.innerHTML = `
-                <div class="feedback-item-header">
-                    <h3>Question ${index + 1}</h3>
-                    <span class="${statusClass}">${result.status}</span>
-                </div>
-                <p id="feedback-placeholder-${index}">
-                    <strong>AI Feedback:</strong> 
-                    <span style="color: #9ca3af;">Generating detailed feedback...</span>
-                </p>
-            `;
-            feedbackList.appendChild(item);
-        });
-
-        resultsScreen.style.display = 'flex';
-        const user = auth.currentUser;
-
-        if (user) {
-            try {
-                const submitTestResults = firebase.functions().httpsCallable('submitTestResults');
-                const response = await submitTestResults({
-                    testId: new URLSearchParams(window.location.search).get('testFile')?.replace('.json', ''),
-                    score: correctAnswers,
-                    totalQuestions,
-                    timeTakenSeconds: timeTaken,
-                    results: testResults
-                });
-                
-                console.log("Test results submitted for deep analysis.", response);
-                const resultId = response.data.resultId;
-                if (resultId) {
-                    listenForDetailedFeedback(user.uid, resultId);
-                }
-            } catch (err) {
-                console.error("Error submitting test results for analysis:", err);
-                testResults.forEach((_, index) => {
-                    const placeholder = document.getElementById(`feedback-placeholder-${index}`);
-                    if (placeholder) {
-                        placeholder.innerHTML = '<strong>AI Feedback:</strong> <span style="color: var(--error-red);">Could not submit for analysis.</span>';
-                    }
-                });
+            // ✅ THE CRITICAL CHANGE IS HERE: We now send the language to the backend
+            const response = await submitTestResults({
+                testId: new URLSearchParams(window.location.search).get('testFile')?.replace('.json', ''),
+                score: correctAnswers,
+                totalQuestions,
+                timeTakenSeconds: timeTaken,
+                results: testResults,
+                language: currentLang // Pass the language!
+            });
+            
+            console.log("Test results submitted for deep analysis.", response);
+            const resultId = response.data.resultId;
+            if (resultId) {
+                listenForDetailedFeedback(user.uid, resultId);
             }
+        } catch (err) {
+            console.error("Error submitting test results for analysis:", err);
+            testResults.forEach((_, index) => {
+                const placeholder = document.getElementById(`feedback-placeholder-${index}`);
+                if (placeholder) {
+                    // Use translated error message
+                    placeholder.innerHTML = `<strong>${texts.aiFeedback}</strong> <span style="color: var(--error-red);">${texts.analysisError}</span>`;
+                }
+            });
         }
     }
-
+}
     function listenForDetailedFeedback(uid, resultId) {
         const solutionsRef = db.collection('thelo-students').doc(uid).collection('test_results').doc(resultId).collection('solutions');
 
