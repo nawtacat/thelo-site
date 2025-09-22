@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
+    <title>thelo | Test Mode</title>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<style>
+    /*--- NEW: Flat Design System ---*/
+    :root {
+        --thelo-blue: #2563eb;
+        --thelo-bg: #ffffff;
+        --thelo-text: #111827;
+        --thelo-text-light: #6b7280;
+        --thelo-border: #d1d5db; /* Slightly darker for better contrast */
+        --success-green: #16a34a;
+        --error-red: #dc2626;
+        --accent-yellow: #f59e0b;
+        --subtle-bg: #f9fafb;
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    }
+
+    @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype'); font-weight: 400; }
+    body.lang-hy { font-family: 'Montserrat Arm', 'Manrope', system-ui, sans-serif; }
+    
+    html { font-size: 16px; background: var(--thelo-bg); }
+    body { margin: 0; height: 100vh; font-family: 'Manrope', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; color: var(--thelo-text); user-select: none; -webkit-user-select: none; }
+    
+    #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.3s ease-out; }
+    #loading-overlay.visible { opacity: 1; pointer-events: auto; }
+    #loading-svg { width: 120px; height: auto; animation: pulse-loader 1.5s infinite ease-in-out; }
+    #loading-text { font-weight: 500; font-size: 1.1rem; margin-top: 1rem; color: var(--thelo-text); }
+    @keyframes pulse-loader { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; } }
+
+    #app { display: flex; flex-grow: 1; height: 100%; }
+    #lessonArea { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; overflow: hidden; }
+    #boardWrap { position: relative; flex-grow: 1; background-color: var(--thelo-bg); background-image: linear-gradient(to right, var(--thelo-border) 1px, transparent 1px), linear-gradient(to bottom, var(--thelo-border) 1px, transparent 1px); background-size: 40px 40px; }
+    #backgroundCanvas, #board { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: transparent; }
+    #backgroundCanvas { z-index: 1; pointer-events: none; opacity: 1; transition: opacity 0.3s ease-in-out; }
+    #backgroundCanvas.fade-out { opacity: 0; }
+    #board { z-index: 3; cursor: crosshair; touch-action: none; }
+    
+    #bottomBar { position: absolute; bottom: 0; left: 0; width: 100%; background: transparent; box-sizing: border-box; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; z-index: 20; }
+    #button-group { display: flex; gap: 0.5rem; }
+    .control-btn { font-family: inherit; padding: 0.6rem 1.2rem; font-size: 1rem; font-weight: 600; border: none; border-radius: 0.5rem; color: white; cursor: pointer; transition: all 0.2s; touch-action: manipulation; box-shadow: var(--shadow-md); }
+    .control-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+    .control-btn:disabled { background-color: #9ca3af !important; cursor: not-allowed; opacity: 0.8; transform: none; box-shadow: none; }
+    #prevBtn { background-color: #6b7280; }
+    #unsureBtn { background-color: var(--accent-yellow); }
+    #clearBtn { background-color: var(--error-red); }
+    #submitBtn, #reviewAnswersBtn, #reviewBackBtn { background-color: var(--thelo-blue); }
+    #timerDisplay { background: var(--thelo-bg); padding: 0.5rem 1.25rem; font-size: 1.2rem; font-weight: 700; border: 2px solid var(--thelo-border); border-radius: 999px; }
+    
+    .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; background-color: var(--thelo-bg); display: none; flex-direction: column; align-items: center; padding: 2rem; box-sizing: border-box; }
+    .screen.visible { display: flex; }
+    .screen-container { width: 100%; max-width: 800px; text-align: center; }
+    .screen-header { border-bottom: 2px solid var(--thelo-border); padding-bottom: 1.5rem; margin-bottom: 1.5rem; }
+    #resultsScore { font-size: 2.5rem; font-weight: 800; color: var(--thelo-blue); }
+    #resultsTime { font-size: 1.2rem; color: var(--thelo-text-light); }
+    
+    #navToggleBtn { position: fixed; top: 20px; right: 20px; z-index: 1001; background-color: var(--thelo-blue); color: white; border: none; border-radius: 0.5rem; width: 50px; height: 50px; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); }
+    #navPanel { position: fixed; top: 0; right: -320px; width: 300px; height: 100%; background: var(--subtle-bg); z-index: 1000; transition: right 0.3s ease-in-out; display: flex; flex-direction: column; border-left: 2px solid var(--thelo-border); }
+    #navPanel.open { right: 0; }
+    #navPanel h3 { padding: 1rem; margin: 0; border-bottom: 2px solid var(--thelo-border); }
+    #navGrid, .nav-grid-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(45px, 1fr)); gap: 10px; padding: 10px; }
+    .nav-item { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 2px solid var(--thelo-border); border-radius: 50%; }
+    .nav-item.unanswered { background-color: #e5e7eb; color: #6b7280; }
+    .nav-item.answered { background-color: var(--success-green); color: white; border-color: var(--success-green); }
+    .nav-item.unsure { background-color: var(--accent-yellow); color: white; border-color: var(--accent-yellow); }
+    .nav-item.correct { background-color: var(--success-green); color: white; border-color: var(--success-green); }
+    .nav-item.incorrect { background-color: var(--error-red); color: white; border-color: var(--error-red); }
+    .nav-item.current { transform: scale(1.1); border-color: var(--thelo-blue); }
+    
+    #notesPanel { position: fixed; bottom: 90px; right: 20px; width: 300px; height: 40%; background: white; z-index: 1002; display: none; flex-direction: column; border: 2px solid var(--thelo-border); border-radius: 0.5rem; }
+    #notesPanel.open { display: flex; }
+    .notes-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background-color: var(--subtle-bg); border-bottom: 2px solid var(--thelo-border); }
+    .notes-header h4 { margin: 0; }
+    #closeNotesBtn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--thelo-text-light); }
+    #notesInput { flex-grow: 1; border: none; padding: 1rem; font-family: inherit; font-size: 1rem; resize: none; border-radius: 0 0 0.5rem 0.5rem;}
+    #notesInput:focus { outline: none; }
+    
+    #reviewContainer { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 1.5rem; width: 100%; max-width: 1200px; height: calc(100vh - 160px); }
+    #reviewHeader { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; }
+    #reviewStudentSolution, #reviewCorrectSolution { border: 2px solid var(--thelo-border); padding: 1rem; overflow-y: auto; border-radius: 0.5rem; }
+    #reviewStudentSolution h4, #reviewCorrectSolution h4 { margin-top: 0; }
+    #reviewStudentDrawing { max-width: 100%; border: 1px solid #ccc; }
+    #reviewStudentNotes { background-color: #fefce8; padding: 0.5rem; white-space: pre-wrap; word-wrap: break-word; border-radius: 0.5rem; }
+    #reviewNav { position: absolute; bottom: 2rem; width: 100%; display: flex; justify-content: center; gap: 1rem; }
+</style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <img id="loading-svg" src="https://thelo.space/img/bluethelo.svg" alt="Loading...">
+        <p id="loading-text"></p>
+    </div>
+
+    <div id="app">
+        <div id="lessonArea">
+            <div id="boardWrap">
+                <canvas id="backgroundCanvas"></canvas>
+                <canvas id="board"></canvas>
+            </div>
+            <div id="bottomBar">
+                <div id="timerDisplay">00:00</div>
+                <div id="button-group">
+                    <button id="prevBtn" class="control-btn" title="Previous Question (←)"></button>
+                    <button id="clearBtn" class="control-btn"></button>
+                    <button id="unsureBtn" class="control-btn" title="Mark as Unsure (U)"></button>
+                    <button id="submitBtn" class="control-btn" title="Next Question (→)"></button>
+                </div>
+            </div>
+        </div>
+        
+        <button id="navToggleBtn" title="Toggle Problem List">☰</button>
+        <div id="navPanel">
+            <h3 id="navHeader"></h3>
+            <div id="navGrid"></div>
+        </div>
+        
+        <div id="notesPanel">
+            <div class="notes-header">
+                <h4 id="notesHeader"></h4>
+                <button id="closeNotesBtn" title="Close Notes">&times;</button>
+            </div>
+            <textarea id="notesInput" placeholder="..."></textarea>
+        </div>
+
+        <div id="resultsOverviewScreen" class="screen">
+            <div class="screen-container">
+                <div class="screen-header">
+                    <h1 id="resultsHeaderTitle"></h1>
+                    <div id="resultsScore"></div>
+                    <div id="resultsTime"></div>
+                </div>
+                <div id="resultsNavGrid" class="nav-grid-results"></div>
+                <button id="reviewAnswersBtn" class="control-btn" style="margin-top: 2rem;"></button>
+            </div>
+        </div>
+
+        <div id="reviewScreen" class="screen">
+             <div id="reviewContainer">
+                <div id="reviewHeader"> 
+                    <h2 id="reviewProblemTitle"></h2> 
+                    <button id="reviewBackBtn" class="control-btn"></button>
+                </div>
+                <div id="reviewStudentSolution">
+                    <h4 id="reviewYourSolutionHeader"></h4>
+                    <img id="reviewStudentDrawing" src="" alt="Your drawing">
+                    <h4 id="reviewYourNotesHeader"></h4>
+                    <p id="reviewStudentNotes"></p>
+                </div>
+                <div id="reviewCorrectSolution">
+                    <h4 id="reviewAIHeader"></h4>
+                    <p id="reviewAIFeedback"></p>
+                    <p><strong><span id="reviewCorrectAnswerHeader"></span></strong> <span id="reviewCorrectAnswer"></span></p>
+                </div>
+            </div>
+            <div id="reviewNav">
+                <button id="reviewPrevBtn" class="control-btn">← Previous</button>
+                <button id="reviewNextBtn" class="control-btn">Next →</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", projectId: "physmathacademy-722b3", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const functions = firebase.functions();
+
+    const dom = {
+        loadingOverlay: document.getElementById('loading-overlay'), loadingText: document.getElementById('loading-text'),
+        backgroundCanvas: document.getElementById('backgroundCanvas'), canvas: document.getElementById('board'),
+        prevBtn: document.getElementById('prevBtn'), submitBtn: document.getElementById('submitBtn'),
+        clearBtn: document.getElementById('clearBtn'), unsureBtn: document.getElementById('unsureBtn'),
+        timerDisplay: document.getElementById('timerDisplay'), lessonArea: document.getElementById('lessonArea'),
+        navToggleBtn: document.getElementById('navToggleBtn'), navPanel: document.getElementById('navPanel'),
+        navGrid: document.getElementById('navGrid'), navHeader: document.getElementById('navHeader'),
+        notesPanel: document.getElementById('notesPanel'), notesInput: document.getElementById('notesInput'),
+        notesHeader: document.getElementById('notesHeader'), closeNotesBtn: document.getElementById('closeNotesBtn'),
+        resultsOverviewScreen: document.getElementById('resultsOverviewScreen'), reviewScreen: document.getElementById('reviewScreen'),
+        reviewAnswersBtn: document.getElementById('reviewAnswersBtn'), reviewBackBtn: document.getElementById('reviewBackBtn')
+    };
+    const bgCtx = dom.backgroundCanvas.getContext('2d');
+    const ctx = dom.canvas.getContext('2d');
+
+    let state = { testData: null, problemStates: [], currentStageIndex: 0, testStartTime: null, timerInterval: null, isTransitioning: false, isDrawing: false, testId: null, currentLang: 'en', finalResults: [] };
+    
+    const UI_TEXT = {
+        en: { start: "Start Test", submit: "Next", prev: "Previous", clear: "Clear", testComplete: "Test Complete!", score: "Score:", timeTaken: "Time Taken:", question: "Question", finishTest: "Finish Test", unsure: "I'm Unsure", reviewAnswers: "Review Answers", analyzing: "Analyzing your answers...", problems: "Problems", myNotes: "My Notes", notesPlaceholder: "Type your notes here...", backToOverview: "Back to Overview", yourSolution: "Your Solution", yourNotes: "Your Notes", aiFeedback: "AI Feedback & Correct Answer", correctAnswer: "Correct Answer:" },
+        hy: { start: "Սկսել թեստը", submit: "Հաջորդը", prev: "Նախորդ", clear: "Մաքրել", testComplete: "Թեստն ավարտված է", score: "Միավոր:", timeTaken: "Ժամանակ:", question: "Հարց", finishTest: "Ավարտել թեստը", unsure: "Վստահ չեմ", reviewAnswers: "Դիտել պատասխանները", analyzing: "Վերլուծվում են պատասխանները...", problems: "Խնդիրներ", myNotes: "Իմ նշումները", notesPlaceholder: "Գրեք ձեր նշումները այստեղ․․․", backToOverview: "Վերադառնալ", yourSolution: "Ձեր լուծումը", yourNotes: "Ձեր նշումները", aiFeedback: "Արհեստական բանականության վերլուծություն", correctAnswer: "Ճիշտ պատասխան՝" }
+    };
+    
+    async function renderComplexHeadline(headline) {
+        bgCtx.clearRect(0, 0, dom.backgroundCanvas.width, dom.backgroundCanvas.height);
+        bgCtx.font = `24px '${state.currentLang === 'hy' ? "Montserrat Arm" : "Manrope"}'`;
+        bgCtx.fillStyle = '#111827';
+        bgCtx.textAlign = 'center';
+        bgCtx.fillText(headline, dom.backgroundCanvas.width / (2 * window.devicePixelRatio), 65, dom.backgroundCanvas.width * 0.9 / window.devicePixelRatio);
+    }
+
+    async function loadTest(testJsonPath) {
+        state.testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '');
+        showLoading(true, '');
+        try {
+            const response = await fetch(testJsonPath);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            state.testData = await response.json();
+            
+            state.currentLang = state.testData.lang === 'hy' ? 'hy' : 'en';
+            document.body.className = state.currentLang === 'hy' ? 'lang-hy' : '';
+            document.title = state.testData.testTitle || "thelo | Test Mode";
+
+            state.problemStates = state.testData.stages.map(() => ({ status: 'unanswered', drawingDataUrl: null, notes: '' }));
+            
+            updateAllUITexts();
+            renderNavPanel();
+            await transitionToStage(0);
+        } catch (error) {
+            console.error("Error loading test:", error);
+            alert("Failed to load the test file.");
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function startTest() {
+        if (state.testStartTime) return;
+        state.testStartTime = Date.now();
+        state.timerInterval = setInterval(updateTimerDisplay, 1000);
+        updateAllUITexts();
+    }
+    
+    function handleNavigation(newIndex) {
+        if (state.isTransitioning || newIndex < 0 || newIndex >= state.testData.stages.length) return;
+        if (state.testStartTime) saveCurrentProblemState();
+        transitionToStage(newIndex);
+    }
+    
+    async function transitionToStage(index) {
+        state.isTransitioning = true;
+        dom.backgroundCanvas.classList.add('fade-out');
+        await new Promise(resolve => setTimeout(resolve, 300));
+        state.currentStageIndex = index;
+        await renderStageUI(index);
+        dom.backgroundCanvas.classList.remove('fade-out');
+        state.isTransitioning = false;
+    }
+    
+    async function renderStageUI(index) {
+        const problemState = state.problemStates[index];
+        const stageData = state.testData.stages[index];
+        const headlineText = `${UI_TEXT[state.currentLang].question} ${index + 1}: ${stageData.headline || ''}`;
+        await renderComplexHeadline(headlineText);
+        
+        clearUserCanvas();
+        if (problemState.drawingDataUrl) {
+            const img = new Image();
+            await new Promise(resolve => {
+                img.onload = () => { ctx.drawImage(img, 0, 0, dom.canvas.width / window.devicePixelRatio, dom.canvas.height / window.devicePixelRatio); resolve(); };
+                img.src = problemState.drawingDataUrl;
+            });
+        }
+        
+        dom.notesInput.value = problemState.notes;
+        updateAllUITexts();
+        renderNavPanel();
+    }
+    
+    function saveCurrentProblemState() {
+        const problemState = state.problemStates[state.currentStageIndex];
+        if (!isCanvasBlank()) {
+            problemState.drawingDataUrl = dom.canvas.toDataURL();
+            if (problemState.status === 'unanswered') problemState.status = 'answered';
+        }
+        problemState.notes = dom.notesInput.value;
+    }
+    
+    // ✅ REPLACED with direct local analysis
+    async function finishTest() {
+        clearInterval(state.timerInterval);
+        showLoading(true, UI_TEXT[state.currentLang].analyzing);
+        dom.lessonArea.style.display = 'none';
+        dom.navPanel.style.display = 'none';
+        dom.navToggleBtn.style.display = 'none';
+        
+        const results = [];
+        for (let i = 0; i < state.problemStates.length; i++) {
+            const ps = state.problemStates[i];
+            const stageData = state.testData.stages[i];
+
+            // Create a placeholder for the result, even if unanswered
+            const resultShell = {
+                ...ps,
+                question: stageData.headline,
+                correctAnswer: stageData.correctAnswer,
+                feedback: "Not answered.",
+                status: "unanswered",
+            };
+
+            if (!ps.drawingDataUrl) {
+                results.push(resultShell);
+                continue; // skip analysis for blank drawings
+            }
+
+            try {
+                const analyze = functions.httpsCallable("analyzeMathDrawing");
+                const res = await analyze({
+                    imageBase64: ps.drawingDataUrl,
+                    problemText: stageData.headline,
+                    correctAnswer: stageData.correctAnswer,
+                    language: state.currentLang,
+                });
+
+                results.push({
+                    ...ps,
+                    question: stageData.headline,
+                    correctAnswer: stageData.correctAnswer,
+                    feedback: res.data.feedback,
+                    status: res.data.status,
+                });
+            } catch (err) {
+                console.error(`Analysis failed for problem ${i+1}:`, err);
+                results.push({
+                    ...ps,
+                    question: stageData.headline,
+                    correctAnswer: stageData.correctAnswer,
+                    feedback: "Analysis failed.",
+                    status: "incorrect", // Mark as incorrect if analysis fails
+                });
+            }
+        }
+
+        state.finalResults = results;
+        renderResultsOverview();
+        showLoading(false);
+    }
+
+    function renderResultsOverview() {
+        const texts = UI_TEXT[state.currentLang];
+        const correctAnswers = state.finalResults.filter(r => r.status === 'correct').length;
+        
+        document.getElementById('resultsHeaderTitle').textContent = texts.testComplete;
+        document.getElementById('resultsScore').textContent = `${texts.score} ${correctAnswers} / ${state.testData.stages.length}`;
+        document.getElementById('resultsTime').textContent = `${texts.timeTaken} ${dom.timerDisplay.textContent}`;
+        
+        const resultsNavGrid = document.getElementById('resultsNavGrid');
+        resultsNavGrid.innerHTML = '';
+        
+        state.finalResults.forEach((result, index) => {
+            const item = document.createElement('div');
+            item.textContent = index + 1;
+            item.className = `nav-item ${result.status}`;
+            item.onclick = () => renderReviewScreen(index);
+            resultsNavGrid.appendChild(item);
+        });
+        
+        dom.reviewAnswersBtn.onclick = () => renderReviewScreen(0);
+        dom.reviewScreen.classList.remove('visible');
+        dom.resultsOverviewScreen.classList.add('visible');
+    }
+
+    function renderReviewScreen(index) {
+        state.currentStageIndex = index; 
+        const texts = UI_TEXT[state.currentLang];
+        const stageData = state.testData.stages[index];
+        const resultData = state.finalResults[index];
+
+        document.getElementById('reviewProblemTitle').textContent = `${texts.question} ${index + 1}: ${stageData.headline}`;
+        document.getElementById('reviewYourSolutionHeader').textContent = texts.yourSolution;
+        document.getElementById('reviewYourNotesHeader').textContent = texts.yourNotes;
+        document.getElementById('reviewAIHeader').textContent = texts.aiFeedback;
+        document.getElementById('reviewCorrectAnswerHeader').textContent = texts.correctAnswer;
+        
+        const drawingImg = document.getElementById('reviewStudentDrawing');
+        drawingImg.src = resultData.drawingDataUrl || '';
+        drawingImg.style.display = resultData.drawingDataUrl ? 'block' : 'none';
+        
+        document.getElementById('reviewStudentNotes').textContent = resultData.notes || "No notes taken.";
+        
+        // ✅ MODIFIED to use new keys
+        document.getElementById('reviewAIFeedback').textContent = resultData ? resultData.feedback : "Not answered.";
+        document.getElementById('reviewCorrectAnswer').textContent = resultData ? resultData.correctAnswer : stageData.correctAnswer;
+        
+        dom.resultsOverviewScreen.classList.remove('visible');
+        dom.reviewScreen.classList.add('visible');
+        
+        document.getElementById('reviewPrevBtn').disabled = index === 0;
+        document.getElementById('reviewNextBtn').disabled = index === state.finalResults.length - 1;
+    }
+    
+    function setupEventListeners() {
+        dom.submitBtn.onclick = () => {
+            if (!state.testStartTime) startTest();
+            else if (state.currentStageIndex === state.testData.stages.length - 1) {
+                saveCurrentProblemState(); // Save the last problem before finishing
+                finishTest();
+            }
+            else handleNavigation(state.currentStageIndex + 1);
+        };
+        dom.prevBtn.onclick = () => handleNavigation(state.currentStageIndex - 1);
+        dom.clearBtn.onclick = clearUserCanvas;
+        dom.unsureBtn.onclick = () => {
+            const problemState = state.problemStates[state.currentStageIndex];
+            if (problemState.status === 'unanswered' && isCanvasBlank()) return;
+            problemState.status = problemState.status === 'unsure' ? 'answered' : 'unsure';
+            renderNavPanel();
+        };
+        dom.navToggleBtn.onclick = () => dom.navPanel.classList.toggle('open');
+        dom.notesInput.oninput = () => { if (state.problemStates[state.currentStageIndex]) state.problemStates[state.currentStageIndex].notes = dom.notesInput.value; };
+        dom.closeNotesBtn.onclick = () => dom.notesPanel.classList.remove('open');
+        dom.reviewBackBtn.onclick = renderResultsOverview;
+        document.getElementById('reviewPrevBtn').onclick = () => renderReviewScreen(state.currentStageIndex - 1);
+        document.getElementById('reviewNextBtn').onclick = () => renderReviewScreen(state.currentStageIndex + 1);
+        
+        window.onkeydown = (e) => {
+            if (document.activeElement === dom.notesInput) return;
+            const key = e.key.toLowerCase();
+            if (key === 'a') { e.preventDefault(); dom.notesPanel.classList.toggle('open'); }
+            if (key === 'u') { e.preventDefault(); dom.unsureBtn.click(); }
+            if (key === 'arrowright') { e.preventDefault(); dom.submitBtn.click(); }
+            if (key === 'arrowleft') { e.preventDefault(); dom.prevBtn.click(); }
+        };
+        
+        dom.canvas.addEventListener('mousedown', handleDrawingStart);
+        dom.canvas.addEventListener('mousemove', handleDrawingMove);
+        window.addEventListener('mouseup', handleDrawingEnd);
+        window.addEventListener('resize', resizeAndRedraw);
+    }
+
+    function updateAllUITexts() {
+        const texts = UI_TEXT[state.currentLang];
+        dom.prevBtn.textContent = texts.prev;
+        dom.clearBtn.textContent = texts.clear;
+        dom.unsureBtn.textContent = texts.unsure;
+        dom.navHeader.textContent = texts.problems;
+        dom.notesHeader.textContent = texts.myNotes;
+        dom.notesInput.placeholder = texts.notesPlaceholder;
+        dom.reviewAnswersBtn.textContent = texts.reviewAnswers;
+        dom.reviewBackBtn.textContent = texts.backToOverview;
+        
+        if (!state.testStartTime) dom.submitBtn.textContent = texts.start;
+        else if (state.currentStageIndex === state.testData.stages.length - 1) dom.submitBtn.textContent = texts.finishTest;
+        else dom.submitBtn.textContent = texts.submit;
+        
+        dom.prevBtn.disabled = state.currentStageIndex === 0 && state.testStartTime === null;
+    }
+
+    function renderNavPanel() {
+        dom.navGrid.innerHTML = '';
+        state.problemStates.forEach((ps, index) => {
+            const item = document.createElement('div');
+            item.textContent = index + 1;
+            item.className = `nav-item ${ps.status}`;
+            if (index === state.currentStageIndex) item.classList.add('current');
+            item.onclick = () => handleNavigation(index);
+            dom.navGrid.appendChild(item);
+        });
+    }
+
+    function showLoading(visible, text = '') {
+        dom.loadingText.textContent = text;
+        dom.loadingOverlay.classList.toggle('visible', visible);
+    }
+    
+    function resizeAndRedraw() { resizeCanvases(); if(state.testData) {renderStageUI(state.currentStageIndex);} }
+    function resizeCanvases() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = dom.canvas.parentElement.getBoundingClientRect();
+        [dom.backgroundCanvas, dom.canvas].forEach(c => { c.width = rect.width * dpr; c.height = rect.height * dpr; c.style.width = `${rect.width}px`; c.style.height = `${rect.height}px`; });
+        [bgCtx, ctx].forEach(context => context.scale(dpr, dpr));
+        ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#000000';
+    }
+
+    function getPos(e) {
+        const rect = dom.canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function handleDrawingStart(e) { state.isDrawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); }
+    function handleDrawingMove(e) { if (!state.isDrawing) return; const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+    function handleDrawingEnd() { state.isDrawing = false; }
+    function clearUserCanvas() { ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height); }
+    function isCanvasBlank() { return !ctx.getImageData(0, 0, dom.canvas.width, dom.canvas.height).data.some(channel => channel !== 0); }
+    function updateTimerDisplay() {
+        if (!state.testStartTime) return;
+        const elapsed = Math.floor((Date.now() - state.testStartTime) / 1000);
+        const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const seconds = String(elapsed % 60).padStart(2, '0');
+        dom.timerDisplay.textContent = `${minutes}:${seconds}`;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                resizeCanvases();
+                setupEventListeners();
+                const testFileName = new URLSearchParams(window.location.search).get('testFile');
+                if (testFileName) loadTest(`https://thelo.space/tests/${testFileName}`);
+                else alert("No test file specified. Add '?testFile=your-test.json' to the URL.");
+            } else { 
+                // Handle user not signed in - perhaps redirect or show a login button
+                document.body.innerHTML = '<h1>Please sign in to start the test.</h1>';
+             }
+        });
+    });
+</script>
+</body>
+</html>
