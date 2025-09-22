@@ -326,6 +326,7 @@
         showLoading(true, UI_TEXT[state.currentLang].analyzing);
         dom.lessonArea.style.display = 'none';
         dom.navPanel.style.display = 'none';
+        dom.navToggleBtn.style.display = 'none';
 
         const timeTaken = Math.floor((Date.now() - state.testStartTime) / 1000);
         const user = auth.currentUser;
@@ -335,10 +336,10 @@
             .map((ps, index) => ({ ...ps, index }))
             .filter(ps => ps.status !== 'unanswered')
             .map(ps => ({
-                question: state.testData.stages[ps.index].headline,
-                correctAnswer: state.testData.stages[ps.index].correctAnswer,
-                solutionImage: ps.drawingDataUrl,
-                notes: ps.notes,
+                question: state.testData.stages[ps.index].headline || '',
+                correctAnswer: String(state.testData.stages[ps.index].correctAnswer || ''),
+                solutionImage: ps.drawingDataUrl || '',
+                notes: ps.notes || '',
                 initialStatus: ps.status
             }));
 
@@ -355,6 +356,8 @@
             const resultId = response.data.resultId;
             if (resultId) {
                 listenForDetailedFeedback(user.uid, resultId, resultsToSubmit);
+            } else {
+                 throw new Error("Backend did not return a resultId.");
             }
         } catch (err) {
             console.error("Error submitting test results:", err);
@@ -379,13 +382,13 @@
             if (receivedFeedback.length >= submittedResults.length) {
                 unsubscribe();
                 state.finalResults = receivedFeedback;
-                renderResultsOverview(submittedResults);
+                renderResultsOverview();
                 showLoading(false);
             }
         });
     }
 
-    function renderResultsOverview(submittedResults) {
+    function renderResultsOverview() {
         const texts = UI_TEXT[state.currentLang];
         const correctAnswers = state.finalResults.filter(r => r.status === 'correct').length;
         
@@ -582,3 +585,4 @@
 </script>
 </body>
 </html>
+
