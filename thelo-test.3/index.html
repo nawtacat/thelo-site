@@ -57,7 +57,6 @@
     
     #bottomBar { position: absolute; bottom: 0; left: 0; width: 100%; background: transparent; box-sizing: border-box; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; z-index: 20; }
     #button-group { display: flex; gap: 0.5rem; }
-    /* --- MODIFIED: Restored rounded corners and shadows --- */
     .control-btn { font-family: inherit; padding: 0.6rem 1.2rem; font-size: 1rem; font-weight: 600; border: none; border-radius: 0.5rem; color: white; cursor: pointer; transition: all 0.2s; touch-action: manipulation; box-shadow: var(--shadow-md); }
     .control-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
     .control-btn:disabled { background-color: #9ca3af !important; cursor: not-allowed; opacity: 0.8; transform: none; box-shadow: none; }
@@ -309,14 +308,14 @@
             .filter(ps => ps.status !== 'unanswered')
             .map(ps => ({
                 question: state.testData.stages[ps.index].headline || '',
-                // --- MODIFIED: The key sent to the backend must be initialClientStatus ---
-                initialClientStatus: ps.status, 
+                // --- MODIFIED: Restore the keys the backend expects ---
+                initialStatus: ps.status, 
+                correctAnswer: String(state.testData.stages[ps.index].correctAnswer || ''),
                 solutionImage: ps.drawingDataUrl || '',
                 notes: ps.notes || '',
             }));
         
         try {
-            // Note: The backend should NOT expect 'correctAnswer'. It calculates correctness.
             const submitTestResults = functions.httpsCallable('submitTestResults');
             const response = await submitTestResults({ testId: state.testId, score: 0, totalQuestions: state.testData.stages.length, timeTakenSeconds: timeTaken, results: resultsToSubmit, language: state.currentLang });
             if (response.data.resultId) {
@@ -375,7 +374,6 @@
     }
 
     function renderReviewScreen(index) {
-        // --- MODIFIED: Keep track of the currently viewed review index ---
         state.currentStageIndex = index; 
         const texts = UI_TEXT[state.currentLang];
         const stageData = state.testData.stages[index];
