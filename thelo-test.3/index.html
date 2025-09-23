@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -13,6 +12,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
 <style>
     :root {
@@ -25,6 +27,8 @@
         --error-red: #dc2626;
         --accent-yellow: #f59e0b;
         --subtle-bg: #f9fafb;
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     }
 
     @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype'); font-weight: 400; }
@@ -49,15 +53,16 @@
     
     #bottomBar { position: absolute; bottom: 0; left: 0; width: 100%; background: transparent; box-sizing: border-box; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; z-index: 20; }
     #button-group { display: flex; gap: 0.5rem; }
-    .control-btn { font-family: inherit; padding: 0.6rem 1.2rem; font-size: 1rem; font-weight: 600; border: none; border-radius: 0.5rem; color: white; background-color: var(--thelo-blue); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
-    .control-btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.1); }
+    .control-btn { font-family: inherit; padding: 0.6rem 1.2rem; font-size: 1rem; font-weight: 600; border: none; border-radius: 0.5rem; color: white; cursor: pointer; transition: all 0.2s; touch-action: manipulation; box-shadow: var(--shadow-md); }
+    .control-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
     .control-btn:disabled { background-color: #9ca3af !important; cursor: not-allowed; opacity: 0.8; transform: none; box-shadow: none; }
-    #prevBtn, #reviewPrevBtn { background-color: #6b7280; }
+    #prevBtn { background-color: #6b7280; }
     #unsureBtn { background-color: var(--accent-yellow); }
     #clearBtn { background-color: var(--error-red); }
+    #submitBtn, #reviewAnswersBtn, #reviewBackBtn { background-color: var(--thelo-blue); }
     #timerDisplay { background: var(--thelo-bg); padding: 0.5rem 1.25rem; font-size: 1.2rem; font-weight: 700; border: 2px solid var(--thelo-border); border-radius: 999px; }
     
-    /* --- New Screen Styles --- */
+    /* --- NEW: Screen System --- */
     .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; background-color: var(--thelo-bg); display: none; flex-direction: column; align-items: center; padding: 2rem; box-sizing: border-box; }
     .screen.visible { display: flex; }
     .screen-container { width: 100%; max-width: 800px; text-align: center; }
@@ -65,39 +70,30 @@
     #resultsScore { font-size: 2.5rem; font-weight: 800; color: var(--thelo-blue); }
     #resultsTime { font-size: 1.2rem; color: var(--thelo-text-light); }
     
-    #navToggleBtn { position: fixed; top: 20px; right: 20px; z-index: 1001; background-color: var(--thelo-blue); color: white; border: none; border-radius: 0.5rem; width: 50px; height: 50px; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    /* --- NEW: Navigation Panel --- */
+    #navToggleBtn { position: fixed; top: 20px; right: 20px; z-index: 1001; background-color: var(--thelo-blue); color: white; border: none; border-radius: 0.5rem; width: 50px; height: 50px; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); }
     #navPanel { position: fixed; top: 0; right: -320px; width: 300px; height: 100%; background: var(--subtle-bg); z-index: 1000; transition: right 0.3s ease-in-out; display: flex; flex-direction: column; border-left: 2px solid var(--thelo-border); }
     #navPanel.open { right: 0; }
     #navPanel h3 { padding: 1rem; margin: 0; border-bottom: 2px solid var(--thelo-border); }
     #navGrid, .nav-grid-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(45px, 1fr)); gap: 10px; padding: 10px; }
     .nav-item { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 2px solid var(--thelo-border); border-radius: 50%; }
     .nav-item.unanswered { background-color: #e5e7eb; color: #6b7280; }
-    .nav-item.answered { background-color: var(--success-green); color: white; border-color: transparent; }
-    .nav-item.unsure { background-color: var(--accent-yellow); color: white; border-color: transparent; }
-    .nav-item.correct { background-color: var(--success-green); color: white; border-color: transparent; }
-    .nav-item.incorrect { background-color: var(--error-red); color: white; border-color: transparent; }
+    .nav-item.answered { background-color: var(--success-green); color: white; border-color: var(--success-green); }
+    .nav-item.unsure { background-color: var(--accent-yellow); color: white; border-color: var(--accent-yellow); }
+    .nav-item.correct { background-color: var(--success-green); color: white; border-color: var(--success-green); }
+    .nav-item.incorrect { background-color: var(--error-red); color: white; border-color: var(--error-red); }
     .nav-item.current { transform: scale(1.1); border-color: var(--thelo-blue); }
     
-    #notesPanel { position: fixed; bottom: 90px; right: 20px; width: 300px; height: 40%; background: white; z-index: 1002; display: none; flex-direction: column; border: 2px solid var(--thelo-border); border-radius: 0.5rem; }
-    #notesPanel.open { display: flex; }
-    .notes-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background-color: var(--subtle-bg); border-bottom: 2px solid var(--thelo-border); }
-    .notes-header h4 { margin: 0; }
-    #closeNotesBtn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--thelo-text-light); }
-    #notesInput { flex-grow: 1; border: none; padding: 1rem; font-family: inherit; font-size: 1rem; resize: none; border-radius: 0 0 0.5rem 0.5rem;}
-    #notesInput:focus { outline: none; }
-    
-    /* --- New Review Screen Styles --- */
+    /* --- NEW: Review Screen --- */
     #reviewContainer { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 1.5rem; width: 100%; max-width: 1200px; height: calc(100vh - 160px); }
     #reviewHeader { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; }
-    #reviewStudentSolution, #reviewCorrectSolution { border: 2px solid var(--thelo-border); padding: 1rem; overflow-y: auto; border-radius: 0.5rem; background-color: var(--subtle-bg); }
-    #reviewStudentSolution h4, #reviewCorrectSolution h4 { margin-top: 0; border-bottom: 1px solid var(--thelo-border); padding-bottom: 0.5rem; }
-    #reviewStudentDrawing { max-width: 100%; border: 1px solid var(--thelo-border); background-color: white; }
-    #reviewStudentNotes { background-color: #fefce8; padding: 0.5rem; white-space: pre-wrap; word-wrap: break-word; border-radius: 0.25rem; }
-    #reviewNav { position: absolute; bottom: 2rem; left: 50%; transform: translateX(-50%); width: 100%; display: flex; justify-content: center; gap: 1rem; }
+    #reviewStudentSolution, #reviewCorrectSolution { border: 2px solid var(--thelo-border); padding: 1rem; overflow-y: auto; border-radius: 0.5rem; }
+    #reviewStudentSolution h4, #reviewCorrectSolution h4 { margin-top: 0; }
+    #reviewStudentDrawing { max-width: 100%; border: 1px solid #ccc; }
+    #reviewStudentNotes { background-color: #fefce8; padding: 0.5rem; margin-top: 1rem; white-space: pre-wrap; word-wrap: break-word; border-radius: 0.5rem; font-style: italic; }
+    #reviewNav { position: absolute; bottom: 2rem; width: 100%; display: flex; justify-content: center; gap: 1rem; }
 </style>
-
 </head>
-
 <body>
     <div id="loading-overlay">
         <img id="loading-svg" src="https://thelo.space/img/bluethelo.svg" alt="Loading...">
@@ -127,14 +123,6 @@
             <div id="navGrid"></div>
         </div>
         
-        <div id="notesPanel">
-            <div class="notes-header">
-                <h4 id="notesHeader"></h4>
-                <button id="closeNotesBtn" title="Close Notes (Esc)">&times;</button>
-            </div>
-            <textarea id="notesInput" placeholder="..."></textarea>
-        </div>
-
         <div id="resultsOverviewScreen" class="screen">
             <div class="screen-container">
                 <div class="screen-header">
@@ -149,21 +137,21 @@
 
         <div id="reviewScreen" class="screen">
              <div id="reviewContainer">
-                 <div id="reviewHeader"> 
-                     <h2 id="reviewProblemTitle"></h2> 
-                     <button id="reviewBackBtn" class="control-btn"></button>
-                 </div>
-                 <div id="reviewStudentSolution">
-                     <h4 id="reviewYourSolutionHeader"></h4>
-                     <img id="reviewStudentDrawing" src="" alt="Your drawing">
-                     <h4 id="reviewYourNotesHeader" style="margin-top: 1rem;"></h4>
-                     <p id="reviewStudentNotes"></p>
-                 </div>
-                 <div id="reviewCorrectSolution">
-                     <h4 id="reviewAIHeader"></h4>
-                     <p id="reviewAIFeedback"></p>
-                     <p><strong><span id="reviewCorrectAnswerHeader"></span></strong> <span id="reviewCorrectAnswer"></span></p>
-                 </div>
+                <div id="reviewHeader"> 
+                    <h2 id="reviewProblemTitle"></h2> 
+                    <button id="reviewBackBtn" class="control-btn"></button>
+                </div>
+                <div id="reviewStudentSolution">
+                    <h4 id="reviewYourSolutionHeader"></h4>
+                    <img id="reviewStudentDrawing" src="" alt="Your drawing">
+                    <h4 id="reviewYourNotesHeader" style="margin-top: 1.5rem;"></h4>
+                    <p id="reviewStudentNotes"></p>
+                </div>
+                <div id="reviewCorrectSolution">
+                    <h4 id="reviewAIHeader"></h4>
+                    <p id="reviewAIFeedback"></p>
+                    <p><strong><span id="reviewCorrectAnswerHeader"></span></strong> <span id="reviewCorrectAnswer"></span></p>
+                </div>
             </div>
             <div id="reviewNav">
                 <button id="reviewPrevBtn" class="control-btn"></button>
@@ -173,7 +161,7 @@
     </div>
 
 <script>
-    const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", projectId: "physmathacademy-722b3", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
+    const firebaseConfig = { apiKey: "YOUR_API_KEY", authDomain: "YOUR_AUTH_DOMAIN", projectId: "YOUR_PROJECT_ID", messagingSenderId: "YOUR_SENDER_ID", appId: "YOUR_APP_ID" };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const functions = firebase.functions();
@@ -186,36 +174,30 @@
         timerDisplay: document.getElementById('timerDisplay'), lessonArea: document.getElementById('lessonArea'),
         navToggleBtn: document.getElementById('navToggleBtn'), navPanel: document.getElementById('navPanel'),
         navGrid: document.getElementById('navGrid'), navHeader: document.getElementById('navHeader'),
-        notesPanel: document.getElementById('notesPanel'), notesInput: document.getElementById('notesInput'),
-        notesHeader: document.getElementById('notesHeader'), closeNotesBtn: document.getElementById('closeNotesBtn'),
-        
-        // New Screen Elements
-        resultsOverviewScreen: document.getElementById('resultsOverviewScreen'),
-        reviewScreen: document.getElementById('reviewScreen'),
-        reviewAnswersBtn: document.getElementById('reviewAnswersBtn'),
-        reviewBackBtn: document.getElementById('reviewBackBtn'),
-        reviewPrevBtn: document.getElementById('reviewPrevBtn'),
-        reviewNextBtn: document.getElementById('reviewNextBtn')
+        resultsOverviewScreen: document.getElementById('resultsOverviewScreen'), reviewScreen: document.getElementById('reviewScreen'),
+        reviewAnswersBtn: document.getElementById('reviewAnswersBtn'), reviewBackBtn: document.getElementById('reviewBackBtn')
     };
     const bgCtx = dom.backgroundCanvas.getContext('2d');
     const ctx = dom.canvas.getContext('2d');
 
-    let state = { testData: null, problemStates: [], currentStageIndex: 0, testStartTime: null, timerInterval: null, isTransitioning: false, isDrawing: false, currentLang: 'en', finalResults: [] };
+    let state = { testData: null, problemStates: [], currentStageIndex: 0, testStartTime: null, timerInterval: null, isTransitioning: false, isDrawing: false, testId: null, currentLang: 'en', finalResults: [] };
     
     const UI_TEXT = {
-        en: { start: "Start Test", submit: "Next", prev: "Previous", clear: "Clear", testComplete: "Test Complete!", score: "Score:", timeTaken: "Time Taken:", question: "Question", finishTest: "Finish Test", unsure: "I'm Unsure", reviewAnswers: "Review Answers", analyzing: "Analyzing your answers...", problems: "Problems", myNotes: "My Notes", notesPlaceholder: "Type your notes here...", backToOverview: "Back to Overview", yourSolution: "Your Solution", yourNotes: "Your Notes", aiFeedback: "AI Feedback & Correct Answer", correctAnswer: "Correct Answer:", next: "Next →", noNotes: "No notes taken." },
-        hy: { start: "Սկսել թեստը", submit: "Հաջորդը", prev: "Նախորդ", clear: "Մաքրել", testComplete: "Թեստն ավարտված է", score: "Միավոր:", timeTaken: "Ժամանակ:", question: "Հարց", finishTest: "Ավարտել թեստը", unsure: "Վստահ չեմ", reviewAnswers: "Դիտել պատասխանները", analyzing: "Վերլուծվում են պատասխանները...", problems: "Խնդիրներ", myNotes: "Իմ նշումները", notesPlaceholder: "Գրեք ձեր նշումները այստեղ․․․", backToOverview: "Վերադառնալ", yourSolution: "Ձեր լուծումը", yourNotes: "Ձեր նշումները", aiFeedback: "Արհեստական բանականության վերլուծություն", correctAnswer: "Ճիշտ պատասխան՝", next: "Հաջորդը →", noNotes: "Նշումներ չկան։" }
+        en: { start: "Start Test", submit: "Next", prev: "Previous", clear: "Clear", testComplete: "Test Complete!", score: "Score:", timeTaken: "Time Taken:", question: "Question", finishTest: "Finish Test", unsure: "I'm Unsure", reviewAnswers: "Review Answers", analyzing: "Analyzing your answers...", problems: "Problems", backToOverview: "Back to Overview", yourSolution: "Your Solution", yourNotes: "Your Notes", aiFeedback: "AI Feedback", correctAnswer: "Correct Answer:", nextReview: "Next →", prevReview: "← Previous", noNotes: "No notes taken for this problem." },
+        hy: { start: "Սկսել թեստը", submit: "Հաջորդը", prev: "Նախորդ", clear: "Մաքրել", testComplete: "Թեստն ավարտված է", score: "Միավոր:", timeTaken: "Ժամանակ:", question: "Հարց", finishTest: "Ավարտել թեստը", unsure: "Վստահ չեմ", reviewAnswers: "Դիտել պատասխանները", analyzing: "Վերլուծվում են պատասխանները...", problems: "Խնդիրներ", backToOverview: "Վերադառնալ", yourSolution: "Ձեր լուծումը", yourNotes: "Ձեր նշումները", aiFeedback: "Արհեստական բանականության վերլուծություն", correctAnswer: "Ճիշտ պատասխան՝", nextReview: "Հաջորդը →", prevReview: "← Նախորդ", noNotes: "Այս խնդրի համար նշումներ չկան։" }
     };
     
     async function renderComplexHeadline(headline) {
         bgCtx.clearRect(0, 0, dom.backgroundCanvas.width, dom.backgroundCanvas.height);
-        bgCtx.font = `bold 24px '${state.currentLang === 'hy' ? "Montserrat Arm" : "Manrope"}'`;
+        bgCtx.font = `24px '${state.currentLang === 'hy' ? "Montserrat Arm" : "Manrope"}'`;
         bgCtx.fillStyle = '#111827';
         bgCtx.textAlign = 'center';
-        bgCtx.fillText(headline, dom.backgroundCanvas.width / (2 * window.devicePixelRatio), 65, dom.backgroundCanvas.width * 0.9 / window.devicePixelRatio);
+        bgCtx.textBaseline = 'middle';
+        bgCtx.fillText(headline, dom.backgroundCanvas.width / (2 * window.devicePixelRatio), 50, dom.backgroundCanvas.width * 0.9 / window.devicePixelRatio);
     }
 
     async function loadTest(testJsonPath) {
+        state.testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '');
         showLoading(true, '');
         try {
             const response = await fetch(testJsonPath);
@@ -277,52 +259,53 @@
             });
         }
         
-        dom.notesInput.value = problemState.notes;
         updateAllUITexts();
         renderNavPanel();
     }
     
     function saveCurrentProblemState() {
         const problemState = state.problemStates[state.currentStageIndex];
-        problemState.drawingDataUrl = isCanvasBlank() ? null : dom.canvas.toDataURL();
-        if (problemState.drawingDataUrl && problemState.status === 'unanswered') {
-            problemState.status = 'answered';
+        if (!isCanvasBlank()) {
+            problemState.drawingDataUrl = dom.canvas.toDataURL();
+            if (problemState.status === 'unanswered') problemState.status = 'answered';
         }
-        problemState.notes = dom.notesInput.value;
     }
     
     async function finishTest() {
-        saveCurrentProblemState(); // Save the very last problem
+        saveCurrentProblemState(); // Save the final problem
         clearInterval(state.timerInterval);
         showLoading(true, UI_TEXT[state.currentLang].analyzing);
+        
+        // Hide test UI
         dom.lessonArea.style.display = 'none';
-        dom.navPanel.classList.remove('open');
+        dom.navPanel.style.display = 'none';
         dom.navToggleBtn.style.display = 'none';
-        dom.notesPanel.classList.remove('open');
 
-        const answeredProblems = state.problemStates
+        const user = auth.currentUser;
+        if (!user) { alert("Authentication error."); showLoading(false); return; }
+
+        const problemsToAnalyze = state.problemStates
             .map((ps, index) => ({ ...ps, index }))
-            .filter(ps => ps.drawingDataUrl);
+            .filter(ps => ps.status !== 'unanswered');
 
-        const analysisPromises = answeredProblems.map(ps => {
-            const analyze = functions.httpsCallable("analyzeMathDrawing");
-            return analyze({
+        const analysisPromises = problemsToAnalyze.map(ps => {
+            const stageData = state.testData.stages[ps.index];
+            const analyzeMathDrawing = functions.httpsCallable('analyzeMathDrawing');
+            return analyzeMathDrawing({
                 imageBase64: ps.drawingDataUrl,
-                problemText: state.testData.stages[ps.index].headline,
-                correctAnswer: String(state.testData.stages[ps.index].correctAnswer),
+                problemText: stageData.headline,
+                correctAnswer: String(stageData.correctAnswer),
                 language: state.currentLang,
-            }).then(res => ({
-                ...state.problemStates[ps.index], // Keep notes and drawing
-                question: state.testData.stages[ps.index].headline,
-                status: res.data.status,
-                detailedFeedback: res.data.feedback,
+            }).then(response => ({
+                question: stageData.headline,
+                status: response.data.status,
+                detailedFeedback: response.data.feedback,
             })).catch(err => {
                 console.error(`Analysis failed for problem ${ps.index + 1}:`, err);
                 return {
-                     ...state.problemStates[ps.index],
-                    question: state.testData.stages[ps.index].headline,
+                    question: stageData.headline,
                     status: 'incorrect',
-                    detailedFeedback: 'Analysis failed for this problem.',
+                    detailedFeedback: 'An error occurred during analysis.'
                 };
             });
         });
@@ -339,6 +322,7 @@
         document.getElementById('resultsHeaderTitle').textContent = texts.testComplete;
         document.getElementById('resultsScore').textContent = `${texts.score} ${correctAnswers} / ${state.testData.stages.length}`;
         document.getElementById('resultsTime').textContent = `${texts.timeTaken} ${dom.timerDisplay.textContent}`;
+        dom.reviewAnswersBtn.textContent = texts.reviewAnswers;
         
         const resultsNavGrid = document.getElementById('resultsNavGrid');
         resultsNavGrid.innerHTML = '';
@@ -347,24 +331,22 @@
             const item = document.createElement('div');
             item.textContent = index + 1;
             
-            // Find the result corresponding to this stage index
             const problemState = state.problemStates[index];
-            const feedback = state.finalResults.find(fr => fr.question === stage.headline);
-            
             let status = 'unanswered';
-            if (feedback) {
-                status = feedback.status;
-            } else if (problemState.status !== 'unanswered') {
-                // If it was marked unsure but not answered with a drawing
-                status = problemState.status;
+            if (problemState.status !== 'unanswered') {
+                 const feedback = state.finalResults.find(fr => fr.question === stage.headline);
+                 status = feedback ? feedback.status : 'incorrect'; // Default to incorrect if analysis fails
             }
 
             item.className = `nav-item ${status}`;
-            item.onclick = () => renderReviewScreen(index);
+            if (status !== 'unanswered') {
+                item.onclick = () => renderReviewScreen(index);
+            } else {
+                item.style.cursor = 'not-allowed';
+            }
             resultsNavGrid.appendChild(item);
         });
         
-        dom.reviewAnswersBtn.onclick = () => renderReviewScreen(0);
         dom.reviewScreen.classList.remove('visible');
         dom.resultsOverviewScreen.classList.add('visible');
     }
@@ -386,15 +368,18 @@
         drawingImg.src = problemState.drawingDataUrl || '';
         drawingImg.style.display = problemState.drawingDataUrl ? 'block' : 'none';
         
-        document.getElementById('reviewStudentNotes').textContent = problemState.notes || texts.noNotes;
+        const notesEl = document.getElementById('reviewStudentNotes');
+        notesEl.textContent = problemState.notes || texts.noNotes;
+        notesEl.style.display = 'block';
+
         document.getElementById('reviewAIFeedback').textContent = feedback ? feedback.detailedFeedback : "Not answered.";
         document.getElementById('reviewCorrectAnswer').textContent = stageData.correctAnswer;
         
         dom.resultsOverviewScreen.classList.remove('visible');
         dom.reviewScreen.classList.add('visible');
         
-        dom.reviewPrevBtn.disabled = index === 0;
-        dom.reviewNextBtn.disabled = index === state.testData.stages.length - 1;
+        document.getElementById('reviewPrevBtn').disabled = index === 0;
+        document.getElementById('reviewNextBtn').disabled = index === state.testData.stages.length - 1;
     }
     
     function setupEventListeners() {
@@ -407,59 +392,44 @@
         dom.clearBtn.onclick = clearUserCanvas;
         dom.unsureBtn.onclick = () => {
             const problemState = state.problemStates[state.currentStageIndex];
-            if (problemState.status !== 'unsure') {
-                problemState.status = 'unsure';
-            } else {
-                problemState.status = isCanvasBlank() ? 'unanswered' : 'answered';
-            }
+            if (problemState.status === 'unanswered' && isCanvasBlank()) return; // Don't mark empty as unsure
+            problemState.status = problemState.status === 'unsure' ? 'answered' : 'unsure';
             renderNavPanel();
         };
         dom.navToggleBtn.onclick = () => dom.navPanel.classList.toggle('open');
-        dom.notesInput.oninput = () => { if (state.problemStates[state.currentStageIndex]) state.problemStates[state.currentStageIndex].notes = dom.notesInput.value; };
-        dom.closeNotesBtn.onclick = () => dom.notesPanel.classList.remove('open');
-        
-        // New Review Screen Listeners
+        dom.reviewAnswersBtn.onclick = () => renderReviewScreen(0);
         dom.reviewBackBtn.onclick = renderResultsOverview;
-        dom.reviewPrevBtn.onclick = () => renderReviewScreen(state.currentStageIndex - 1);
-        dom.reviewNextBtn.onclick = () => renderReviewScreen(state.currentStageIndex + 1);
+        document.getElementById('reviewPrevBtn').onclick = () => renderReviewScreen(state.currentStageIndex - 1);
+        document.getElementById('reviewNextBtn').onclick = () => renderReviewScreen(state.currentStageIndex + 1);
         
         window.onkeydown = (e) => {
-            const isNotesActive = dom.notesPanel.classList.contains('open');
-            if (isNotesActive && e.key !== 'Escape') return;
-
-            switch (e.key.toLowerCase()) {
-                case 'a': e.preventDefault(); dom.notesPanel.classList.toggle('open'); if(dom.notesPanel.classList.contains('open')) dom.notesInput.focus(); break;
-                case 'u': e.preventDefault(); dom.unsureBtn.click(); break;
-                case 'arrowright': e.preventDefault(); dom.submitBtn.click(); break;
-                case 'arrowleft': e.preventDefault(); dom.prevBtn.click(); break;
-                case 'escape': if(isNotesActive) { e.preventDefault(); dom.notesPanel.classList.remove('open'); } break;
-            }
+            const key = e.key.toLowerCase();
+            if (key === 'u') { e.preventDefault(); dom.unsureBtn.click(); }
+            if (key === 'arrowright') { e.preventDefault(); dom.submitBtn.click(); }
+            if (key === 'arrowleft') { e.preventDefault(); dom.prevBtn.click(); }
         };
         
-        dom.canvas.addEventListener('pointerdown', handleDrawingStart);
-        dom.canvas.addEventListener('pointermove', handleDrawingMove);
-        window.addEventListener('pointerup', handleDrawingEnd);
+        dom.canvas.addEventListener('mousedown', handleDrawingStart);
+        dom.canvas.addEventListener('mousemove', handleDrawingMove);
+        window.addEventListener('mouseup', handleDrawingEnd);
         window.addEventListener('resize', resizeAndRedraw);
     }
 
     function updateAllUITexts() {
         const texts = UI_TEXT[state.currentLang];
         dom.prevBtn.textContent = texts.prev;
-        dom.reviewPrevBtn.textContent = `← ${texts.prev}`;
         dom.clearBtn.textContent = texts.clear;
         dom.unsureBtn.textContent = texts.unsure;
         dom.navHeader.textContent = texts.problems;
-        dom.notesHeader.textContent = texts.myNotes;
-        dom.notesInput.placeholder = texts.notesPlaceholder;
-        dom.reviewAnswersBtn.textContent = texts.reviewAnswers;
         dom.reviewBackBtn.textContent = texts.backToOverview;
-        dom.reviewNextBtn.textContent = `${texts.next}`;
-        
+        document.getElementById('reviewPrevBtn').textContent = texts.prevReview;
+        document.getElementById('reviewNextBtn').textContent = texts.nextReview;
+
         if (!state.testStartTime) dom.submitBtn.textContent = texts.start;
         else if (state.currentStageIndex === state.testData.stages.length - 1) dom.submitBtn.textContent = texts.finishTest;
         else dom.submitBtn.textContent = texts.submit;
         
-        dom.prevBtn.disabled = !state.testStartTime || state.currentStageIndex === 0;
+        dom.prevBtn.disabled = state.currentStageIndex === 0;
     }
 
     function renderNavPanel() {
@@ -479,7 +449,7 @@
         dom.loadingOverlay.classList.toggle('visible', visible);
     }
     
-    function resizeAndRedraw() { resizeCanvases(); if(state.testData) {renderStageUI(state.currentStageIndex);} }
+    function resizeAndRedraw() { resizeCanvases(); renderStageUI(state.currentStageIndex); }
     function resizeCanvases() {
         const dpr = window.devicePixelRatio || 1;
         const rect = dom.canvas.parentElement.getBoundingClientRect();
@@ -490,10 +460,12 @@
 
     function getPos(e) {
         const rect = dom.canvas.getBoundingClientRect();
-        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
-    function handleDrawingStart(e) { if(e.pointerType === 'mouse' && e.button !== 0) return; state.isDrawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); }
+    function handleDrawingStart(e) { state.isDrawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); }
     function handleDrawingMove(e) { if (!state.isDrawing) return; const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
     function handleDrawingEnd() { state.isDrawing = false; }
     function clearUserCanvas() { ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height); }
@@ -515,8 +487,8 @@
                 if (testFileName) loadTest(`https://thelo.space/tests/${testFileName}`);
                 else alert("No test file specified. Add '?testFile=your-test.json' to the URL.");
             } else { 
-                // Handle not signed in state
-                document.body.innerHTML = '<h1>Please sign in to start the test.</h1>';
+                // Handle not signed in case, maybe redirect or show a message
+                document.body.innerHTML = '<h1>Please sign in to take a test.</h1>';
             }
         });
     });
