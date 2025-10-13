@@ -3845,8 +3845,7 @@ function logHandwritingAttempt(result) {
     };
 
     try {
-        // In checkHandwritingAnswer() and checkMathDrawing()
-const analyzeMathDrawing = firebase.app().functions('us-east1').httpsCallable('analyzeMathDrawing');
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
         const result = await analyzeMathDrawing(payload);
         const { status, feedback } = result.data;
         
@@ -3920,75 +3919,78 @@ async function checkMathDrawing(isMcqContext = false) {
     
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    try {
-        let imageBase64;
-        if (isMcqContext) {
-            imageBase64 = canvas.toDataURL("image/png");
-        } else {
-            const compositeCanvas = document.createElement('canvas');
-            compositeCanvas.width = canvas.width;
-            compositeCanvas.height = canvas.height;
-            const compositeCtx = compositeCanvas.getContext('2d');
-            compositeCtx.drawImage(backgroundCanvas, 0, 0);
-            compositeCtx.drawImage(canvas, 0, 0);
-            imageBase64 = compositeCanvas.toDataURL("image/png");
-        }
+    // --- Start of Replacement ---
 
-        const payload = {
-            imageBase64: imageBase64,
-            problemText: currentStageData.problemText || "No problem text provided.",
-            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
-            solutionSteps: currentStageData.solutionSteps || "",
-            customInstructions: currentStageData.customInstructions || "",
-            language: currentLang
-        };
+try {
+    let imageBase64;
+    if (isMcqContext) {
+        imageBase64 = canvas.toDataURL("image/png");
+    } else {
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = canvas.width;
+        compositeCanvas.height = canvas.height;
+        const compositeCtx = compositeCanvas.getContext('2d');
+        compositeCtx.drawImage(backgroundCanvas, 0, 0);
+        compositeCtx.drawImage(canvas, 0, 0);
+        imageBase64 = compositeCanvas.toDataURL("image/png");
+    }
 
-        // In checkHandwritingAnswer() and checkMathDrawing()
-const analyzeMathDrawing = firebase.app().functions('us-east1').httpsCallable('analyzeMathDrawing');
-        const result = await analyzeMathDrawing(payload);
-        const { status, feedback } = result.data;
-	
-        if (status === 'correct') {
-            showOnCanvasFeedback(feedback, undefined, 'success');
-        } else {
-            showOnCanvasFeedback(feedback);
+    const payload = {
+        boardDataUrl: imageBase64, // Corrected property name from your new backend
+        problemText: currentStageData.problemText || "No problem text provided.",
+        lang: currentLang
+    };
+
+    const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+    const result = await analyzeMathDrawing(payload);
+
+    // ✅ THE FIX IS HERE: Use the correct properties from the backend's response
+    const { verdict, firstIssue, fix, tips } = result.data;
+
+    // Build a user-friendly feedback message from the parts
+    let feedbackMessage = `<strong>${firstIssue}</strong><br>${fix}<br><br>Tips:<br>• ${tips.join('<br>• ')}`;
+
+    if (verdict === 'correct') {
+        // For correct answers, you might want a simpler message
+        feedbackMessage = fix || "Great job! That's the correct approach.";
+        showOnCanvasFeedback(feedbackMessage, 'success'); // Use the 'success' type for different styling
+    } else {
+        showOnCanvasFeedback(feedbackMessage);
+    }
+
+    if (verdict === 'correct') {
+        playRandomFeedback('approve');
+        nextCheckBtn.classList.add('correct');
+        const pointsGained = 15;
+        userPoints += pointsGained;
+        sessionPoints += pointsGained;
+        updatePointsDisplay();
+        updateUserPointsInFirestore(pointsGained);
+        if (currentStageData.type === 'question_math_solution') {
+            nextCheckBtn.textContent = TXT.gotIt;
         }
+        nextCheckBtn.disabled = false;
+    } else {
+        playRandomFeedback('disapprove');
+        nextCheckBtn.classList.add('incorrect');
+        setTimeout(() => {
+            nextCheckBtn.disabled = false;
+            nextCheckBtn.textContent = TXT.check;
+            nextCheckBtn.classList.remove('incorrect');
+        }, 2000);
+    }
 
-        if (status === 'correct') {
-            playRandomFeedback('approve');
-            nextCheckBtn.classList.add('correct');
-            
-            const pointsGained = 15;
-            userPoints += pointsGained;
-            sessionPoints += pointsGained;
-            updatePointsDisplay();
-            updateUserPointsInFirestore(pointsGained);
+} catch (error) {
+    // (Your existing catch block remains the same)
+    console.error("Math analysis failed:", error);
+    addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
+    playRandomFeedback('disapprove');
+    nextCheckBtn.disabled = false;
+    nextCheckBtn.textContent = TXT.check;
+    nextCheckBtn.classList.remove('incorrect');
+}
 
-            if (currentStageData.type === 'question_math_solution') {
-                nextCheckBtn.textContent = TXT.gotIt;
-            }
-            nextCheckBtn.disabled = false;
-
-        } else {
-            playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-            
-            setTimeout(() => {
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = TXT.check;
-                nextCheckBtn.classList.remove('incorrect');
-            }, 2000);
-        }
-
-    } catch (error) {
-        console.error("Math analysis failed:", error);
-        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
-        playRandomFeedback('disapprove');
-        
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        nextCheckBtn.classList.remove('incorrect');
-    }
+// --- End of Replacement ---
 }
 	    /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
