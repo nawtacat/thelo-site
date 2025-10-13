@@ -3886,123 +3886,136 @@ function logHandwritingAttempt(result) {
         nextCheckBtn.textContent = TXT.check;
     }
 }
+	  // Add this entire function to your main HTML file's <script> tag
+
+const feedbackOverlay = document.getElementById('feedbackOverlay');
+const feedbackEmoji = document.getElementById('feedbackEmoji');
+const feedbackText = document.getElementById('feedbackText');
+let feedbackTimer = null; 
+
+function showFeedback(htmlMessage, duration = 4000) {
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+
+    // Determine the emoji based on the message content
+    let emoji = '🤔'; // Default for analysis/incorrect
+    if (htmlMessage.toLowerCase().includes('correct') || htmlMessage.toLowerCase().includes('great job')) {
+        emoji = '🎉'; // Success
+    } else if (htmlMessage.includes('⚠️')) {
+        emoji = '⚠️'; // Warning/Error
+    }
+    
+    feedbackEmoji.textContent = emoji;
+    feedbackText.innerHTML = htmlMessage; // Use .innerHTML to correctly render the HTML tags
+    
+    feedbackOverlay.classList.remove('feedback-hidden');
+    
+    // Set a timer to automatically hide the feedback modal
+    feedbackTimer = setTimeout(() => {
+        feedbackOverlay.classList.add('feedback-hidden');
+    }, duration);
+}
 async function checkMathDrawing(isMcqContext = false) {
-    if (!auth.currentUser) {
-        console.error("User is not authenticated.");
-        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
-        throw new Error("User not authenticated.");
-    }
-    try {
-        await auth.currentUser.getIdToken(true);
-    } catch (error) {
-        console.error("Token refresh failed:", error);
-        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
-        throw new Error("Token refresh failed.");
-    }
-
-    try {
-        const blankCanvasCheck = document.createElement('canvas');
-        blankCanvasCheck.width = canvas.width;
-        blankCanvasCheck.height = canvas.height;
-        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
-            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
-            throw new Error("No drawing found on canvas.");
-        }
-    } catch (e) {
-        console.error("Blank canvas check failed:", e.message);
-        throw e;
-    }
-
-    const TXT = getCurrentUIText();
-    nextCheckBtn.disabled = true;
-    nextCheckBtn.textContent = TXT.checking;
-    
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // --- Start of Replacement ---
-
-try {
-    let imageBase64;
-    if (isMcqContext) {
-        imageBase64 = canvas.toDataURL("image/png");
-    } else {
-        const compositeCanvas = document.createElement('canvas');
-        compositeCanvas.width = canvas.width;
-        compositeCanvas.height = canvas.height;
-        const compositeCtx = compositeCanvas.getContext('2d');
-        compositeCtx.drawImage(backgroundCanvas, 0, 0);
-        compositeCtx.drawImage(canvas, 0, 0);
-        imageBase64 = compositeCanvas.toDataURL("image/png");
+    if (!auth.currentUser) {
+        console.error("User is not authenticated.");
+        showFeedback('⚠️ You must be logged in to use this feature.');
+        throw new Error("User not authenticated.");
+    }
+    try {
+        await auth.currentUser.getIdToken(true);
+    } catch (error) {
+        console.error("Token refresh failed:", error);
+        showFeedback('⚠️ Your session has expired. Please refresh and log in again.');
+        throw new Error("Token refresh failed.");
     }
 
-    const payload = {
-        boardDataUrl: imageBase64, // Corrected property name from your new backend
-        problemText: currentStageData.problemText || "No problem text provided.",
-        lang: currentLang
-    };
-
-    const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-    const result = await analyzeMathDrawing(payload);
-
-    // ✅ THE FIX IS HERE: Use the correct properties from the backend's response
-    const { verdict, firstIssue, fix, tips } = result.data;
-
-    // Build a user-friendly feedback message from the parts
-    // Build the feedback message piece by piece for safety
-let feedbackMessage = `<strong>${firstIssue || 'Analysis'}</strong><br>${fix || 'No specific fix provided.'}`;
-
-// ✅ THE FIX: Only add the "Tips" section if the 'tips' array exists and has content.
-if (Array.isArray(tips) && tips.length > 0) {
-    feedbackMessage += `<br><br>Tips:<br>• ${tips.join('<br>• ')}`;
-}
-    if (verdict === 'correct') {
-        // For correct answers, you might want a simpler message
-        feedbackMessage = fix || "Great job! That's the correct approach.";
-        showOnCanvasFeedback(feedbackMessage, 'success'); // Use the 'success' type for different styling
-    } else {
-        showOnCanvasFeedback(feedbackMessage);
-    }
-
-    if (verdict === 'correct') {
-        playRandomFeedback('approve');
-        nextCheckBtn.classList.add('correct');
-        const pointsGained = 15;
-        userPoints += pointsGained;
-        sessionPoints += pointsGained;
-        updatePointsDisplay();
-        updateUserPointsInFirestore(pointsGained);
-        if (currentStageData.type === 'question_math_solution') {
-            nextCheckBtn.textContent = TXT.gotIt;
+    try {
+        const blankCanvasCheck = document.createElement('canvas');
+        blankCanvasCheck.width = canvas.width;
+        blankCanvasCheck.height = canvas.height;
+        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
+            showFeedback("I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
+            throw new Error("No drawing found on canvas.");
         }
-        nextCheckBtn.disabled = false;
-    } else {
-        playRandomFeedback('disapprove');
-        nextCheckBtn.classList.add('incorrect');
-        setTimeout(() => {
-            nextCheckBtn.disabled = false;
-            nextCheckBtn.textContent = TXT.check;
-            nextCheckBtn.classList.remove('incorrect');
-        }, 2000);
+    } catch (e) {
+        console.error("Blank canvas check failed:", e.message);
+        throw e;
     }
 
-// Inside the checkMathDrawing function...
-} catch (error) {
-    console.error("Math analysis failed:", error);
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
     
-    // ✅ NEW: Show the error from the backend directly on the canvas
-    const errorMessage = error.message || "The AI failed to respond. Please try again.";
-    showOnCanvasFeedback(`⚠️ ${errorMessage}`); 
+    await new Promise(resolve => setTimeout(resolve, 100));
     
-    playRandomFeedback('disapprove');
-    
-    nextCheckBtn.disabled = false;
-    nextCheckBtn.textContent = TXT.check;
-    nextCheckBtn.classList.remove('incorrect');
-}
+    try {
+        let imageBase64;
+        if (isMcqContext) {
+            imageBase64 = canvas.toDataURL("image/png");
+        } else {
+            const compositeCanvas = document.createElement('canvas');
+            compositeCanvas.width = canvas.width;
+            compositeCanvas.height = canvas.height;
+            const compositeCtx = compositeCanvas.getContext('2d');
+            compositeCtx.drawImage(backgroundCanvas, 0, 0);
+            compositeCtx.drawImage(canvas, 0, 0);
+            imageBase64 = compositeCanvas.toDataURL("image/png");
+        }
 
-// --- End of Replacement ---
+        const payload = {
+            boardDataUrl: imageBase64,
+            problemText: currentStageData.problemText || "No problem text provided.",
+            lang: currentLang
+        };
+
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
+
+        const { verdict, firstIssue, fix, tips } = result.data;
+
+        let feedbackMessage = `<strong>${firstIssue || 'Analysis'}</strong><br>${fix || 'No specific fix provided.'}`;
+        if (Array.isArray(tips) && tips.length > 0) {
+            feedbackMessage += `<br><br>Tips:<br>• ${tips.join('<br>• ')}`;
+        }
+        
+        showFeedback(feedbackMessage);
+
+        if (verdict === 'correct') {
+            playRandomFeedback('approve');
+            nextCheckBtn.classList.add('correct');
+            const pointsGained = 15;
+            userPoints += pointsGained;
+            sessionPoints += pointsGained;
+            updatePointsDisplay();
+            updateUserPointsInFirestore(pointsGained);
+            if (currentStageData.type === 'question_math_solution') {
+                nextCheckBtn.textContent = TXT.gotIt;
+            }
+            nextCheckBtn.disabled = false;
+        } else {
+            playRandomFeedback('disapprove');
+            nextCheckBtn.classList.add('incorrect');
+            setTimeout(() => {
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                nextCheckBtn.classList.remove('incorrect');
+            }, 2000);
+        }
+
+    } catch (error) {
+        console.error("Math analysis failed:", error);
+        
+        const errorMessage = error.message || "The AI failed to respond. Please try again.";
+        
+        showFeedback(`⚠️ ${errorMessage}`); 
+        
+        playRandomFeedback('disapprove');
+        
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        nextCheckBtn.classList.remove('incorrect');
+    }
 }
-	    /* ========== THELOBOOK FUNCTIONALITY ========== */
+	  /* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
         const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
