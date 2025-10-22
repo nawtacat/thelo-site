@@ -224,15 +224,12 @@
     transform: translateY(150%);
     pointer-events: none;
   }
-  
-  /* ===== MODIFIED: Hide cursor globally ===== */
   html, body {
     cursor: none !important;
   }
   .no-cursor {
     cursor: none !important;
   }
-  
   #bottom-logo-container {
     position: fixed;
     bottom: 1.25rem; /* MODIFIED: Logo is raised slightly */
@@ -259,7 +256,10 @@
     border: 1px solid var(--thelo-border);
   }
 
- /* ===== REMOVED: Results Screen Styling ===== */
+  /* ===== Results/Detail View Styling Removed ===== */
+  .hidden {
+      display: none !important;
+  }
 
   @media (max-width: 768px) {
     #bottomBar {
@@ -328,13 +328,12 @@
     const bgCtx = backgroundCanvas.getContext('2d');
     const ctx = canvas.getContext('2d');
 
-    // ===== REMOVED: Result Screen DOM Elements =====
-
+    // Results Screen DOM Elements Removed
 
     /* ========== State Variables ========== */
     let testData = null;
     let currentStageIndex = -1;
-    // let currentDetailIndex = -1; // REMOVED
+    // currentDetailIndex Removed
     let currentStageData = null;
     let drawing = false;
     let lastPos = { x: 0, y: 0 };
@@ -348,7 +347,7 @@
     let buttonVanishTimer = null;
     let currentLang = 'en';
 
-    /* ========== UI Text (Cleaned) ========== */
+    /* ========== UI Text ========== */
     const UI_TEXT = {
         en: {
             start: "Start Test",
@@ -356,10 +355,10 @@
             checking: "Checking...",
             prev: "Previous",
             clear: "Clear",
-            testComplete: "Test Complete! Your results have been saved.",
             provideSolution: "Please provide a solution before submitting.",
             question: "Question",
             analysisError: "Could not submit for analysis.",
+            testComplete: "Test Complete! Your results have been saved."
         },
         hy: {
             start: "Սկսել թեստը",
@@ -367,10 +366,10 @@
             checking: "Ստուգվում է...",
             prev: "Նախորդ",
             clear: "Մաքրել",
-            testComplete: "Թեստն ավարտված է։ Ձեր արդյունքները պահպանված են։",
             provideSolution: "Խնդրում ենք լուծումը գրել նոր ուղարկել։",
             question: "Հարց",
             analysisError: "Չհաջողվեց ուղարկել վերլուծության։",
+            testComplete: "Թեստն ավարտված է։ Ձեր արդյունքները պահպանված են։"
         }
     };
     // ===================================================================
@@ -566,7 +565,7 @@
     function transitionToStage(newIndex) {
         if (isTransitioning) return;
         if (newIndex >= testData.stages.length) {
-            finishTest();
+            finishTest(); // Test is over
             return;
         }
         isTransitioning = true;
@@ -580,6 +579,8 @@
     }
 
     async function handleSubmitClick() {
+        if (isTransitioning) return; // Prevent double-submit
+        
         if (currentStageIndex === -1) {
             startTest();
             return;
@@ -591,10 +592,13 @@
         const texts = UI_TEXT[currentLang] || UI_TEXT.en;
         submitBtn.disabled = true;
         submitBtn.textContent = texts.checking;
+        isTransitioning = true; // Lock UI during submit
+        
         const user = auth.currentUser;
         if (!user) {
             alert("You must be signed in to submit a test.");
             submitBtn.disabled = false;
+            isTransitioning = false;
             updateAllUITexts();
             return;
         }
@@ -614,6 +618,7 @@
             console.error("Image capture error:", e);
             alert("Error capturing your solution. Please ensure something is drawn.");
             submitBtn.disabled = false;
+            isTransitioning = false;
             updateAllUITexts();
             return;
         }
@@ -634,76 +639,81 @@
             testResults.push({
                 question: currentStageData.headline,
                 correctAnswer: currentStageData.correctAnswer,
-                solutionImage: base64ImageData,
+                solutionImage: base64ImageData, // Storing the cropped image
                 status: status,
                 feedback: feedback,
             });
-            transitionToStage(currentStageIndex + 1);
+            // transitionToStage will set isTransitioning to false
+            transitionToStage(currentStageIndex + 1); 
         } catch (error) {
             console.error("AI analysis failed:", error);
-            alert(texts.analysisError);
+            alert("There was an error checking your answer. Please try again.");
             submitBtn.disabled = false;
+            isTransitioning = false; // Manually unlock on error
             updateAllUITexts();
         }
     }
     
     // ===================================================================
-    //  MODIFIED: Simplified Test Finish Logic
-    // ===================================================================
-
-    // ===================================================================
-    //  MODIFIED: Simplified Test Finish Logic
+    //  NEW: Simplified Finish Test Logic
     // ===================================================================
 
     function finishTest() {
         clearInterval(timerInterval);
         const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
-        document.getElementById('lessonArea').style.display = 'none';
-
+        
         const correctAnswers = testResults.filter(r => r.status === 'correct').length;
         const totalQuestions = testData.stages.length;
+        const scorePercentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
 
-        // Backend submission logic
+        // Hide the main test UI
+        document.getElementById('app').style.display = 'none';
+
+        const texts = UI_TEXT[currentLang] || UI_TEXT.en;
+
+        // Save results to Firestore
         const user = auth.currentUser;
         if (user) {
-            
-            // ===== NEW CODE TO SAVE TO 'thelo-test' =====
-            // This will create the collection if it doesn't exist
             try {
-                const testResultData = {
-                    userId: user.uid,
-                    testId: new URLSearchParams(window.location.search).get('testFile')?.replace('.json', ''),
+                const testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '');
+                
+                const resultData = {
+                    uid: user.uid,
+                    email: user.email, // Storing email for easier lookup
+                    testId: testId,
+                    testTitle: testData.testTitle || 'Untitled Test',
                     score: correctAnswers,
                     totalQuestions: totalQuestions,
+                    scorePercentage: scorePercentage,
                     timeTakenSeconds: timeTaken,
-                    results: testResults, // This is the array of answers
+                    results: testResults, // This stores the array of individual question results
                     language: currentLang,
-                    submittedAt: firebase.firestore.FieldValue.serverTimestamp() // Adds a timestamp
+                    completedAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
 
-                // Add this test result as a new document to the 'thelo-test' collection
-                db.collection('thelo-test').add(testResultData)
+                // Add to the new root collection "thelo-test-results"
+                db.collection('thelo-test-results').add(resultData)
                     .then((docRef) => {
-                        console.log("Test results saved to 'thelo-test' with ID: ", docRef.id);
+                        console.log("Test results saved with ID: ", docRef.id);
+                        // Show alert *after* successful save
+                        alert(texts.testComplete);
                     })
                     .catch((error) => {
                         console.error("Error saving test results: ", error);
+                        alert("Error saving results. Please check the console.");
                     });
 
             } catch (err) {
                 console.error("Error preparing test results for saving:", err);
+                alert("A local error occurred while saving results.");
             }
-            // ===== END OF NEW CODE =====
-
+        } else {
+             // If for some reason user is not signed in
+            alert(texts.testComplete);
         }
-        
-        // Show simple alert instead of results screen
-        alert(UI_TEXT[currentLang].testComplete);
-        
-        // Optional: redirect or reload
-        // window.location.reload(); 
     }
-    // ===== REMOVED: showDetailView, showSummaryView, listenForDetailedFeedback =====
+
+    // All Results Screen Logic (showDetailView, showSummaryView, listenForDetailedFeedback) Removed
 
     // ===================================================================
     //  Canvas and Event Listener Setup
@@ -794,30 +804,12 @@
         userDrawingOccurred = false;
     }
 
-    // ===== NEW: Keyboard Shortcut Handler =====
-    function handleKeyPress(e) {
-        // Don't interfere if user is typing in a text box (if one existed)
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-            return;
-        }
-
-        if (e.code === 'Space') {
-            e.preventDefault(); // Stop spacebar from scrolling page
-            if (!submitBtn.disabled) {
-                handleSubmitClick();
-            }
-        } else if (e.code === 'KeyC') {
-            e.preventDefault();
-            clearUserCanvas();
-        }
-    }
-
     function updateAllUITexts() {
         const texts = UI_TEXT[currentLang] || UI_TEXT.en;
         submitBtn.textContent = (currentStageIndex === -1) ? texts.start : texts.submit;
         prevBtn.textContent = texts.prev;
         clearBtn.textContent = texts.clear;
-        // REMOVED: detailNextBtn text update
+        // detailNextBtn removed
     }
 
     function checkTabletMode() {
@@ -841,10 +833,21 @@
         submitBtn.onclick = handleSubmitClick;
         clearBtn.onclick = clearUserCanvas;
 
-        // ===== NEW: Keyboard listener =====
-        window.addEventListener('keydown', handleKeyPress);
+        // NEW: Keyboard listeners
+        window.addEventListener('keydown', (e) => {
+            // Ignore keypresses if user is somehow focused on an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-        // ===== REMOVED: Results screen listeners =====
+            if (e.code === 'Space') {
+                e.preventDefault(); // Stop spacebar from scrolling
+                handleSubmitClick();
+            } else if (e.key === 'c' || e.key === 'C') {
+                e.preventDefault();
+                clearUserCanvas();
+            }
+        });
+
+        // Results screen listeners Removed
 
         window.addEventListener('resize', resizeCanvases);
         const urlParams = new URLSearchParams(window.location.search);
