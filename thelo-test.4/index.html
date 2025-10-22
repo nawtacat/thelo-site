@@ -579,80 +579,109 @@
     }
 
     async function handleSubmitClick() {
-        if (isTransitioning) return; // Prevent double-submit
-        
-        if (currentStageIndex === -1) {
-            startTest();
-            return;
-        }
-        if (!userDrawingOccurred) {
-            alert(UI_TEXT[currentLang].provideSolution);
-            return;
-        }
-        const texts = UI_TEXT[currentLang] || UI_TEXT.en;
-        submitBtn.disabled = true;
-        submitBtn.textContent = texts.checking;
-        isTransitioning = true; // Lock UI during submit
-        
-        const user = auth.currentUser;
-        if (!user) {
-            alert("You must be signed in to submit a test.");
-            submitBtn.disabled = false;
-            isTransitioning = false;
-            updateAllUITexts();
-            return;
-        }
-        let base64ImageData;
-        try {
-            const box = getBoundingBox(ctx);
-            if (!box) throw new Error("No drawing found to capture.");
-            const cropCanvas = document.createElement('canvas');
-            cropCanvas.width = box.width;
-            cropCanvas.height = box.height;
-            const cropCtx = cropCanvas.getContext('2d');
-            cropCtx.fillStyle = '#FFFFFF';
-            cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-            cropCtx.drawImage(canvas, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-            base64ImageData = cropCanvas.toDataURL("image/png");
-        } catch (e) {
-            console.error("Image capture error:", e);
-            alert("Error capturing your solution. Please ensure something is drawn.");
-            submitBtn.disabled = false;
-            isTransitioning = false;
-            updateAllUITexts();
-            return;
-        }
-        try {
-            const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-            
-            const payload = {
-                imageBase64: base64ImageData,
-                problemText: currentStageData.headline || "A math problem.",
-                correctAnswer: String(currentStageData.correctAnswer),
-                language: currentLang,
-                solutionSteps: currentStageData.solutionSteps || "", 
-                customInstructions: currentStageData.customInstructions || ""
-            };
-
-            const result = await analyzeMathDrawing(payload);
-            const { status, feedback } = result.data;
-            testResults.push({
-                question: currentStageData.headline,
-                correctAnswer: currentStageData.correctAnswer,
-                solutionImage: base64ImageData, // Storing the cropped image
-                status: status,
-                feedback: feedback,
-            });
-            // transitionToStage will set isTransitioning to false
-            transitionToStage(currentStageIndex + 1); 
-        } catch (error) {
-            console.error("AI analysis failed:", error);
-            alert("There was an error checking your answer. Please try again.");
-            submitBtn.disabled = false;
-            isTransitioning = false; // Manually unlock on error
-            updateAllUITexts();
-        }
+    if (isTransitioning) return; // Prevent double-submit
+    
+    // 1. Handle "Start Test" button click
+    if (currentStageIndex === -1) {
+        startTest();
+        return;
     }
+
+    // 2. Check if user has drawn anything
+    if (!userDrawingOccurred) {
+        alert(UI_TEXT[currentLang].provideSolution);
+        return;
+    }
+
+    // 3. Lock the UI
+    const texts = UI_TEXT[currentLang] || UI_TEXT.en;
+    submitBtn.disabled = true;
+    submitBtn.textContent = texts.checking;
+    isTransitioning = true; 
+    
+    // 4. Check for user authentication
+    const user = auth.currentUser;
+    if (!user) {
+        alert("You must be signed in to submit a test.");
+        submitBtn.disabled = false;
+        isTransitioning = false;
+        updateAllUITexts();
+        return;
+    }
+
+    // 5. Capture the drawing as an image
+    let base64ImageData;
+    try {
+        const box = getBoundingBox(ctx);
+        if (!box) throw new Error("No drawing found to capture.");
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = box.width;
+        cropCanvas.height = box.height;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.fillStyle = '#FFFFFF'; // Set white background
+        cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+        cropCtx.drawImage(canvas, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+        base64ImageData = cropCanvas.toDataURL("image/png");
+    } catch (e) {
+        console.error("Image capture error:", e);
+        alert("Error capturing your solution. Please ensure something is drawn.");
+        submitBtn.disabled = false;
+        isTransitioning = false;
+        updateAllUITexts();
+        return;
+    }
+
+    // 6. Call the Cloud Function with a Timeout
+    try {
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        
+        const payload = {
+            imageBase64: base64ImageData,
+            problemText: currentStageData.headline || "A math problem.",
+            correctAnswer: String(currentStageData.correctAnswer),
+            language: currentLang,
+            solutionSteps: currentStageData.solutionSteps || "", 
+            customInstructions: currentStageData.customInstructions || ""
+        };
+
+        // --- This is the new timeout logic ---
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+                reject(new Error("The check is taking too long. Please try again."));
+            }, 30000); // 30-second timeout
+        });
+
+        // Race the function call against the timeout
+        const result = await Promise.race([
+            analyzeMathDrawing(payload),
+            timeoutPromise
+        ]);
+        // -------------------------------------
+
+        // 7. Process the successful result
+        const { status, feedback } = result.data;
+        testResults.push({
+            question: currentStageData.headline,
+            correctAnswer: currentStageData.correctAnswer,
+            solutionImage: base64ImageData, // Store the cropped image
+            status: status,
+            feedback: feedback,
+        });
+
+        // Go to the next stage (this will unlock the UI)
+        transitionToStage(currentStageIndex + 1);
+
+    } catch (error) {
+        // 8. Handle any failure (from timeout or function error)
+        console.error("AI analysis failed or timed out:", error);
+        alert(error.message || "There was an error checking your answer. Please try again.");
+        
+        // --- IMPORTANT: Unlock the UI on failure ---
+        submitBtn.disabled = false;
+        isTransitionisixng = false; 
+        updateAllUITexts();
+    }
+}
     
     // ===================================================================
     //  NEW: Simplified Finish Test Logic
