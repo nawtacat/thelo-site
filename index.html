@@ -237,6 +237,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     document.addEventListener('DOMContentLoaded', () => {
 
@@ -309,20 +310,23 @@
         const langEnBtn = document.getElementById('lang-en');
         const langHyBtn = document.getElementById('lang-hy');
 
-        function updateAuthUI(lang) {
-            const T = strings[lang];
-            const loginAnchors = document.querySelectorAll('[data-i18n="navAuth"]');
-            
-            loginAnchors.forEach(anchor => {
-                if (currentUser) {
-                    anchor.href = "/sdashboard";
-                    anchor.textContent = T.navDash;
-                } else {
-                    anchor.href = "/auth";
-                    anchor.textContent = T.navAuth;
-                }
-            });
+        // --- MODIFY THIS FUNCTION DEFINITION ---
+function updateAuthUI(lang, targetDashboard) { // <-- Add targetDashboard argument
+    const T = strings[lang];
+    const loginAnchors = document.querySelectorAll('[data-i18n="navAuth"]');
+
+    loginAnchors.forEach(anchor => {
+        if (currentUser && targetDashboard) { // <-- Check for targetDashboard
+            // --- USE targetDashboard HERE ---
+            anchor.href = targetDashboard;
+            // --- END CHANGE ---
+            anchor.textContent = T.navDash;
+        } else {
+            anchor.href = "/auth";
+            anchor.textContent = T.navAuth;
         }
+    });
+}
 
       function applyContent(lang) {
     const T = strings[lang];
@@ -413,11 +417,56 @@
         };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
+        const db = getFirestore(app);
 
-        onAuthStateChanged(auth, user => {
-            currentUser = user;
-            updateAuthUI(currentLang);
-        });
+        onAuthStateChanged(auth, async (user) => { // <-- Make the function async
+    currentUser = user;
+
+    if (currentUser) {
+        // --- START MODIFICATION ---
+        // User is logged in, check if they are a tutor or student
+        console.log("User logged in:", currentUser.email); // Debugging line
+        let isTutor = false;
+        let isStudent = false;
+        let targetDashboard = "/sdashboard"; // Default to student dashboard
+
+        try {
+            // Check tutors collection (using email as ID)
+            const tutorDocRef = doc(db, "tutors", currentUser.email);
+            const tutorDocSnap = await getDoc(tutorDocRef);
+            if (tutorDocSnap.exists()) {
+                console.log("User is a tutor."); // Debugging line
+                isTutor = true;
+                targetDashboard = "/tdashboard"; // Set target to tutor dashboard
+            } else {
+                // Optional: Check students collection if not a tutor (using UID as ID)
+                const studentDocRef = doc(db, "thelo-students", currentUser.uid);
+                const studentDocSnap = await getDoc(studentDocRef);
+                if (studentDocSnap.exists()) {
+                    console.log("User is a student."); // Debugging line
+                    isStudent = true;
+                    targetDashboard = "/sdashboard"; // Explicitly set target
+                } else {
+                     console.warn("User document not found in tutors or thelo-students."); // Debugging line
+                     // Keep default /sdashboard or redirect elsewhere?
+                }
+            }
+
+            // Update the UI after checking Firestore
+            updateAuthUI(currentLang, targetDashboard);
+
+        } catch (error) {
+            console.error("Error checking user role:", error);
+            // Fallback: update UI with default dashboard link in case of error
+            updateAuthUI(currentLang, targetDashboard);
+        }
+        // --- END MODIFICATION ---
+
+    } else {
+        // User is logged out, update UI normally
+        updateAuthUI(currentLang, null); // Pass null when logged out
+    }
+});
 
         const mobileMenuButton = document.getElementById('mobileMenuButton');
         const mobileMenu = document.getElementById('mobileMenu');
