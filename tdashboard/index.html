@@ -130,6 +130,18 @@
     .lang-btn.active {
         @apply text-[var(--thelo-blue)];
     }
+    
+    /* Notification Toast Styles */
+    #notification-toast {
+        @apply fixed bottom-5 right-5 bg-green-600 text-white p-4 rounded-lg shadow-lg transition-all duration-300 transform translate-y-10 opacity-0 z-50;
+    }
+    #notification-toast.show {
+        @apply transform-none opacity-100;
+    }
+    #notification-toast.error {
+        @apply bg-red-600;
+    }
+
    </style>
 </head>
 
@@ -203,7 +215,8 @@
                         <div id="roster-container" class="mt-6 hidden">
                             <h3 class="text-xl font-bold text-slate-700" data-i18n="rosterTitle">Student Roster</h3>
                             <div id="roster-list" class="mt-4 p-4 bg-slate-50 rounded-lg max-h-48 overflow-y-auto">
-                                </div>
+                                <!-- Student roster will be populated here -->
+                            </div>
                         </div>
 
                         <div id="results-container" class="mt-8 overflow-x-auto">
@@ -222,7 +235,8 @@
                                     </tr>
                                 </thead>
                                 <tbody id="results-table-body" class="bg-white divide-y divide-slate-200">
-                                    </tbody>
+                                    <!-- Results rows will be populated here -->
+                                </tbody>
                             </table>
                         </div>
                     </div>
@@ -232,14 +246,20 @@
     </div>
 </main>
 
+<!-- Notification Toast Container -->
+<div id="notification-toast" class="hidden">
+    <span id="notification-message"></span>
+</div>
+
+
 <script type="module">
-    // Firebase v10 SDK
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    // Firebase v11.6.1 SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { 
         getAuth, 
         onAuthStateChanged, 
         signOut 
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { 
         getFirestore, 
         doc, 
@@ -250,8 +270,9 @@
         getDocs, 
         addDoc, 
         serverTimestamp,
-        orderBy 
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        orderBy, // We'll keep the import but not use it in the query
+        setLogLevel // <-- Import setLogLevel
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // Firebase Config
     const firebaseConfig = {
@@ -265,6 +286,15 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    
+    // Enable debug logging for Firestore
+    // This will show you detailed query info and errors in the console
+    try {
+        setLogLevel('debug');
+    } catch (e) {
+        console.warn("Could not set Firestore log level:", e);
+    }
+
 
     // DOM Elements
     const loadingState = document.getElementById('loading-state');
@@ -300,6 +330,7 @@
             navTutorPortal: 'Tutor Portal',
             navLogout: 'Log Out',
             loading: 'Loading Dashboard...',
+            loadingSubmit: 'Loading...', // <-- Added for submit button
             errorTitle: 'Access Denied',
             errorSubtitle: 'You must be a registered tutor to access this page. Please contact support if you believe this is an error.',
             errorButton: 'Back to Home',
@@ -332,6 +363,7 @@
             navTutorPortal: 'Ուսուցչի Վահանակ',
             navLogout: 'Դուրս գալ',
             loading: 'Բեռնվում է...',
+            loadingSubmit: 'Բեռնվում է...', // <-- Added for submit button
             errorTitle: 'Մուտքը մերժված է',
             errorSubtitle: 'Դուք պետք է լինեք գրանցված ուսուցիչ՝ այս էջը տեսնելու համար։',
             errorButton: 'Գլխավոր էջ',
@@ -360,6 +392,35 @@
             tableView: 'Դիտել'
         }
     };
+
+    /**
+     * Shows a non-blocking notification toast
+     */
+    function showNotification(message, isError = false) {
+        const toast = document.getElementById('notification-toast');
+        const msgEl = document.getElementById('notification-message');
+        if (!toast || !msgEl) return;
+
+        msgEl.textContent = message;
+        toast.classList.toggle('error', isError);
+        toast.classList.remove('hidden');
+        
+        // Use requestAnimationFrame to ensure the 'show' class is added after 'hidden' is removed
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+            toast.classList.remove('show');
+            // Wait for transition to end before fully hiding
+            setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.classList.remove('error'); // Reset error state
+            }, 300); // Must match CSS transition duration
+        }, 3000);
+    }
+
 
     /**
      * Applies all UI text based on the current language
@@ -407,6 +468,7 @@
                     currentTutor = { email: user.email, uid: user.uid, ...tutorDoc.data() };
                     await initDashboard();
                 } else {
+                    console.warn("User is not listed in 'tutors' collection:", user.email);
                     showErrorState();
                 }
             } catch (err) {
@@ -477,17 +539,23 @@
 
     /**
      * Loads and renders the tutor's groups
+     * * *** FIX APPLIED HERE ***
+     * Removed orderBy() from the query and added client-side sorting
+     * to prevent "missing index" errors from Firestore.
      */
     async function loadGroups() {
         groupListContainer.innerHTML = ''; // Clear existing list
+        
+        // 1. Create the query *without* orderBy
         const q = query(
             collection(db, "groups"), 
-            where("ownerId", "==", currentUser.uid),
-            orderBy("createdAt", "desc")
+            where("ownerId", "==", currentUser.uid)
+            // Removed: orderBy("createdAt", "desc")
         );
         
         try {
             const querySnapshot = await getDocs(q);
+            
             if (querySnapshot.empty) {
                 groupListContainer.appendChild(noGroupsMsg);
                 noGroupsMsg.classList.remove('hidden');
@@ -495,14 +563,32 @@
             }
             
             noGroupsMsg.classList.add('hidden');
+            
+            // 2. Convert snapshot to an array
+            const groups = [];
             querySnapshot.forEach(doc => {
-                const group = { id: doc.id, ...doc.data() };
+                groups.push({ id: doc.id, ...doc.data() });
+            });
+
+            // 3. Sort the array in memory (client-side)
+            groups.sort((a, b) => {
+                const timeA = a.createdAt?.seconds || 0; // Handle missing or null timestamps
+                const timeB = b.createdAt?.seconds || 0;
+                return timeB - timeA; // Descending order (newest first)
+            });
+            
+            // 4. Render the sorted groups
+            groups.forEach(group => {
                 renderGroup(group);
             });
+
         } catch (err) {
             console.error("Error loading groups:", err);
+            // Show a more informative error to the user
+            groupListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Please check the console and ensure your Firestore security rules are correct.</p>`;
         }
     }
+
 
     /**
      * Renders a single group item in the list
@@ -547,6 +633,8 @@
 
     /**
      * Handles the "Create New Group" form submission
+     * * *** FIX APPLIED HERE ***
+     * Replaced alert() with showNotification()
      */
     async function handleCreateGroup(e) {
         e.preventDefault();
@@ -555,7 +643,8 @@
 
         createGroupBtn.disabled = true;
         const T = strings[currentLang];
-        createGroupBtn.querySelector('span').textContent = T.loading;
+        // Use the new 'loadingSubmit' string
+        createGroupBtn.querySelector('span').textContent = T.loadingSubmit; 
 
         const newGroup = {
             groupName: groupName,
@@ -567,12 +656,16 @@
 
         try {
             const docRef = await addDoc(collection(db, "groups"), newGroup);
-            alert(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
+            
+            // Use notification instead of alert
+            showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
+            
             groupNameInput.value = '';
             await loadGroups(); // Refresh group list
         } catch (err) {
             console.error("Error creating group:", err);
-            alert(T.groupsCreateError);
+            // Use error notification instead of alert
+            showNotification(T.groupsCreateError, true);
         } finally {
             createGroupBtn.disabled = false;
             createGroupBtn.querySelector('span').textContent = T.groupsCreateButton;
@@ -612,6 +705,12 @@
             }
 
             // 2. Load Test Results
+            // *** NOTE ***
+            // This query also has a where() and orderBy().
+            // If it fails, you will need to apply the same fix as in loadGroups():
+            // 1. Remove orderBy("submittedAt", "desc")
+            // 2. Fetch results
+            // 3. Sort them in JS: results.sort((a,b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0))
             const resultsQuery = query(
                 collection(db, "thelo-test-results"), 
                 where("groupId", "==", group.id),
@@ -624,9 +723,24 @@
                 resultsPlaceholder.classList.remove('hidden');
             } else {
                 resultsPlaceholder.classList.add('hidden');
+                
+                // Convert to array *before* rendering if you need to sort client-side
+                const results = [];
                 resultsSnapshot.forEach(doc => {
-                    renderResultRow(doc.data());
+                    results.push(doc.data());
                 });
+                
+                // If you removed orderBy, uncomment this sort:
+                // results.sort((a, b) => {
+                //    const timeA = a.submittedAt?.seconds || 0;
+                //    const timeB = b.submittedAt?.seconds || 0;
+                //    return timeB - timeA;
+                // });
+
+                results.forEach(result => {
+                    renderResultRow(result);
+                });
+
                 resultsTable.classList.remove('hidden');
             }
             
@@ -634,7 +748,8 @@
 
         } catch (err) {
             console.error("Error loading group data:", err);
-            resultsPlaceholder.textContent = "Error loading results.";
+            resultsPlaceholder.textContent = "Error loading results. Check console for details.";
+            // If the error message mentions an index, you MUST apply the fix noted above.
         }
     }
 
