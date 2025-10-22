@@ -641,60 +641,81 @@
     }
     
     // ===================================================================
-    //  NEW: Simplified Finish Test Logic
-    // ===================================================================
+    //  NEW: Simplified Finish Test Logic
+    // ===================================================================
 
-    async function finishTestAndSave() {
-        clearInterval(timerInterval);
-        const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
+    async function finishTestAndSave() {
+        clearInterval(timerInterval);
+        const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
 
-        // Hide the test UI and show a simple "Test Complete" message
-        document.getElementById('app').innerHTML = `<div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100%; text-align:center; padding: 2rem; box-sizing: border-box;">
-            <h1 style="font-size: 2.5rem; color: var(--thelo-blue);">Test Complete!</h1>
-            <p style="font-size: 1.2rem; color: var(--thelo-text-light);">Submitting your results...</p>
-        </div>`;
-        
-        // Also hide the bottom logo
-        const logo = document.getElementById('bottom-logo-container');
-        if (logo) logo.style.display = 'none';
+        // Hide the test UI and show a simple "Test Complete" message
+        document.getElementById('app').innerHTML = `<div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100%; text-align:center; padding: 2rem; box-sizing: border-box;">
+            <h1 style="font-size: 2.5rem; color: var(--thelo-blue);">Test Complete!</h1>
+            <p style="font-size: 1.2rem; color: var(--thelo-text-light);">Submitting your results...</p>
+        </div>`;
+        
+        // Also hide the bottom logo
+        const logo = document.getElementById('bottom-logo-container');
+        if (logo) logo.style.display = 'none';
 
-        const correctAnswers = testResults.filter(r => r.status === 'correct').length;
-        const totalQuestions = testData.stages.length;
-        const user = auth.currentUser;
+        const correctAnswers = testResults.filter(r => r.status === 'correct').length;
+        const totalQuestions = testData.stages.length;
+        const user = auth.currentUser;
 
-        if (!user) {
-            console.error("User not signed in. Cannot save results.");
-            document.querySelector('#app p').textContent = 'Error: You are not signed in. Results cannot be saved.';
-            document.querySelector('#app p').style.color = 'var(--error-red)';
-            return;
-        }
+        if (!user) {
+            console.error("User not signed in. Cannot save results.");
+            document.querySelector('#app p').textContent = 'Error: You are not signed in. Results cannot be saved.';
+            document.querySelector('#app p').style.color = 'var(--error-red)';
+            return;
+        }
 
-        const testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '') || 'unknown_test';
+        // --- *** START OF FIX *** ---
+        // We must fetch the student's doc to get their groupId and reliable email
+        let groupId = null;
+        let userEmail = user.email; // Fallback
+        try {
+            const studentDocRef = db.collection('thelo-students').doc(user.uid);
+            const studentDoc = await studentDocRef.get();
+            if (studentDoc.exists) {
+                const studentData = studentDoc.data();
+                groupId = studentData.groupId; // <-- Get the groupId
+                userEmail = studentData.email; // <-- Get the reliable email
+            } else {
+                console.warn("Could not find student document to add groupId.");
+          }
+        } catch (err) {
+            console.error("Error fetching student doc:", err);
+            // We won't block the submission, but it might not appear in the dashboard
+        }
+        // --- *** END OF FIX *** ---
 
-        // Prepare the payload for Firestore
-        const payload = {
-            uid: user.uid,
-            email: user.email || 'unknown_email',
-            testId: testId,
-            score: correctAnswers,
-            totalQuestions: totalQuestions,
-            timeTakenSeconds: timeTaken,
-            results: testResults, // The full array of answers, images, and feedback
-            language: currentLang,
-            submittedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
+        const testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '') || 'unknown_test';
 
-        try {
-            // Save directly to the 'thelo-test-results' collection
-            const docRef = await db.collection('thelo-test-results').add(payload);
-            console.log("Test results saved successfully with ID:", docRef.id);
-            document.querySelector('#app p').textContent = 'Your results have been saved successfully.';
-        } catch (err) {
-            console.error("Error saving test results to Firestore:", err);
-            document.querySelector('#app p').textContent = 'An error occurred while saving your results.';
-            document.querySelector('#app p').style.color = 'var(--error-red)';
-        }
-    }
+        // Prepare the payload for Firestore
+        const payload = {
+            uid: user.uid,
+            email: userEmail, // <-- Use the fetched email
+            groupId: groupId, // <-- Add the groupId
+            testId: testId,
+            score: correctAnswers,
+            totalQuestions: totalQuestions,
+            timeTakenSeconds: timeTaken,
+            results: testResults, // The full array of answers, images, and feedback
+            language: currentLang,
+            submittedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        try {
+            // Save directly to the 'thelo-test-results' collection
+            const docRef = await db.collection('thelo-test-results').add(payload);
+            console.log("Test results saved successfully with ID:", docRef.id);
+            document.querySelector('#app p').textContent = 'Your results have been saved successfully.';
+        } catch (err) {
+            console.error("Error saving test results to Firestore:", err);
+            document.querySelector('#app p').textContent = 'An error occurred while saving your results.';
+            document.querySelector('#app p').style.color = 'var(--error-red)';
+        }
+    }
 
     // Results/Detail view functions (showDetailView, showSummaryView, listenForDetailedFeedback) have been REMOVED
 
