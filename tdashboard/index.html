@@ -12,7 +12,7 @@
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
-   <style>
+  <style>
     /*
      * ============================================
      * Custom Font Definitions for Armenian
@@ -71,7 +71,7 @@
     h1, h2, h3, h4, h5, h6 { font-weight: 800; }
     .nav-link { color: var(--thelo-text); transition: color 0.2s; }
     .nav-link:hover { color: var(--thelo-blue); }
-    
+
     /* Copied from main page for consistency */
     .window-container {
         position: relative;
@@ -90,7 +90,7 @@
         background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
         background-repeat: no-repeat;
     }
-    
+
     /* Custom Dashboard Styles */
     .group-item {
         @apply block w-full p-4 rounded-lg cursor-pointer transition-all duration-200;
@@ -113,7 +113,7 @@
     .join-code {
         @apply text-lg font-bold text-slate-800;
     }
-    
+
     .btn-primary {
         @apply w-full text-center px-4 py-3 bg-[var(--thelo-blue)] text-white font-bold rounded-lg shadow-md transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50;
     }
@@ -123,14 +123,14 @@
     .input-field {
         @apply w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500;
     }
-    
+
     .lang-btn {
         @apply cursor-pointer font-bold text-slate-400;
     }
     .lang-btn.active {
         @apply text-[var(--thelo-blue)];
     }
-    
+
     /* Notification Toast Styles */
     #notification-toast {
         @apply fixed bottom-5 right-5 bg-green-600 text-white p-4 rounded-lg shadow-lg transition-all duration-300 transform translate-y-10 opacity-0 z-50;
@@ -142,6 +142,60 @@
         @apply bg-red-600;
     }
 
+    /* === Modal Styles (FIXED VISIBILITY) === */
+    /* Initial hidden state (Added explicit properties) */
+    #modal-backdrop {
+         opacity: 0;
+         /* Ensure transitions work correctly */
+         transition: opacity 0.3s ease-out;
+    }
+    #result-modal {
+         opacity: 0;
+         transform: scale(0.95);
+         /* Ensure transitions work correctly */
+         transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    }
+
+    /* Visible state (Using standard CSS properties) */
+    #modal-backdrop.show {
+        opacity: 1;
+    }
+    #result-modal.show {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    /* Remaining modal content styles (using @apply is fine here) */
+    .question-item {
+        @apply border border-slate-200 rounded-lg p-4;
+    }
+    .question-header {
+        @apply flex justify-between items-center;
+    }
+    .question-title {
+        @apply text-lg font-bold text-slate-800;
+    }
+    .question-status-correct {
+        @apply text-sm font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full;
+    }
+    .question-status-incorrect {
+        @apply text-sm font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full;
+    }
+    .question-status-other {
+        @apply text-sm font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-full;
+    }
+    .question-body {
+        @apply mt-4 grid grid-cols-1 md:grid-cols-2 gap-4;
+    }
+    .question-label {
+        @apply block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2;
+    }
+    .student-solution-img {
+        @apply w-full h-auto bg-white border border-slate-300 rounded-md object-contain;
+    }
+    .feedback-text {
+        @apply p-3 bg-slate-50 rounded-md text-slate-700 text-sm prose max-w-none;
+    }
    </style>
 </head>
 
@@ -215,8 +269,7 @@
                         <div id="roster-container" class="mt-6 hidden">
                             <h3 class="text-xl font-bold text-slate-700" data-i18n="rosterTitle">Student Roster</h3>
                             <div id="roster-list" class="mt-4 p-4 bg-slate-50 rounded-lg max-h-48 overflow-y-auto">
-                                <!-- Student roster will be populated here -->
-                            </div>
+                                </div>
                         </div>
 
                         <div id="results-container" class="mt-8 overflow-x-auto">
@@ -235,8 +288,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="results-table-body" class="bg-white divide-y divide-slate-200">
-                                    <!-- Results rows will be populated here -->
-                                </tbody>
+                                    </tbody>
                             </table>
                         </div>
                     </div>
@@ -246,7 +298,6 @@
     </div>
 </main>
 
-<!-- Notification Toast Container -->
 <div id="notification-toast" class="hidden">
     <span id="notification-message"></span>
 </div>
@@ -270,8 +321,8 @@
         getDocs, 
         addDoc, 
         serverTimestamp,
-        orderBy, // We'll keep the import but not use it in the query
-        setLogLevel // <-- Import setLogLevel
+        orderBy, 
+        setLogLevel
     } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // Firebase Config
@@ -288,7 +339,6 @@
     const db = getFirestore(app);
     
     // Enable debug logging for Firestore
-    // This will show you detailed query info and errors in the console
     try {
         setLogLevel('debug');
     } catch (e) {
@@ -317,6 +367,17 @@
     const langEnBtn = document.getElementById('lang-en');
     const langHyBtn = document.getElementById('lang-hy');
 
+    // === MODAL ELEMENTS ===
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    const resultModal = document.getElementById('result-modal');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const modalTitle = document.getElementById('modal-title');
+    const modalStudentEmail = document.getElementById('modal-student-email');
+    const modalTestId = document.getElementById('modal-test-id');
+    const modalScore = document.getElementById('modal-score');
+    const modalTime = document.getElementById('modal-time');
+    const modalResultsContainer = document.getElementById('modal-results-container');
+
     // App State
     let currentUser = null;
     let currentTutor = null;
@@ -330,7 +391,7 @@
             navTutorPortal: 'Tutor Portal',
             navLogout: 'Log Out',
             loading: 'Loading Dashboard...',
-            loadingSubmit: 'Loading...', // <-- Added for submit button
+            loadingSubmit: 'Loading...', 
             errorTitle: 'Access Denied',
             errorSubtitle: 'You must be a registered tutor to access this page. Please contact support if you believe this is an error.',
             errorButton: 'Back to Home',
@@ -363,7 +424,7 @@
             navTutorPortal: 'Ուսուցչի Վահանակ',
             navLogout: 'Դուրս գալ',
             loading: 'Բեռնվում է...',
-            loadingSubmit: 'Բեռնվում է...', // <-- Added for submit button
+            loadingSubmit: 'Բեռնվում է...', 
             errorTitle: 'Մուտքը մերժված է',
             errorSubtitle: 'Դուք պետք է լինեք գրանցված ուսուցիչ՝ այս էջը տեսնելու համար։',
             errorButton: 'Գլխավոր էջ',
@@ -400,27 +461,20 @@
         const toast = document.getElementById('notification-toast');
         const msgEl = document.getElementById('notification-message');
         if (!toast || !msgEl) return;
-
         msgEl.textContent = message;
         toast.classList.toggle('error', isError);
         toast.classList.remove('hidden');
-        
-        // Use requestAnimationFrame to ensure the 'show' class is added after 'hidden' is removed
         requestAnimationFrame(() => {
             toast.classList.add('show');
         });
-        
-        // Hide after 3 seconds
         setTimeout(() => {
             toast.classList.remove('show');
-            // Wait for transition to end before fully hiding
             setTimeout(() => {
                 toast.classList.add('hidden');
-                toast.classList.remove('error'); // Reset error state
-            }, 300); // Must match CSS transition duration
+                toast.classList.remove('error');
+            }, 300); 
         }, 3000);
     }
-
 
     /**
      * Applies all UI text based on the current language
@@ -428,26 +482,21 @@
     function applyContent(lang) {
         const T = strings[lang];
         if (!T) return;
-
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.dataset.i18n;
             if (T[key]) {
                 el.innerHTML = T[key];
             }
         });
-        
         document.documentElement.lang = lang;
         langEnBtn.classList.toggle('active', lang === 'en');
         langHyBtn.classList.toggle('active', lang === 'hy');
-
-        // Update placeholders
         groupNameInput.placeholder = (lang === 'hy') ? 'օր.՝ Հանրահաշիվ 1 (Աշուն)' : 'e.g. Algebra 1 (Fall)';
         resultsPlaceholder.textContent = T.resultsNone;
     }
 
     /**
      * Formats a string with given key-value pairs
-     * e.g. formatString("Hello, {name}", { name: "World" }) -> "Hello, World"
      */
     function formatString(str, values) {
         return str.replace(/{(\w+)}/g, (match, key) => values[key] || match);
@@ -459,11 +508,9 @@
     onAuthStateChanged(auth, async (user) => {
         if (user) {
             currentUser = user;
-            // Check if user is a tutor
             try {
                 const tutorDocRef = doc(db, "tutors", user.email);
                 const tutorDoc = await getDoc(tutorDocRef);
-
                 if (tutorDoc.exists()) {
                     currentTutor = { email: user.email, uid: user.uid, ...tutorDoc.data() };
                     await initDashboard();
@@ -476,7 +523,6 @@
                 showErrorState();
             }
         } else {
-            // No user, redirect to auth page
             window.location.href = '/auth';
         }
     });
@@ -495,10 +541,8 @@
     async function initDashboard() {
         loadingState.classList.add('hidden');
         dashboardContent.classList.remove('hidden');
-
         const T = strings[currentLang];
         welcomeMessage.textContent = formatString(T.dashboardSubtitle, { tutorEmail: currentTutor.email });
-        
         applyContent(currentLang);
         setupEventListeners();
         await loadGroups();
@@ -522,6 +566,10 @@
             localStorage.setItem('thelo-lang', currentLang);
             applyContent(currentLang);
         });
+
+        // === MODAL LISTENERS ===
+        modalBackdrop.addEventListener('click', hideResultDetail);
+        modalCloseBtn.addEventListener('click', hideResultDetail);
     }
 
     /**
@@ -531,7 +579,7 @@
         e.preventDefault();
         try {
             await signOut(auth);
-            window.location.href = '/'; // Redirect to home
+            window.location.href = '/'; 
         } catch (err) {
             console.error("Error logging out:", err);
         }
@@ -539,56 +587,38 @@
 
     /**
      * Loads and renders the tutor's groups
-     * * *** FIX APPLIED HERE ***
-     * Removed orderBy() from the query and added client-side sorting
-     * to prevent "missing index" errors from Firestore.
      */
     async function loadGroups() {
-        groupListContainer.innerHTML = ''; // Clear existing list
-        
-        // 1. Create the query *without* orderBy
+        groupListContainer.innerHTML = ''; 
         const q = query(
             collection(db, "groups"), 
             where("ownerId", "==", currentUser.uid)
-            // Removed: orderBy("createdAt", "desc")
         );
-        
         try {
             const querySnapshot = await getDocs(q);
-            
             if (querySnapshot.empty) {
                 groupListContainer.appendChild(noGroupsMsg);
                 noGroupsMsg.classList.remove('hidden');
                 return;
             }
-            
             noGroupsMsg.classList.add('hidden');
-            
-            // 2. Convert snapshot to an array
             const groups = [];
             querySnapshot.forEach(doc => {
                 groups.push({ id: doc.id, ...doc.data() });
             });
-
-            // 3. Sort the array in memory (client-side)
             groups.sort((a, b) => {
-                const timeA = a.createdAt?.seconds || 0; // Handle missing or null timestamps
+                const timeA = a.createdAt?.seconds || 0;
                 const timeB = b.createdAt?.seconds || 0;
-                return timeB - timeA; // Descending order (newest first)
+                return timeB - timeA; 
             });
-            
-            // 4. Render the sorted groups
             groups.forEach(group => {
                 renderGroup(group);
             });
-
         } catch (err) {
             console.error("Error loading groups:", err);
-            // Show a more informative error to the user
-            groupListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Please check the console and ensure your Firestore security rules are correct.</p>`;
+            groupListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Please check the console.</p>`;
         }
     }
-
 
     /**
      * Renders a single group item in the list
@@ -599,23 +629,18 @@
         groupEl.href = "#";
         groupEl.className = 'group-item';
         groupEl.dataset.groupId = group.id;
-        
         groupEl.innerHTML = `
             <span class="block text-xl font-bold">${group.groupName}</span>
             <span class="join-code-label">${T.joinCode}</span>
             <span class="join-code">${group.joinCode}</span>
         `;
-        
         groupEl.addEventListener('click', (e) => {
             e.preventDefault();
-            // Handle active state
             document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
             groupEl.classList.add('active');
-            
             selectedGroupId = group.id;
             loadGroupData(group);
         });
-        
         groupListContainer.appendChild(groupEl);
     }
 
@@ -623,7 +648,7 @@
      * Generates a random 6-char alphanumeric join code
      */
     function generateJoinCode() {
-        const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'; // Omitted 0, O
+        const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'; 
         let result = '';
         for (let i = 0; i < 6; i++) {
             result += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -632,114 +657,216 @@
     }
 
     /**
-     * Handles the "Create New Group" form submission
-     */
-    async function handleCreateGroup(e) {
-        e.preventDefault();
-        const groupName = groupNameInput.value.trim();
-        if (!groupName) return;
+     * Handles the "Create New Group" form submission
+     */
+    async function handleCreateGroup(e) {
+        e.preventDefault();
+        const groupName = groupNameInput.value.trim();
+        if (!groupName) return;
+        createGroupBtn.disabled = true;
+        const T = strings[currentLang];
+        createGroupBtn.querySelector('span').textContent = T.loadingSubmit; 
+        const newGroup = {
+            groupName: groupName,
+            ownerId: currentUser.uid,
+            ownerEmail: currentUser.email,
+            joinCode: generateJoinCode(),
+            createdAt: serverTimestamp(),
+            memberIds: [] 
+        };
+        try {
+            const docRef = await addDoc(collection(db, "groups"), newGroup);
+            showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
+            groupNameInput.value = '';
+            await loadGroups(); 
+        } catch (err) {
+            console.error("Error creating group:", err);
+            showNotification(T.groupsCreateError, true);
+        } finally {
+            createGroupBtn.disabled = false;
+            createGroupBtn.querySelector('span').textContent = T.groupsCreateButton;
+        }
+    }
 
-        createGroupBtn.disabled = true;
-        const T = strings[currentLang];
-        createGroupBtn.querySelector('span').textContent = T.loadingSubmit; 
+   async function showResultDetail(result) {
+        const T = strings[currentLang];
+        
+        // 1. Populate Header (already working)
+        modalStudentEmail.textContent = result.email;
+        modalTestId.textContent = result.testId;
+        modalScore.textContent = `${result.score} / ${result.totalQuestions}`;
+        modalTime.textContent = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
 
-        const newGroup = {
-            groupName: groupName,
-            ownerId: currentUser.uid,
-            ownerEmail: currentUser.email,
-            joinCode: generateJoinCode(),
-            createdAt: serverTimestamp(),
-            memberIds: [] // <-- *** ADD THIS LINE ***
-        };
+        // 2. Populate Question Breakdown (DEBUGGING ADDED)
+        modalResultsContainer.innerHTML = '<p>Loading details...</p>'; // Loading state
+        
+        // --- START DEBUGGING ---
+        console.log(`Attempting to query subcollection for result ID: ${result.id}`); 
+        const subcollectionPath = `thelo-test-results/${result.id}/results`;
+        console.log(`Query path: ${subcollectionPath}`);
+        // --- END DEBUGGING ---
 
-        try {
-            const docRef = await addDoc(collection(db, "groups"), newGroup);
-            
-            showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
-            
-            groupNameInput.value = '';
-            await loadGroups(); // Refresh group list
-        } catch (err) {
-            console.error("Error creating group:", err);
-            showNotification(T.groupsCreateError, true);
-        } finally {
-            createGroupBtn.disabled = false;
-            createGroupBtn.querySelector('span').textContent = T.groupsCreateButton;
-        }
-    }
+        try {
+            const detailQuery = query(
+                collection(db, "thelo-test-results", result.id, "results") // Double-check this path matches Firestore exactly
+            );
+            const detailSnapshot = await getDocs(detailQuery);
+
+            // --- MORE DEBUGGING ---
+            console.log(`Subcollection query finished. Snapshot empty? ${detailSnapshot.empty}`);
+            console.log(`Number of documents found: ${detailSnapshot.size}`);
+            // --- END DEBUGGING ---
+
+            if (detailSnapshot.empty) {
+                modalResultsContainer.innerHTML = '<p>No detailed breakdown available (Query returned empty).</p>'; // More specific message
+            } else {
+                modalResultsContainer.innerHTML = ''; // Clear loading message
+
+                const questions = [];
+                detailSnapshot.forEach(doc => {
+                     // --- EVEN MORE DEBUGGING ---
+                    console.log(`Found question doc ID: ${doc.id}`, doc.data()); 
+                    // --- END DEBUGGING ---
+                    questions.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Sort questions by their document ID ("0", "1", "2", etc.)
+                questions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+
+                questions.forEach((q, index) => {
+                    // ... (rest of the code to build questionEl HTML - unchanged) ...
+                     let statusClass = 'question-status-other';
+                    let statusText = q.status || 'N/A';
+                    if (q.status === 'correct') {
+                        statusClass = 'question-status-correct';
+                        statusText = 'Correct';
+                    } else if (q.status === 'incorrect') {
+                        statusClass = 'question-status-incorrect';
+                        statusText = 'Incorrect';
+                    }
+
+                    const questionEl = document.createElement('div');
+                    questionEl.className = 'question-item';
+                    questionEl.innerHTML = `
+                        <div class="question-header">
+                            <span class="question-title">Question ${index + 1}</span>
+                            <span class="${statusClass}">${statusText}</span>
+                        </div>
+                        <div class="question-body">
+                            <div>
+                                <span class="question-label">Student's Solution</span>
+                                <img src="${q.solutionImage}" alt="Student solution for question ${index + 1}" class="student-solution-img">
+                            </div>
+                            <div>
+                                <span class="question-label">AI Feedback</span>
+                                <div class="feedback-text">
+                                    <p>${q.feedback || 'No feedback provided.'}</p>
+                                    <p class="mt-2 text-xs"><strong>Question:</strong> ${q.question || 'N/A'}</p>
+                                    <p class="mt-2 text-xs"><strong>Correct Answer:</strong> ${q.correctAnswer || 'N/A'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    modalResultsContainer.appendChild(questionEl);
+                });
+            }
+        } catch (err) {
+            console.error("Error loading result details:", err); // This should appear if the query itself fails
+            modalResultsContainer.innerHTML = '<p class="text-red-500">Error loading details. See console.</p>';
+        }
+
+        // 3. Show Modal (already working)
+        modalBackdrop.classList.remove('hidden');
+        resultModal.classList.remove('hidden');
+        setTimeout(() => {
+            modalBackdrop.classList.add('show');
+            resultModal.classList.add('show');
+        }, 10);
+    }
     /**
-     * Loads all students and results for a selected group
-     */
-    async function loadGroupData(group) {
-        const T = strings[currentLang];
-        resultsTitle.textContent = formatString(T.resultsTitleLoading, { groupName: group.groupName });
-        resultsTable.classList.add('hidden');
-        resultsTableBody.innerHTML = '';
-        rosterList.innerHTML = '';
-        rosterContainer.classList.remove('hidden');
-        
-        try {
-            // 1. Load Students (Roster)
-            const studentsQuery = query(
-                collection(db, "thelo-students"), 
-                where("groupId", "==", group.id)
-            );
-            const studentSnapshot = await getDocs(studentsQuery);
-            const studentEmails = [];
-            if (studentSnapshot.empty) {
-                rosterList.innerHTML = `<span class="text-slate-500 italic">${T.rosterNone}</span>`;
-            } else {
-                studentSnapshot.forEach(doc => {
-                    const student = doc.data();
-                    studentEmails.push(student.email);
-                    const studentEl = document.createElement('span');
-                    studentEl.className = 'block text-sm text-slate-700';
-                    studentEl.textContent = student.email;
-                    rosterList.appendChild(studentEl);
-                });
-            }
+     * Hides the result detail modal
+     */
+    function hideResultDetail() {
+        modalBackdrop.classList.remove('show');
+        resultModal.classList.remove('show');
+        setTimeout(() => {
+            modalBackdrop.classList.add('hidden');
+            resultModal.classList.add('hidden');
+        }, 300); 
+    }
 
-            // 2. Load Test Results
-            // *** HERE IS THE FIX ***
-            // 1. Removed orderBy("submittedAt", "desc") from the query
-            const resultsQuery = query(
-                collection(db, "thelo-test-results"), 
-                where("groupId", "==", group.id)
-            );
-            const resultsSnapshot = await getDocs(resultsQuery);
 
-            if (resultsSnapshot.empty) {
-                resultsPlaceholder.textContent = T.resultsNone;
-                resultsPlaceholder.classList.remove('hidden');
-            } else {
-                resultsPlaceholder.classList.add('hidden');
-                
-                const results = [];
-                resultsSnapshot.forEach(doc => {
-                    results.push(doc.data());
-                });
-                
-                // 2. Sort the results here in JavaScript
-               results.sort((a, b) => {
-                   const timeA = a.submittedAt?.seconds || 0;
-                   const timeB = b.submittedAt?.seconds || 0;
-                   return timeB - timeA; // Descending order
-                });
+    /**
+     * Loads all students and results for a selected group
+     */
+    async function loadGroupData(group) {
+        const T = strings[currentLang];
+        resultsTitle.textContent = formatString(T.resultsTitleLoading, { groupName: group.groupName });
+        resultsTable.classList.add('hidden');
+        resultsTableBody.innerHTML = '';
+        rosterList.innerHTML = '';
+        rosterContainer.classList.remove('hidden');
+        
+        try {
+            // 1. Load Students (Roster)
+            const studentsQuery = query(
+                collection(db, "thelo-students"), 
+                where("groupId", "==", group.id)
+            );
+            const studentSnapshot = await getDocs(studentsQuery);
+            if (studentSnapshot.empty) {
+                rosterList.innerHTML = `<span class="text-slate-500 italic">${T.rosterNone}</span>`;
+            } else {
+                studentSnapshot.forEach(doc => {
+                    const student = doc.data();
+                    const studentEl = document.createElement('span');
+                    studentEl.className = 'block text-sm text-slate-700';
+                    studentEl.textContent = student.email;
+                    rosterList.appendChild(studentEl);
+                });
+            }
 
-                results.forEach(result => {
-                    renderResultRow(result);
-                });
+            // 2. Load Test Results (Client-side sorting)
+            const resultsQuery = query(
+                collection(db, "thelo-test-results"), 
+                where("groupId", "==", group.id)
+            );
+            const resultsSnapshot = await getDocs(resultsQuery);
 
-                resultsTable.classList.remove('hidden');
-            }
-            
-            resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
+            if (resultsSnapshot.empty) {
+                resultsPlaceholder.textContent = T.resultsNone;
+                resultsPlaceholder.classList.remove('hidden');
+            } else {
+                resultsPlaceholder.classList.add('hidden');
+                
+                const results = [];
+                resultsSnapshot.forEach(doc => {
+                    // Store the full result object, including its ID
+                    results.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Sort the results in JavaScript
+                results.sort((a, b) => {
+                   const timeA = a.submittedAt?.seconds || 0;
+                   const timeB = b.submittedAt?.seconds || 0;
+                   return timeB - timeA;
+                });
 
-        } catch (err) {
-            console.error("Error loading group data:", err);
-            resultsPlaceholder.textContent = "Error loading results. Check console for details.";
-        }
-    }
+                results.forEach(result => {
+                    renderResultRow(result); // Pass the full result object
+                });
+
+                resultsTable.classList.remove('hidden');
+            }
+            
+            resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
+
+        } catch (err) {
+            console.error("Error loading group data:", err);
+            resultsPlaceholder.textContent = "Error loading results. Check console for details.";
+        }
+    }
+
     /**
      * Renders a single test result row in the table
      */
@@ -750,7 +877,7 @@
 
         const scoreText = `${result.score} / ${result.totalQuestions}`;
         const timeText = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
-        const dateText = result.submittedAt ? result.submittedAt.toDate().toLocaleDateString(currentLang) : 'N/A';
+        const dateText = result.submittedAt ? result.submittedAt.toDate().toLocaleString(currentLang) : 'N/A';
 
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${result.email}</td>
@@ -763,11 +890,13 @@
             </td>
         `;
         
-        // TODO: Add click listener to 'View' button to open a modal
-        // row.querySelector('a').addEventListener('click', (e) => {
-        //     e.preventDefault();
-        //     showResultDetail(result);
-        // });
+        // === UPDATED: Add async click listener to 'View' button ===
+        row.querySelector('a').addEventListener('click', async (e) => {
+            e.preventDefault();
+            console.log("View button clicked! Result ID:", result.id); // <-- ADD THIS
+    console.log("Result object:", result); // <-- ADD THIS to see the data
+            await showResultDetail(result); // Await the async function
+        });
         
         resultsTableBody.appendChild(row);
     }
@@ -776,6 +905,37 @@
     applyContent(currentLang);
 
 </script>
+
+<div id="modal-backdrop" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden transition-opacity duration-300 opacity-0"></div>
+<div id="result-modal" class="fixed inset-0 z-50 hidden p-4 md:p-8 overflow-y-auto transition-all duration-300 transform scale-95 opacity-0">
+    <div class="relative w-full max-w-4xl mx-auto bg-white rounded-xl shadow-2xl window-container">
+        <div class="pt-8">
+            <button id="modal-close-btn" class="absolute top-4 right-4 text-3xl font-light text-slate-400 hover:text-slate-700">&times;</button>
+            <h2 class="text-2xl font-bold" id="modal-title">Test Result Details</h2>
+            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Student</span>
+                    <span class="block font-medium text-slate-800" id="modal-student-email"></span>
+                </div>
+                <div>
+                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Test ID</span>
+                    <span class="block font-medium text-slate-800" id="modal-test-id"></span>
+                </div>
+                <div>
+                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Score</span>
+                    <span class="block font-medium text-slate-800" id="modal-score"></span>
+                </div>
+                <div>
+                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Time Taken</span>
+                    <span class="block font-medium text-slate-800" id="modal-time"></span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="modal-results-container" class="mt-8 space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+            </div>
+    </div>
+</div>
 
 </body>
 </html>
