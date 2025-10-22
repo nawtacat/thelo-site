@@ -651,6 +651,10 @@
     //  MODIFIED: Simplified Test Finish Logic
     // ===================================================================
 
+    // ===================================================================
+    //  MODIFIED: Simplified Test Finish Logic
+    // ===================================================================
+
     function finishTest() {
         clearInterval(timerInterval);
         const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
@@ -662,22 +666,35 @@
         // Backend submission logic
         const user = auth.currentUser;
         if (user) {
+            
+            // ===== NEW CODE TO SAVE TO 'thelo-test' =====
+            // This will create the collection if it doesn't exist
             try {
-                const submitTestResults = firebase.functions().httpsCallable('submitTestResults');
-                submitTestResults({
+                const testResultData = {
+                    userId: user.uid,
                     testId: new URLSearchParams(window.location.search).get('testFile')?.replace('.json', ''),
                     score: correctAnswers,
-                    totalQuestions,
+                    totalQuestions: totalQuestions,
                     timeTakenSeconds: timeTaken,
-                    results: testResults,
-                    language: currentLang
-                });
-                // REMOVED: .then() block that listened for feedback
-                console.log("Test results submission initiated.");
+                    results: testResults, // This is the array of answers
+                    language: currentLang,
+                    submittedAt: firebase.firestore.FieldValue.serverTimestamp() // Adds a timestamp
+                };
+
+                // Add this test result as a new document to the 'thelo-test' collection
+                db.collection('thelo-test').add(testResultData)
+                    .then((docRef) => {
+                        console.log("Test results saved to 'thelo-test' with ID: ", docRef.id);
+                    })
+                    .catch((error) => {
+                        console.error("Error saving test results: ", error);
+                    });
 
             } catch (err) {
-                console.error("Error submitting test results:", err);
+                console.error("Error preparing test results for saving:", err);
             }
+            // ===== END OF NEW CODE =====
+
         }
         
         // Show simple alert instead of results screen
@@ -686,7 +703,6 @@
         // Optional: redirect or reload
         // window.location.reload(); 
     }
-
     // ===== REMOVED: showDetailView, showSummaryView, listenForDetailedFeedback =====
 
     // ===================================================================
