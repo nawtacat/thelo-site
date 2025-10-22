@@ -688,38 +688,45 @@
         }
     }
 
-    /**
-     * ===== UPDATED: Shows the result detail modal by querying the subcollection =====
-     */
-    async function showResultDetail(result) {
-        console.log("showResultDetail called with result:", result);
+   async function showResultDetail(result) {
         const T = strings[currentLang];
         
-        // 1. Populate Header (from the main result object)
+        // 1. Populate Header (already working)
         modalStudentEmail.textContent = result.email;
         modalTestId.textContent = result.testId;
         modalScore.textContent = `${result.score} / ${result.totalQuestions}`;
         modalTime.textContent = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
 
-        // 2. Populate Question Breakdown (by fetching from the subcollection)
+        // 2. Populate Question Breakdown (DEBUGGING ADDED)
         modalResultsContainer.innerHTML = '<p>Loading details...</p>'; // Loading state
+        
+        // --- START DEBUGGING ---
+        console.log(`Attempting to query subcollection for result ID: ${result.id}`); 
+        const subcollectionPath = `thelo-test-results/${result.id}/results`;
+        console.log(`Query path: ${subcollectionPath}`);
+        // --- END DEBUGGING ---
 
         try {
-            // *** THIS IS THE FIX ***
-            // Query the 'results' subcollection of the specific test result document
             const detailQuery = query(
-                collection(db, "thelo-test-results", result.id, "results")
+                collection(db, "thelo-test-results", result.id, "results") // Double-check this path matches Firestore exactly
             );
             const detailSnapshot = await getDocs(detailQuery);
 
+            // --- MORE DEBUGGING ---
+            console.log(`Subcollection query finished. Snapshot empty? ${detailSnapshot.empty}`);
+            console.log(`Number of documents found: ${detailSnapshot.size}`);
+            // --- END DEBUGGING ---
+
             if (detailSnapshot.empty) {
-                modalResultsContainer.innerHTML = '<p>No detailed breakdown available.</p>';
+                modalResultsContainer.innerHTML = '<p>No detailed breakdown available (Query returned empty).</p>'; // More specific message
             } else {
                 modalResultsContainer.innerHTML = ''; // Clear loading message
 
-                // Convert snapshot to an array to sort it
                 const questions = [];
                 detailSnapshot.forEach(doc => {
+                     // --- EVEN MORE DEBUGGING ---
+                    console.log(`Found question doc ID: ${doc.id}`, doc.data()); 
+                    // --- END DEBUGGING ---
                     questions.push({ id: doc.id, ...doc.data() });
                 });
 
@@ -727,7 +734,8 @@
                 questions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
 
                 questions.forEach((q, index) => {
-                    let statusClass = 'question-status-other';
+                    // ... (rest of the code to build questionEl HTML - unchanged) ...
+                     let statusClass = 'question-status-other';
                     let statusText = q.status || 'N/A';
                     if (q.status === 'correct') {
                         statusClass = 'question-status-correct';
@@ -763,13 +771,11 @@
                 });
             }
         } catch (err) {
-            console.error("Error loading result details:", err);
+            console.error("Error loading result details:", err); // This should appear if the query itself fails
             modalResultsContainer.innerHTML = '<p class="text-red-500">Error loading details. See console.</p>';
         }
 
-        console.log("Modal Backdrop Element:", modalBackdrop); // <-- ADD THIS
-    console.log("Result Modal Element:", resultModal);
-        // 3. Show Modal
+        // 3. Show Modal (already working)
         modalBackdrop.classList.remove('hidden');
         resultModal.classList.remove('hidden');
         setTimeout(() => {
@@ -777,7 +783,6 @@
             resultModal.classList.add('show');
         }, 10);
     }
-
     /**
      * Hides the result detail modal
      */
