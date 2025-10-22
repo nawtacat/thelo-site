@@ -668,86 +668,78 @@
         }
     }
     /**
-     * Loads all students and results for a selected group
-     */
-    async function loadGroupData(group) {
-        const T = strings[currentLang];
-        resultsTitle.textContent = formatString(T.resultsTitleLoading, { groupName: group.groupName });
-        resultsTable.classList.add('hidden');
-        resultsTableBody.innerHTML = '';
-        rosterList.innerHTML = '';
-        rosterContainer.classList.remove('hidden');
-        
-        try {
-            // 1. Load Students (Roster)
-            const studentsQuery = query(
-                collection(db, "thelo-students"), 
-                where("groupId", "==", group.id)
-            );
-            const studentSnapshot = await getDocs(studentsQuery);
-            const studentEmails = [];
-            if (studentSnapshot.empty) {
-                rosterList.innerHTML = `<span class="text-slate-500 italic">${T.rosterNone}</span>`;
-            } else {
-                studentSnapshot.forEach(doc => {
-                    const student = doc.data();
-                    studentEmails.push(student.email);
-                    const studentEl = document.createElement('span');
-                    studentEl.className = 'block text-sm text-slate-700';
-                    studentEl.textContent = student.email;
-                    rosterList.appendChild(studentEl);
-                });
-            }
+     * Loads all students and results for a selected group
+     */
+    async function loadGroupData(group) {
+        const T = strings[currentLang];
+        resultsTitle.textContent = formatString(T.resultsTitleLoading, { groupName: group.groupName });
+        resultsTable.classList.add('hidden');
+        resultsTableBody.innerHTML = '';
+        rosterList.innerHTML = '';
+        rosterContainer.classList.remove('hidden');
+        
+        try {
+            // 1. Load Students (Roster)
+            const studentsQuery = query(
+                collection(db, "thelo-students"), 
+                where("groupId", "==", group.id)
+            );
+            const studentSnapshot = await getDocs(studentsQuery);
+            const studentEmails = [];
+            if (studentSnapshot.empty) {
+                rosterList.innerHTML = `<span class="text-slate-500 italic">${T.rosterNone}</span>`;
+            } else {
+                studentSnapshot.forEach(doc => {
+                    const student = doc.data();
+                    studentEmails.push(student.email);
+                    const studentEl = document.createElement('span');
+                    studentEl.className = 'block text-sm text-slate-700';
+                    studentEl.textContent = student.email;
+                    rosterList.appendChild(studentEl);
+                });
+            }
 
-            // 2. Load Test Results
-            // *** NOTE ***
-            // This query also has a where() and orderBy().
-            // If it fails, you will need to apply the same fix as in loadGroups():
-            // 1. Remove orderBy("submittedAt", "desc")
-            // 2. Fetch results
-            // 3. Sort them in JS: results.sort((a,b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0))
-            const resultsQuery = query(
-                collection(db, "thelo-test-results"), 
-                where("groupId", "==", group.id),
-                orderBy("submittedAt", "desc")
-            );
-            const resultsSnapshot = await getDocs(resultsQuery);
+            // 2. Load Test Results
+            // *** HERE IS THE FIX ***
+            // 1. Removed orderBy("submittedAt", "desc") from the query
+            const resultsQuery = query(
+                collection(db, "thelo-test-results"), 
+                where("groupId", "==", group.id)
+            );
+            const resultsSnapshot = await getDocs(resultsQuery);
 
-            if (resultsSnapshot.empty) {
-                resultsPlaceholder.textContent = T.resultsNone;
-                resultsPlaceholder.classList.remove('hidden');
-            } else {
-                resultsPlaceholder.classList.add('hidden');
-                
-                // Convert to array *before* rendering if you need to sort client-side
-                const results = [];
-                resultsSnapshot.forEach(doc => {
-                    results.push(doc.data());
-                });
-                
-                // If you removed orderBy, uncomment this sort:
-                // results.sort((a, b) => {
-                //    const timeA = a.submittedAt?.seconds || 0;
-                //    const timeB = b.submittedAt?.seconds || 0;
-                //    return timeB - timeA;
-                // });
+            if (resultsSnapshot.empty) {
+                resultsPlaceholder.textContent = T.resultsNone;
+                resultsPlaceholder.classList.remove('hidden');
+            } else {
+                resultsPlaceholder.classList.add('hidden');
+                
+                const results = [];
+                resultsSnapshot.forEach(doc => {
+                    results.push(doc.data());
+                });
+                
+                // 2. Sort the results here in JavaScript
+               results.sort((a, b) => {
+                   const timeA = a.submittedAt?.seconds || 0;
+                   const timeB = b.submittedAt?.seconds || 0;
+                   return timeB - timeA; // Descending order
+                });
 
-                results.forEach(result => {
-                    renderResultRow(result);
-                });
+                results.forEach(result => {
+                    renderResultRow(result);
+                });
 
-                resultsTable.classList.remove('hidden');
-            }
-            
-            resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
+                resultsTable.classList.remove('hidden');
+            }
+            
+            resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
 
-        } catch (err) {
-            console.error("Error loading group data:", err);
-            resultsPlaceholder.textContent = "Error loading results. Check console for details.";
-            // If the error message mentions an index, you MUST apply the fix noted above.
-        }
-    }
-
+        } catch (err) {
+            console.error("Error loading group data:", err);
+            resultsPlaceholder.textContent = "Error loading results. Check console for details.";
+        }
+    }
     /**
      * Renders a single test result row in the table
      */
