@@ -632,46 +632,41 @@
     }
 
     /**
-     * Handles the "Create New Group" form submission
-     * * *** FIX APPLIED HERE ***
-     * Replaced alert() with showNotification()
-     */
-    async function handleCreateGroup(e) {
-        e.preventDefault();
-        const groupName = groupNameInput.value.trim();
-        if (!groupName) return;
+     * Handles the "Create New Group" form submission
+     */
+    async function handleCreateGroup(e) {
+        e.preventDefault();
+        const groupName = groupNameInput.value.trim();
+        if (!groupName) return;
 
-        createGroupBtn.disabled = true;
-        const T = strings[currentLang];
-        // Use the new 'loadingSubmit' string
-        createGroupBtn.querySelector('span').textContent = T.loadingSubmit; 
+        createGroupBtn.disabled = true;
+        const T = strings[currentLang];
+        createGroupBtn.querySelector('span').textContent = T.loadingSubmit; 
 
-        const newGroup = {
-            groupName: groupName,
-            ownerId: currentUser.uid,
-            ownerEmail: currentUser.email,
-            joinCode: generateJoinCode(),
-            createdAt: serverTimestamp()
-        };
+        const newGroup = {
+            groupName: groupName,
+            ownerId: currentUser.uid,
+            ownerEmail: currentUser.email,
+            joinCode: generateJoinCode(),
+            createdAt: serverTimestamp(),
+            memberIds: [] // <-- *** ADD THIS LINE ***
+        };
 
-        try {
-            const docRef = await addDoc(collection(db, "groups"), newGroup);
-            
-            // Use notification instead of alert
-            showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
-            
-            groupNameInput.value = '';
-            await loadGroups(); // Refresh group list
-        } catch (err) {
-            console.error("Error creating group:", err);
-            // Use error notification instead of alert
-            showNotification(T.groupsCreateError, true);
-        } finally {
-            createGroupBtn.disabled = false;
-            createGroupBtn.querySelector('span').textContent = T.groupsCreateButton;
-        }
-    }
-
+        try {
+            const docRef = await addDoc(collection(db, "groups"), newGroup);
+            
+            showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
+            
+            groupNameInput.value = '';
+            await loadGroups(); // Refresh group list
+        } catch (err) {
+            console.error("Error creating group:", err);
+            showNotification(T.groupsCreateError, true);
+        } finally {
+            createGroupBtn.disabled = false;
+            createGroupBtn.querySelector('span').textContent = T.groupsCreateButton;
+        }
+    }
     /**
      * Loads all students and results for a selected group
      */
