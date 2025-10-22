@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="title">Tutor Dashboard | thelo</title>
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+
+   <style>
+    /*
+     * ============================================
+     * Custom Font Definitions for Armenian
+     * ============================================
+     */
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype');
+      font-weight: 400; /* Regular */
+      font-style: normal;
+      font-display: swap;
+      /* Armenian Unicode character range */
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf') format('opentype');
+      font-weight: 600; /* SemiBold */
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf') format('opentype');
+      font-weight: 800; /* ExtraBold */
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+
+    /*
+     * ============================================
+     * Main Site Styles (from thelo main page)
+     * ============================================
+     */
+    :root {
+        --thelo-blue: #2563EB;
+        --thelo-bg: #F8F9FA;
+        --thelo-text: #111827;
+        --grid-color: #E5E7EB;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+        font-family: 'Montserrat Arm', 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        background-color: var(--thelo-bg);
+        color: var(--thelo-text);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background-image:
+            linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+            linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+        background-size: 40px 40px;
+        min-height: 100vh;
+    }
+    h1, h2, h3, h4, h5, h6 { font-weight: 800; }
+    .nav-link { color: var(--thelo-text); transition: color 0.2s; }
+    .nav-link:hover { color: var(--thelo-blue); }
+    
+    /* Copied from main page for consistency */
+    .window-container {
+        position: relative;
+        background-color: white;
+        border: 1px solid var(--grid-color);
+        border-radius: 0.75rem;
+        padding: 2.5rem;
+    }
+    .window-container::before {
+        content: ' ';
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        width: 52px;
+        height: 12px;
+        background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
+        background-repeat: no-repeat;
+    }
+    
+    /* Custom Dashboard Styles */
+    .group-item {
+        @apply block w-full p-4 rounded-lg cursor-pointer transition-all duration-200;
+    }
+    .group-item:hover {
+        @apply bg-slate-50;
+    }
+    .group-item.active {
+        @apply bg-[var(--thelo-blue)] text-white shadow-md;
+    }
+    .group-item.active .join-code-label {
+        @apply text-blue-200;
+    }
+    .group-item.active .join-code {
+        @apply text-white;
+    }
+    .join-code-label {
+        @apply text-xs font-semibold text-slate-400 uppercase tracking-wider;
+    }
+    .join-code {
+        @apply text-lg font-bold text-slate-800;
+    }
+    
+    .btn-primary {
+        @apply w-full text-center px-4 py-3 bg-[var(--thelo-blue)] text-white font-bold rounded-lg shadow-md transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50;
+    }
+    .btn-primary:disabled {
+        @apply bg-slate-300 cursor-not-allowed;
+    }
+    .input-field {
+        @apply w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500;
+    }
+    
+    .lang-btn {
+        @apply cursor-pointer font-bold text-slate-400;
+    }
+    .lang-btn.active {
+        @apply text-[var(--thelo-blue)];
+    }
+    
+    /* Notification Toast Styles */
+    #notification-toast {
+        @apply fixed bottom-5 right-5 bg-green-600 text-white p-4 rounded-lg shadow-lg transition-all duration-300 transform translate-y-10 opacity-0 z-50;
+    }
+    #notification-toast.show {
+        @apply transform-none opacity-100;
+    }
+    #notification-toast.error {
+        @apply bg-red-600;
+    }
+
+    /* === NEW: Modal Styles === */
+    #modal-backdrop.show {
+        @apply opacity-100;
+    }
+    #result-modal.show {
+        @apply opacity-100 scale-100;
+    }
+
+    .question-item {
+        @apply border border-slate-200 rounded-lg p-4;
+    }
+    .question-header {
+        @apply flex justify-between items-center;
+    }
+    .question-title {
+        @apply text-lg font-bold text-slate-800;
+    }
+    .question-status-correct {
+        @apply text-sm font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full;
+    }
+    .question-status-incorrect {
+        @apply text-sm font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full;
+    }
+    .question-status-other {
+        @apply text-sm font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-full;
+    }
+    .question-body {
+        @apply mt-4 grid grid-cols-1 md:grid-cols-2 gap-4;
+    }
+    .question-label {
+        @apply block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2;
+    }
+    .student-solution-img {
+        @apply w-full h-auto bg-white border border-slate-300 rounded-md object-contain;
+    }
+    .feedback-text {
+        @apply p-3 bg-slate-50 rounded-md text-slate-700 text-sm prose max-w-none;
+    }
+   </style>
+</head>
+
+<body class="antialiased">
+
+<nav id="mainNav" class="w-full z-50 border-b border-slate-200 backdrop-blur-sm bg-transparent sticky top-0">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 lg:px-8">
+        <a href="/" class="flex items-center gap-2">
+            <img src="https://thelo.space/img/bluethelo.svg" alt="thelo logo" class="h-9 w-auto" />
+            <span class="text-lg font-bold text-slate-600 border-l pl-3 ml-1" data-i18n="navTutorPortal">Tutor Portal</span>
+        </a>
+        
+        <div class="flex items-center gap-4">
+            <ul class="hidden gap-8 md:flex">
+                <li><a href="#" id="logout-btn" class="nav-link font-semibold" data-i18n="navLogout">Log Out</a></li>
+            </ul>
+            <div class="flex items-center gap-2 text-sm">
+                <span id="lang-en" class="lang-btn">EN</span>
+                <span class="text-slate-300">|</span>
+                <span id="lang-hy" class="lang-btn">HY</span>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<main class="py-16 lg:py-24">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+
+        <div id="loading-state" class="text-center py-20">
+            <h2 class="text-2xl font-bold text-slate-600" data-i18n="loading">Loading Dashboard...</h2>
+        </div>
+
+        <div id="error-state" class="hidden text-center py-20 window-container max-w-3xl mx-auto">
+            <h2 class="text-3xl font-bold text-red-600" data-i18n="errorTitle">Access Denied</h2>
+            <p class="text-lg text-slate-600 mt-4" data-i18n="errorSubtitle">You must be a registered tutor to access this page. Please contact support if you believe this is an error.</p>
+            <a href="/" class="inline-block mt-8 px-6 py-3 bg-slate-600 text-white font-bold rounded-lg" data-i18n="errorButton">Back to Home</a>
+        </div>
+
+        <div id="dashboard-content" class="hidden">
+            <h1 class="text-4xl font-extrabold tracking-tighter text-[var(--thelo-text)] sm:text-5xl" data-i18n="dashboardTitle">Tutor Dashboard</h1>
+            <p class="text-lg text-slate-600 mt-4" id="welcome-message" data-i18n="dashboardSubtitle">Welcome, tutor. Select a group to get started.</p>
+
+            <div class="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                <aside class="lg:col-span-1 space-y-6">
+                    <div class="window-container">
+                        <h2 class="text-2xl font-bold pt-8" data-i18n="groupsTitle">My Groups</h2>
+                        <div id="group-list-container" class="mt-6 space-y-2">
+                            <p id="no-groups-msg" class="text-slate-500" data-i18n="groupsNone">You haven't created any groups yet.</p>
+                        </div>
+                    </div>
+
+                    <div class="window-container">
+                        <h2 class="text-2xl font-bold pt-8" data-i18n="groupsCreateTitle">Create New Group</h2>
+                        <form id="create-group-form" class="mt-6 space-y-4">
+                            <div>
+                                <label for="group-name" class="block text-sm font-bold text-slate-700" data-i18n="groupsCreateLabel">Group Name</label>
+                                <input type="text" id="group-name" class="input-field mt-1" placeholder="e.g. Algebra 1 (Fall)" required>
+                            </div>
+                            <button type="submit" id="create-group-btn" class="btn-primary">
+                                <span data-i18n="groupsCreateButton">Create Group</span>
+                            </button>
+                        </form>
+                    </div>
+                </aside>
+
+                <section class="lg:col-span-2 window-container">
+                    <div class="pt-8">
+                        <h2 id="results-title" class="text-2xl font-bold" data-i18n="resultsTitleDefault">Select a group to view results</h2>
+                        
+                        <div id="roster-container" class="mt-6 hidden">
+                            <h3 class="text-xl font-bold text-slate-700" data-i18n="rosterTitle">Student Roster</h3>
+                            <div id="roster-list" class="mt-4 p-4 bg-slate-50 rounded-lg max-h-48 overflow-y-auto">
+                                </div>
+                        </div>
+
+                        <div id="results-container" class="mt-8 overflow-x-auto">
+                            <p id="results-placeholder" class="text-lg text-slate-500"></p>
+                            <table id="results-table" class="hidden min-w-full divide-y divide-slate-200">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableStudent">Student</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableTest">Test ID</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableScore">Score</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableTime">Time</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableDate">Date</th>
+                                        <th scope="col" class="relative px-6 py-3">
+                                            <span class="sr-only">View</span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="results-table-body" class="bg-white divide-y divide-slate-200">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</main>
+
+<div id="notification-toast" class="hidden">
+    <span id="notification-message"></span>
+</div>
+
+
+<script type="module">
+    // Firebase v11.6.1 SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { 
+        getAuth, 
+        onAuthStateChanged, 
+        signOut 
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { 
+        getFirestore, 
+        doc, 
+        getDoc, 
+        collection, 
+        query, 
+        where, 
+        getDocs, 
+        addDoc, 
+        serverTimestamp,
+        orderBy, // We'll keep the import but not use it in the query
+        setLogLevel // <-- Import setLogLevel
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Firebase Config
+    const firebaseConfig = {
+        apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+        authDomain: "physmathacademy-722b3.firebaseapp.com",
+        projectId: "physmathacademy-722b3",
+        appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    
+    // Enable debug logging for Firestore
+    // This will show you detailed query info and errors in the console
+    try {
+        setLogLevel('debug');
+    } catch (e) {
+        console.warn("Could not set Firestore log level:", e);
+    }
+
+
+    // DOM Elements
+    const loadingState = document.getElementById('loading-state');
+    const errorState = document.getElementById('error-state');
+    const dashboardContent = document.getElementById('dashboard-content');
+    const welcomeMessage = document.getElementById('welcome-message');
+    const groupListContainer = document.getElementById('group-list-container');
+    const noGroupsMsg = document.getElementById('no-groups-msg');
+    const createGroupForm = document.getElementById('create-group-form');
+    const createGroupBtn = document.getElementById('create-group-btn');
+    const groupNameInput = document.getElementById('group-name');
+    const resultsTitle = document.getElementById('results-title');
+    const resultsContainer = document.getElementById('results-container');
+    const resultsPlaceholder = document.getElementById('results-placeholder');
+    const resultsTable = document.getElementById('results-table');
+    const resultsTableBody = document.getElementById('results-table-body');
+    const rosterContainer = document.getElementById('roster-container');
+    const rosterList = document.getElementById('roster-list');
+    const logoutBtn = document.getElementById('logout-btn');
+    const langEnBtn = document.getElementById('lang-en');
+    const langHyBtn = document.getElementById('lang-hy');
+
+    // === NEW MODAL ELEMENTS ===
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    const resultModal = document.getElementById('result-modal');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const modalTitle = document.getElementById('modal-title');
+    const modalStudentEmail = document.getElementById('modal-student-email');
+    const modalTestId = document.getElementById('modal-test-id');
+    const modalScore = document.getElementById('modal-score');
+    const modalTime = document.getElementById('modal-time');
+    const modalResultsContainer = document.getElementById('modal-results-container');
+
+    // App State
+    let currentUser = null;
+    let currentTutor = null;
+    let selectedGroupId = null;
+    let currentLang = localStorage.getItem('thelo-lang') || 'en';
+
+    // UI Strings for i18n
+    const strings = {
+        en: {
+            title: 'Tutor Dashboard | thelo',
+            navTutorPortal: 'Tutor Portal',
+            navLogout: 'Log Out',
+            loading: 'Loading Dashboard...',
+            loadingSubmit: 'Loading...', // <-- Added for submit button
+            errorTitle: 'Access Denied',
+            errorSubtitle: 'You must be a registered tutor to access this page. Please contact support if you believe this is an error.',
+            errorButton: 'Back to Home',
+            dashboardTitle: 'Tutor Dashboard',
+            dashboardSubtitle: 'Welcome. Select a group to get started.',
+            groupsTitle: 'My Groups',
+            groupsNone: "You haven't created any groups yet.",
+            groupsCreateTitle: 'Create New Group',
+            groupsCreateLabel: 'Group Name',
+            groupsCreateButton: 'Create Group',
+            groupsCreateSuccess: 'Group "{groupName}" created! Join Code: {joinCode}',
+            groupsCreateError: 'Error creating group. Please try again.',
+            joinCode: 'Join Code',
+            resultsTitleDefault: 'Select a group to view results',
+            resultsTitleLoading: 'Loading results for "{groupName}"...',
+            resultsTitleLoaded: 'Showing results for "{groupName}"',
+            resultsNone: 'No test results found for this group yet.',
+            rosterTitle: 'Student Roster',
+            rosterNone: 'No students have joined this group yet.',
+            tableStudent: 'Student',
+            tableTest: 'Test ID',
+            tableScore: 'Score',
+            tableTime: 'Time',
+            tableDate: 'Date',
+            tableTimeValue: '{time}s',
+            tableView: 'View'
+        },
+        hy: {
+            title: 'Ուսուցչի Վահանակ | Թելո',
+            navTutorPortal: 'Ուսուցչի Վահանակ',
+            navLogout: 'Դուրս գալ',
+            loading: 'Բեռնվում է...',
+            loadingSubmit: 'Բեռնվում է...', // <-- Added for submit button
+            errorTitle: 'Մուտքը մերժված է',
+            errorSubtitle: 'Դուք պետք է լինեք գրանցված ուսուցիչ՝ այս էջը տեսնելու համար։',
+            errorButton: 'Գլխավոր էջ',
+            dashboardTitle: 'Ուսուցչի Վահանակ',
+            dashboardSubtitle: 'Բարի գալուստ։ Ընտրեք խումբ՝ սկսելու համար։',
+            groupsTitle: 'Իմ Խմբերը',
+            groupsNone: 'Դուք դեռ խմբեր չեք ստեղծել։',
+            groupsCreateTitle: 'Ստեղծել Նոր Խումբ',
+            groupsCreateLabel: 'Խմբի Անունը',
+            groupsCreateButton: 'Ստեղծել Խումբ',
+            groupsCreateSuccess: '«{groupName}» խումբը ստեղծված է։ Միանալու կոդը՝ {joinCode}',
+            groupsCreateError: 'Սխալ՝ խումբ ստեղծելիս։ Խնդրում ենք փորձել նորից։',
+            joinCode: 'Միանալու կոդ',
+            resultsTitleDefault: 'Ընտրեք խումբ՝ արդյունքները տեսնելու համար',
+            resultsTitleLoading: 'Բեռնվում են «{groupName}» խմբի արդյունքները...',
+            resultsTitleLoaded: '«{groupName}» խմբի արդյունքները',
+            resultsNone: 'Այս խմբի համար թեստի արդյունքներ դեռ չկան։',
+            rosterTitle: 'Աշակերտների Ցուցակ',
+            rosterNone: 'Այս խմբին դեռ ոչ մի աշակերտ չի միացել։',
+            tableStudent: 'Աշակերտ',
+            tableTest: 'Թեստի ID',
+            tableScore: 'Միավոր',
+            tableTime: 'Ժամանակ',
+            tableDate: 'Ամսաթիվ',
+            tableTimeValue: '{time}վ',
+            tableView: 'Դիտել'
+        }
+    };
+
+    /**
+     * Shows a non-blocking notification toast
+     */
+    function showNotification(message, isError = false) {
+        const toast = document.getElementById('notification-toast');
+        const msgEl = document.getElementById('notification-message');
+        if (!toast || !msgEl) return;
+
+        msgEl.textContent = message;
+        toast.classList.toggle('error', isError);
+        toast.classList.remove('hidden');
+        
+        // Use requestAnimationFrame to ensure the 'show' class is added after 'hidden' is removed
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+            toast.classList.remove('show');
+            // Wait for transition to end before fully hiding
+            setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.classList.remove('error'); // Reset error state
+            }, 300); // Must match CSS transition duration
+        }, 3000);
+    }
+
+
+    /**
+     * Applies all UI text based on the current language
+     */
+    function applyContent(lang) {
+        const T = strings[lang];
+        if (!T) return;
+
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.dataset.i18n;
+            if (T[key]) {
+                el.innerHTML = T[key];
+            }
+        });
+        
+        document.documentElement.lang = lang;
+        langEnBtn.classList.toggle('active', lang === 'en');
+        langHyBtn.classList.toggle('active', lang === 'hy');
+
+        // Update placeholders
+        groupNameInput.placeholder = (lang === 'hy') ? 'օր.՝ Հանրահաշիվ 1 (Աշուն)' : 'e.g. Algebra 1 (Fall)';
+        resultsPlaceholder.textContent = T.resultsNone;
+    }
+
+    /**
+     * Formats a string with given key-value pairs
+     * e.g. formatString("Hello, {name}", { name: "World" }) -> "Hello, World"
+     */
+    function formatString(str, values) {
+        return str.replace(/{(\w+)}/g, (match, key) => values[key] || match);
+    }
+
+    /**
+     * Main entry point on auth state change
+     */
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            currentUser = user;
+            // Check if user is a tutor
+            try {
+                const tutorDocRef = doc(db, "tutors", user.email);
+                const tutorDoc = await getDoc(tutorDocRef);
+
+                if (tutorDoc.exists()) {
+                    currentTutor = { email: user.email, uid: user.uid, ...tutorDoc.data() };
+                    await initDashboard();
+                } else {
+                    console.warn("User is not listed in 'tutors' collection:", user.email);
+                    showErrorState();
+                }
+            } catch (err) {
+                console.error("Error checking tutor status:", err);
+                showErrorState();
+            }
+        } else {
+            // No user, redirect to auth page
+            window.location.href = '/auth';
+        }
+    });
+
+    /**
+     * Shows the error state (not a tutor)
+     */
+    function showErrorState() {
+        loadingState.classList.add('hidden');
+        errorState.classList.remove('hidden');
+    }
+
+    /**
+     * Initializes the dashboard after successful tutor auth
+     */
+    async function initDashboard() {
+        loadingState.classList.add('hidden');
+        dashboardContent.classList.remove('hidden');
+
+        const T = strings[currentLang];
+        welcomeMessage.textContent = formatString(T.dashboardSubtitle, { tutorEmail: currentTutor.email });
+        
+        applyContent(currentLang);
+        setupEventListeners();
+        await loadGroups();
+    }
+
+    /**
+     * Sets up all click/submit listeners
+     */
+    function setupEventListeners() {
+        createGroupForm.addEventListener('submit', handleCreateGroup);
+        logoutBtn.addEventListener('click', handleLogout);
+
+        langEnBtn.addEventListener('click', () => {
+            currentLang = 'en';
+            localStorage.setItem('thelo-lang', currentLang);
+            applyContent(currentLang);
+        });
+
+        langHyBtn.addEventListener('click', () => {
+            currentLang = 'hy';
+            localStorage.setItem('thelo-lang', currentLang);
+            applyContent(currentLang);
+        });
+
+        // === NEW MODAL LISTENERS ===
+        modalBackdrop.addEventListener('click', hideResultDetail);
+        modalCloseBtn.addEventListener('click', hideResultDetail);
+    }
+
+    /**
+     * Logs the user out
+     */
+    async function handleLogout(e) {
+        e.preventDefault();
+        try {
+            await signOut(auth);
+            window.location.href = '/'; // Redirect to home
+        } catch (err) {
+            console.error("Error logging out:", err);
+        }
+    }
+
+    /**
+     * Loads and renders the tutor's groups
+     */
+    async function loadGroups() {
+        groupListContainer.innerHTML = ''; // Clear existing list
+        
+        // 1. Create the query *without* orderBy
+        const q = query(
+            collection(db, "groups"), 
+            where("ownerId", "==", currentUser.uid)
+        );
+        
+        try {
+            const querySnapshot = await getDocs(q);
+            
+            if (querySnapshot.empty) {
+                groupListContainer.appendChild(noGroupsMsg);
+                noGroupsMsg.classList.remove('hidden');
+                return;
+            }
+            
+            noGroupsMsg.classList.add('hidden');
+            
+            // 2. Convert snapshot to an array
+            const groups = [];
+            querySnapshot.forEach(doc => {
+                groups.push({ id: doc.id, ...doc.data() });
+            });
+
+            // 3. Sort the array in memory (client-side)
+            groups.sort((a, b) => {
+                const timeA = a.createdAt?.seconds || 0;
+                const timeB = b.createdAt?.seconds || 0;
+                return timeB - timeA; // Descending order (newest first)
+            });
+            
+            // 4. Render the sorted groups
+            groups.forEach(group => {
+                renderGroup(group);
+            });
+
+        } catch (err) {
+            console.error("Error loading groups:", err);
+            groupListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Please check the console.</p>`;
+        }
+    }
+
+
+    /**
+     * Renders a single group item in the list
+     */
+    function renderGroup(group) {
+        const T = strings[currentLang];
+        const groupEl = document.createElement('a');
+        groupEl.href = "#";
+        groupEl.className = 'group-item';
+        groupEl.dataset.groupId = group.id;
+        
+        groupEl.innerHTML = `
+            <span class="block text-xl font-bold">${group.groupName}</span>
+            <span class="join-code-label">${T.joinCode}</span>
+            <span class="join-code">${group.joinCode}</span>
+        `;
+        
+        groupEl.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
+            groupEl.classList.add('active');
+            
+            selectedGroupId = group.id;
+            loadGroupData(group);
+        });
+        
+        groupListContainer.appendChild(groupEl);
+    }
+
+    /**
+     * Generates a random 6-char alphanumeric join code
+     */
+    function generateJoinCode() {
+        const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'; // Omitted 0, O
+        let result = '';
+        for (let i = 0; i < 6; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    /**
+     * Handles the "Create New Group" form submission
+     */
+    async function handleCreateGroup(e) {
+        e.preventDefault();
+        const groupName = groupNameInput.value.trim();
+        if (!groupName) return;
+
+        createGroupBtn.disabled = true;
+        const T = strings[currentLang];
+        createGroupBtn.querySelector('span').textContent = T.loadingSubmit; 
+
+        const newGroup = {
+            groupName: groupName,
+            ownerId: currentUser.uid,
+            ownerEmail: currentUser.email,
+            joinCode: generateJoinCode(),
+            createdAt: serverTimestamp(),
+            memberIds: [] // <-- Initialize empty memberIds
+        };
+
+        try {
+            const docRef = await addDoc(collection(db, "groups"), newGroup);
+            
+            showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
+            
+            groupNameInput.value = '';
+            await loadGroups(); // Refresh group list
+        } catch (err) {
+            console.error("Error creating group:", err);
+            showNotification(T.groupsCreateError, true);
+        } finally {
+            createGroupBtn.disabled = false;
+            createGroupBtn.querySelector('span').textContent = T.groupsCreateButton;
+        }
+    }
+
+    /**
+     * ===== NEW: Shows the result detail modal and populates it with data =====
+     */
+    function showResultDetail(result) {
+        const T = strings[currentLang];
+        
+        // 1. Populate Header
+        modalStudentEmail.textContent = result.email;
+        modalTestId.textContent = result.testId;
+        modalScore.textContent = `${result.score} / ${result.totalQuestions}`;
+        modalTime.textContent = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
+
+        // 2. Populate Question Breakdown
+        modalResultsContainer.innerHTML = ''; // Clear old content
+        if (!result.results || result.results.length === 0) {
+            modalResultsContainer.innerHTML = '<p>No detailed breakdown available.</p>';
+        } else {
+            result.results.forEach((q, index) => {
+                let statusClass = 'question-status-other';
+                let statusText = q.status || 'N/A';
+                if (q.status === 'correct') {
+                    statusClass = 'question-status-correct';
+                    statusText = 'Correct';
+                } else if (q.status === 'incorrect') {
+                    statusClass = 'question-status-incorrect';
+                    statusText = 'Incorrect';
+                }
+
+                const questionEl = document.createElement('div');
+                questionEl.className = 'question-item';
+                questionEl.innerHTML = `
+                    <div class="question-header">
+                        <span class="question-title">Question ${index + 1}</span>
+                        <span class="${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="question-body">
+                        <div>
+                            <span class="question-label">Student's Solution</span>
+                            <img src="${q.solutionImage}" alt="Student solution for question ${index + 1}" class="student-solution-img">
+                        </div>
+                        <div>
+                            <span class="question-label">AI Feedback</span>
+                            <div class="feedback-text">
+                                <p>${q.feedback || 'No feedback provided.'}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                modalResultsContainer.appendChild(questionEl);
+            });
+        }
+
+        // 3. Show Modal
+        modalBackdrop.classList.remove('hidden');
+        resultModal.classList.remove('hidden');
+        setTimeout(() => { // Short delay for transition
+            modalBackdrop.classList.add('show');
+            resultModal.classList.add('show');
+        }, 10);
+    }
+
+    /**
+     * ===== NEW: Hides the result detail modal =====
+     */
+    function hideResultDetail() {
+        modalBackdrop.classList.remove('show');
+        resultModal.classList.remove('show');
+        setTimeout(() => {
+            modalBackdrop.classList.add('hidden');
+            resultModal.classList.add('hidden');
+        }, 300); // Must match CSS transition duration
+    }
+
+
+    /**
+     * Loads all students and results for a selected group
+     */
+    async function loadGroupData(group) {
+        const T = strings[currentLang];
+        resultsTitle.textContent = formatString(T.resultsTitleLoading, { groupName: group.groupName });
+        resultsTable.classList.add('hidden');
+        resultsTableBody.innerHTML = '';
+        rosterList.innerHTML = '';
+        rosterContainer.classList.remove('hidden');
+        
+        try {
+            // 1. Load Students (Roster)
+            const studentsQuery = query(
+                collection(db, "thelo-students"), 
+                where("groupId", "==", group.id)
+            );
+            const studentSnapshot = await getDocs(studentsQuery);
+            const studentEmails = [];
+            if (studentSnapshot.empty) {
+                rosterList.innerHTML = `<span class="text-slate-500 italic">${T.rosterNone}</span>`;
+            } else {
+                studentSnapshot.forEach(doc => {
+                    const student = doc.data();
+                    studentEmails.push(student.email);
+                    const studentEl = document.createElement('span');
+                    studentEl.className = 'block text-sm text-slate-700';
+                    studentEl.textContent = student.email;
+                    rosterList.appendChild(studentEl);
+                });
+            }
+
+            // 2. Load Test Results (Client-side sorting)
+            const resultsQuery = query(
+                collection(db, "thelo-test-results"), 
+                where("groupId", "==", group.id)
+            );
+            const resultsSnapshot = await getDocs(resultsQuery);
+
+            if (resultsSnapshot.empty) {
+                resultsPlaceholder.textContent = T.resultsNone;
+                resultsPlaceholder.classList.remove('hidden');
+            } else {
+                resultsPlaceholder.classList.add('hidden');
+                
+                const results = [];
+                resultsSnapshot.forEach(doc => {
+                    // Store the full result object, including its ID
+                    results.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Sort the results in JavaScript
+                results.sort((a, b) => {
+                   const timeA = a.submittedAt?.seconds || 0;
+                   const timeB = b.submittedAt?.seconds || 0;
+                   return timeB - timeA;
+                });
+
+                results.forEach(result => {
+                    renderResultRow(result); // Pass the full result object
+                });
+
+                resultsTable.classList.remove('hidden');
+            }
+            
+            resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
+
+        } catch (err) {
+            console.error("Error loading group data:", err);
+            resultsPlaceholder.textContent = "Error loading results. Check console for details.";
+        }
+    }
+
+    /**
+     * Renders a single test result row in the table
+     */
+    function renderResultRow(result) {
+        const T = strings[currentLang];
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-slate-50';
+
+        const scoreText = `${result.score} / ${result.totalQuestions}`;
+        const timeText = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
+        const dateText = result.submittedAt ? result.submittedAt.toDate().toLocaleString(currentLang) : 'N/A';
+
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${result.email}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${result.testId}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${scoreText}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${timeText}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${dateText}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <a href="#" class="text-[var(--thelo-blue)] hover:text-blue-700" data-i18n="tableView">${T.tableView}</a>
+            </td>
+        `;
+        
+        // === UPDATED: Add click listener to 'View' button ===
+        row.querySelector('a').addEventListener('click', (e) => {
+            e.preventDefault();
+            showResultDetail(result); // Pass the full result object
+        });
+        
+        resultsTableBody.appendChild(row);
+    }
+
+    // Initial call to set language
+    applyContent(currentLang);
+
+</script>
+
+<div id="modal-backdrop" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden transition-opacity duration-300 opacity-0"></div>
+<div id="result-modal" class="fixed inset-0 z-50 hidden p-4 md:p-8 overflow-y-auto transition-all duration-300 transform scale-95 opacity-0">
+    <div class="relative w-full max-w-4xl mx-auto bg-white rounded-xl shadow-2xl window-container">
+        <div class="pt-8">
+            <button id="modal-close-btn" class="absolute top-4 right-4 text-3xl font-light text-slate-400 hover:text-slate-700">&times;</button>
+            <h2 class="text-2xl font-bold" id="modal-title">Test Result Details</h2>
+            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Student</span>
+                    <span class="block font-medium text-slate-800" id="modal-student-email"></span>
+                </div>
+                <div>
+                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Test ID</span>
+                    <span class="block font-medium text-slate-800" id="modal-test-id"></span>
+                </div>
+                <div>
+                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Score</span>
+                    <span class="block font-medium text-slate-800" id="modal-score"></span>
+                </div>
+                <div>
+                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Time Taken</span>
+                    <span class="block font-medium text-slate-800" id="modal-time"></span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="modal-results-container" class="mt-8 space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+            </div>
+    </div>
+</div>
+
+</body>
+</html>
