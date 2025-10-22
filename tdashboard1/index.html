@@ -142,7 +142,7 @@
         @apply bg-red-600;
     }
 
-    /* === NEW: Modal Styles === */
+    /* === Modal Styles === */
     #modal-backdrop.show {
         @apply opacity-100;
     }
@@ -305,8 +305,8 @@
         getDocs, 
         addDoc, 
         serverTimestamp,
-        orderBy, // We'll keep the import but not use it in the query
-        setLogLevel // <-- Import setLogLevel
+        orderBy, 
+        setLogLevel
     } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // Firebase Config
@@ -323,7 +323,6 @@
     const db = getFirestore(app);
     
     // Enable debug logging for Firestore
-    // This will show you detailed query info and errors in the console
     try {
         setLogLevel('debug');
     } catch (e) {
@@ -352,7 +351,7 @@
     const langEnBtn = document.getElementById('lang-en');
     const langHyBtn = document.getElementById('lang-hy');
 
-    // === NEW MODAL ELEMENTS ===
+    // === MODAL ELEMENTS ===
     const modalBackdrop = document.getElementById('modal-backdrop');
     const resultModal = document.getElementById('result-modal');
     const modalCloseBtn = document.getElementById('modal-close-btn');
@@ -376,7 +375,7 @@
             navTutorPortal: 'Tutor Portal',
             navLogout: 'Log Out',
             loading: 'Loading Dashboard...',
-            loadingSubmit: 'Loading...', // <-- Added for submit button
+            loadingSubmit: 'Loading...', 
             errorTitle: 'Access Denied',
             errorSubtitle: 'You must be a registered tutor to access this page. Please contact support if you believe this is an error.',
             errorButton: 'Back to Home',
@@ -409,7 +408,7 @@
             navTutorPortal: 'Ուսուցչի Վահանակ',
             navLogout: 'Դուրս գալ',
             loading: 'Բեռնվում է...',
-            loadingSubmit: 'Բեռնվում է...', // <-- Added for submit button
+            loadingSubmit: 'Բեռնվում է...', 
             errorTitle: 'Մուտքը մերժված է',
             errorSubtitle: 'Դուք պետք է լինեք գրանցված ուսուցիչ՝ այս էջը տեսնելու համար։',
             errorButton: 'Գլխավոր էջ',
@@ -446,27 +445,20 @@
         const toast = document.getElementById('notification-toast');
         const msgEl = document.getElementById('notification-message');
         if (!toast || !msgEl) return;
-
         msgEl.textContent = message;
         toast.classList.toggle('error', isError);
         toast.classList.remove('hidden');
-        
-        // Use requestAnimationFrame to ensure the 'show' class is added after 'hidden' is removed
         requestAnimationFrame(() => {
             toast.classList.add('show');
         });
-        
-        // Hide after 3 seconds
         setTimeout(() => {
             toast.classList.remove('show');
-            // Wait for transition to end before fully hiding
             setTimeout(() => {
                 toast.classList.add('hidden');
-                toast.classList.remove('error'); // Reset error state
-            }, 300); // Must match CSS transition duration
+                toast.classList.remove('error');
+            }, 300); 
         }, 3000);
     }
-
 
     /**
      * Applies all UI text based on the current language
@@ -474,26 +466,21 @@
     function applyContent(lang) {
         const T = strings[lang];
         if (!T) return;
-
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.dataset.i18n;
             if (T[key]) {
                 el.innerHTML = T[key];
             }
         });
-        
         document.documentElement.lang = lang;
         langEnBtn.classList.toggle('active', lang === 'en');
         langHyBtn.classList.toggle('active', lang === 'hy');
-
-        // Update placeholders
         groupNameInput.placeholder = (lang === 'hy') ? 'օր.՝ Հանրահաշիվ 1 (Աշուն)' : 'e.g. Algebra 1 (Fall)';
         resultsPlaceholder.textContent = T.resultsNone;
     }
 
     /**
      * Formats a string with given key-value pairs
-     * e.g. formatString("Hello, {name}", { name: "World" }) -> "Hello, World"
      */
     function formatString(str, values) {
         return str.replace(/{(\w+)}/g, (match, key) => values[key] || match);
@@ -505,11 +492,9 @@
     onAuthStateChanged(auth, async (user) => {
         if (user) {
             currentUser = user;
-            // Check if user is a tutor
             try {
                 const tutorDocRef = doc(db, "tutors", user.email);
                 const tutorDoc = await getDoc(tutorDocRef);
-
                 if (tutorDoc.exists()) {
                     currentTutor = { email: user.email, uid: user.uid, ...tutorDoc.data() };
                     await initDashboard();
@@ -522,7 +507,6 @@
                 showErrorState();
             }
         } else {
-            // No user, redirect to auth page
             window.location.href = '/auth';
         }
     });
@@ -541,10 +525,8 @@
     async function initDashboard() {
         loadingState.classList.add('hidden');
         dashboardContent.classList.remove('hidden');
-
         const T = strings[currentLang];
         welcomeMessage.textContent = formatString(T.dashboardSubtitle, { tutorEmail: currentTutor.email });
-        
         applyContent(currentLang);
         setupEventListeners();
         await loadGroups();
@@ -569,7 +551,7 @@
             applyContent(currentLang);
         });
 
-        // === NEW MODAL LISTENERS ===
+        // === MODAL LISTENERS ===
         modalBackdrop.addEventListener('click', hideResultDetail);
         modalCloseBtn.addEventListener('click', hideResultDetail);
     }
@@ -581,7 +563,7 @@
         e.preventDefault();
         try {
             await signOut(auth);
-            window.location.href = '/'; // Redirect to home
+            window.location.href = '/'; 
         } catch (err) {
             console.error("Error logging out:", err);
         }
@@ -591,49 +573,36 @@
      * Loads and renders the tutor's groups
      */
     async function loadGroups() {
-        groupListContainer.innerHTML = ''; // Clear existing list
-        
-        // 1. Create the query *without* orderBy
+        groupListContainer.innerHTML = ''; 
         const q = query(
             collection(db, "groups"), 
             where("ownerId", "==", currentUser.uid)
         );
-        
         try {
             const querySnapshot = await getDocs(q);
-            
             if (querySnapshot.empty) {
                 groupListContainer.appendChild(noGroupsMsg);
                 noGroupsMsg.classList.remove('hidden');
                 return;
             }
-            
             noGroupsMsg.classList.add('hidden');
-            
-            // 2. Convert snapshot to an array
             const groups = [];
             querySnapshot.forEach(doc => {
                 groups.push({ id: doc.id, ...doc.data() });
             });
-
-            // 3. Sort the array in memory (client-side)
             groups.sort((a, b) => {
                 const timeA = a.createdAt?.seconds || 0;
                 const timeB = b.createdAt?.seconds || 0;
-                return timeB - timeA; // Descending order (newest first)
+                return timeB - timeA; 
             });
-            
-            // 4. Render the sorted groups
             groups.forEach(group => {
                 renderGroup(group);
             });
-
         } catch (err) {
             console.error("Error loading groups:", err);
             groupListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Please check the console.</p>`;
         }
     }
-
 
     /**
      * Renders a single group item in the list
@@ -644,22 +613,18 @@
         groupEl.href = "#";
         groupEl.className = 'group-item';
         groupEl.dataset.groupId = group.id;
-        
         groupEl.innerHTML = `
             <span class="block text-xl font-bold">${group.groupName}</span>
             <span class="join-code-label">${T.joinCode}</span>
             <span class="join-code">${group.joinCode}</span>
         `;
-        
         groupEl.addEventListener('click', (e) => {
             e.preventDefault();
             document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
             groupEl.classList.add('active');
-            
             selectedGroupId = group.id;
             loadGroupData(group);
         });
-        
         groupListContainer.appendChild(groupEl);
     }
 
@@ -667,7 +632,7 @@
      * Generates a random 6-char alphanumeric join code
      */
     function generateJoinCode() {
-        const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'; // Omitted 0, O
+        const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'; 
         let result = '';
         for (let i = 0; i < 6; i++) {
             result += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -682,27 +647,22 @@
         e.preventDefault();
         const groupName = groupNameInput.value.trim();
         if (!groupName) return;
-
         createGroupBtn.disabled = true;
         const T = strings[currentLang];
         createGroupBtn.querySelector('span').textContent = T.loadingSubmit; 
-
         const newGroup = {
             groupName: groupName,
             ownerId: currentUser.uid,
             ownerEmail: currentUser.email,
             joinCode: generateJoinCode(),
             createdAt: serverTimestamp(),
-            memberIds: [] // <-- Initialize empty memberIds
+            memberIds: [] 
         };
-
         try {
             const docRef = await addDoc(collection(db, "groups"), newGroup);
-            
             showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
-            
             groupNameInput.value = '';
-            await loadGroups(); // Refresh group list
+            await loadGroups(); 
         } catch (err) {
             console.error("Error creating group:", err);
             showNotification(T.groupsCreateError, true);
@@ -713,68 +673,94 @@
     }
 
     /**
-     * ===== NEW: Shows the result detail modal and populates it with data =====
+     * ===== UPDATED: Shows the result detail modal by querying the subcollection =====
      */
-    function showResultDetail(result) {
+    async function showResultDetail(result) {
         const T = strings[currentLang];
         
-        // 1. Populate Header
+        // 1. Populate Header (from the main result object)
         modalStudentEmail.textContent = result.email;
         modalTestId.textContent = result.testId;
         modalScore.textContent = `${result.score} / ${result.totalQuestions}`;
         modalTime.textContent = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
 
-        // 2. Populate Question Breakdown
-        modalResultsContainer.innerHTML = ''; // Clear old content
-        if (!result.results || result.results.length === 0) {
-            modalResultsContainer.innerHTML = '<p>No detailed breakdown available.</p>';
-        } else {
-            result.results.forEach((q, index) => {
-                let statusClass = 'question-status-other';
-                let statusText = q.status || 'N/A';
-                if (q.status === 'correct') {
-                    statusClass = 'question-status-correct';
-                    statusText = 'Correct';
-                } else if (q.status === 'incorrect') {
-                    statusClass = 'question-status-incorrect';
-                    statusText = 'Incorrect';
-                }
+        // 2. Populate Question Breakdown (by fetching from the subcollection)
+        modalResultsContainer.innerHTML = '<p>Loading details...</p>'; // Loading state
 
-                const questionEl = document.createElement('div');
-                questionEl.className = 'question-item';
-                questionEl.innerHTML = `
-                    <div class="question-header">
-                        <span class="question-title">Question ${index + 1}</span>
-                        <span class="${statusClass}">${statusText}</span>
-                    </div>
-                    <div class="question-body">
-                        <div>
-                            <span class="question-label">Student's Solution</span>
-                            <img src="${q.solutionImage}" alt="Student solution for question ${index + 1}" class="student-solution-img">
+        try {
+            // *** THIS IS THE FIX ***
+            // Query the 'results' subcollection of the specific test result document
+            const detailQuery = query(
+                collection(db, "thelo-test-results", result.id, "results")
+            );
+            const detailSnapshot = await getDocs(detailQuery);
+
+            if (detailSnapshot.empty) {
+                modalResultsContainer.innerHTML = '<p>No detailed breakdown available.</p>';
+            } else {
+                modalResultsContainer.innerHTML = ''; // Clear loading message
+
+                // Convert snapshot to an array to sort it
+                const questions = [];
+                detailSnapshot.forEach(doc => {
+                    questions.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Sort questions by their document ID ("0", "1", "2", etc.)
+                questions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+
+                questions.forEach((q, index) => {
+                    let statusClass = 'question-status-other';
+                    let statusText = q.status || 'N/A';
+                    if (q.status === 'correct') {
+                        statusClass = 'question-status-correct';
+                        statusText = 'Correct';
+                    } else if (q.status === 'incorrect') {
+                        statusClass = 'question-status-incorrect';
+                        statusText = 'Incorrect';
+                    }
+
+                    const questionEl = document.createElement('div');
+                    questionEl.className = 'question-item';
+                    questionEl.innerHTML = `
+                        <div class="question-header">
+                            <span class="question-title">Question ${index + 1}</span>
+                            <span class="${statusClass}">${statusText}</span>
                         </div>
-                        <div>
-                            <span class="question-label">AI Feedback</span>
-                            <div class="feedback-text">
-                                <p>${q.feedback || 'No feedback provided.'}</p>
+                        <div class="question-body">
+                            <div>
+                                <span class="question-label">Student's Solution</span>
+                                <img src="${q.solutionImage}" alt="Student solution for question ${index + 1}" class="student-solution-img">
+                            </div>
+                            <div>
+                                <span class="question-label">AI Feedback</span>
+                                <div class="feedback-text">
+                                    <p>${q.feedback || 'No feedback provided.'}</p>
+                                    <p class="mt-2 text-xs"><strong>Question:</strong> ${q.question || 'N/A'}</p>
+                                    <p class="mt-2 text-xs"><strong>Correct Answer:</strong> ${q.correctAnswer || 'N/A'}</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
-                modalResultsContainer.appendChild(questionEl);
-            });
+                    `;
+                    modalResultsContainer.appendChild(questionEl);
+                });
+            }
+        } catch (err) {
+            console.error("Error loading result details:", err);
+            modalResultsContainer.innerHTML = '<p class="text-red-500">Error loading details. See console.</p>';
         }
 
         // 3. Show Modal
         modalBackdrop.classList.remove('hidden');
         resultModal.classList.remove('hidden');
-        setTimeout(() => { // Short delay for transition
+        setTimeout(() => {
             modalBackdrop.classList.add('show');
             resultModal.classList.add('show');
         }, 10);
     }
 
     /**
-     * ===== NEW: Hides the result detail modal =====
+     * Hides the result detail modal
      */
     function hideResultDetail() {
         modalBackdrop.classList.remove('show');
@@ -782,7 +768,7 @@
         setTimeout(() => {
             modalBackdrop.classList.add('hidden');
             resultModal.classList.add('hidden');
-        }, 300); // Must match CSS transition duration
+        }, 300); 
     }
 
 
@@ -804,13 +790,11 @@
                 where("groupId", "==", group.id)
             );
             const studentSnapshot = await getDocs(studentsQuery);
-            const studentEmails = [];
             if (studentSnapshot.empty) {
                 rosterList.innerHTML = `<span class="text-slate-500 italic">${T.rosterNone}</span>`;
             } else {
                 studentSnapshot.forEach(doc => {
                     const student = doc.data();
-                    studentEmails.push(student.email);
                     const studentEl = document.createElement('span');
                     studentEl.className = 'block text-sm text-slate-700';
                     studentEl.textContent = student.email;
@@ -882,10 +866,10 @@
             </td>
         `;
         
-        // === UPDATED: Add click listener to 'View' button ===
-        row.querySelector('a').addEventListener('click', (e) => {
+        // === UPDATED: Add async click listener to 'View' button ===
+        row.querySelector('a').addEventListener('click', async (e) => {
             e.preventDefault();
-            showResultDetail(result); // Pass the full result object
+            await showResultDetail(result); // Await the async function
         });
         
         resultsTableBody.appendChild(row);
