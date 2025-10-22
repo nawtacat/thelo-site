@@ -256,11 +256,11 @@
     border: 1px solid var(--thelo-border);
   }
 
-  /* ===== Results/Detail View Styling Removed ===== */
+  /* Helper class for loading overlay */
   .hidden {
       display: none !important;
   }
-
+  
   @media (max-width: 768px) {
     #bottomBar {
       flex-wrap: wrap;
@@ -328,12 +328,11 @@
     const bgCtx = backgroundCanvas.getContext('2d');
     const ctx = canvas.getContext('2d');
 
-    // Results Screen DOM Elements Removed
+    // Result Screen DOM Elements have been removed
 
     /* ========== State Variables ========== */
     let testData = null;
     let currentStageIndex = -1;
-    // currentDetailIndex Removed
     let currentStageData = null;
     let drawing = false;
     let lastPos = { x: 0, y: 0 };
@@ -342,34 +341,30 @@
     let devicePixelRatio = window.devicePixelRatio || 1;
     let timerInterval = null;
     let testStartTime = null;
-    let testResults = [];
+    let testResults = []; // This will store results locally before final submission
     let isTabletMode = false;
     let buttonVanishTimer = null;
     let currentLang = 'en';
 
-    /* ========== UI Text ========== */
+    /* ========== UI Text (Simplified) ========== */
     const UI_TEXT = {
         en: {
             start: "Start Test",
             submit: "Submit Answer",
-            checking: "Checking...",
+            checking: "Saving...",
             prev: "Previous",
             clear: "Clear",
             provideSolution: "Please provide a solution before submitting.",
-            question: "Question",
-            analysisError: "Could not submit for analysis.",
-            testComplete: "Test Complete! Your results have been saved."
+            question: "Question", // Kept for headline rendering
         },
         hy: {
             start: "Սկսել թեստը",
             submit: "Ուղարկել",
-            checking: "Ստուգվում է...",
+            checking: "Պահպանում...",
             prev: "Նախորդ",
             clear: "Մաքրել",
             provideSolution: "Խնդրում ենք լուծումը գրել նոր ուղարկել։",
-            question: "Հարց",
-            analysisError: "Չհաջողվեց ուղարկել վերլուծության։",
-            testComplete: "Թեստն ավարտված է։ Ձեր արդյունքները պահպանված են։"
+            question: "Հարց", // Kept for headline rendering
         }
     };
     // ===================================================================
@@ -549,7 +544,10 @@
         currentStageIndex = index;
         bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
         clearUserCanvas();
+        
+        // Use the 'question' text from UI_TEXT
         const headlineText = `${UI_TEXT[currentLang].question} ${index + 1}: ${currentStageData.headline || ''}`;
+        
         if (headlineText && bgCtx.canvas.width > 0) {
             const baseFont = currentLang === 'hy' ? "Montserrat Arm" : "Manrope";
             bgCtx.font = `24px '${baseFont}', system-ui, sans-serif`;
@@ -578,171 +576,117 @@
         }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
     }
 
+    /**
+     * MODIFIED: This function no longer calls AI.
+     * It just captures the drawing and advances to the next stage.
+     */
     async function handleSubmitClick() {
-    if (isTransitioning) return; // Prevent double-submit
-    
-    // 1. Handle "Start Test" button click
-    if (currentStageIndex === -1) {
-        startTest();
-        return;
-    }
-
-    // 2. Check if user has drawn anything
-    if (!userDrawingOccurred) {
-        alert(UI_TEXT[currentLang].provideSolution);
-        return;
-    }
-
-    // 3. Lock the UI
-    const texts = UI_TEXT[currentLang] || UI_TEXT.en;
-    submitBtn.disabled = true;
-    submitBtn.textContent = texts.checking;
-    isTransitioning = true; 
-    
-    // 4. Check for user authentication
-    const user = auth.currentUser;
-    if (!user) {
-        alert("You must be signed in to submit a test.");
-        submitBtn.disabled = false;
-        isTransitioning = false;
-        updateAllUITexts();
-        return;
-    }
-
-    // 5. Capture the drawing as an image
-    let base64ImageData;
-    try {
-        const box = getBoundingBox(ctx);
-        if (!box) throw new Error("No drawing found to capture.");
-        const cropCanvas = document.createElement('canvas');
-        cropCanvas.width = box.width;
-        cropCanvas.height = box.height;
-        const cropCtx = cropCanvas.getContext('2d');
-        cropCtx.fillStyle = '#FFFFFF'; // Set white background
-        cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-        cropCtx.drawImage(canvas, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-        base64ImageData = cropCanvas.toDataURL("image/png");
-    } catch (e) {
-        console.error("Image capture error:", e);
-        alert("Error capturing your solution. Please ensure something is drawn.");
-        submitBtn.disabled = false;
-        isTransitioning = false;
-        updateAllUITexts();
-        return;
-    }
-
-    // 6. Call the Cloud Function with a Timeout
-    try {
-        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        if (currentStageIndex === -1) {
+            startTest();
+            return;
+        }
+        if (!userDrawingOccurred) {
+            alert(UI_TEXT[currentLang].provideSolution);
+            return;
+        }
+        const texts = UI_TEXT[currentLang] || UI_TEXT.en;
+        submitBtn.disabled = true;
+        submitBtn.textContent = texts.checking;
         
-        const payload = {
-            imageBase64: base64ImageData,
-            problemText: currentStageData.headline || "A math problem.",
-            correctAnswer: String(currentStageData.correctAnswer),
-            language: currentLang,
-            solutionSteps: currentStageData.solutionSteps || "", 
-            customInstructions: currentStageData.customInstructions || ""
-        };
+        const user = auth.currentUser;
+        if (!user) {
+            alert("You must be signed in to submit a test.");
+            submitBtn.disabled = false;
+            updateAllUITexts();
+            return;
+        }
 
-        // --- This is the new timeout logic ---
-        const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => {
-                reject(new Error("The check is taking too long. Please try again."));
-            }, 30000); // 30-second timeout
-        });
+        let base64ImageData;
+        try {
+            const box = getBoundingBox(ctx);
+            if (!box) throw new Error("No drawing found to capture.");
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = box.width;
+            cropCanvas.height = box.height;
+            const cropCtx = cropCanvas.getContext('2d');
+            cropCtx.fillStyle = '#FFFFFF';
+            cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+            cropCtx.drawImage(canvas, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+            base64ImageData = cropCanvas.toDataURL("image/png");
+        } catch (e) {
+            console.error("Image capture error:", e);
+            alert("Error capturing your solution. Please ensure something is drawn.");
+            submitBtn.disabled = false;
+            updateAllUITexts();
+            return;
+        }
 
-        // Race the function call against the timeout
-        const result = await Promise.race([
-            analyzeMathDrawing(payload),
-            timeoutPromise
-        ]);
-        // -------------------------------------
-
-        // 7. Process the successful result
-        const { status, feedback } = result.data;
+        // Store the result locally. No AI call.
         testResults.push({
             question: currentStageData.headline,
-            correctAnswer: currentStageData.correctAnswer,
-            solutionImage: base64ImageData, // Store the cropped image
-            status: status,
-            feedback: feedback,
+            correctAnswer: currentStageData.correctAnswer || "", // Store for reference
+            solutionSteps: currentStageData.solutionSteps || "", // Store for reference
+            solutionImage: base64ImageData,
+            // 'status' and 'feedback' are no longer generated here
         });
 
-        // Go to the next stage (this will unlock the UI)
+        // Immediately transition to the next stage
         transitionToStage(currentStageIndex + 1);
-
-    } catch (error) {
-        // 8. Handle any failure (from timeout or function error)
-        console.error("AI analysis failed or timed out:", error);
-        alert(error.message || "There was an error checking your answer. Please try again.");
-        
-        // --- IMPORTANT: Unlock the UI on failure ---
-        submitBtn.disabled = false;
-        isTransitionisixng = false; 
-        updateAllUITexts();
     }
-}
     
-    // ===================================================================
-    //  NEW: Simplified Finish Test Logic
-    // ===================================================================
-
+    /**
+     * NEW/REWRITTEN: This function now saves the entire test
+     * to the 'thelo-test-results' collection in Firestore.
+     */
     function finishTest() {
         clearInterval(timerInterval);
         const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
         
-        const correctAnswers = testResults.filter(r => r.status === 'correct').length;
-        const totalQuestions = testData.stages.length;
-        const scorePercentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+        // Hide the test area and show the loading overlay
+        document.getElementById('lessonArea').style.display = 'none';
+        loadingOverlay.classList.remove('hidden');
 
-        // Hide the main test UI
-        document.getElementById('app').style.display = 'none';
-
-        const texts = UI_TEXT[currentLang] || UI_TEXT.en;
-
-        // Save results to Firestore
         const user = auth.currentUser;
-        if (user) {
-            try {
-                const testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '');
-                
-                const resultData = {
-                    uid: user.uid,
-                    email: user.email, // Storing email for easier lookup
-                    testId: testId,
-                    testTitle: testData.testTitle || 'Untitled Test',
-                    score: correctAnswers,
-                    totalQuestions: totalQuestions,
-                    scorePercentage: scorePercentage,
-                    timeTakenSeconds: timeTaken,
-                    results: testResults, // This stores the array of individual question results
-                    language: currentLang,
-                    completedAt: firebase.firestore.FieldValue.serverTimestamp()
-                };
-
-                // Add to the new root collection "thelo-test-results"
-                db.collection('thelo-test-results').add(resultData)
-                    .then((docRef) => {
-                        console.log("Test results saved with ID: ", docRef.id);
-                        // Show alert *after* successful save
-                        alert(texts.testComplete);
-                    })
-                    .catch((error) => {
-                        console.error("Error saving test results: ", error);
-                        alert("Error saving results. Please check the console.");
-                    });
-
-            } catch (err) {
-                console.error("Error preparing test results for saving:", err);
-                alert("A local error occurred while saving results.");
-            }
-        } else {
-             // If for some reason user is not signed in
-            alert(texts.testComplete);
+        if (!user) {
+            alert("You are not signed in. Your results cannot be saved.");
+            loadingOverlay.classList.add('hidden');
+            return;
         }
+
+        const testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '');
+        
+        const finalTestData = {
+            uid: user.uid,
+            testId: testId || "unknown_test",
+            testTitle: testData.testTitle || "Test",
+            totalQuestions: testData.stages.length,
+            timeTakenSeconds: timeTaken,
+            language: currentLang,
+            submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            solutions: testResults // The array of {question, correctAnswer, solutionImage}
+        };
+
+        // Save to the new collection 'thelo-test-results'
+        db.collection('thelo-test-results').add(finalTestData)
+            .then((docRef) => {
+                console.log("Test results saved with ID: ", docRef.id);
+                loadingOverlay.classList.add('hidden');
+                // Show a final message
+                const app = document.getElementById('app');
+                app.innerHTML = `<h1 style="text-align: center; margin-top: 40vh; width: 100%;">Test Submitted. You may close this window.</h1>`;
+            })
+            .catch((error) => {
+                console.error("Error saving test results: ", error);
+                loadingOverlay.classList.add('hidden');
+                // Show error message
+                const app = document.getElementById('app');
+                app.innerHTML = `<h1 style="text-align: center; margin-top: 40vh; width: 100%; color: var(--error-red);">Error saving test. Please try again.</h1>`;
+                // Re-show the lesson area in case they need to try again?
+                // Or just leave it at the error. For now, just error.
+            });
     }
 
-    // All Results Screen Logic (showDetailView, showSummaryView, listenForDetailedFeedback) Removed
+    // `showDetailView`, `showSummaryView`, and `listenForDetailedFeedback` have been removed.
 
     // ===================================================================
     //  Canvas and Event Listener Setup
@@ -858,27 +802,30 @@
         window.addEventListener('mouseleave', handleDrawingEnd);
         window.addEventListener('touchend', handleDrawingEnd);
         window.addEventListener('touchcancel', handleDrawingEnd);
+        
         prevBtn.onclick = () => transitionToStage(currentStageIndex - 1);
         submitBtn.onclick = handleSubmitClick;
         clearBtn.onclick = clearUserCanvas;
 
         // NEW: Keyboard listeners
         window.addEventListener('keydown', (e) => {
-            // Ignore keypresses if user is somehow focused on an input
+            // Ignore if user is typing in an input (if one existed)
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            // Don't do actions while transitioning
+            if (isTransitioning) return;
 
             if (e.code === 'Space') {
                 e.preventDefault(); // Stop spacebar from scrolling
                 handleSubmitClick();
-            } else if (e.key === 'c' || e.key === 'C') {
+            } else if (e.key.toLowerCase() === 'c') {
                 e.preventDefault();
                 clearUserCanvas();
             }
         });
 
-        // Results screen listeners Removed
-
+        // Results screen listeners have been removed
         window.addEventListener('resize', resizeCanvases);
+        
         const urlParams = new URLSearchParams(window.location.search);
         const testFileName = urlParams.get('testFile');
         if (testFileName) {
