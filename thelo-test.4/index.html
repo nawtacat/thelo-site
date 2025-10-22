@@ -6,15 +6,22 @@
     <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png">
     <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
     <title>thelo | Test Mode</title>
+    <!-- Firebase (Compat Version as in original) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+    
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- KaTeX -->
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css">
+    
+    <!-- PWA Meta -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -255,12 +262,13 @@
     box-shadow: var(--shadow-md);
     border: 1px solid var(--thelo-border);
   }
-
-  /* Helper class for loading overlay */
+  
   .hidden {
       display: none !important;
   }
   
+  /* --- Results Page CSS (REMOVED) --- */
+
   @media (max-width: 768px) {
     #bottomBar {
       flex-wrap: wrap;
@@ -305,15 +313,20 @@
         </div>
     </div>
 
+    <!-- Results and Detail Screens (REMOVED) -->
+
     <div id="bottom-logo-container">
         <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo Logo">
     </div>
 
 <script>
+    // --- Firebase Config ---
+    // This config is public and safe to use in client-side code.
     const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", projectId: "physmathacademy-722b3", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
+    const functions = firebase.functions(); // Added functions initialization
 
     /* ========== DOM Elements ========== */
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -328,7 +341,7 @@
     const bgCtx = backgroundCanvas.getContext('2d');
     const ctx = canvas.getContext('2d');
 
-    // Result Screen DOM Elements have been removed
+    // --- Results Screen DOM (REMOVED) ---
 
     /* ========== State Variables ========== */
     let testData = null;
@@ -341,30 +354,43 @@
     let devicePixelRatio = window.devicePixelRatio || 1;
     let timerInterval = null;
     let testStartTime = null;
-    let testResults = []; // This will store results locally before final submission
     let isTabletMode = false;
     let buttonVanishTimer = null;
     let currentLang = 'en';
+    let currentTestAttemptId = null; // NEW: To store the random ID for this test attempt
+    let totalCorrect = 0; // NEW: To track score for the final report
+    let totalAttempted = 0; // NEW: To track attempted questions
+    let currentTestName = "default-test"; // NEW: To store test name
 
-    /* ========== UI Text (Simplified) ========== */
+    /* ========== UI Text ========== */
     const UI_TEXT = {
         en: {
             start: "Start Test",
             submit: "Submit Answer",
-            checking: "Saving...",
+            checking: "Checking...",
             prev: "Previous",
             clear: "Clear",
+            testComplete: "Test Complete!",
+            score: "Score:",
+            timeTaken: "Time Taken:",
             provideSolution: "Please provide a solution before submitting.",
-            question: "Question", // Kept for headline rendering
+            question: "Question",
+            analysisError: "Could not submit for analysis.",
+            testOver: "Test Finished" // NEW: Message for final stage
         },
         hy: {
             start: "Սկսել թեստը",
             submit: "Ուղարկել",
-            checking: "Պահպանում...",
+            checking: "Ստուգվում է...",
             prev: "Նախորդ",
             clear: "Մաքրել",
+            testComplete: "Թեստն ավարտված է",
+            score: "Միավոր:",
+            timeTaken: "Ժամանակ:",
             provideSolution: "Խնդրում ենք լուծումը գրել նոր ուղարկել։",
-            question: "Հարց", // Kept for headline rendering
+            question: "Հարց",
+            analysisError: "Չհաջողվեց ուղարկել վերլուծության։",
+            testOver: "Թեստն Ավարտված Է" // NEW
         }
     };
     // ===================================================================
@@ -476,7 +502,7 @@
         bgCtx.textAlign = prevAlign; bgCtx.textBaseline = prevBase; bgCtx.fillStyle = prevFill;
     }
     // ===================================================================
-    //  Main Application Logic
+    //  Main Application Logic (MODIFIED)
     // ===================================================================
     function getBoundingBox(ctx, padding = 20 * (window.devicePixelRatio || 1)) {
         const canvas = ctx.canvas;
@@ -507,16 +533,16 @@
             
             currentLang = testData.lang === 'hy' ? 'hy' : 'en';
             document.body.className = currentLang === 'hy' ? 'lang-hy' : '';
+            currentTestName = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '') || 'unknown-test';
 
             document.title = testData.testTitle || "thelo | Test Mode";
             currentStageIndex = -1;
-            testResults = [];
             updateAllUITexts();
             submitBtn.disabled = false;
             prevBtn.disabled = true;
         } catch (error) {
             console.error("Error loading test:", error);
-            alert("Failed to load the test file. Please check the console for details.");
+            alert("Failed to load the test file. Please check the console for details."); // Using alert as per original code
         } finally {
             isTransitioning = false;
             loadingOverlay.classList.add('hidden');
@@ -525,8 +551,39 @@
 
     function startTest() {
         if (currentStageIndex !== -1) return;
+        
+        const user = auth.currentUser;
+        if (!user) {
+            alert("You must be signed in to start a test.");
+            return;
+        }
+
         testStartTime = Date.now();
         timerInterval = setInterval(updateTimerDisplay, 1000);
+        
+        // NEW: Create a new test attempt in Firestore
+        totalCorrect = 0;
+        totalAttempted = 0;
+        currentTestAttemptId = db.collection('thelo-test-results').doc().id; // Generate a random ID
+        
+        try {
+            const attemptDocRef = db.collection('thelo-test-results').doc(user.uid)
+                                  .collection('attempts').doc(currentTestAttemptId);
+            
+            attemptDocRef.set({
+                testName: currentTestName,
+                language: currentLang,
+                startTime: firebase.firestore.FieldValue.serverTimestamp(),
+                status: 'started',
+                totalQuestions: testData.stages.length
+            }).catch(err => {
+                console.error("Failed to create test attempt document:", err);
+            });
+
+        } catch (error) {
+            console.error("Error creating Firestore test attempt:", error);
+        }
+
         transitionToStage(0);
     }
 
@@ -539,15 +596,31 @@
     }
 
     async function renderStageUI(index) {
+        // This function is called when finishing the test with index -1
+        if (index === -1) {
+            bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+            clearUserCanvas();
+            const texts = UI_TEXT[currentLang] || UI_TEXT.en;
+            
+            bgCtx.font = `bold 32px '${currentLang === 'hy' ? "Montserrat Arm" : "Manrope"}'`;
+            bgCtx.textAlign = 'center';
+            bgCtx.textBaseline = 'middle';
+            bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+            bgCtx.fillText(texts.testComplete, (backgroundCanvas.width / devicePixelRatio) / 2, (backgroundCanvas.height / devicePixelRatio) / 2);
+
+            prevBtn.disabled = true;
+            submitBtn.disabled = false; // Re-enable to start again
+            updateAllUITexts(); // This will set submitBtn text to "Start Test"
+            userDrawingOccurred = false;
+            return;
+        }
+        
         if (index < 0 || index >= testData.stages.length) return;
         currentStageData = testData.stages[index];
         currentStageIndex = index;
         bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
         clearUserCanvas();
-        
-        // Use the 'question' text from UI_TEXT
         const headlineText = `${UI_TEXT[currentLang].question} ${index + 1}: ${currentStageData.headline || ''}`;
-        
         if (headlineText && bgCtx.canvas.width > 0) {
             const baseFont = currentLang === 'hy' ? "Montserrat Arm" : "Manrope";
             bgCtx.font = `24px '${baseFont}', system-ui, sans-serif`;
@@ -562,10 +635,12 @@
 
     function transitionToStage(newIndex) {
         if (isTransitioning) return;
+        
         if (newIndex >= testData.stages.length) {
             finishTest(); // Test is over
             return;
         }
+        
         isTransitioning = true;
         backgroundCanvas.classList.add('fade-out');
         setTimeout(() => {
@@ -576,26 +651,26 @@
         }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
     }
 
-    /**
-     * MODIFIED: This function no longer calls AI.
-     * It just captures the drawing and advances to the next stage.
-     */
     async function handleSubmitClick() {
+        if (isTransitioning) return;
+
         if (currentStageIndex === -1) {
             startTest();
             return;
         }
+        
         if (!userDrawingOccurred) {
             alert(UI_TEXT[currentLang].provideSolution);
             return;
         }
+
         const texts = UI_TEXT[currentLang] || UI_TEXT.en;
         submitBtn.disabled = true;
         submitBtn.textContent = texts.checking;
         
         const user = auth.currentUser;
-        if (!user) {
-            alert("You must be signed in to submit a test.");
+        if (!user || !currentTestAttemptId) {
+            alert("You must be signed in and have started a test.");
             submitBtn.disabled = false;
             updateAllUITexts();
             return;
@@ -621,72 +696,95 @@
             return;
         }
 
-        // Store the result locally. No AI call.
-        testResults.push({
-            question: currentStageData.headline,
-            correctAnswer: currentStageData.correctAnswer || "", // Store for reference
-            solutionSteps: currentStageData.solutionSteps || "", // Store for reference
-            solutionImage: base64ImageData,
-            // 'status' and 'feedback' are no longer generated here
-        });
+        try {
+            const analyzeMathDrawing = functions.httpsCallable('analyzeMathDrawing');
+            
+            const payload = {
+                imageBase64: base64ImageData,
+                problemText: currentStageData.headline || "A math problem.",
+                correctAnswer: String(currentStageData.correctAnswer),
+                language: currentLang,
+                solutionSteps: currentStageData.solutionSteps || "",  
+                customInstructions: currentStageData.customInstructions || ""
+            };
+            
+            const result = await analyzeMathDrawing(payload);
+            const { status, feedback } = result.data;
 
-        // Immediately transition to the next stage
-        transitionToStage(currentStageIndex + 1);
+            // NEW: Save result directly to Firestore
+            const solutionDocRef = db.collection('thelo-test-results').doc(user.uid)
+                                     .collection('attempts').doc(currentTestAttemptId)
+                                     .collection('solutions').doc(String(currentStageIndex));
+            
+            await solutionDocRef.set({
+                questionIndex: currentStageIndex,
+                questionText: currentStageData.headline,
+                correctAnswer: currentStageData.correctAnswer,
+                solutionImage: base64ImageData, // Note: Storing large images in Firestore can be costly.
+                status: status,
+                feedback: feedback,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // Update score
+            totalAttempted++;
+            if (status === 'correct') {
+                totalCorrect++;
+            }
+
+            // Move to next stage
+            transitionToStage(currentStageIndex + 1);
+
+        } catch (error) {
+            console.error("AI analysis or Firestore save failed:", error);
+            alert("There was an error checking your answer. Please try again.");
+            submitBtn.disabled = false;
+            updateAllUITexts();
+        }
     }
-    
-    /**
-     * NEW/REWRITTEN: This function now saves the entire test
-     * to the 'thelo-test-results' collection in Firestore.
-     */
+     
+    // ===================================================================
+    //  REFACTORED: Simplified Finish Test Logic
+    // ===================================================================
+
     function finishTest() {
         clearInterval(timerInterval);
         const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
         
-        // Hide the test area and show the loading overlay
-        document.getElementById('lessonArea').style.display = 'none';
-        loadingOverlay.classList.remove('hidden');
-
+        // Update the main attempt document in Firestore
         const user = auth.currentUser;
-        if (!user) {
-            alert("You are not signed in. Your results cannot be saved.");
-            loadingOverlay.classList.add('hidden');
-            return;
-        }
-
-        const testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '');
-        
-        const finalTestData = {
-            uid: user.uid,
-            testId: testId || "unknown_test",
-            testTitle: testData.testTitle || "Test",
-            totalQuestions: testData.stages.length,
-            timeTakenSeconds: timeTaken,
-            language: currentLang,
-            submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            solutions: testResults // The array of {question, correctAnswer, solutionImage}
-        };
-
-        // Save to the new collection 'thelo-test-results'
-        db.collection('thelo-test-results').add(finalTestData)
-            .then((docRef) => {
-                console.log("Test results saved with ID: ", docRef.id);
-                loadingOverlay.classList.add('hidden');
-                // Show a final message
-                const app = document.getElementById('app');
-                app.innerHTML = `<h1 style="text-align: center; margin-top: 40vh; width: 100%;">Test Submitted. You may close this window.</h1>`;
-            })
-            .catch((error) => {
-                console.error("Error saving test results: ", error);
-                loadingOverlay.classList.add('hidden');
-                // Show error message
-                const app = document.getElementById('app');
-                app.innerHTML = `<h1 style="text-align: center; margin-top: 40vh; width: 100%; color: var(--error-red);">Error saving test. Please try again.</h1>`;
-                // Re-show the lesson area in case they need to try again?
-                // Or just leave it at the error. For now, just error.
+        if (user && currentTestAttemptId) {
+            const attemptDocRef = db.collection('thelo-test-results').doc(user.uid)
+                                  .collection('attempts').doc(currentTestAttemptId);
+            
+            attemptDocRef.update({
+                status: 'completed',
+                endTime: firebase.firestore.FieldValue.serverTimestamp(),
+                timeTakenSeconds: timeTaken,
+                score: totalCorrect,
+                questionsAttempted: totalAttempted
+            }).catch(err => {
+                console.error("Failed to update test attempt document:", err);
             });
+        }
+        
+        // Reset state
+        currentStageIndex = -1; // Set to -1 to show "Start Test" screen
+        currentTestAttemptId = null;
+        testStartTime = null;
+        
+        // Transition to the "Test Complete" message screen
+        isTransitioning = true;
+        backgroundCanvas.classList.add('fade-out');
+        setTimeout(() => {
+            renderStageUI(-1).then(() => { // Render the -1 "complete" state
+                backgroundCanvas.classList.remove('fade-out');
+                isTransitioning = false;
+            });
+        }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
     }
 
-    // `showDetailView`, `showSummaryView`, and `listenForDetailedFeedback` have been removed.
+    // --- Results Screen Functions (REMOVED) ---
 
     // ===================================================================
     //  Canvas and Event Listener Setup
@@ -703,7 +801,7 @@
             c.style.width = `${cssWidth}px`; c.style.height = `${cssHeight}px`;
         });
         setupContexts();
-        if (currentStageIndex >= 0) renderStageUI(currentStageIndex);
+        if (testData) renderStageUI(currentStageIndex); // Re-render current stage on resize
     }
 
     function setupContexts() {
@@ -782,13 +880,32 @@
         submitBtn.textContent = (currentStageIndex === -1) ? texts.start : texts.submit;
         prevBtn.textContent = texts.prev;
         clearBtn.textContent = texts.clear;
-        // detailNextBtn removed
     }
 
     function checkTabletMode() {
         const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
         const landscapeQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (min-height: 500px)');
         isTabletMode = tabletQuery.matches || landscapeQuery.matches;
+    }
+    
+    // NEW: Keyboard listeners
+    function handleKeyDown(e) {
+        // Prevent shortcuts if user is typing in an input (none here, but good practice)
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        if (e.code === 'Space') {
+            e.preventDefault(); // Stop spacebar from scrolling
+            if (!submitBtn.disabled) {
+                handleSubmitClick();
+            }
+        } else if (e.key === 'c' || e.key === 'C') {
+            e.preventDefault();
+            if (!clearBtn.disabled) {
+                clearUserCanvas();
+            }
+        }
     }
 
     function initApp() {
@@ -802,30 +919,16 @@
         window.addEventListener('mouseleave', handleDrawingEnd);
         window.addEventListener('touchend', handleDrawingEnd);
         window.addEventListener('touchcancel', handleDrawingEnd);
-        
         prevBtn.onclick = () => transitionToStage(currentStageIndex - 1);
         submitBtn.onclick = handleSubmitClick;
         clearBtn.onclick = clearUserCanvas;
 
-        // NEW: Keyboard listeners
-        window.addEventListener('keydown', (e) => {
-            // Ignore if user is typing in an input (if one existed)
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            // Don't do actions while transitioning
-            if (isTransitioning) return;
-
-            if (e.code === 'Space') {
-                e.preventDefault(); // Stop spacebar from scrolling
-                handleSubmitClick();
-            } else if (e.key.toLowerCase() === 'c') {
-                e.preventDefault();
-                clearUserCanvas();
-            }
-        });
-
-        // Results screen listeners have been removed
-        window.addEventListener('resize', resizeCanvases);
+        // --- Results listeners (REMOVED) ---
         
+        // NEW: Keyboard listener
+        window.addEventListener('keydown', handleKeyDown);
+
+        window.addEventListener('resize', resizeCanvases);
         const urlParams = new URLSearchParams(window.location.search);
         const testFileName = urlParams.get('testFile');
         if (testFileName) {
@@ -839,7 +942,21 @@
     document.addEventListener('DOMContentLoaded', () => {
         updateAllUITexts(); // Set initial button text
         auth.onAuthStateChanged(user => {
-            initApp();
+            if (user) {
+                console.log("User is signed in:", user.uid);
+                initApp();
+            } else {
+                console.log("User is not signed in. Attempting anonymous sign-in.");
+                auth.signInAnonymously()
+                    .then(() => {
+                        console.log("Signed in anonymously.");
+                        initApp();
+                    })
+                    .catch((error) => {
+                        console.error("Error signing in anonymously:", error);
+                        alert("Authentication is required to take tests. Please refresh and try again.");
+                    });
+            }
         });
     });
 </script>
