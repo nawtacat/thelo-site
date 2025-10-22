@@ -503,80 +503,85 @@
             }
         }
         /**
-         * Handles the logic for a student to join a group using a code.
-         * @param {string} userId - The ID of the currently logged-in student.
-         * @param {string} userEmail - The email of the currently logged-in student.
-         */
-        async function handleJoinGroup(userId, userEmail) {
-            const codeInput = document.getElementById('class-code-input');
-            const joinBtn = document.getElementById('join-class-btn');
-            const joinCode = codeInput.value.trim().toUpperCase();
+         * Handles the logic for a student to join a group using a code.
+         * @param {string} userId - The ID of the currently logged-in student.
+         * @param {string} userEmail - The email of the currently logged-in student.
+         */
+        async function handleJoinGroup(userId, userEmail) {
+            const codeInput = document.getElementById('class-code-input');
+            const joinBtn = document.getElementById('join-class-btn');
+            const joinCode = codeInput.value.trim().toUpperCase();
 
-            if (!joinCode) {
-                showNotification("Please enter a group code.", true); // <-- Use notification
-                return;
-            }
+            if (!joinCode) {
+                showNotification("Please enter a group code.", true);
+                return;
+            }
 
-            joinBtn.disabled = true;
-            joinBtn.textContent = 'Joining...';
+            joinBtn.disabled = true;
+            joinBtn.textContent = 'Joining...';
 
-            try {
-                // Step 1: Find the group with the matching join code
-                const groupsRef = collection(db, 'groups');
-                const q = query(groupsRef, where("joinCode", "==", joinCode));
-                const querySnapshot = await getDocs(q);
+            try {
+                // Step 1: Find the group with the matching join code
+                const groupsRef = collection(db, 'groups');
+                const q = query(groupsRef, where("joinCode", "==", joinCode));
+                const querySnapshot = await getDocs(q);
 
-                if (querySnapshot.empty) {
-                    throw new Error("Invalid group code. Please check and try again.");
-                }
+                if (querySnapshot.empty) {
+                    throw new Error("Invalid group code. Please check and try again.");
+                }
 
-                // Step 2: Get the group's data
-                const groupDoc = querySnapshot.docs[0];
-                const groupId = groupDoc.id;
-                const studentRef = doc(db, 'thelo-students', userId);
+                // Step 2: Get the group's data
+                const groupDoc = querySnapshot.docs[0];
+                const groupId = groupDoc.id;
+                const groupData = groupDoc.data(); // <-- Get group data
+                const studentRef = doc(db, 'thelo-students', userId);
 
-                // Step 3: Update the student's document with the groupId and email
-                // (Tutor dashboard needs email to display in roster)
-                await updateDoc(studentRef, {
-                    groupId: groupId,
-                    email: userEmail // <-- Make sure student doc has email
-                });
+                // Step 3: Update the student's document with the groupId and email
+                await updateDoc(studentRef, {
+                    groupId: groupId,
+                    email: userEmail
+                });
 
-                // Step 4: Add the student's ID to the group's member list
-                await updateDoc(doc(db, 'groups', groupId), {
-                    memberIds: arrayUnion(userId)
-                });
+                // --- MODIFIED STEP 4: Manually update the member list ---
+                // Get the old member list, or an empty array if it doesn't exist
+                const oldMemberIds = groupData.memberIds || [];
+                
+                // Create the new member list (Set ensures no duplicates)
+                const newMemberIds = [...new Set([...oldMemberIds, userId])];
+               
+                // Update the group with the *full* new array
+               await updateDoc(doc(db, 'groups', groupId), {
+                    memberIds: newMemberIds
+                });
+                // --- END OF MODIFIED STEP 4 ---
 
-                // --- NEW: Create the "Welcome" post on the bulletin board ---
+                // Step 5: Create the "Welcome" post on the bulletin board
+                // First, get the student's name
+                const studentSnap = await getDoc(studentRef);
+                const studentName = studentSnap.data()?.name || 'A new member';
 
-                // First, get the student's name
-                const studentSnap = await getDoc(studentRef);
-                const studentName = studentSnap.data()?.name || 'A new member';
+                // Then, create the post document
+                await addDoc(collection(db, "bulletin-posts"), {
+                    groupId: groupId,
+                    authorId: userId,
+                   type: "welcome",
+                    timestamp: serverTimestamp(),
+                    content: {
+                        newMemberName: studentName
+                    }
+                });
 
-                // Then, create the post document
-                await addDoc(collection(db, "bulletin-posts"), {
-                    groupId: groupId,
-                    authorId: userId,
-                    type: "welcome",
-                    timestamp: serverTimestamp(),
-                    content: {
-                        newMemberName: studentName
-                    }
-                });
+                showNotification(`Successfully joined the group: "${groupData.groupName}"!`);
+                document.getElementById('join-class-card').style.display = 'none';
 
-                // --- END OF NEW CODE ---
-
-                showNotification(`Successfully joined the group: "${groupDoc.data().groupName}"!`); // <-- Use notification
-                document.getElementById('join-class-card').style.display = 'none';
-
-            } catch (error) {
-                console.error("Error joining group:", error);
-                showNotification(error.message, true); // <-- Use notification
-            } finally {
-                joinBtn.disabled = false;
-                joinBtn.textContent = 'Join Class';
-            }
-        }
+            } catch (error) {
+            console.error("Error joining group:", error);
+                showNotification(error.message, true);
+            } finally {
+                joinBtn.disabled = false;
+                joinBtn.textContent = 'Join Class';
+            }
+        }
         // --- Main Execution ---
         onAuthStateChanged(auth, async (user) => {
             // ✅ Check if user exists AND if their email is verified
