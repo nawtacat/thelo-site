@@ -321,12 +321,14 @@
 
 <script>
     // --- Firebase Config ---
-    // This config is public and safe to use in client-side code.
-    const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", projectId: "physmathacademy-722b3", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-    const functions = firebase.functions(); // Added functions initialization
+    // Config will be initialized in DOMContentLoaded
+    let auth;
+    let db;
+    let functions;
+
+    // NEW: Environment variables
+    let appId = 'default-app-id';
+    let userId = null;
 
     /* ========== DOM Elements ========== */
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -552,8 +554,7 @@
     function startTest() {
         if (currentStageIndex !== -1) return;
         
-        const user = auth.currentUser;
-        if (!user) {
+        if (!userId) { // Check for global userId
             alert("You must be signed in to start a test.");
             return;
         }
@@ -564,11 +565,13 @@
         // NEW: Create a new test attempt in Firestore
         totalCorrect = 0;
         totalAttempted = 0;
-        currentTestAttemptId = db.collection('thelo-test-results').doc().id; // Generate a random ID
+        currentTestAttemptId = db.collection('artifacts').doc().id; // Generate a random ID
         
         try {
-            const attemptDocRef = db.collection('thelo-test-results').doc(user.uid)
-                                  .collection('attempts').doc(currentTestAttemptId);
+            // UPDATED PATH: Using artifacts/{appId}/users/{userId}/...
+            const attemptDocRef = db.collection('artifacts').doc(appId)
+                                  .collection('users').doc(userId)
+                                  .collection('thelo-test-results').doc(currentTestAttemptId);
             
             attemptDocRef.set({
                 testName: currentTestName,
@@ -668,8 +671,7 @@
         submitBtn.disabled = true;
         submitBtn.textContent = texts.checking;
         
-        const user = auth.currentUser;
-        if (!user || !currentTestAttemptId) {
+        if (!userId || !currentTestAttemptId) {
             alert("You must be signed in and have started a test.");
             submitBtn.disabled = false;
             updateAllUITexts();
@@ -711,9 +713,10 @@
             const result = await analyzeMathDrawing(payload);
             const { status, feedback } = result.data;
 
-            // NEW: Save result directly to Firestore
-            const solutionDocRef = db.collection('thelo-test-results').doc(user.uid)
-                                     .collection('attempts').doc(currentTestAttemptId)
+            // UPDATED PATH: Using artifacts/{appId}/users/{userId}/...
+            const solutionDocRef = db.collection('artifacts').doc(appId)
+                                     .collection('users').doc(userId)
+                                     .collection('thelo-test-results').doc(currentTestAttemptId)
                                      .collection('solutions').doc(String(currentStageIndex));
             
             await solutionDocRef.set({
@@ -752,10 +755,11 @@
         const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
         
         // Update the main attempt document in Firestore
-        const user = auth.currentUser;
-        if (user && currentTestAttemptId) {
-            const attemptDocRef = db.collection('thelo-test-results').doc(user.uid)
-                                  .collection('attempts').doc(currentTestAttemptId);
+        if (userId && currentTestAttemptId) {
+            // UPDATED PATH: Using artifacts/{appId}/users/{userId}/...
+            const attemptDocRef = db.collection('artifacts').doc(appId)
+                                  .collection('users').doc(userId)
+                                  .collection('thelo-test-results').doc(currentTestAttemptId);
             
             attemptDocRef.update({
                 status: 'completed',
@@ -941,24 +945,62 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         updateAllUITexts(); // Set initial button text
-        auth.onAuthStateChanged(user => {
+
+        // NEW: Initialize Firebase from environment
+        const hardcodedConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", projectId: "physmathacademy-722b3", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
+        
+        let firebaseConfigToUse;
+        if (typeof __firebase_config !== 'undefined') {
+            firebaseConfigToUse = JSON.parse(__firebase_config);
+            console.log("Initialized Firebase with environment config.");
+        } else {
+            firebaseConfigToUse = hardcodedConfig;
+            console.log("Initialized Firebase with hardcoded config.");
+        }
+        
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfigToUse);
+        }
+
+        // Assign global instances
+        auth = firebase.auth();
+        db = firebase.firestore();
+        functions = firebase.functions();
+        
+        // Set log level for debugging
+        firebase.firestore.setLogLevel('debug');
+
+        // NEW: Add Auth logic from instructions
+        auth.onAuthStateChanged(async (user) => {
             if (user) {
-                console.log("User is signed in:", user.uid);
-                initApp();
+                userId = user.uid; // Set global userId
+                console.log("User is signed in:", userId);
             } else {
-                console.log("User is not signed in. Attempting anonymous sign-in.");
-                auth.signInAnonymously()
-                    .then(() => {
-                        console.log("Signed in anonymously.");
-                        initApp();
-                    })
-                    .catch((error) => {
-                        console.error("Error signing in anonymously:", error);
-                        alert("Authentication is required to take tests. Please refresh and try again.");
-                    });
+                console.log("User is not signed in. Attempting auth...");
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await auth.signInAnonymously();
+                    }
+                    userId = auth.currentUser?.uid;
+                    console.log("Signed in. UserID:", userId);
+                } catch (error) {
+                    console.error("Error signing in:", error);
+                    alert("Authentication failed. Please refresh and try again.");
+                    return;
+                }
             }
+            
+            // Set global appId
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            console.log("AppID:", appId);
+
+            // Now that auth is ready, init the app
+            initApp();
         });
     });
 </script>
 </body>
 </html>
+
