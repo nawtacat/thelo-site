@@ -20,95 +20,274 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
 <style>
-    /*--- NEW: Flat Design System ---*/
-    :root {
-        --thelo-blue: #2563eb;
-        --thelo-bg: #ffffff;
-        --thelo-text: #111827;
-        --thelo-text-light: #6b7280;
-        --thelo-border: #d1d5db; /* Slightly darker for better contrast */
-        --success-green: #16a34a;
-        --error-red: #dc2626;
-        --accent-yellow: #f59e0b;
-        --subtle-bg: #f9fafb;
-        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  /* ===== NEW: Updated Design System ===== */
+  :root {
+    /* Core Palette */
+    --thelo-blue: #2563eb;
+    --thelo-blue-dark: #1d4ed8;
+    --thelo-bg: #ffffff;
+    --thelo-text: #111827;
+    --thelo-text-light: #6b7280;
+    --thelo-border: #e5e7eb;
+
+    /* Status Colors */
+    --success-green: #22c55e;
+    --error-red: #ef4444;
+    --accent-yellow: #f59e0b;
+
+    /* UI Element Colors */
+    --bg-white: #ffffff;
+    --chat-ai-bg: #ffffff;
+    --bg-light-gray: #f9fafb;
+
+    /* Ink Colors */
+    --ink-black: #000000;
+    --ink-blue: var(--thelo-blue);
+
+    /* Effects */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+    /* Transitions */
+    --fade-duration: 0.3s;
+    --animation-duration: 0.3s;
+  }
+
+  /* ===== NEW: Armenian Font Definitions ===== */
+  @font-face {
+    font-family: 'Montserrat Arm';
+    src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype');
+    font-weight: 400; /* Regular */
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Montserrat Arm';
+    src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf') format('opentype');
+    font-weight: 600; /* SemiBold */
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Montserrat Arm';
+    src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf') format('opentype');
+    font-weight: 800; /* ExtraBold */
+    font-style: normal;
+    font-display: swap;
+  }
+
+  /* Rule to apply the Armenian font when needed */
+  body.lang-hy {
+    font-family: 'Montserrat Arm', 'Manrope', system-ui, -apple-system, sans-serif;
+  }
+
+  #loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--thelo-bg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+  }
+  #loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  #loading-svg {
+    width: 150px;
+    height: auto;
+    animation: pulse-loader 1.5s infinite ease-in-out;
+  }
+  @keyframes pulse-loader {
+    0% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.8; }
+  }
+  html {
+    font-size: 16px;
+    background: var(--thelo-bg);
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    height: 100vh;
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+    font-weight: 400;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--thelo-bg);
+    color: var(--thelo-text);
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #app { display: flex; flex-grow: 1; height: 100%; }
+  #lessonArea {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #boardWrap {
+    position: relative;
+    flex-grow: 1;
+    overflow: hidden;
+    background-color: var(--thelo-bg);
+    background-image: linear-gradient(to right, var(--thelo-border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--thelo-border) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  #backgroundCanvas,
+  #board {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    background-color: transparent;
+  }
+  #backgroundCanvas {
+    z-index: 1;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity var(--fade-duration) ease-in-out;
+  }
+  #backgroundCanvas.fade-out {
+    opacity: 0;
+  }
+  #board {
+    z-index: 3;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  #bottomBar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: transparent;
+    box-sizing: border-box;
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 20;
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  #button-group {
+      display: flex;
+      gap: 0.2rem; /* MODIFIED: Buttons are closer */
+  }
+  .control-btn {
+    font-family: inherit;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: none;
+    border-radius: 0.5rem;
+    color: var(--bg-white);
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
+    box-shadow: var(--shadow-md);
+    touch-action: manipulation;
+  }
+  .control-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+  .control-btn:disabled {
+    background-color: #9ca3af !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  #prevBtn { background-color: var(--accent-yellow); }
+  #clearBtn { background-color: var(--error-red); }
+  #submitBtn { background-color: var(--thelo-blue); }
+  #submitBtn:hover:not(:disabled) { background-color: var(--thelo-blue-dark); }
+
+  .bar-hidden-by-stylus {
+    transform: translateY(150%);
+    pointer-events: none;
+  }
+  
+  /* ===== MODIFIED: Hide cursor globally ===== */
+  html, body {
+    cursor: none !important;
+  }
+  .no-cursor {
+    cursor: none !important;
+  }
+  
+  #bottom-logo-container {
+    position: fixed;
+    bottom: 1.25rem; /* MODIFIED: Logo is raised slightly */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    pointer-events: none;
+  }
+  #bottom-logo-container img {
+    display: block;
+    height: 35px;
+    width: auto;
+  }
+  #timerDisplay {
+    background-color: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 0.5rem 1.25rem;
+    border-radius: 999px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--thelo-text);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--thelo-border);
+  }
+
+ /* ===== REMOVED: Results Screen Styling ===== */
+
+  @media (max-width: 768px) {
+    #bottomBar {
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1rem;
     }
+    .control-btn {
+      padding: 0.6rem 0.8rem;
+      font-size: 0.8rem;
+    }
+  }
 
-    @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype'); font-weight: 400; }
-    body.lang-hy { font-family: 'Montserrat Arm', 'Manrope', system-ui, sans-serif; }
-    
-    html { font-size: 16px; background: var(--thelo-bg); }
-    body { margin: 0; height: 100vh; font-family: 'Manrope', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; color: var(--thelo-text); user-select: none; -webkit-user-select: none; }
-    
-    #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.3s ease-out; }
-    #loading-overlay.visible { opacity: 1; pointer-events: auto; }
-    #loading-svg { width: 120px; height: auto; animation: pulse-loader 1.5s infinite ease-in-out; }
-    #loading-text { font-weight: 500; font-size: 1.1rem; margin-top: 1rem; color: var(--thelo-text); }
-    @keyframes pulse-loader { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; } }
-
-    #app { display: flex; flex-grow: 1; height: 100%; }
-    #lessonArea { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; overflow: hidden; }
-    #boardWrap { position: relative; flex-grow: 1; background-color: var(--thelo-bg); background-image: linear-gradient(to right, var(--thelo-border) 1px, transparent 1px), linear-gradient(to bottom, var(--thelo-border) 1px, transparent 1px); background-size: 40px 40px; }
-    #backgroundCanvas, #board { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: transparent; }
-    #backgroundCanvas { z-index: 1; pointer-events: none; opacity: 1; transition: opacity 0.3s ease-in-out; }
-    #backgroundCanvas.fade-out { opacity: 0; }
-    #board { z-index: 3; cursor: crosshair; touch-action: none; }
-    
-    #bottomBar { position: absolute; bottom: 0; left: 0; width: 100%; background: transparent; box-sizing: border-box; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; z-index: 20; }
-    #button-group { display: flex; gap: 0.5rem; }
-    .control-btn { font-family: inherit; padding: 0.6rem 1.2rem; font-size: 1rem; font-weight: 600; border: none; border-radius: 0.5rem; color: white; cursor: pointer; transition: all 0.2s; touch-action: manipulation; box-shadow: var(--shadow-md); }
-    .control-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
-    .control-btn:disabled { background-color: #9ca3af !important; cursor: not-allowed; opacity: 0.8; transform: none; box-shadow: none; }
-    #prevBtn { background-color: #6b7280; }
-    #unsureBtn { background-color: var(--accent-yellow); }
-    #clearBtn { background-color: var(--error-red); }
-    #submitBtn, #reviewAnswersBtn, #reviewBackBtn { background-color: var(--thelo-blue); }
-    #timerDisplay { background: var(--thelo-bg); padding: 0.5rem 1.25rem; font-size: 1.2rem; font-weight: 700; border: 2px solid var(--thelo-border); border-radius: 999px; }
-    
-    .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; background-color: var(--thelo-bg); display: none; flex-direction: column; align-items: center; padding: 2rem; box-sizing: border-box; }
-    .screen.visible { display: flex; }
-    .screen-container { width: 100%; max-width: 800px; text-align: center; }
-    .screen-header { border-bottom: 2px solid var(--thelo-border); padding-bottom: 1.5rem; margin-bottom: 1.5rem; }
-    #resultsScore { font-size: 2.5rem; font-weight: 800; color: var(--thelo-blue); }
-    #resultsTime { font-size: 1.2rem; color: var(--thelo-text-light); }
-    
-    #navToggleBtn { position: fixed; top: 20px; right: 20px; z-index: 1001; background-color: var(--thelo-blue); color: white; border: none; border-radius: 0.5rem; width: 50px; height: 50px; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); }
-    #navPanel { position: fixed; top: 0; right: -320px; width: 300px; height: 100%; background: var(--subtle-bg); z-index: 1000; transition: right 0.3s ease-in-out; display: flex; flex-direction: column; border-left: 2px solid var(--thelo-border); }
-    #navPanel.open { right: 0; }
-    #navPanel h3 { padding: 1rem; margin: 0; border-bottom: 2px solid var(--thelo-border); text-align: center; }
-    #navGrid, .nav-grid-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(45px, 1fr)); gap: 10px; padding: 10px; }
-    .nav-item { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 2px solid var(--thelo-border); border-radius: 50%; }
-    .nav-item.unanswered { background-color: #e5e7eb; color: #6b7280; }
-    .nav-item.answered { background-color: var(--success-green); color: white; border-color: var(--success-green); }
-    .nav-item.unsure { background-color: var(--accent-yellow); color: white; border-color: var(--accent-yellow); }
-    .nav-item.correct { background-color: var(--success-green); color: white; border-color: var(--success-green); }
-    .nav-item.incorrect { background-color: var(--error-red); color: white; border-color: var(--error-red); }
-    .nav-item.current { transform: scale(1.1); border-color: var(--thelo-blue); }
-    
-    #notesPanel { position: fixed; bottom: 90px; right: 20px; width: 300px; height: 40%; background: white; z-index: 1002; display: none; flex-direction: column; border: 2px solid var(--thelo-border); border-radius: 0.5rem; box-shadow: var(--shadow-lg); }
-    #notesPanel.open { display: flex; }
-    .notes-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background-color: var(--subtle-bg); border-bottom: 2px solid var(--thelo-border); }
-    .notes-header h4 { margin: 0; }
-    #closeNotesBtn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--thelo-text-light); }
-    #notesInput { flex-grow: 1; border: none; padding: 1rem; font-family: inherit; font-size: 1rem; resize: none; border-radius: 0 0 0.5rem 0.5rem;}
-    #notesInput:focus { outline: none; }
-    
-    #reviewContainer { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 1.5rem; width: 100%; max-width: 1200px; height: calc(100vh - 160px); }
-    #reviewHeader { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; }
-    #reviewStudentSolution, #reviewCorrectSolution { border: 2px solid var(--thelo-border); padding: 1rem; overflow-y: auto; border-radius: 0.5rem; text-align: left;}
-    #reviewStudentSolution h4, #reviewCorrectSolution h4 { margin-top: 0; }
-    #reviewStudentDrawing { max-width: 100%; border: 1px solid #ccc; display: block; margin-top: 1rem; margin-bottom: 1rem; }
-    #reviewStudentNotes { background-color: #fefce8; padding: 0.5rem; white-space: pre-wrap; word-wrap: break-word; border-radius: 0.5rem; }
-    #reviewNav { position: absolute; bottom: 2rem; width: 100%; display: flex; justify-content: center; gap: 1rem; }
+  @media (min-width: 769px) and (max-width: 1200px) and (pointer: coarse) {
+    #boardWrap {
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+  }
 </style>
 </head>
 <body>
     <div id="loading-overlay">
         <img id="loading-svg" src="https://thelo.space/img/bluethelo.svg" alt="Loading...">
-        <p id="loading-text"></p>
     </div>
-
     <div id="app">
         <div id="lessonArea">
             <div id="boardWrap">
@@ -118,63 +297,16 @@
             <div id="bottomBar">
                 <div id="timerDisplay">00:00</div>
                 <div id="button-group">
-                    <button id="prevBtn" class="control-btn" title="Previous Question (←)"></button>
+                    <button id="prevBtn" class="control-btn"></button>
                     <button id="clearBtn" class="control-btn"></button>
-                    <button id="unsureBtn" class="control-btn" title="Mark as Unsure (U)"></button>
-                    <button id="submitBtn" class="control-btn" title="Next Question (→)"></button>
+                    <button id="submitBtn" class="control-btn"></button>
                 </div>
             </div>
         </div>
-        
-        <button id="navToggleBtn" title="Toggle Problem List">☰</button>
-        <div id="navPanel">
-            <h3 id="navHeader"></h3>
-            <div id="navGrid"></div>
-        </div>
-        
-        <div id="notesPanel">
-            <div class="notes-header">
-                <h4 id="notesHeader"></h4>
-                <button id="closeNotesBtn" title="Close Notes">&times;</button>
-            </div>
-            <textarea id="notesInput" placeholder="..."></textarea>
-        </div>
+    </div>
 
-        <div id="resultsOverviewScreen" class="screen">
-            <div class="screen-container">
-                <div class="screen-header">
-                    <h1 id="resultsHeaderTitle"></h1>
-                    <div id="resultsScore"></div>
-                    <div id="resultsTime"></div>
-                </div>
-                <div id="resultsNavGrid" class="nav-grid-results"></div>
-                <button id="reviewAnswersBtn" class="control-btn" style="margin-top: 2rem;"></button>
-            </div>
-        </div>
-
-        <div id="reviewScreen" class="screen">
-             <div id="reviewContainer">
-                <div id="reviewHeader"> 
-                    <h2 id="reviewProblemTitle"></h2> 
-                    <button id="reviewBackBtn" class="control-btn"></button>
-                </div>
-                <div id="reviewStudentSolution">
-                    <h4 id="reviewYourSolutionHeader"></h4>
-                    <img id="reviewStudentDrawing" src="" alt="Your drawing">
-                    <h4 id="reviewYourNotesHeader"></h4>
-                    <p id="reviewStudentNotes"></p>
-                </div>
-                <div id="reviewCorrectSolution">
-                    <h4 id="reviewAIHeader"></h4>
-                    <p id="reviewAIFeedback"></p>
-                    <p><strong><span id="reviewCorrectAnswerHeader"></span></strong> <span id="reviewCorrectAnswer"></span></p>
-                </div>
-            </div>
-            <div id="reviewNav">
-                <button id="reviewPrevBtn" class="control-btn"></button>
-                <button id="reviewNextBtn" class="control-btn"></button>
-            </div>
-        </div>
+    <div id="bottom-logo-container">
+        <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo Logo">
     </div>
 
 <script>
@@ -182,355 +314,537 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
-    const functions = firebase.functions();
 
-    const dom = {
-        loadingOverlay: document.getElementById('loading-overlay'), loadingText: document.getElementById('loading-text'),
-        backgroundCanvas: document.getElementById('backgroundCanvas'), canvas: document.getElementById('board'),
-        prevBtn: document.getElementById('prevBtn'), submitBtn: document.getElementById('submitBtn'),
-        clearBtn: document.getElementById('clearBtn'), unsureBtn: document.getElementById('unsureBtn'),
-        timerDisplay: document.getElementById('timerDisplay'), lessonArea: document.getElementById('lessonArea'),
-        navToggleBtn: document.getElementById('navToggleBtn'), navPanel: document.getElementById('navPanel'),
-        navGrid: document.getElementById('navGrid'), navHeader: document.getElementById('navHeader'),
-        notesPanel: document.getElementById('notesPanel'), notesInput: document.getElementById('notesInput'),
-        notesHeader: document.getElementById('notesHeader'), closeNotesBtn: document.getElementById('closeNotesBtn'),
-        resultsOverviewScreen: document.getElementById('resultsOverviewScreen'), reviewScreen: document.getElementById('reviewScreen'),
-        reviewAnswersBtn: document.getElementById('reviewAnswersBtn'), reviewBackBtn: document.getElementById('reviewBackBtn')
-    };
-    const bgCtx = dom.backgroundCanvas.getContext('2d');
-    const ctx = dom.canvas.getContext('2d');
+    /* ========== DOM Elements ========== */
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const backgroundCanvas = document.getElementById('backgroundCanvas');
+    const canvas = document.getElementById('board');
+    const boardWrapper = document.getElementById('boardWrap');
+    const prevBtn = document.getElementById('prevBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const bottomBar = document.getElementById('bottomBar');
+    const bgCtx = backgroundCanvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
 
-    let state = { testData: null, problemStates: [], currentStageIndex: 0, testStartTime: null, timerInterval: null, isTransitioning: false, isDrawing: false, currentLang: 'en', finalResults: [] };
-    
+    // ===== REMOVED: Result Screen DOM Elements =====
+
+
+    /* ========== State Variables ========== */
+    let testData = null;
+    let currentStageIndex = -1;
+    // let currentDetailIndex = -1; // REMOVED
+    let currentStageData = null;
+    let drawing = false;
+    let lastPos = { x: 0, y: 0 };
+    let userDrawingOccurred = false;
+    let isTransitioning = false;
+    let devicePixelRatio = window.devicePixelRatio || 1;
+    let timerInterval = null;
+    let testStartTime = null;
+    let testResults = [];
+    let isTabletMode = false;
+    let buttonVanishTimer = null;
+    let currentLang = 'en';
+
+    /* ========== UI Text (Cleaned) ========== */
     const UI_TEXT = {
-        en: { start: "Start Test", submit: "Next", prev: "Previous", clear: "Clear", testComplete: "Test Complete!", score: "Score:", timeTaken: "Time Taken:", question: "Question", finishTest: "Finish Test", unsure: "I'm Unsure", reviewAnswers: "Review Answers", analyzing: "Analyzing your answers...", problems: "Problems", myNotes: "My Notes", notesPlaceholder: "Type your notes here...", backToOverview: "Back to Overview", yourSolution: "Your Solution", yourNotes: "Your Notes", aiFeedback: "AI Feedback & Correct Answer", correctAnswer: "Correct Answer:", reviewPrev: "← Previous", reviewNext: "Next →" },
-        hy: { start: "Սկսել թեստը", submit: "Հաջորդը", prev: "Նախորդ", clear: "Մաքրել", testComplete: "Թեստն ավարտված է", score: "Միավոր:", timeTaken: "Ժամանակ:", question: "Հարց", finishTest: "Ավարտել թեստը", unsure: "Վստահ չեմ", reviewAnswers: "Դիտել պատասխանները", analyzing: "Վերլուծվում են պատասխանները...", problems: "Խնդիրներ", myNotes: "Իմ նշումները", notesPlaceholder: "Գրեք ձեր նշումները այստեղ․․․", backToOverview: "Վերադառնալ", yourSolution: "Ձեր լուծումը", yourNotes: "Ձեր նշումները", aiFeedback: "ԱԲ-ի վերլուծություն և ճիշտ պատասխան", correctAnswer: "Ճիշտ պատասխան՝", reviewPrev: "← Նախորդ", reviewNext: "Հաջորդ →" }
+        en: {
+            start: "Start Test",
+            submit: "Submit Answer",
+            checking: "Checking...",
+            prev: "Previous",
+            clear: "Clear",
+            testComplete: "Test Complete! Your results have been saved.",
+            provideSolution: "Please provide a solution before submitting.",
+            question: "Question",
+            analysisError: "Could not submit for analysis.",
+        },
+        hy: {
+            start: "Սկսել թեստը",
+            submit: "Ուղարկել",
+            checking: "Ստուգվում է...",
+            prev: "Նախորդ",
+            clear: "Մաքրել",
+            testComplete: "Թեստն ավարտված է։ Ձեր արդյունքները պահպանված են։",
+            provideSolution: "Խնդրում ենք լուծումը գրել նոր ուղարկել։",
+            question: "Հարց",
+            analysisError: "Չհաջողվեց ուղարկել վերլուծության։",
+        }
     };
-    
-    async function renderComplexHeadline(headline) {
-        bgCtx.clearRect(0, 0, dom.backgroundCanvas.width, dom.backgroundCanvas.height);
-        bgCtx.font = `bold 24px '${state.currentLang === 'hy' ? "Montserrat Arm" : "Manrope"}'`;
-        bgCtx.fillStyle = '#111827';
-        bgCtx.textAlign = 'center';
+    // ===================================================================
+    //  KaTeX and Headline Rendering Functions (Unchanged)
+    // ===================================================================
+    let katexCSSInlined = null;
 
-        const dpr = window.devicePixelRatio || 1;
-        const canvasWidth = dom.backgroundCanvas.width / dpr;
-        const maxWidth = canvasWidth * 0.9;
-        const words = headline.split(' ');
-        let line = '';
-        let y = 65;
+    function abToBase64(ab) {
+        const CHUNK = 0x8000;
+        const bytes = new Uint8Array(ab);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+        }
+        return btoa(binary);
+    }
 
-        for (let n = 0; n < words.length; n++) {
-            const testLine = line + words[n] + ' ';
-            const metrics = bgCtx.measureText(testLine);
-            const testWidth = metrics.width;
-            if (testWidth > maxWidth && n > 0) {
-                bgCtx.fillText(line, canvasWidth / 2, y);
-                line = words[n] + ' ';
-                y += 30; // Line height
-            } else {
-                line = testLine;
+    async function getKatexCSSWithEmbeddedFonts() {
+        if (katexCSSInlined) return katexCSSInlined;
+        const base = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist';
+        let css = await (await fetch(`${base}/katex.min.css`)).text();
+        const fonts = ['KaTeX_Main-Regular.woff2', 'KaTeX_Main-Italic.woff2', 'KaTeX_Main-Bold.woff2', 'KaTeX_Math-Italic.woff2', 'KaTeX_AMS-Regular.woff2', 'KaTeX_Size1-Regular.woff2', 'KaTeX_Size2-Regular.woff2'];
+        for (const name of fonts) {
+            const url = `${base}/fonts/${name}`;
+            const res = await fetch(url);
+            const b64 = abToBase64(await res.arrayBuffer());
+            const dataURL = `url(data:font/woff2;base64,${b64}) format("woff2")`;
+            css = css.replace(new RegExp(`url\\([^)]*${name}[^)]*\\)\\s*format\\("woff2"\\)`, 'g'), dataURL);
+        }
+        katexCSSInlined = css;
+        return katexCSSInlined;
+    }
+
+    async function ensureHeadlineFontsLoaded() {
+        try {
+            if (document.fonts && document.fonts.load) {
+                await Promise.race([
+                    (async () => {
+                        await document.fonts.load(`24px "Manrope"`);
+                        if (currentLang === 'hy') {
+                            await document.fonts.load(`24px "Montserrat Arm"`);
+                        }
+                        await document.fonts.ready;
+                    })(),
+                    new Promise(res => setTimeout(res, 800))
+                ]);
+            }
+        } catch (_) {}
+    }
+
+    async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
+        if (!headline || !bgCtx) return;
+        const widthFraction = 0.88, yNudge = -14, fontSize = 24, mathFontSize = 26;
+        const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
+        const katexCSS = await getKatexCSSWithEmbeddedFonts();
+        const extraRules = `.katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }`;
+        const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || []).filter(Boolean).map(p => p.startsWith('/K') && p.endsWith('K/') ? { type: 'math', content: p.replace(/^\/K\s*/, '').replace(/\s*K\/$/, '') } : { type: 'text', content: p });
+        const measureHost = document.createElement('div');
+        measureHost.style.cssText = 'position:absolute;visibility:hidden;left:-9999px;top:-9999px;';
+        document.body.appendChild(measureHost);
+        const tokens = [];
+        for (const seg of segments) {
+            if (seg.type === 'text') {
+                const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
+                for (const p of parts) {
+                    tokens.push({ type: 'text', content: p, width: bgCtx.measureText(p).width, height: fontSize, isSpace: /^\s+$/.test(p) });
+                }
+                continue;
+            }
+            try {
+                const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
+                const style = document.createElement('style'); style.textContent = katexCSS; measureHost.appendChild(style);
+                const tmp = document.createElement('div'); tmp.style.color = fontColor; tmp.style.fontSize = `${mathFontSize}px`; tmp.innerHTML = html; measureHost.appendChild(tmp);
+                const rect = (tmp.querySelector('.katex') || tmp).getBoundingClientRect();
+                tmp.remove();
+                const PAD = 2; const w = Math.ceil(rect.width) + PAD; const h = Math.ceil(rect.height) + PAD;
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><style>${katexCSS}\n${extraRules}</style><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;padding-right:${PAD/2}px;">${html}</div></foreignObject></svg>`;
+                const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+                const image = new Image(); image.src = dataUrl; await image.decode();
+                tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
+            } catch (e) {
+                tokens.push({ type: 'text', content: seg.content, width: bgCtx.measureText(seg.content).width, height: fontSize, isSpace: false });
             }
         }
-        bgCtx.fillText(line, canvasWidth / 2, y);
+        measureHost.remove();
+        const canvasW = bgCtx.canvas.width / devicePixelRatio;
+        const maxWidth = canvasW * widthFraction;
+        const lines = []; let line = { tokens: [], width: 0, height: fontSize };
+        for (const t of tokens) {
+            let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
+            if (t.type === 'math' && width > maxWidth) { const s = maxWidth / width; width = Math.floor(width * s); height = Math.floor(height * s); drawW *= s; drawH *= s; }
+            const tok = { ...t, width, height, drawW, drawH };
+            if (line.tokens.length && line.width + width > maxWidth) { lines.push(line); line = { tokens: [], width: 0, height: fontSize }; }
+            if (!(line.tokens.length === 0 && tok.isSpace)) { line.tokens.push(tok); line.width += width; if (height > line.height) line.height = height; }
+        }
+        if (line.tokens.length) lines.push(line);
+        const prevAlign = bgCtx.textAlign; const prevBase = bgCtx.textBaseline; const prevFill = bgCtx.fillStyle;
+        bgCtx.fillStyle = fontColor; bgCtx.textAlign = 'left'; bgCtx.textBaseline = 'top';
+        let curY = y + yNudge;
+        for (const L of lines) {
+            let x = (canvasW - L.width) / 2;
+            for (const t of L.tokens) {
+                const topY = curY + (L.height - t.height) / 2;
+                if (t.type === 'text') bgCtx.fillText(t.content, x, topY); else bgCtx.drawImage(t.image, x, topY, t.drawW, t.drawH);
+                x += t.width;
+            }
+            curY += L.height + 8;
+        }
+        bgCtx.textAlign = prevAlign; bgCtx.textBaseline = prevBase; bgCtx.fillStyle = prevFill;
+    }
+    // ===================================================================
+    //  Main Application Logic
+    // ===================================================================
+    function getBoundingBox(ctx, padding = 20 * (window.devicePixelRatio || 1)) {
+        const canvas = ctx.canvas;
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        let minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1;
+        for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+                if (data[(y * canvas.width + x) * 4 + 3] > 0) {
+                    minX = Math.min(minX, x); minY = Math.min(minY, y);
+                    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+                }
+            }
+        }
+        if (maxX === -1) return null;
+        minX = Math.max(0, minX - padding); minY = Math.max(0, minY - padding);
+        maxX = Math.min(canvas.width, maxX + padding); maxY = Math.min(canvas.height, maxY + padding);
+        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
     async function loadTest(testJsonPath) {
-        showLoading(true);
+        isTransitioning = true;
         try {
             const response = await fetch(testJsonPath);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            state.testData = await response.json();
+            testData = await response.json();
+            if (!testData || !Array.isArray(testData.stages)) throw new Error("Invalid test format.");
             
-            state.currentLang = state.testData.lang === 'hy' ? 'hy' : 'en';
-            document.body.className = state.currentLang === 'hy' ? 'lang-hy' : '';
-            document.title = state.testData.testTitle || "thelo | Test Mode";
+            currentLang = testData.lang === 'hy' ? 'hy' : 'en';
+            document.body.className = currentLang === 'hy' ? 'lang-hy' : '';
 
-            state.problemStates = state.testData.stages.map(() => ({ status: 'unanswered', drawingDataUrl: null, notes: '' }));
-            
+            document.title = testData.testTitle || "thelo | Test Mode";
+            currentStageIndex = -1;
+            testResults = [];
             updateAllUITexts();
-            renderNavPanel();
-            await transitionToStage(0);
+            submitBtn.disabled = false;
+            prevBtn.disabled = true;
         } catch (error) {
             console.error("Error loading test:", error);
-            alert("Failed to load the test file.");
+            alert("Failed to load the test file. Please check the console for details.");
         } finally {
-            showLoading(false);
+            isTransitioning = false;
+            loadingOverlay.classList.add('hidden');
         }
     }
 
     function startTest() {
-        if (state.testStartTime) return;
-        state.testStartTime = Date.now();
-        state.timerInterval = setInterval(updateTimerDisplay, 1000);
-        updateAllUITexts();
+        if (currentStageIndex !== -1) return;
+        testStartTime = Date.now();
+        timerInterval = setInterval(updateTimerDisplay, 1000);
+        transitionToStage(0);
     }
-    
-    function handleNavigation(newIndex) {
-        if (state.isTransitioning || newIndex < 0 || newIndex >= state.testData.stages.length) return;
-        if (state.testStartTime) saveCurrentProblemState();
-        transitionToStage(newIndex);
-    }
-    
-    async function transitionToStage(index) {
-        state.isTransitioning = true;
-        dom.backgroundCanvas.classList.add('fade-out');
-        await new Promise(resolve => setTimeout(resolve, 300));
-        state.currentStageIndex = index;
-        await renderStageUI(index);
-        dom.backgroundCanvas.classList.remove('fade-out');
-        state.isTransitioning = false;
-    }
-    
-    async function renderStageUI(index) {
-        const problemState = state.problemStates[index];
-        const stageData = state.testData.stages[index];
-        const texts = UI_TEXT[state.currentLang];
-        const headlineText = `${texts.question} ${index + 1}: ${stageData.headline || ''}`;
-        await renderComplexHeadline(headlineText);
-        
-        clearUserCanvas();
-        if (problemState.drawingDataUrl) {
-            const img = new Image();
-            await new Promise(resolve => {
-                img.onload = () => { ctx.drawImage(img, 0, 0, dom.canvas.width / (window.devicePixelRatio || 1), dom.canvas.height / (window.devicePixelRatio || 1)); resolve(); };
-                img.src = problemState.drawingDataUrl;
-            });
-        }
-        
-        dom.notesInput.value = problemState.notes;
-        updateAllUITexts();
-        renderNavPanel();
-    }
-    
-    function saveCurrentProblemState() {
-        const problemState = state.problemStates[state.currentStageIndex];
-        if (!isCanvasBlank()) {
-            problemState.drawingDataUrl = dom.canvas.toDataURL();
-            if (problemState.status === 'unanswered') {
-                problemState.status = 'answered';
-            }
-        }
-        problemState.notes = dom.notesInput.value;
-    }
-    
-    async function finishTest() {
-        saveCurrentProblemState(); // Save the very last problem
-        clearInterval(state.timerInterval);
-        showLoading(true, UI_TEXT[state.currentLang].analyzing);
-        dom.lessonArea.style.display = 'none';
-        dom.navPanel.classList.remove('open');
-        dom.navToggleBtn.style.display = 'none';
-        dom.notesPanel.classList.remove('open');
 
-        const analysisPromises = state.problemStates.map((ps, index) => {
-            const stageData = state.testData.stages[index];
-            const resultShell = {
-                ...ps,
-                question: stageData.headline,
-                correctAnswer: stageData.correctAnswer,
-                feedback: "Not answered.",
-                status: ps.status,
+    function updateTimerDisplay() {
+        if (!testStartTime) return;
+        const elapsed = Math.floor((Date.now() - testStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+        const seconds = (elapsed % 60).toString().padStart(2, '0');
+        timerDisplay.textContent = `${minutes}:${seconds}`;
+    }
+
+    async function renderStageUI(index) {
+        if (index < 0 || index >= testData.stages.length) return;
+        currentStageData = testData.stages[index];
+        currentStageIndex = index;
+        bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+        clearUserCanvas();
+        const headlineText = `${UI_TEXT[currentLang].question} ${index + 1}: ${currentStageData.headline || ''}`;
+        if (headlineText && bgCtx.canvas.width > 0) {
+            const baseFont = currentLang === 'hy' ? "Montserrat Arm" : "Manrope";
+            bgCtx.font = `24px '${baseFont}', system-ui, sans-serif`;
+            await ensureHeadlineFontsLoaded();
+            await renderComplexHeadline(bgCtx, headlineText, 65);
+        }
+        prevBtn.disabled = index === 0;
+        submitBtn.disabled = false;
+        updateAllUITexts();
+        userDrawingOccurred = false;
+    }
+
+    function transitionToStage(newIndex) {
+        if (isTransitioning) return;
+        if (newIndex >= testData.stages.length) {
+            finishTest();
+            return;
+        }
+        isTransitioning = true;
+        backgroundCanvas.classList.add('fade-out');
+        setTimeout(() => {
+            renderStageUI(newIndex).then(() => {
+                backgroundCanvas.classList.remove('fade-out');
+                isTransitioning = false;
+            });
+        }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000);
+    }
+
+    async function handleSubmitClick() {
+        if (currentStageIndex === -1) {
+            startTest();
+            return;
+        }
+        if (!userDrawingOccurred) {
+            alert(UI_TEXT[currentLang].provideSolution);
+            return;
+        }
+        const texts = UI_TEXT[currentLang] || UI_TEXT.en;
+        submitBtn.disabled = true;
+        submitBtn.textContent = texts.checking;
+        const user = auth.currentUser;
+        if (!user) {
+            alert("You must be signed in to submit a test.");
+            submitBtn.disabled = false;
+            updateAllUITexts();
+            return;
+        }
+        let base64ImageData;
+        try {
+            const box = getBoundingBox(ctx);
+            if (!box) throw new Error("No drawing found to capture.");
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = box.width;
+            cropCanvas.height = box.height;
+            const cropCtx = cropCanvas.getContext('2d');
+            cropCtx.fillStyle = '#FFFFFF';
+            cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+            cropCtx.drawImage(canvas, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+            base64ImageData = cropCanvas.toDataURL("image/png");
+        } catch (e) {
+            console.error("Image capture error:", e);
+            alert("Error capturing your solution. Please ensure something is drawn.");
+            submitBtn.disabled = false;
+            updateAllUITexts();
+            return;
+        }
+        try {
+            const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+            
+            const payload = {
+                imageBase64: base64ImageData,
+                problemText: currentStageData.headline || "A math problem.",
+                correctAnswer: String(currentStageData.correctAnswer),
+                language: currentLang,
+                solutionSteps: currentStageData.solutionSteps || "", 
+                customInstructions: currentStageData.customInstructions || ""
             };
 
-            if (!ps.drawingDataUrl) {
-                return Promise.resolve(resultShell);
-            }
-
-            const analyze = functions.httpsCallable("analyzeMathDrawing");
-            return analyze({
-                imageBase64: ps.drawingDataUrl,
-                problemText: stageData.headline,
-                correctAnswer: String(stageData.correctAnswer),
-                language: state.currentLang,
-            }).then(res => {
-                resultShell.feedback = res.data.feedback;
-                resultShell.status = res.data.status;
-                return resultShell;
-            }).catch(err => {
-                console.error(`Analysis failed for problem ${index + 1}:`, err);
-                resultShell.feedback = "Analysis failed for this problem.";
-                resultShell.status = "incorrect";
-                return resultShell;
+            const result = await analyzeMathDrawing(payload);
+            const { status, feedback } = result.data;
+            testResults.push({
+                question: currentStageData.headline,
+                correctAnswer: currentStageData.correctAnswer,
+                solutionImage: base64ImageData,
+                status: status,
+                feedback: feedback,
             });
-        });
-
-        state.finalResults = await Promise.all(analysisPromises);
-        renderResultsOverview();
-        showLoading(false);
-    }
-
-    function renderResultsOverview() {
-        const texts = UI_TEXT[state.currentLang];
-        const correctAnswers = state.finalResults.filter(r => r.status === 'correct').length;
-        
-        document.getElementById('resultsHeaderTitle').textContent = texts.testComplete;
-        document.getElementById('resultsScore').textContent = `${texts.score} ${correctAnswers} / ${state.testData.stages.length}`;
-        document.getElementById('resultsTime').textContent = `${texts.timeTaken} ${dom.timerDisplay.textContent}`;
-        
-        const resultsNavGrid = document.getElementById('resultsNavGrid');
-        resultsNavGrid.innerHTML = '';
-        
-        state.finalResults.forEach((result, index) => {
-            const item = document.createElement('div');
-            item.textContent = index + 1;
-            item.className = `nav-item ${result.status}`;
-            item.onclick = () => renderReviewScreen(index);
-            resultsNavGrid.appendChild(item);
-        });
-        
-        dom.reviewAnswersBtn.onclick = () => renderReviewScreen(0);
-        dom.reviewScreen.classList.remove('visible');
-        dom.resultsOverviewScreen.classList.add('visible');
-    }
-
-    function renderReviewScreen(index) {
-        state.currentStageIndex = index; 
-        const texts = UI_TEXT[state.currentLang];
-        const resultData = state.finalResults[index];
-        if (!resultData) return;
-
-        document.getElementById('reviewProblemTitle').textContent = `${texts.question} ${index + 1}: ${resultData.question}`;
-        document.getElementById('reviewYourSolutionHeader').textContent = texts.yourSolution;
-        document.getElementById('reviewYourNotesHeader').textContent = texts.yourNotes;
-        document.getElementById('reviewAIHeader').textContent = texts.aiFeedback;
-        document.getElementById('reviewCorrectAnswerHeader').textContent = texts.correctAnswer;
-        
-        const drawingImg = document.getElementById('reviewStudentDrawing');
-        drawingImg.src = resultData.drawingDataUrl || '';
-        drawingImg.style.display = resultData.drawingDataUrl ? 'block' : 'none';
-        
-        document.getElementById('reviewStudentNotes').textContent = resultData.notes || "No notes taken.";
-        document.getElementById('reviewAIFeedback').textContent = resultData.feedback;
-        document.getElementById('reviewCorrectAnswer').textContent = resultData.correctAnswer;
-        
-        dom.resultsOverviewScreen.classList.remove('visible');
-        dom.reviewScreen.classList.add('visible');
-        
-        const reviewPrevBtn = document.getElementById('reviewPrevBtn');
-        const reviewNextBtn = document.getElementById('reviewNextBtn');
-        reviewPrevBtn.disabled = index === 0;
-        reviewNextBtn.disabled = index === state.finalResults.length - 1;
+            transitionToStage(currentStageIndex + 1);
+        } catch (error) {
+            console.error("AI analysis failed:", error);
+            alert(texts.analysisError);
+            submitBtn.disabled = false;
+            updateAllUITexts();
+        }
     }
     
-    function setupEventListeners() {
-        dom.submitBtn.onclick = () => {
-            if (!state.testStartTime) startTest();
-            else if (state.currentStageIndex === state.testData.stages.length - 1) finishTest();
-            else handleNavigation(state.currentStageIndex + 1);
-        };
-        dom.prevBtn.onclick = () => handleNavigation(state.currentStageIndex - 1);
-        dom.clearBtn.onclick = clearUserCanvas;
-        dom.unsureBtn.onclick = () => {
-            const problemState = state.problemStates[state.currentStageIndex];
-            if (problemState.status === 'unanswered' && isCanvasBlank()) return;
-            problemState.status = problemState.status === 'unsure' ? 'answered' : 'unsure';
-            renderNavPanel();
-        };
-        dom.navToggleBtn.onclick = () => dom.navPanel.classList.toggle('open');
-        dom.notesInput.oninput = () => { if (state.problemStates[state.currentStageIndex]) state.problemStates[state.currentStageIndex].notes = dom.notesInput.value; };
-        dom.closeNotesBtn.onclick = () => dom.notesPanel.classList.remove('open');
-        dom.reviewBackBtn.onclick = renderResultsOverview;
-        document.getElementById('reviewPrevBtn').onclick = () => renderReviewScreen(state.currentStageIndex - 1);
-        document.getElementById('reviewNextBtn').onclick = () => renderReviewScreen(state.currentStageIndex + 1);
-        
-        window.onkeydown = (e) => {
-            if (document.activeElement === dom.notesInput) return;
-            const key = e.key.toLowerCase();
-            if (key === 'a') { e.preventDefault(); dom.notesPanel.classList.toggle('open'); dom.notesInput.focus(); }
-            if (key === 'u') { e.preventDefault(); dom.unsureBtn.click(); }
-            if (key === 'arrowright') { e.preventDefault(); dom.submitBtn.click(); }
-            if (key === 'arrowleft') { e.preventDefault(); dom.prevBtn.click(); }
-        };
-        
-        dom.canvas.addEventListener('mousedown', handleDrawingStart);
-        dom.canvas.addEventListener('mousemove', handleDrawingMove);
-        window.addEventListener('mouseup', handleDrawingEnd);
-        dom.canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
-        dom.canvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
-        window.addEventListener('touchend', handleDrawingEnd);
+    // ===================================================================
+    //  MODIFIED: Simplified Test Finish Logic
+    // ===================================================================
 
-        window.addEventListener('resize', resizeAndRedraw);
+    function finishTest() {
+        clearInterval(timerInterval);
+        const timeTaken = Math.floor((Date.now() - testStartTime) / 1000);
+        document.getElementById('lessonArea').style.display = 'none';
+
+        const correctAnswers = testResults.filter(r => r.status === 'correct').length;
+        const totalQuestions = testData.stages.length;
+
+        // Backend submission logic
+        const user = auth.currentUser;
+        if (user) {
+            try {
+                const submitTestResults = firebase.functions().httpsCallable('submitTestResults');
+                submitTestResults({
+                    testId: new URLSearchParams(window.location.search).get('testFile')?.replace('.json', ''),
+                    score: correctAnswers,
+                    totalQuestions,
+                    timeTakenSeconds: timeTaken,
+                    results: testResults,
+                    language: currentLang
+                });
+                // REMOVED: .then() block that listened for feedback
+                console.log("Test results submission initiated.");
+
+            } catch (err) {
+                console.error("Error submitting test results:", err);
+            }
+        }
+        
+        // Show simple alert instead of results screen
+        alert(UI_TEXT[currentLang].testComplete);
+        
+        // Optional: redirect or reload
+        // window.location.reload(); 
     }
 
-    function updateAllUITexts() {
-        const texts = UI_TEXT[state.currentLang];
-        dom.prevBtn.textContent = texts.prev;
-        dom.clearBtn.textContent = texts.clear;
-        dom.unsureBtn.textContent = texts.unsure;
-        dom.navHeader.textContent = texts.problems;
-        dom.notesHeader.textContent = texts.myNotes;
-        dom.notesInput.placeholder = texts.notesPlaceholder;
-        dom.reviewAnswersBtn.textContent = texts.reviewAnswers;
-        dom.reviewBackBtn.textContent = texts.backToOverview;
-        document.getElementById('reviewPrevBtn').textContent = texts.reviewPrev;
-        document.getElementById('reviewNextBtn').textContent = texts.reviewNext;
-        
-        if (!state.testStartTime) dom.submitBtn.textContent = texts.start;
-        else if (state.currentStageIndex === state.testData.stages.length - 1) dom.submitBtn.textContent = texts.finishTest;
-        else dom.submitBtn.textContent = texts.submit;
-        
-        dom.prevBtn.disabled = !state.testStartTime || state.currentStageIndex === 0;
-    }
+    // ===== REMOVED: showDetailView, showSummaryView, listenForDetailedFeedback =====
 
-    function renderNavPanel() {
-        dom.navGrid.innerHTML = '';
-        state.problemStates.forEach((ps, index) => {
-            const item = document.createElement('div');
-            item.textContent = index + 1;
-            item.className = `nav-item ${ps.status}`;
-            if (index === state.currentStageIndex) item.classList.add('current');
-            item.onclick = () => handleNavigation(index);
-            dom.navGrid.appendChild(item);
-        });
-    }
-
-    function showLoading(visible, text = '') {
-        dom.loadingText.textContent = text;
-        dom.loadingOverlay.classList.toggle('visible', visible);
-    }
-    
-    function resizeAndRedraw() { resizeCanvases(); if (state.testData) {renderStageUI(state.currentStageIndex);} }
+    // ===================================================================
+    //  Canvas and Event Listener Setup
+    // ===================================================================
     function resizeCanvases() {
-        const dpr = window.devicePixelRatio || 1;
-        const rect = dom.canvas.parentElement.getBoundingClientRect();
-        [dom.backgroundCanvas, dom.canvas].forEach(c => { c.width = rect.width * dpr; c.height = rect.height * dpr; c.style.width = `${rect.width}px`; c.style.height = `${rect.height}px`; });
-        [bgCtx, ctx].forEach(context => context.scale(dpr, dpr));
+        checkTabletMode();
+        if (!boardWrapper) return;
+        const rect = boardWrapper.getBoundingClientRect();
+        const cssWidth = Math.floor(rect.width); const cssHeight = Math.floor(rect.height);
+        devicePixelRatio = window.devicePixelRatio || 1;
+        const internalWidth = cssWidth * devicePixelRatio; const internalHeight = cssHeight * devicePixelRatio;
+        [backgroundCanvas, canvas].forEach(c => {
+            c.width = internalWidth; c.height = internalHeight;
+            c.style.width = `${cssWidth}px`; c.style.height = `${cssHeight}px`;
+        });
+        setupContexts();
+        if (currentStageIndex >= 0) renderStageUI(currentStageIndex);
+    }
+
+    function setupContexts() {
+        [bgCtx, ctx].forEach(context => {
+            context.resetTransform();
+            context.scale(devicePixelRatio, devicePixelRatio);
+        });
         ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#000000';
     }
 
-    function getPos(e) {
-        const rect = dom.canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    function getPos(e, targetCanvas) {
+        const rect = targetCanvas.getBoundingClientRect();
+        let clientX, clientY;
+        if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+        else if (e.changedTouches && e.changedTouches.length > 0) { clientX = e.changedTouches[0].clientX; clientY = e.changedTouches[0].clientY; }
+        else { clientX = e.clientX; clientY = e.clientY; }
+        if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
-    function handleDrawingStart(e) { e.preventDefault(); state.isDrawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); }
-    function handleDrawingMove(e) { e.preventDefault(); if (!state.isDrawing) return; const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
-    function handleDrawingEnd() { state.isDrawing = false; }
-    function clearUserCanvas() { ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height); }
-    function isCanvasBlank() { return !ctx.getImageData(0, 0, dom.canvas.width, dom.canvas.height).data.some(channel => channel !== 0); }
-    function updateTimerDisplay() {
-        if (!state.testStartTime) return;
-        const elapsed = Math.floor((Date.now() - state.testStartTime) / 1000);
-        const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
-        const seconds = String(elapsed % 60).padStart(2, '0');
-        dom.timerDisplay.textContent = `${minutes}:${seconds}`;
+    function handleDrawingStart(e) {
+        if (isTabletMode && e.type.startsWith('touch')) {
+            if (!Array.from(e.touches).some(t => t.touchType === 'stylus')) { e.preventDefault(); return; }
+        }
+        const pos = getPos(e, canvas);
+        if (!pos) return;
+        if (e.touches) e.preventDefault();
+        drawing = true;
+        if (e.pointerType === 'pen') canvas.classList.add('no-cursor');
+        userDrawingOccurred = true;
+        lastPos = pos;
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
+    }
+
+    function handleDrawingMove(e) {
+        if (!drawing) return;
+        if (isTabletMode) {
+            if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+            if (bottomBar && !bottomBar.classList.contains('bar-hidden-by-stylus')) {
+                bottomBar.classList.add('bar-hidden-by-stylus');
+            }
+        }
+        const pos = getPos(e, canvas);
+        if (!pos) return;
+        if (e.touches) e.preventDefault();
+        const midPoint = { x: (lastPos.x + pos.x) / 2, y: (lastPos.y + pos.y) / 2 };
+        ctx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
+        ctx.stroke();
+        ctx.moveTo(midPoint.x, midPoint.y);
+        lastPos = pos;
+    }
+
+    function handleDrawingEnd(e) {
+        canvas.classList.remove('no-cursor');
+        if (isTabletMode) {
+            if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+            buttonVanishTimer = setTimeout(() => {
+                if (bottomBar) bottomBar.classList.remove('bar-hidden-by-stylus');
+            }, 500);
+        }
+        if (!drawing) return;
+        drawing = false;
+        ctx.lineTo(lastPos.x, lastPos.y);
+        ctx.stroke();
+        ctx.closePath();
+    }
+    
+    function clearUserCanvas() {
+        ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+        userDrawingOccurred = false;
+    }
+
+    // ===== NEW: Keyboard Shortcut Handler =====
+    function handleKeyPress(e) {
+        // Don't interfere if user is typing in a text box (if one existed)
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        if (e.code === 'Space') {
+            e.preventDefault(); // Stop spacebar from scrolling page
+            if (!submitBtn.disabled) {
+                handleSubmitClick();
+            }
+        } else if (e.code === 'KeyC') {
+            e.preventDefault();
+            clearUserCanvas();
+        }
+    }
+
+    function updateAllUITexts() {
+        const texts = UI_TEXT[currentLang] || UI_TEXT.en;
+        submitBtn.textContent = (currentStageIndex === -1) ? texts.start : texts.submit;
+        prevBtn.textContent = texts.prev;
+        clearBtn.textContent = texts.clear;
+        // REMOVED: detailNextBtn text update
+    }
+
+    function checkTabletMode() {
+        const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (pointer: coarse)');
+        const landscapeQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (min-height: 500px)');
+        isTabletMode = tabletQuery.matches || landscapeQuery.matches;
+    }
+
+    function initApp() {
+        resizeCanvases();
+        // Test-taking listeners
+        canvas.addEventListener('mousedown', handleDrawingStart);
+        canvas.addEventListener('mousemove', handleDrawingMove);
+        canvas.addEventListener('touchstart', handleDrawingStart, { passive: false });
+        canvas.addEventListener('touchmove', handleDrawingMove, { passive: false });
+        window.addEventListener('mouseup', handleDrawingEnd);
+        window.addEventListener('mouseleave', handleDrawingEnd);
+        window.addEventListener('touchend', handleDrawingEnd);
+        window.addEventListener('touchcancel', handleDrawingEnd);
+        prevBtn.onclick = () => transitionToStage(currentStageIndex - 1);
+        submitBtn.onclick = handleSubmitClick;
+        clearBtn.onclick = clearUserCanvas;
+
+        // ===== NEW: Keyboard listener =====
+        window.addEventListener('keydown', handleKeyPress);
+
+        // ===== REMOVED: Results screen listeners =====
+
+        window.addEventListener('resize', resizeCanvases);
+        const urlParams = new URLSearchParams(window.location.search);
+        const testFileName = urlParams.get('testFile');
+        if (testFileName) {
+            loadTest(`https://thelo.space/tests/${testFileName}`);
+        } else {
+            alert("No test file specified in the URL. Please add '?testFile=your-test.json'.");
+            loadingOverlay.classList.add('hidden');
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        updateAllUITexts(); // Set initial button text
         auth.onAuthStateChanged(user => {
-            if(user) {
-                resizeCanvases();
-                setupEventListeners();
-                const testFileName = new URLSearchParams(window.location.search).get('testFile');
-                if (testFileName) loadTest(`https://thelo.space/tests/${testFileName}`);
-                else alert("No test file specified. Add '?testFile=your-test.json' to the URL.");
-            } else { 
-                // Handle user not signed in - perhaps redirect to a login page
-                document.body.innerHTML = "<h1>Please sign in to continue.</h1>";
-             }
+            initApp();
         });
     });
 </script>
