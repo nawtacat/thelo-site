@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <!-- 
-  UX Enhancements (v2):
-  1.  Moved "Create New Group" to a modal, triggered by a new button in the navbar.
-  2.  Adopted new styling for buttons (.thelo-btn) and containers (.window-container)
-      based on user feedback (subtle shadows, new border-radius).
-  3.  Fixed i18n bugs:
-      - All static text in the "Test Result Details" modal is now translated.
-      - "Correct" / "Incorrect" statuses are now translated.
-  4.  Updated font stack to use Manrope (EN) and Noto Serif Armenian (HY) per user spec.
+  UX Enhancements (v3):
+  1.  Replaced 'My Groups' sidebar with a full-width layout.
+  2.  Added a dropdown menu (<select>) for group selection, replacing the sidebar list.
+  3.  The main content area (results/roster) now takes up the full width below the selector.
+  4.  Re-implemented 'Montserrat Arm' font stack per user request, replacing 'Noto Serif Armenian'.
+  5.  Styled the 'Create Group' modal input field to be less "miserable".
+  6.  Fixed i18n mismatch in the "Test Result Details" modal for "Question", "Student's Solution", and "AI Feedback".
 -->
 <html lang="en">
 <head>
@@ -18,14 +17,44 @@
     <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Updated Font Imports -->
+    <!-- Updated Font Imports: Montserrat Arm (via @font-face) + Manrope -->
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">
 
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
   <style>
+    /*
+     * ============================================
+     * Custom Font Definitions for Armenian (Montserrat Arm)
+     * ============================================
+     */
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype');
+      font-weight: 400; /* Regular */
+      font-style: normal;
+      font-display: swap;
+      /* Armenian Unicode character range */
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf') format('opentype');
+      font-weight: 600; /* SemiBold */
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf') format('opentype');
+      font-weight: 800; /* ExtraBold */
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+
     /*
      * ============================================
      * Main Site Styles (Updated from user feedback)
@@ -39,8 +68,8 @@
     }
     html { scroll-behavior: smooth; }
     body {
-        /* Default font stack */
-        font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        /* Updated Font Stack: Montserrat Arm first */
+        font-family: 'Montserrat Arm', 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
         background-color: var(--thelo-bg);
         color: var(--thelo-text);
         -webkit-font-smoothing: antialiased;
@@ -52,17 +81,8 @@
         min-height: 100vh;
     }
 
-    /* Language-specific font overrides */
-    html[lang="en"] body { font-family: 'Manrope', sans-serif; }
-    html[lang="hy"] body { font-family: "Noto Serif Armenian", serif; }
-
+    /* Removed language-specific font overrides */
     h1, h2, h3, h4, h5, h6 { font-weight: 800; }
-    html[lang="hy"] h1, 
-    html[lang="hy"] h2, 
-    html[lang="hy"] h3, 
-    html[lang="hy"] h4, 
-    html[lang="hy"] h5, 
-    html[lang="hy"] h6 { font-weight: 700; }
 
     .nav-link { 
         @apply font-semibold text-[var(--thelo-text)] transition-colors duration-200;
@@ -90,29 +110,6 @@
         background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
         background-repeat: no-repeat;
         z-index: 1;
-    }
-
-    /* Custom Dashboard Styles */
-    .group-item {
-        @apply block w-full p-4 rounded-lg cursor-pointer transition-all duration-200;
-    }
-    .group-item:hover {
-        @apply bg-slate-50;
-    }
-    .group-item.active {
-        @apply bg-[var(--thelo-blue)] text-white shadow-md;
-    }
-    .group-item.active .join-code-label {
-        @apply text-blue-200;
-    }
-    .group-item.active .join-code {
-        @apply text-white;
-    }
-    .join-code-label {
-        @apply text-xs font-semibold text-slate-400 uppercase tracking-wider;
-    }
-    .join-code {
-        @apply text-lg font-bold text-slate-800;
     }
 
     /* Updated button style from user feedback */
@@ -157,8 +154,17 @@
         border-color: #d1d5db;
      }
 
+    /* Updated input field style */
     .input-field {
-        @apply w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500;
+        @apply w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 transition-all duration-200 focus:bg-white;
+    }
+    /* Style for <select> element */
+    select.input-field {
+        @apply appearance-none bg-slate-50 bg-no-repeat bg-right;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+        background-position: right 0.75rem center;
+        background-size: 1.25em 1.25em;
+        padding-right: 2.5rem; /* Make space for arrow */
     }
 
     .lang-btn {
@@ -330,24 +336,27 @@
 
             <!-- === "Create Group" section removed from here === -->
 
-            <div class="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
-                <!-- === Sidebar: Now dedicated to group navigation === -->
-                <aside class="lg:col-span-1 space-y-6">
-                    <div class="window-container">
-                        <h2 class="text-2xl font-bold pt-8" data-i18n="groupsTitle">My Groups</h2>
-                        <div id="group-list-container" class="mt-6 space-y-2">
-                            <p id="no-groups-msg" class="text-slate-500" data-i18n="groupsNone">You haven't created any groups yet.</p>
-                        </div>
-                    </div>
-                </aside>
-
-                <!-- === Main Content: Tabbed interface === -->
-                <section class="lg:col-span-2 window-container">
+            <!-- === NEW FULL-WIDTH LAYOUT === -->
+            <div class="mt-12">
+                <section class="w-full window-container">
                     <div class="pt-8">
+                        
+                        <!-- 1. New Group Selector -->
+                        <div id="group-selector-container" class="mb-6 max-w-md">
+                            <label for="group-selector" class="block text-sm font-bold text-slate-700 mb-2" data-i18n="groupsTitle">My Groups</label>
+                            <select id="group-selector" class="input-field">
+                                <option value="" data-i18n="groupsSelectDefault">Select a group...</option>
+                            </select>
+                            <p id="no-groups-msg" class="text-slate-500 mt-2 hidden" data-i18n="groupsNone">You haven't created any groups yet.</p>
+                        </div>
+
+                        <!-- Divider -->
+                        <hr class="my-8 border-slate-200">
+                        
+                        <!-- 2. Results Title -->
                         <h2 id="results-title" class="text-2xl font-bold" data-i18n="resultsTitleDefault">Select a group</h2>
                         
-                        <!-- 1. Empty State (Visible by default) -->
+                        <!-- 3. Empty State (Visible by default) -->
                         <div id="results-empty-state" class="text-center py-12">
                             <svg class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 16.5h16.5M3.75 8.25h16.5M3.75 4.5h16.5" />
@@ -356,7 +365,7 @@
                             <p id="results-placeholder" class="mt-1 text-sm text-slate-500" data-i18n="resultsSelectPrompt">Select a group from the list to view its details.</p>
                         </div>
 
-                        <!-- 2. Tabbed Content (Hidden by default, shown on group select) -->
+                        <!-- 4. Tabbed Content (Hidden by default, shown on group select) -->
                         <div id="results-content" class="hidden">
                             <!-- Tab Navigation -->
                             <div class="border-b border-slate-200">
@@ -509,11 +518,14 @@
     const errorState = document.getElementById('error-state');
     const dashboardContent = document.getElementById('dashboard-content');
     const welcomeMessage = document.getElementById('welcome-message');
-    const groupListContainer = document.getElementById('group-list-container');
-    const noGroupsMsg = document.getElementById('no-groups-msg');
     const logoutBtn = document.getElementById('logout-btn');
     const langEnBtn = document.getElementById('lang-en');
     const langHyBtn = document.getElementById('lang-hy');
+
+    // === NEW Layout DOM Elements ===
+    const groupSelectorContainer = document.getElementById('group-selector-container');
+    const groupSelector = document.getElementById('group-selector');
+    const noGroupsMsg = document.getElementById('no-groups-msg');
 
     // Content Panel DOM Elements
     const resultsTitle = document.getElementById('results-title');
@@ -555,6 +567,7 @@
     let currentTutor = null;
     let selectedGroupId = null;
     let currentLang = localStorage.getItem('thelo-lang') || 'en';
+    let allGroups = []; // Store groups for the dropdown
 
     // UI Strings for i18n
     const strings = {
@@ -572,6 +585,7 @@
             dashboardTitle: 'Tutor Dashboard',
             dashboardSubtitle: 'Welcome. Select a group to get started.',
             groupsTitle: 'My Groups',
+            groupsSelectDefault: 'Select a group...',
             groupsNone: "You haven't created any groups yet.",
             groupsCreateTitle: 'Create New Group',
             groupsCreateLabel: 'Group Name',
@@ -595,14 +609,16 @@
             tableDate: 'Date',
             tableTimeValue: '{time}s',
             tableView: 'View',
-            // New keys for modal i18n fix
             modalTestDetailsTitle: 'Test Result Details',
             modalLabelStudent: 'Student',
             modalLabelTestID: 'Test ID',
             modalLabelScore: 'Score',
             modalLabelTime: 'Time Taken',
             statusCorrect: 'Correct',
-            statusIncorrect: 'Incorrect'
+            statusIncorrect: 'Incorrect',
+            modalQuestionTitle: 'Question {index}',
+            modalLabelSolution: "Student's Solution",
+            modalLabelFeedback: 'AI Feedback'
         },
         hy: {
             title: 'Ուսուցչի Վահանակ | Թելո',
@@ -618,6 +634,7 @@
             dashboardTitle: 'Ուսուցչի Վահանակ',
             dashboardSubtitle: 'Բարի գալուստ։ Ընտրեք խումբ՝ սկսելու համար։',
             groupsTitle: 'Իմ Խմբերը',
+            groupsSelectDefault: 'Ընտրեք խումբ...',
             groupsNone: 'Դուք դեռ խմբեր չեք ստեղծել։',
             groupsCreateTitle: 'Ստեղծել Նոր Խումբ',
             groupsCreateLabel: 'Խմբի Անունը',
@@ -641,14 +658,16 @@
             tableDate: 'Ամսաթիվ',
             tableTimeValue: '{time}վ',
             tableView: 'Դիտել',
-            // New keys for modal i18n fix
             modalTestDetailsTitle: 'Թեստի Արդյունքների Մանրամասներ',
             modalLabelStudent: 'Աշակերտ',
             modalLabelTestID: 'Թեստի ID',
             modalLabelScore: 'Միավոր',
             modalLabelTime: 'Ծախսած Ժամանակ',
             statusCorrect: 'Ճիշտ է',
-            statusIncorrect: 'Սխալ է'
+            statusIncorrect: 'Սխալ է',
+            modalQuestionTitle: 'Հարց {index}',
+            modalLabelSolution: 'Աշակերտի Լուծումը',
+            modalLabelFeedback: 'AI-ի Կարծիքը'
         }
     };
 
@@ -705,6 +724,11 @@
         }
         if (!selectedGroupId) {
              resultsTitle.textContent = T.resultsTitleDefault;
+        }
+        // Update dropdown default
+        const selectDefault = groupSelector.querySelector('option[value=""]');
+        if (selectDefault) {
+            selectDefault.textContent = T.groupsSelectDefault;
         }
     }
 
@@ -771,8 +795,11 @@
             currentLang = 'en';
             localStorage.setItem('thelo-lang', currentLang);
             applyContent(currentLang);
+            // Re-load groups to get new text in dropdown
+            loadGroups(selectedGroupId);
             if (selectedGroupId) {
-                 document.querySelector(`.group-item[data-group-id="${selectedGroupId}"]`).click();
+                 const selectedGroup = allGroups.find(g => g.id === selectedGroupId);
+                 if (selectedGroup) loadGroupData(selectedGroup);
             }
         });
 
@@ -780,8 +807,11 @@
             currentLang = 'hy';
             localStorage.setItem('thelo-lang', currentLang);
             applyContent(currentLang);
+            // Re-load groups to get new text in dropdown
+            loadGroups(selectedGroupId);
             if (selectedGroupId) {
-                 document.querySelector(`.group-item[data-group-id="${selectedGroupId}"]`).click();
+                 const selectedGroup = allGroups.find(g => g.id === selectedGroupId);
+                 if (selectedGroup) loadGroupData(selectedGroup);
             }
         });
 
@@ -820,6 +850,34 @@
             }
         });
         modalCloseBtn.addEventListener('click', hideResultDetail);
+
+        // NEW: Group Selector Listener
+        groupSelector.addEventListener('change', handleGroupSelect);
+    }
+
+    /**
+     * NEW: Handles group selection from dropdown
+     */
+    function handleGroupSelect() {
+        selectedGroupId = groupSelector.value;
+        if (!selectedGroupId) {
+            showEmptyState();
+            return;
+        }
+        const selectedGroup = allGroups.find(g => g.id === selectedGroupId);
+        if (selectedGroup) {
+            loadGroupData(selectedGroup);
+        }
+    }
+
+    /**
+     * NEW: Resets the main panel to its empty state
+     */
+    function showEmptyState() {
+        const T = strings[currentLang];
+        resultsTitle.textContent = T.resultsTitleDefault;
+        resultsEmptyState.classList.remove('hidden');
+        resultsContent.classList.add('hidden');
     }
 
     /**
@@ -836,10 +894,13 @@
     }
 
     /**
-     * Loads and renders the tutor's groups
+     * Loads and renders the tutor's groups into the dropdown
      */
-    async function loadGroups() {
-        groupListContainer.innerHTML = ''; 
+    async function loadGroups(preserveSelected = null) {
+        allGroups = []; // Reset global array
+        const T = strings[currentLang];
+        groupSelector.innerHTML = `<option value="" data-i18n="groupsSelectDefault">${T.groupsSelectDefault}</option>`;
+        
         const q = query(
             collection(db, "groups"), 
             where("ownerId", "==", currentUser.uid)
@@ -847,11 +908,15 @@
         try {
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
-                groupListContainer.appendChild(noGroupsMsg);
                 noGroupsMsg.classList.remove('hidden');
+                groupSelector.classList.add('hidden');
+                showEmptyState();
                 return;
             }
+            
             noGroupsMsg.classList.add('hidden');
+            groupSelector.classList.remove('hidden');
+            
             const groups = [];
             querySnapshot.forEach(doc => {
                 groups.push({ id: doc.id, ...doc.data() });
@@ -861,43 +926,29 @@
                 const timeB = b.createdAt?.seconds || 0;
                 return timeB - timeA; 
             });
+
             groups.forEach(group => {
-                renderGroup(group);
+                allGroups.push(group);
+                const option = document.createElement('option');
+                option.value = group.id;
+                option.textContent = `${group.groupName} (Code: ${group.joinCode})`;
+                groupSelector.appendChild(option);
             });
+
+            if (preserveSelected) {
+                groupSelector.value = preserveSelected;
+            } else {
+                showEmptyState(); // Show empty state by default after loading
+            }
+
         } catch (err) {
             console.error("Error loading groups:", err);
-            groupListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Please check the console.</p>`;
+            noGroupsMsg.textContent = "Error loading groups.";
+            noGroupsMsg.classList.remove('hidden');
         }
     }
 
-    /**
-     * Renders a single group item in the list
-     */
-    function renderGroup(group) {
-        const T = strings[currentLang];
-        const groupEl = document.createElement('a');
-        groupEl.href = "#";
-        groupEl.className = 'group-item';
-        groupEl.dataset.groupId = group.id;
-        groupEl.innerHTML = `
-            <span class="block text-xl font-bold">${group.groupName}</span>
-            <span class="join-code-label" data-i18n-dyn="joinCode">${T.joinCode}</span>
-            <span class="join-code">${group.joinCode}</span>
-        `;
-        
-        if (groupEl.dataset.groupId === selectedGroupId) {
-            groupEl.classList.add('active');
-        }
-
-        groupEl.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
-            groupEl.classList.add('active');
-            selectedGroupId = group.id;
-            loadGroupData(group);
-        });
-        groupListContainer.appendChild(groupEl);
-    }
+    /* renderGroup() function is no longer needed */
 
     /**
      * Generates a random 6-char alphanumeric join code
@@ -952,7 +1003,12 @@
             showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
             groupNameInput.value = '';
             hideCreateGroupModal();
-            await loadGroups(); 
+            await loadGroups(docRef.id); // Pass new group ID to select it
+            
+            // Manually trigger select change
+            const selectedGroup = allGroups.find(g => g.id === docRef.id);
+            if (selectedGroup) loadGroupData(selectedGroup);
+
         } catch (err) {
             console.error("Error creating group:", err);
             showNotification(T.groupsCreateError, true);
@@ -1004,32 +1060,31 @@
                 questions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
 
                 questions.forEach((q, index) => {
-                    // === I18N FIX HERE ===
                     let statusClass = 'question-status-other';
                     let statusText = q.status || 'N/A';
                     if (q.status === 'correct') {
                         statusClass = 'question-status-correct';
-                        statusText = T.statusCorrect; // Use translated string
+                        statusText = T.statusCorrect;
                     } else if (q.status === 'incorrect') {
                         statusClass = 'question-status-incorrect';
-                        statusText = T.statusIncorrect; // Use translated string
+                        statusText = T.statusIncorrect;
                     }
-                    // === END I18N FIX ===
 
                     const questionEl = document.createElement('div');
                     questionEl.className = 'question-item';
+                    // === I18N FIX HERE ===
                     questionEl.innerHTML = `
                         <div class="question-header">
-                            <span class="question-title">Question ${index + 1}</span>
+                            <span class="question-title">${formatString(T.modalQuestionTitle, { index: index + 1 })}</span>
                             <span class="${statusClass}">${statusText}</span>
                         </div>
                         <div class="question-body">
                             <div>
-                                <span class="question-label">Student's Solution</span>
+                                <span class="question-label">${T.modalLabelSolution}</span>
                                 <img src="${q.solutionImage}" alt="Student solution for question ${index + 1}" class="student-solution-img">
                             </div>
                             <div>
-                                <span class="question-label">AI Feedback</span>
+                                <span class="question-label">${T.modalLabelFeedback}</span>
                                 <div class="feedback-text">
                                     <p>${q.feedback || 'No feedback provided.'}</p>
                                     <p class="mt-2 text-xs"><strong>Question:</strong> ${q.question || 'N/A'}</p>
@@ -1038,6 +1093,7 @@
                             </div>
                         </div>
                     `;
+                    // === END I18N FIX ===
                     modalResultsContainer.appendChild(questionEl);
                 });
             }
