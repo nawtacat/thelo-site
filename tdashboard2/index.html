@@ -1,14 +1,13 @@
 <!DOCTYPE html>
 <!-- 
-  UX Enhancements:
-  1.  Moved "Create New Group" out of the sidebar to a primary position 
-      at the top of the content area. This prevents it from being pushed 
-      down by a long group list.
-  2.  Restructured the main results panel into a tabbed interface 
-      ("Results" and "Student Roster") that appears *after* a group 
-      is selected.
-  3.  Created a dedicated "empty state" for the main panel, which is 
-      replaced by the tabbed content upon selection.
+  UX Enhancements (v2):
+  1.  Moved "Create New Group" to a modal, triggered by a new button in the navbar.
+  2.  Adopted new styling for buttons (.thelo-btn) and containers (.window-container)
+      based on user feedback (subtle shadows, new border-radius).
+  3.  Fixed i18n bugs:
+      - All static text in the "Test Result Details" modal is now translated.
+      - "Correct" / "Incorrect" statuses are now translated.
+  4.  Updated font stack to use Manrope (EN) and Noto Serif Armenian (HY) per user spec.
 -->
 <html lang="en">
 <head>
@@ -19,45 +18,17 @@
     <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Updated Font Imports -->
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">
+
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
   <style>
     /*
      * ============================================
-     * Custom Font Definitions for Armenian
-     * ============================================
-     */
-    @font-face {
-      font-family: 'Montserrat Arm';
-      src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype');
-      font-weight: 400; /* Regular */
-      font-style: normal;
-      font-display: swap;
-      /* Armenian Unicode character range */
-      unicode-range: U+0530-058F, U+FB13-FB17;
-    }
-    @font-face {
-      font-family: 'Montserrat Arm';
-      src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf') format('opentype');
-      font-weight: 600; /* SemiBold */
-      font-style: normal;
-      font-display: swap;
-      unicode-range: U+0530-058F, U+FB13-FB17;
-    }
-    @font-face {
-      font-family: 'Montserrat Arm';
-      src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf') format('opentype');
-      font-weight: 800; /* ExtraBold */
-      font-style: normal;
-      font-display: swap;
-      unicode-range: U+0530-058F, U+FB13-FB17;
-    }
-
-    /*
-     * ============================================
-     * Main Site Styles (from thelo main page)
+     * Main Site Styles (Updated from user feedback)
      * ============================================
      */
     :root {
@@ -68,7 +39,8 @@
     }
     html { scroll-behavior: smooth; }
     body {
-        font-family: 'Montserrat Arm', 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        /* Default font stack */
+        font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
         background-color: var(--thelo-bg);
         color: var(--thelo-text);
         -webkit-font-smoothing: antialiased;
@@ -79,16 +51,33 @@
         background-size: 40px 40px;
         min-height: 100vh;
     }
-    h1, h2, h3, h4, h5, h6 { font-weight: 800; }
-    .nav-link { color: var(--thelo-text); transition: color 0.2s; }
-    .nav-link:hover { color: var(--thelo-blue); }
 
-    /* Copied from main page for consistency */
+    /* Language-specific font overrides */
+    html[lang="en"] body { font-family: 'Manrope', sans-serif; }
+    html[lang="hy"] body { font-family: "Noto Serif Armenian", serif; }
+
+    h1, h2, h3, h4, h5, h6 { font-weight: 800; }
+    html[lang="hy"] h1, 
+    html[lang="hy"] h2, 
+    html[lang="hy"] h3, 
+    html[lang="hy"] h4, 
+    html[lang="hy"] h5, 
+    html[lang="hy"] h6 { font-weight: 700; }
+
+    .nav-link { 
+        @apply font-semibold text-[var(--thelo-text)] transition-colors duration-200;
+    }
+    .nav-link:hover { 
+        color: var(--thelo-blue); 
+    }
+
+    /* Updated container style from user feedback */
     .window-container {
         position: relative;
         background-color: white;
         border: 1px solid var(--grid-color);
-        border-radius: 0.75rem;
+        border-radius: 0.75rem; /* Rounded corners */
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.07); /* Subtle shadow */
         padding: 2.5rem;
     }
     .window-container::before {
@@ -100,6 +89,7 @@
         height: 12px;
         background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
         background-repeat: no-repeat;
+        z-index: 1;
     }
 
     /* Custom Dashboard Styles */
@@ -125,12 +115,48 @@
         @apply text-lg font-bold text-slate-800;
     }
 
-    .btn-primary {
-        @apply w-full text-center px-4 py-3 bg-[var(--thelo-blue)] text-white font-bold rounded-lg shadow-md transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50;
+    /* Updated button style from user feedback */
+    .thelo-btn {
+        font-weight: 700;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        transition: all 0.2s ease-in-out;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        background-color: var(--thelo-blue);
+        color: white;
+        cursor: pointer;
     }
-    .btn-primary:disabled {
-        @apply bg-slate-300 cursor-not-allowed;
+    .thelo-btn:hover {
+        background-color: #1a56d2; 
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
     }
+    .thelo-btn:disabled {
+        @apply bg-slate-300 cursor-not-allowed transform-none shadow-none;
+    }
+
+    /* Secondary button style for nav */
+    .thelo-btn-nav {
+         font-weight: 600;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        transition: all 0.2s ease-in-out;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--grid-color);
+        background-color: white;
+        color: var(--thelo-text);
+        cursor: pointer;
+    }
+     .thelo-btn-nav:hover {
+        background-color: var(--thelo-bg);
+        border-color: #d1d5db;
+     }
+
     .input-field {
         @apply w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500;
     }
@@ -153,7 +179,7 @@
         @apply bg-red-600;
     }
 
-    /* === NEW Tab Styles === */
+    /* Tab Styles */
     .tab-btn {
         @apply border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm cursor-pointer;
     }
@@ -164,30 +190,58 @@
         @apply py-6;
     }
 
-    /* === Modal Styles (FIXED VISIBILITY) === */
-    /* Initial hidden state (Added explicit properties) */
-    #modal-backdrop {
+    /* === NEW Modal Styles (from user feedback) === */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex; /* Use flex for centering */
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
         opacity: 0;
-        /* Ensure transitions work correctly */
         transition: opacity 0.3s ease-out;
+        padding: 1rem; /* Padding for small screens */
     }
-    #result-modal {
+    .modal-overlay.show {
+        opacity: 1;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        width: 100%;
+        position: relative;
         opacity: 0;
         transform: scale(0.95);
-        /* Ensure transitions work correctly */
         transition: opacity 0.3s ease-out, transform 0.3s ease-out;
     }
-
-    /* Visible state (Using standard CSS properties) */
-    #modal-backdrop.show {
-        opacity: 1;
-    }
-    #result-modal.show {
-        opacity: 1;
-        transform: scale(1);
+    .modal-overlay.show .modal-content {
+         opacity: 1;
+         transform: scale(1);
     }
 
-    /* Remaining modal content styles (using @apply is fine here) */
+    .modal-label {
+        @apply block text-sm font-bold text-slate-700;
+    }
+    .modal-close-btn {
+        @apply absolute top-4 right-4 text-3xl font-light text-slate-400 hover:text-slate-700 cursor-pointer;
+    }
+
+    /* Specific modal content styles */
+    #result-modal-content {
+        max-width: 56rem; /* 4xl */
+    }
+    #create-group-modal-content {
+         max-width: 28rem; /* md */
+    }
+
     .question-item {
         @apply border border-slate-200 rounded-lg p-4;
     }
@@ -223,7 +277,7 @@
 
 <body class="antialiased">
 
-<nav id="mainNav" class="w-full z-50 border-b border-slate-200 backdrop-blur-sm bg-transparent sticky top-0">
+<nav id="mainNav" class="w-full z-50 border-b border-slate-200 backdrop-blur-sm bg-white/80 sticky top-0">
     <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 lg:px-8">
         <a href="/" class="flex items-center gap-2">
             <img src="https://thelo.space/img/bluethelo.svg" alt="thelo logo" class="h-9 w-auto" />
@@ -231,10 +285,15 @@
         </a>
         
         <div class="flex items-center gap-4">
-            <ul class="hidden gap-8 md:flex">
-                <li><a href="#" id="logout-btn" class="nav-link font-semibold" data-i18n="navLogout">Log Out</a></li>
+             <!-- New "Create Group" Button -->
+            <button id="nav-create-group-btn" class="thelo-btn-nav hidden md:flex" data-i18n="navCreateGroup">
+                Create Group
+            </button>
+            
+            <ul class="hidden gap-6 md:flex">
+                <li><a href="#" id="logout-btn" class="nav-link" data-i18n="navLogout">Log Out</a></li>
             </ul>
-            <div class="flex items-center gap-2 text-sm">
+            <div class="flex items-center gap-2 text-sm border-l pl-4 ml-2">
                 <span id="lang-en" class="lang-btn">EN</span>
                 <span class="text-slate-300">|</span>
                 <span id="lang-hy" class="lang-btn">HY</span>
@@ -257,26 +316,21 @@
         </div>
 
         <div id="dashboard-content" class="hidden">
-            <h1 class="text-4xl font-extrabold tracking-tighter text-[var(--thelo-text)] sm:text-5xl" data-i18n="dashboardTitle">Tutor Dashboard</h1>
-            <p class="text-lg text-slate-600 mt-4" id="welcome-message" data-i18n="dashboardSubtitle">Welcome, tutor. Select a group to get started.</p>
-
-            <!-- === UX RESTRUCTURE: "Create Group" moved to top-level === -->
-            <div class="max-w-3xl mx-auto my-12">
-                <div class="window-container">
-                    <h2 class="text-2xl font-bold pt-8" data-i18n="groupsCreateTitle">Create New Group</h2>
-                    <form id="create-group-form" class="mt-6 space-y-4">
-                        <div>
-                            <label for="group-name" class="block text-sm font-bold text-slate-700" data-i18n="groupsCreateLabel">Group Name</label>
-                            <input type="text" id="group-name" class="input-field mt-1" placeholder="e.g. Algebra 1 (Fall)" required>
-                        </div>
-                        <button type="submit" id="create-group-btn" class="btn-primary">
-                            <span data-i18n="groupsCreateButton">Create Group</span>
-                        </button>
-                    </form>
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h1 class="text-4xl font-extrabold tracking-tighter text-[var(--thelo-text)] sm:text-5xl" data-i18n="dashboardTitle">Tutor Dashboard</h1>
+                    <p class="text-lg text-slate-600 mt-4" id="welcome-message" data-i18n="dashboardSubtitle">Welcome, tutor. Select a group to get started.</p>
                 </div>
+                 <!-- "Create Group" button for mobile -->
+                <button id="nav-create-group-btn-mobile" class="thelo-btn md:hidden" data-i18n="navCreateGroupShort">
+                    New
+                </button>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- === "Create Group" section removed from here === -->
+
+            <div class="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
                 <!-- === Sidebar: Now dedicated to group navigation === -->
                 <aside class="lg:col-span-1 space-y-6">
@@ -288,7 +342,7 @@
                     </div>
                 </aside>
 
-                <!-- === Main Content: Now features an empty state and tabbed interface === -->
+                <!-- === Main Content: Tabbed interface === -->
                 <section class="lg:col-span-2 window-container">
                     <div class="pt-8">
                         <h2 id="results-title" class="text-2xl font-bold" data-i18n="resultsTitleDefault">Select a group</h2>
@@ -353,8 +407,57 @@
     </div>
 </main>
 
+<!-- Notification Toast -->
 <div id="notification-toast" class="hidden">
     <span id="notification-message"></span>
+</div>
+
+<!-- === New "Create Group" Modal === -->
+<div id="create-group-modal-overlay" class="modal-overlay hidden">
+    <div id="create-group-modal-content" class="modal-content">
+        <button id="create-group-modal-close-btn" class="modal-close-btn">&times;</button>
+        <h2 class="text-2xl font-bold" data-i18n="groupsCreateTitle">Create New Group</h2>
+        <form id="create-group-form" class="mt-6 space-y-4">
+            <div>
+                <label for="group-name-input" class="modal-label" data-i18n="groupsCreateLabel">Group Name</label>
+                <input type="text" id="group-name-input" class="input-field mt-1" placeholder="e.g. Algebra 1 (Fall)" required>
+            </div>
+            <button type="submit" id="create-group-submit-btn" class="thelo-btn w-full">
+                <span data-i18n="groupsCreateButton">Create Group</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- === Refactored "Test Result Details" Modal === -->
+<div id="result-modal-overlay" class="modal-overlay hidden">
+    <div id="result-modal-content" class="modal-content">
+        <button id="modal-close-btn" class="modal-close-btn">&times;</button>
+        <!-- Static content now has i18n keys -->
+        <h2 class="text-2xl font-bold" id="modal-title" data-i18n="modalTestDetailsTitle">Test Result Details</h2>
+        <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+                <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="modalLabelStudent">Student</span>
+                <span class="block font-medium text-slate-800" id="modal-student-email"></span>
+            </div>
+            <div>
+                <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="modalLabelTestID">Test ID</span>
+                <span class="block font-medium text-slate-800" id="modal-test-id"></span>
+            </div>
+            <div>
+                <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="modalLabelScore">Score</span>
+                <span class="block font-medium text-slate-800" id="modal-score"></span>
+            </div>
+            <div>
+                <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="modalLabelTime">Time Taken</span>
+                <span class="block font-medium text-slate-800" id="modal-time"></span>
+            </div>
+        </div>
+        
+        <div id="modal-results-container" class="mt-8 space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+            <!-- Detailed results inserted by JS -->
+        </div>
+    </div>
 </div>
 
 
@@ -408,38 +511,39 @@
     const welcomeMessage = document.getElementById('welcome-message');
     const groupListContainer = document.getElementById('group-list-container');
     const noGroupsMsg = document.getElementById('no-groups-msg');
-    const createGroupForm = document.getElementById('create-group-form');
-    const createGroupBtn = document.getElementById('create-group-btn');
-    const groupNameInput = document.getElementById('group-name');
     const logoutBtn = document.getElementById('logout-btn');
     const langEnBtn = document.getElementById('lang-en');
     const langHyBtn = document.getElementById('lang-hy');
 
-    // === NEW UX DOM Elements ===
+    // Content Panel DOM Elements
     const resultsTitle = document.getElementById('results-title');
     const resultsEmptyState = document.getElementById('results-empty-state');
     const resultsContent = document.getElementById('results-content');
-    
     const tabBtnResults = document.getElementById('tab-btn-results');
     const tabBtnRoster = document.getElementById('tab-btn-roster');
     const tabPanelResults = document.getElementById('tab-panel-results');
     const tabPanelRoster = document.getElementById('tab-panel-roster');
-    
     const resultsContainer = document.getElementById('results-container');
-    const resultsNoneMsg = document.getElementById('results-none-msg'); // Was results-placeholder
+    const resultsNoneMsg = document.getElementById('results-none-msg');
     const resultsTable = document.getElementById('results-table');
     const resultsTableBody = document.getElementById('results-table-body');
-    
     const rosterContainer = document.getElementById('roster-container');
     const rosterList = document.getElementById('roster-list');
     const rosterNoneMsg = document.getElementById('roster-none-msg');
-    const resultsPlaceholder = document.getElementById('results-placeholder'); // This is now just for the empty state
+    const resultsPlaceholder = document.getElementById('results-placeholder');
 
-    // === MODAL ELEMENTS ===
-    const modalBackdrop = document.getElementById('modal-backdrop');
-    const resultModal = document.getElementById('result-modal');
+    // "Create Group" Modal Elements
+    const navCreateGroupBtn = document.getElementById('nav-create-group-btn');
+    const navCreateGroupBtnMobile = document.getElementById('nav-create-group-btn-mobile');
+    const createGroupModalOverlay = document.getElementById('create-group-modal-overlay');
+    const createGroupModalCloseBtn = document.getElementById('create-group-modal-close-btn');
+    const createGroupForm = document.getElementById('create-group-form');
+    const groupNameInput = document.getElementById('group-name-input'); // Renamed input ID
+    const createGroupSubmitBtn = document.getElementById('create-group-submit-btn');
+
+    // "Result Details" Modal Elements
+    const resultModalOverlay = document.getElementById('result-modal-overlay'); // Renamed overlay
     const modalCloseBtn = document.getElementById('modal-close-btn');
-    const modalTitle = document.getElementById('modal-title');
     const modalStudentEmail = document.getElementById('modal-student-email');
     const modalTestId = document.getElementById('modal-test-id');
     const modalScore = document.getElementById('modal-score');
@@ -458,8 +562,10 @@
             title: 'Tutor Dashboard | thelo',
             navTutorPortal: 'Tutor Portal',
             navLogout: 'Log Out',
+            navCreateGroup: 'Create Group',
+            navCreateGroupShort: 'New',
             loading: 'Loading Dashboard...',
-            loadingSubmit: 'Loading...', 
+            loadingSubmit: 'Creating...', 
             errorTitle: 'Access Denied',
             errorSubtitle: 'You must be a registered tutor to access this page. Please contact support if you believe this is an error.',
             errorButton: 'Back to Home',
@@ -488,14 +594,24 @@
             tableTime: 'Time',
             tableDate: 'Date',
             tableTimeValue: '{time}s',
-            tableView: 'View'
+            tableView: 'View',
+            // New keys for modal i18n fix
+            modalTestDetailsTitle: 'Test Result Details',
+            modalLabelStudent: 'Student',
+            modalLabelTestID: 'Test ID',
+            modalLabelScore: 'Score',
+            modalLabelTime: 'Time Taken',
+            statusCorrect: 'Correct',
+            statusIncorrect: 'Incorrect'
         },
         hy: {
             title: 'Ուսուցչի Վահանակ | Թելո',
             navTutorPortal: 'Ուսուցչի Վահանակ',
             navLogout: 'Դուրս գալ',
+            navCreateGroup: 'Ստեղծել Խումբ',
+            navCreateGroupShort: 'Նոր',
             loading: 'Բեռնվում է...',
-            loadingSubmit: 'Բեռնվում է...', 
+            loadingSubmit: 'Ստեղծվում է...', 
             errorTitle: 'Մուտքը մերժված է',
             errorSubtitle: 'Դուք պետք է լինեք գրանցված ուսուցիչ՝ այս էջը տեսնելու համար։',
             errorButton: 'Գլխավոր էջ',
@@ -524,7 +640,15 @@
             tableTime: 'Ժամանակ',
             tableDate: 'Ամսաթիվ',
             tableTimeValue: '{time}վ',
-            tableView: 'Դիտել'
+            tableView: 'Դիտել',
+            // New keys for modal i18n fix
+            modalTestDetailsTitle: 'Թեստի Արդյունքների Մանրամասներ',
+            modalLabelStudent: 'Աշակերտ',
+            modalLabelTestID: 'Թեստի ID',
+            modalLabelScore: 'Միավոր',
+            modalLabelTime: 'Ծախսած Ժամանակ',
+            statusCorrect: 'Ճիշտ է',
+            statusIncorrect: 'Սխալ է'
         }
     };
 
@@ -565,13 +689,11 @@
         document.documentElement.lang = lang;
         langEnBtn.classList.toggle('active', lang === 'en');
         langHyBtn.classList.toggle('active', lang === 'hy');
-        groupNameInput.placeholder = (lang === 'hy') ? 'օր.՝ Հանրահաշիվ 1 (Աշուն)' : 'e.g. Algebra 1 (Fall)';
         
-        // Update new/moved elements
+        // Update placeholders
+        groupNameInput.placeholder = (lang === 'hy') ? 'օր.՝ Հանրահաշիվ 1 (Աշուն)' : 'e.g. Algebra 1 (Fall)';
         resultsNoneMsg.textContent = T.resultsNone;
         rosterNoneMsg.textContent = T.rosterNone;
-        
-        // Update placeholder text for the main empty state
         if (resultsPlaceholder) {
             resultsPlaceholder.textContent = T.resultsSelectPrompt;
         }
@@ -634,7 +756,7 @@
         dashboardContent.classList.remove('hidden');
         const T = strings[currentLang];
         welcomeMessage.textContent = formatString(T.dashboardSubtitle, { tutorEmail: currentTutor.email });
-        applyContent(currentLang); // Apply language *before* loading groups
+        applyContent(currentLang);
         setupEventListeners();
         await loadGroups();
     }
@@ -643,14 +765,12 @@
      * Sets up all click/submit listeners
      */
     function setupEventListeners() {
-        createGroupForm.addEventListener('submit', handleCreateGroup);
         logoutBtn.addEventListener('click', handleLogout);
 
         langEnBtn.addEventListener('click', () => {
             currentLang = 'en';
             localStorage.setItem('thelo-lang', currentLang);
             applyContent(currentLang);
-            // Re-render date strings if a group is selected
             if (selectedGroupId) {
                  document.querySelector(`.group-item[data-group-id="${selectedGroupId}"]`).click();
             }
@@ -660,13 +780,24 @@
             currentLang = 'hy';
             localStorage.setItem('thelo-lang', currentLang);
             applyContent(currentLang);
-            // Re-render date strings if a group is selected
             if (selectedGroupId) {
                  document.querySelector(`.group-item[data-group-id="${selectedGroupId}"]`).click();
             }
         });
 
-        // === NEW Tab Listeners ===
+        // "Create Group" Modal Listeners
+        navCreateGroupBtn.addEventListener('click', showCreateGroupModal);
+        navCreateGroupBtnMobile.addEventListener('click', showCreateGroupModal);
+        createGroupModalCloseBtn.addEventListener('click', hideCreateGroupModal);
+        createGroupModalOverlay.addEventListener('click', (e) => {
+            if (e.target === createGroupModalOverlay) {
+                hideCreateGroupModal();
+            }
+        });
+        createGroupForm.addEventListener('submit', handleCreateGroup);
+
+
+        // Tab Listeners
         tabBtnResults.addEventListener('click', () => {
             tabBtnResults.classList.add('active');
             tabBtnRoster.classList.remove('active');
@@ -682,8 +813,12 @@
         });
 
 
-        // === MODAL LISTENERS ===
-        modalBackdrop.addEventListener('click', hideResultDetail);
+        // "Result Details" Modal Listeners
+        resultModalOverlay.addEventListener('click', (e) => {
+            if (e.target === resultModalOverlay) {
+                hideResultDetail();
+            }
+        });
         modalCloseBtn.addEventListener('click', hideResultDetail);
     }
 
@@ -750,21 +885,15 @@
             <span class="join-code">${group.joinCode}</span>
         `;
         
-        // Update dynamic i18n content when lang changes
         if (groupEl.dataset.groupId === selectedGroupId) {
             groupEl.classList.add('active');
         }
 
         groupEl.addEventListener('click', (e) => {
             e.preventDefault();
-            // Update active state in UI
             document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
             groupEl.classList.add('active');
-            
-            // Set app state
             selectedGroupId = group.id;
-            
-            // Load data
             loadGroupData(group);
         });
         groupListContainer.appendChild(groupEl);
@@ -783,15 +912,33 @@
     }
 
     /**
-     * Handles the "Create New Group" form submission
+     * Shows the "Create Group" modal
+     */
+    function showCreateGroupModal() {
+        createGroupModalOverlay.classList.remove('hidden');
+        setTimeout(() => createGroupModalOverlay.classList.add('show'), 10);
+    }
+
+    /**
+     * Hides the "Create Group" modal
+     */
+    function hideCreateGroupModal() {
+        createGroupModalOverlay.classList.remove('show');
+        setTimeout(() => createGroupModalOverlay.classList.add('hidden'), 300);
+    }
+
+    /**
+     * Handles the "Create New Group" form submission (from modal)
      */
     async function handleCreateGroup(e) {
         e.preventDefault();
         const groupName = groupNameInput.value.trim();
         if (!groupName) return;
-        createGroupBtn.disabled = true;
+        
+        createGroupSubmitBtn.disabled = true;
         const T = strings[currentLang];
-        createGroupBtn.querySelector('span').textContent = T.loadingSubmit; 
+        createGroupSubmitBtn.querySelector('span').textContent = T.loadingSubmit; 
+        
         const newGroup = {
             groupName: groupName,
             ownerId: currentUser.uid,
@@ -804,16 +951,20 @@
             const docRef = await addDoc(collection(db, "groups"), newGroup);
             showNotification(formatString(T.groupsCreateSuccess, { groupName: newGroup.groupName, joinCode: newGroup.joinCode }));
             groupNameInput.value = '';
+            hideCreateGroupModal();
             await loadGroups(); 
         } catch (err) {
             console.error("Error creating group:", err);
             showNotification(T.groupsCreateError, true);
         } finally {
-            createGroupBtn.disabled = false;
-            createGroupBtn.querySelector('span').textContent = T.groupsCreateButton;
+            createGroupSubmitBtn.disabled = false;
+            createGroupSubmitBtn.querySelector('span').textContent = T.groupsCreateButton;
         }
     }
 
+   /**
+    * Shows the result detail modal
+    */
    async function showResultDetail(result) {
         const T = strings[currentLang];
         
@@ -850,19 +1001,20 @@
                     questions.push({ id: doc.id, ...doc.data() });
                 });
 
-                // Sort questions by their document ID ("0", "1", "2", etc.)
                 questions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
 
                 questions.forEach((q, index) => {
+                    // === I18N FIX HERE ===
                     let statusClass = 'question-status-other';
                     let statusText = q.status || 'N/A';
                     if (q.status === 'correct') {
                         statusClass = 'question-status-correct';
-                        statusText = 'Correct';
+                        statusText = T.statusCorrect; // Use translated string
                     } else if (q.status === 'incorrect') {
                         statusClass = 'question-status-incorrect';
-                        statusText = 'Incorrect';
+                        statusText = T.statusIncorrect; // Use translated string
                     }
+                    // === END I18N FIX ===
 
                     const questionEl = document.createElement('div');
                     questionEl.className = 'question-item';
@@ -895,22 +1047,19 @@
         }
 
         // 3. Show Modal
-        modalBackdrop.classList.remove('hidden');
-        resultModal.classList.remove('hidden');
+        resultModalOverlay.classList.remove('hidden');
         setTimeout(() => {
-            modalBackdrop.classList.add('show');
-            resultModal.classList.add('show');
+            resultModalOverlay.classList.add('show');
         }, 10);
     }
+
     /**
      * Hides the result detail modal
      */
     function hideResultDetail() {
-        modalBackdrop.classList.remove('show');
-        resultModal.classList.remove('show');
+        resultModalOverlay.classList.remove('show');
         setTimeout(() => {
-            modalBackdrop.classList.add('hidden');
-            resultModal.classList.add('hidden');
+            resultModalOverlay.classList.add('hidden');
         }, 300); 
     }
 
@@ -921,18 +1070,15 @@
     async function loadGroupData(group) {
         const T = strings[currentLang];
         
-        // 1. === UX UPDATE: Show content, hide empty state ===
         resultsTitle.textContent = formatString(T.resultsTitleLoading, { groupName: group.groupName });
         resultsEmptyState.classList.add('hidden');
         resultsContent.classList.remove('hidden');
 
-        // 2. === UX UPDATE: Reset tabs to default ("Results") ===
         tabBtnResults.classList.add('active');
         tabBtnRoster.classList.remove('active');
         tabPanelResults.classList.remove('hidden');
         tabPanelRoster.classList.add('hidden');
 
-        // 3. Reset content areas
         resultsTable.classList.add('hidden');
         resultsNoneMsg.classList.add('hidden');
         resultsTableBody.innerHTML = '';
@@ -940,7 +1086,7 @@
         rosterNoneMsg.classList.add('hidden');
         
         try {
-            // 4. Load Students (Roster)
+            // Load Students (Roster)
             const studentsQuery = query(
                 collection(db, "thelo-students"), 
                 where("groupId", "==", group.id)
@@ -959,7 +1105,7 @@
                 });
             }
 
-            // 5. Load Test Results
+            // Load Test Results
             const resultsQuery = query(
                 collection(db, "thelo-test-results"), 
                 where("groupId", "==", group.id)
@@ -976,7 +1122,6 @@
                     results.push({ id: doc.id, ...doc.data() });
                 });
                 
-                // Sort the results in JavaScript
                 results.sort((a, b) => {
                    const timeA = a.submittedAt?.seconds || 0;
                    const timeB = b.submittedAt?.seconds || 0;
@@ -990,7 +1135,6 @@
                 resultsTable.classList.remove('hidden');
             }
             
-            // 6. Update title
             resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
 
         } catch (err) {
@@ -1011,7 +1155,9 @@
 
         const scoreText = `${result.score} / ${result.totalQuestions}`;
         const timeText = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
-        const dateText = result.submittedAt ? result.submittedAt.toDate().toLocaleString(currentLang) : 'N/A';
+        // Must use currentLang for locale-aware date formatting
+        const dateText = result.submittedAt ? result.submittedAt.toDate().toLocaleString(currentLang.startsWith('hy') ? 'hy-AM' : 'en-US') : 'N/A';
+
 
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${result.email}</td>
@@ -1039,39 +1185,6 @@
 
 </script>
 
-<!-- Modal HTML (no changes, just moved to end of body for convention) -->
-<div id="modal-backdrop" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden transition-opacity duration-300 opacity-0"></div>
-<div id="result-modal" class="fixed inset-0 z-50 hidden p-4 md:p-8 overflow-y-auto transition-all duration-300 transform scale-95 opacity-0">
-    <div class="relative w-full max-w-4xl mx-auto bg-white rounded-xl shadow-2xl window-container">
-        <!-- Modal content is unchanged -->
-        <div class="pt-8">
-            <button id="modal-close-btn" class="absolute top-4 right-4 text-3xl font-light text-slate-400 hover:text-slate-700">&times;</button>
-            <h2 class="text-2xl font-bold" id="modal-title">Test Result Details</h2>
-            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Student</span>
-                    <span class="block font-medium text-slate-800" id="modal-student-email"></span>
-                </div>
-                <div>
-                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Test ID</span>
-                    <span class="block font-medium text-slate-800" id="modal-test-id"></span>
-                </div>
-                <div>
-                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Score</span>
-                    <span class="block font-medium text-slate-800" id="modal-score"></span>
-                </div>
-                <div>
-                    <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Time Taken</span>
-                    <span class="block font-medium text-slate-800" id="modal-time"></span>
-                </div>
-            </div>
-        </div>
-        
-        <div id="modal-results-container" class="mt-8 space-y-6 max-h-[60vh] overflow-y-auto pr-2">
-            <!-- Detailed results inserted by JS -->
-        </div>
-    </div>
-</div>
-
 </body>
 </html>
+
