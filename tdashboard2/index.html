@@ -1,4 +1,15 @@
 <!DOCTYPE html>
+<!-- 
+  UX Enhancements:
+  1.  Moved "Create New Group" out of the sidebar to a primary position 
+      at the top of the content area. This prevents it from being pushed 
+      down by a long group list.
+  2.  Restructured the main results panel into a tabbed interface 
+      ("Results" and "Student Roster") that appears *after* a group 
+      is selected.
+  3.  Created a dedicated "empty state" for the main panel, which is 
+      replaced by the tabbed content upon selection.
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
@@ -8,21 +19,45 @@
     <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
   <style>
     /*
      * ============================================
-     * DELETED: All @font-face rules for Montserrat Arm
+     * Custom Font Definitions for Armenian
      * ============================================
      */
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype');
+      font-weight: 400; /* Regular */
+      font-style: normal;
+      font-display: swap;
+      /* Armenian Unicode character range */
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf') format('opentype');
+      font-weight: 600; /* SemiBold */
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf') format('opentype');
+      font-weight: 800; /* ExtraBold */
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
 
     /*
      * ============================================
-     * Main Site Styles
+     * Main Site Styles (from thelo main page)
      * ============================================
      */
     :root {
@@ -32,10 +67,8 @@
         --grid-color: #E5E7EB;
     }
     html { scroll-behavior: smooth; }
-    
-    /* UPDATED: Font stack to use new fonts */
     body {
-        font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        font-family: 'Montserrat Arm', 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
         background-color: var(--thelo-bg);
         color: var(--thelo-text);
         -webkit-font-smoothing: antialiased;
@@ -46,48 +79,27 @@
         background-size: 40px 40px;
         min-height: 100vh;
     }
-    
-    /* NEW: Font rules from settings page */
-    html[lang="en"] body { font-family: 'Manrope', sans-serif; }
-    html[lang="hy"] body { font-family: "Noto Serif Armenian", serif; }
-
-    /* UPDATED: Heading font weights from settings page */
     h1, h2, h3, h4, h5, h6 { font-weight: 800; }
-    html[lang="hy"] h1, 
-    html[lang="hy"] h2, 
-    html[lang="hy"] h3, 
-    html[lang="hy"] h4, 
-    html[lang="hy"] h5, 
-    html[lang="hy"] h6 { 
-        font-weight: 700; 
-    }
-
     .nav-link { color: var(--thelo-text); transition: color 0.2s; }
     .nav-link:hover { color: var(--thelo-blue); }
 
-    /* Modern subtle container styles */
-    .sidebar-card,
-    .main-content-card {
-        @apply relative bg-white/80 backdrop-blur-md border border-[var(--grid-color)] rounded-xl p-8 shadow-sm;
+    /* Copied from main page for consistency */
+    .window-container {
+        position: relative;
+        background-color: white;
+        border: 1px solid var(--grid-color);
+        border-radius: 0.75rem;
+        padding: 2.5rem;
     }
-
-    /* Traffic light styles */
-    .sidebar-card::before,
-    .main-content-card::before {
+    .window-container::before {
         content: ' ';
         position: absolute;
-        top: 1.5rem;
-        left: 1.5rem;
+        top: 1rem;
+        left: 1rem;
         width: 52px;
         height: 12px;
         background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
         background-repeat: no-repeat;
-        z-index: 10;
-    }
-
-    /* Error state card */
-    #error-state.window-container {
-         @apply p-10 bg-white/80 backdrop-blur-md border border-[var(--grid-color)] rounded-xl shadow-sm;
     }
 
     /* Custom Dashboard Styles */
@@ -113,60 +125,12 @@
         @apply text-lg font-bold text-slate-800;
     }
 
-    /* Button Styles from Settings Page */
-    .thelo-btn, .thelo-btn-secondary, .thelo-btn-destructive, .thelo-btn-subtle {
-        font-weight: 700;
-        border-radius: 0.5rem;
-        transition: all 0.2s ease-in-out;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid transparent;
-        cursor: pointer;
+    .btn-primary {
+        @apply w-full text-center px-4 py-3 bg-[var(--thelo-blue)] text-white font-bold rounded-lg shadow-md transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50;
     }
-    .thelo-btn {
-        padding: 0.75rem 1.5rem;
-        background-color: var(--thelo-blue);
-        color: white;
-    }
-    .thelo-btn:hover {
-        background-color: #1a56d2; 
-        transform: translateY(-2px);
-    }
-    .thelo-btn-secondary {
-        padding: 0.75rem 1.5rem;
-        background-color: transparent;
-        color: var(--thelo-blue);
-        border-color: var(--thelo-blue);
-    }
-    .thelo-btn-secondary:hover {
-        background-color: var(--thelo-blue);
-        color: white;
-    }
-    .thelo-btn-destructive {
-        padding: 0.75rem 1.5rem;
-        background-color: #EF4444; 
-        color: white;
-    }
-    .thelo-btn-destructive:hover {
-        background-color: #DC2626; 
-        transform: translateY(-2px);
-    }
-    
-    /* NEW: Subtle button for 'View' */
-    .thelo-btn-subtle {
-        @apply px-4 py-1.5 rounded-full text-sm font-semibold;
-        @apply bg-blue-100 text-blue-700;
-    }
-    .thelo-btn-subtle:hover {
-        @apply bg-blue-200 text-blue-800 transform -translate-y-px;
-    }
-
-    .thelo-btn:disabled {
+    .btn-primary:disabled {
         @apply bg-slate-300 cursor-not-allowed;
-        transform: none;
     }
-
     .input-field {
         @apply w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500;
     }
@@ -189,30 +153,71 @@
         @apply bg-red-600;
     }
 
-    /* === Modal Styles === */
+    /* === NEW Tab Styles === */
+    .tab-btn {
+        @apply border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm cursor-pointer;
+    }
+    .tab-btn.active {
+        @apply border-[var(--thelo-blue)] text-[var(--thelo-blue)];
+    }
+    .tab-panel {
+        @apply py-6;
+    }
+
+    /* === Modal Styles (FIXED VISIBILITY) === */
+    /* Initial hidden state (Added explicit properties) */
     #modal-backdrop {
-          opacity: 0;
-          transition: opacity 0.3s ease-out;
+        opacity: 0;
+        /* Ensure transitions work correctly */
+        transition: opacity 0.3s ease-out;
     }
     #result-modal {
-          opacity: 0;
-          transform: scale(0.95);
-          transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        opacity: 0;
+        transform: scale(0.95);
+        /* Ensure transitions work correctly */
+        transition: opacity 0.3s ease-out, transform 0.3s ease-out;
     }
-    #modal-backdrop.show { opacity: 1; }
-    #result-modal.show { opacity: 1; transform: scale(1); }
 
-    /* Modal content styles */
-    .question-item { @apply border border-slate-200 rounded-lg p-4; }
-    .question-header { @apply flex justify-between items-center; }
-    .question-title { @apply text-lg font-bold text-slate-800; }
-    .question-status-correct { @apply text-sm font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full; }
-    .question-status-incorrect { @apply text-sm font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full; }
-    .question-status-other { @apply text-sm font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-full; }
-    .question-body { @apply mt-4 grid grid-cols-1 md:grid-cols-2 gap-4; }
-    .question-label { @apply block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2; }
-    .student-solution-img { @apply w-full h-auto bg-white border border-slate-300 rounded-md object-contain; }
-    .feedback-text { @apply p-3 bg-slate-50 rounded-md text-slate-700 text-sm prose max-w-none; }
+    /* Visible state (Using standard CSS properties) */
+    #modal-backdrop.show {
+        opacity: 1;
+    }
+    #result-modal.show {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    /* Remaining modal content styles (using @apply is fine here) */
+    .question-item {
+        @apply border border-slate-200 rounded-lg p-4;
+    }
+    .question-header {
+        @apply flex justify-between items-center;
+    }
+    .question-title {
+        @apply text-lg font-bold text-slate-800;
+    }
+    .question-status-correct {
+        @apply text-sm font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full;
+    }
+    .question-status-incorrect {
+        @apply text-sm font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full;
+    }
+    .question-status-other {
+        @apply text-sm font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-full;
+    }
+    .question-body {
+        @apply mt-4 grid grid-cols-1 md:grid-cols-2 gap-4;
+    }
+    .question-label {
+        @apply block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2;
+    }
+    .student-solution-img {
+        @apply w-full h-auto bg-white border border-slate-300 rounded-md object-contain;
+    }
+    .feedback-text {
+        @apply p-3 bg-slate-50 rounded-md text-slate-700 text-sm prose max-w-none;
+    }
    </style>
 </head>
 
@@ -245,74 +250,100 @@
             <h2 class="text-2xl font-bold text-slate-600" data-i18n="loading">Loading Dashboard...</h2>
         </div>
 
-        <div id="error-state" class="hidden text-center max-w-3xl mx-auto window-container">
+        <div id="error-state" class="hidden text-center py-20 window-container max-w-3xl mx-auto">
             <h2 class="text-3xl font-bold text-red-600" data-i18n="errorTitle">Access Denied</h2>
             <p class="text-lg text-slate-600 mt-4" data-i18n="errorSubtitle">You must be a registered tutor to access this page. Please contact support if you believe this is an error.</p>
             <a href="/" class="inline-block mt-8 px-6 py-3 bg-slate-600 text-white font-bold rounded-lg" data-i18n="errorButton">Back to Home</a>
         </div>
 
         <div id="dashboard-content" class="hidden">
+            <h1 class="text-4xl font-extrabold tracking-tighter text-[var(--thelo-text)] sm:text-5xl" data-i18n="dashboardTitle">Tutor Dashboard</h1>
+            <p class="text-lg text-slate-600 mt-4" id="welcome-message" data-i18n="dashboardSubtitle">Welcome, tutor. Select a group to get started.</p>
+
+            <!-- === UX RESTRUCTURE: "Create Group" moved to top-level === -->
+            <div class="max-w-3xl mx-auto my-12">
+                <div class="window-container">
+                    <h2 class="text-2xl font-bold pt-8" data-i18n="groupsCreateTitle">Create New Group</h2>
+                    <form id="create-group-form" class="mt-6 space-y-4">
+                        <div>
+                            <label for="group-name" class="block text-sm font-bold text-slate-700" data-i18n="groupsCreateLabel">Group Name</label>
+                            <input type="text" id="group-name" class="input-field mt-1" placeholder="e.g. Algebra 1 (Fall)" required>
+                        </div>
+                        <button type="submit" id="create-group-btn" class="btn-primary">
+                            <span data-i18n="groupsCreateButton">Create Group</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
+                <!-- === Sidebar: Now dedicated to group navigation === -->
                 <aside class="lg:col-span-1 space-y-6">
-                    
-                    <div>
-                        <h1 class="text-4xl font-extrabold tracking-tighter text-[var(--thelo-text)] sm:text-5xl" data-i18n="dashboardTitle">Tutor Dashboard</h1>
-                        <p class="text-lg text-slate-600 mt-4" id="welcome-message" data-i18n="dashboardSubtitle">Welcome, tutor. Select a group to get started.</p>
-                    </div>
-
-                    <div class="sidebar-card">
+                    <div class="window-container">
                         <h2 class="text-2xl font-bold pt-8" data-i18n="groupsTitle">My Groups</h2>
                         <div id="group-list-container" class="mt-6 space-y-2">
                             <p id="no-groups-msg" class="text-slate-500" data-i18n="groupsNone">You haven't created any groups yet.</p>
                         </div>
                     </div>
-
-                    <div class="sidebar-card">
-                        <h2 class="text-2xl font-bold pt-8" data-i18n="groupsCreateTitle">Create New Group</h2>
-                        <form id="create-group-form" class="mt-6 space-y-4">
-                            <div>
-                                <label for="group-name" class="block text-sm font-bold text-slate-700" data-i18n="groupsCreateLabel">Group Name</label>
-                                <input type="text" id="group-name" class="input-field mt-1" placeholder="e.g. Algebra 1 (Fall)" required>
-                            </div>
-                            <button type="submit" id="create-group-btn" class="thelo-btn w-full">
-                                <span data-i18n="groupsCreateButton">Create Group</span>
-                            </button>
-                        </form>
-                    </div>
                 </aside>
-                
-                <section class="lg:col-span-2 space-y-6">
-                    
-                    <div>
-                        <h2 id="results-title" class="text-3xl font-bold text-slate-800" data-i18n="resultsTitleDefault">Select a group to view results</h2>
-                    </div>
 
-                    <div class="main-content-card">
-                        <div class="pt-8"> <div id="roster-container" class="mt-6 hidden">
-                                <h3 class="text-xl font-bold text-slate-700" data-i18n="rosterTitle">Student Roster</h3>
-                                <div id="roster-list" class="mt-4 p-4 bg-slate-50 rounded-lg max-h-48 overflow-y-auto">
-                                    </div>
+                <!-- === Main Content: Now features an empty state and tabbed interface === -->
+                <section class="lg:col-span-2 window-container">
+                    <div class="pt-8">
+                        <h2 id="results-title" class="text-2xl font-bold" data-i18n="resultsTitleDefault">Select a group</h2>
+                        
+                        <!-- 1. Empty State (Visible by default) -->
+                        <div id="results-empty-state" class="text-center py-12">
+                            <svg class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 16.5h16.5M3.75 8.25h16.5M3.75 4.5h16.5" />
+                            </svg>
+                            <h3 class="mt-2 text-lg font-semibold text-slate-800" data-i18n="resultsTitleDefault">Select a group</h3>
+                            <p id="results-placeholder" class="mt-1 text-sm text-slate-500" data-i18n="resultsSelectPrompt">Select a group from the list to view its details.</p>
+                        </div>
+
+                        <!-- 2. Tabbed Content (Hidden by default, shown on group select) -->
+                        <div id="results-content" class="hidden">
+                            <!-- Tab Navigation -->
+                            <div class="border-b border-slate-200">
+                                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                                    <button id="tab-btn-results" class="tab-btn active" data-i18n="tabResults">Results</button>
+                                    <button id="tab-btn-roster" class="tab-btn" data-i18n="tabRoster">Student Roster</button>
+                                </nav>
                             </div>
-    
-                            <div id="results-container" class="mt-8 overflow-x-auto">
-                                <p id="results-placeholder" class="text-lg text-slate-500"></p>
-                                <table id="results-table" class="hidden min-w-full divide-y divide-slate-200">
-                                    <thead class="bg-slate-50">
-                                        <tr>
-                                            <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableStudent">Student</th>
-                                            <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableTest">Test ID</th>
-                                            <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableScore">Score</th>
-                                            <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableTime">Time</th>
-                                            <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableDate">Date</th>
-                                            <th scope="col" class="relative px-6 py-3">
-                                                <span class="sr-only">View</span>
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="results-table-body" class="bg-white divide-y divide-slate-200">
+
+                            <!-- Tab Panels -->
+                            <div id="tab-panel-results" class="tab-panel">
+                                <div id="results-container" class="overflow-x-auto">
+                                    <p id="results-none-msg" class="text-lg text-slate-500 hidden" data-i18n="resultsNone"></p>
+                                    <table id="results-table" class="hidden min-w-full divide-y divide-slate-200">
+                                        <thead class="bg-slate-50">
+                                            <tr>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableStudent">Student</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableTest">Test ID</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableScore">Score</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableTime">Time</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableDate">Date</th>
+                                                <th scope="col" class="relative px-6 py-3">
+                                                    <span class="sr-only">View</span>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="results-table-body" class="bg-white divide-y divide-slate-200">
+                                            <!-- Rows inserted by JS -->
                                         </tbody>
-                                </table>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <div id="tab-panel-roster" class="tab-panel hidden">
+                                <div id="roster-container">
+                                    <h3 class="text-xl font-bold text-slate-700 sr-only" data-i18n="rosterTitle">Student Roster</h3>
+                                    <div id="roster-list" class="mt-4 p-4 bg-slate-50 rounded-lg max-h-96 overflow-y-auto">
+                                        <!-- Roster inserted by JS -->
+                                        <span id="roster-none-msg" class="text-slate-500 italic hidden" data-i18n="rosterNone"></span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -325,6 +356,7 @@
 <div id="notification-toast" class="hidden">
     <span id="notification-message"></span>
 </div>
+
 
 <script type="module">
     // Firebase v11.6.1 SDK
@@ -379,16 +411,29 @@
     const createGroupForm = document.getElementById('create-group-form');
     const createGroupBtn = document.getElementById('create-group-btn');
     const groupNameInput = document.getElementById('group-name');
-    const resultsTitle = document.getElementById('results-title');
-    const resultsContainer = document.getElementById('results-container');
-    const resultsPlaceholder = document.getElementById('results-placeholder');
-    const resultsTable = document.getElementById('results-table');
-    const resultsTableBody = document.getElementById('results-table-body');
-    const rosterContainer = document.getElementById('roster-container');
-    const rosterList = document.getElementById('roster-list');
     const logoutBtn = document.getElementById('logout-btn');
     const langEnBtn = document.getElementById('lang-en');
     const langHyBtn = document.getElementById('lang-hy');
+
+    // === NEW UX DOM Elements ===
+    const resultsTitle = document.getElementById('results-title');
+    const resultsEmptyState = document.getElementById('results-empty-state');
+    const resultsContent = document.getElementById('results-content');
+    
+    const tabBtnResults = document.getElementById('tab-btn-results');
+    const tabBtnRoster = document.getElementById('tab-btn-roster');
+    const tabPanelResults = document.getElementById('tab-panel-results');
+    const tabPanelRoster = document.getElementById('tab-panel-roster');
+    
+    const resultsContainer = document.getElementById('results-container');
+    const resultsNoneMsg = document.getElementById('results-none-msg'); // Was results-placeholder
+    const resultsTable = document.getElementById('results-table');
+    const resultsTableBody = document.getElementById('results-table-body');
+    
+    const rosterContainer = document.getElementById('roster-container');
+    const rosterList = document.getElementById('roster-list');
+    const rosterNoneMsg = document.getElementById('roster-none-msg');
+    const resultsPlaceholder = document.getElementById('results-placeholder'); // This is now just for the empty state
 
     // === MODAL ELEMENTS ===
     const modalBackdrop = document.getElementById('modal-backdrop');
@@ -428,12 +473,15 @@
             groupsCreateSuccess: 'Group "{groupName}" created! Join Code: {joinCode}',
             groupsCreateError: 'Error creating group. Please try again.',
             joinCode: 'Join Code',
-            resultsTitleDefault: 'Select a group to view results',
+            resultsTitleDefault: 'Select a group',
+            resultsSelectPrompt: 'Select a group from the list to view its details.',
             resultsTitleLoading: 'Loading results for "{groupName}"...',
             resultsTitleLoaded: 'Showing results for "{groupName}"',
             resultsNone: 'No test results found for this group yet.',
             rosterTitle: 'Student Roster',
             rosterNone: 'No students have joined this group yet.',
+            tabResults: 'Results',
+            tabRoster: 'Student Roster',
             tableStudent: 'Student',
             tableTest: 'Test ID',
             tableScore: 'Score',
@@ -461,12 +509,15 @@
             groupsCreateSuccess: '«{groupName}» խումբը ստեղծված է։ Միանալու կոդը՝ {joinCode}',
             groupsCreateError: 'Սխալ՝ խումբ ստեղծելիս։ Խնդրում ենք փորձել նորից։',
             joinCode: 'Միանալու կոդ',
-            resultsTitleDefault: 'Ընտրեք խումբ՝ արդյունքները տեսնելու համար',
+            resultsTitleDefault: 'Ընտրեք խումբ',
+            resultsSelectPrompt: 'Ընտրեք խումբ ցանկից՝ մանրամասները տեսնելու համար։',
             resultsTitleLoading: 'Բեռնվում են «{groupName}» խմբի արդյունքները...',
             resultsTitleLoaded: '«{groupName}» խմբի արդյունքները',
             resultsNone: 'Այս խմբի համար թեստի արդյունքներ դեռ չկան։',
             rosterTitle: 'Աշակերտների Ցուցակ',
             rosterNone: 'Այս խմբին դեռ ոչ մի աշակերտ չի միացել։',
+            tabResults: 'Արդյունքներ',
+            tabRoster: 'Աշակերտների Ցուցակ',
             tableStudent: 'Աշակերտ',
             tableTest: 'Թեստի ID',
             tableScore: 'Միավոր',
@@ -511,11 +562,28 @@
                 el.innerHTML = T[key];
             }
         });
-        document.documentElement.lang = lang; // This triggers the :lang(hy) CSS rule
+        document.documentElement.lang = lang;
         langEnBtn.classList.toggle('active', lang === 'en');
         langHyBtn.classList.toggle('active', lang === 'hy');
         groupNameInput.placeholder = (lang === 'hy') ? 'օր.՝ Հանրահաշիվ 1 (Աշուն)' : 'e.g. Algebra 1 (Fall)';
-        resultsPlaceholder.textContent = T.resultsNone;
+        
+        // Update new/moved elements
+        resultsNoneMsg.textContent = T.resultsNone;
+        rosterNoneMsg.textContent = T.rosterNone;
+        
+        // Update placeholder text for the main empty state
+        if (resultsPlaceholder) {
+            resultsPlaceholder.textContent = T.resultsSelectPrompt;
+        }
+
+        // Manually update the title for the main empty state and panel
+        const defaultTitleEl = document.querySelector('[data-i18n="resultsTitleDefault"]');
+        if (defaultTitleEl) {
+            defaultTitleEl.textContent = T.resultsTitleDefault;
+        }
+        if (!selectedGroupId) {
+             resultsTitle.textContent = T.resultsTitleDefault;
+        }
     }
 
     /**
@@ -566,7 +634,7 @@
         dashboardContent.classList.remove('hidden');
         const T = strings[currentLang];
         welcomeMessage.textContent = formatString(T.dashboardSubtitle, { tutorEmail: currentTutor.email });
-        applyContent(currentLang);
+        applyContent(currentLang); // Apply language *before* loading groups
         setupEventListeners();
         await loadGroups();
     }
@@ -582,13 +650,37 @@
             currentLang = 'en';
             localStorage.setItem('thelo-lang', currentLang);
             applyContent(currentLang);
+            // Re-render date strings if a group is selected
+            if (selectedGroupId) {
+                 document.querySelector(`.group-item[data-group-id="${selectedGroupId}"]`).click();
+            }
         });
 
         langHyBtn.addEventListener('click', () => {
             currentLang = 'hy';
             localStorage.setItem('thelo-lang', currentLang);
             applyContent(currentLang);
+            // Re-render date strings if a group is selected
+            if (selectedGroupId) {
+                 document.querySelector(`.group-item[data-group-id="${selectedGroupId}"]`).click();
+            }
         });
+
+        // === NEW Tab Listeners ===
+        tabBtnResults.addEventListener('click', () => {
+            tabBtnResults.classList.add('active');
+            tabBtnRoster.classList.remove('active');
+            tabPanelResults.classList.remove('hidden');
+            tabPanelRoster.classList.add('hidden');
+        });
+
+        tabBtnRoster.addEventListener('click', () => {
+            tabBtnRoster.classList.add('active');
+            tabBtnResults.classList.remove('active');
+            tabPanelRoster.classList.remove('hidden');
+            tabPanelResults.classList.add('hidden');
+        });
+
 
         // === MODAL LISTENERS ===
         modalBackdrop.addEventListener('click', hideResultDetail);
@@ -654,14 +746,25 @@
         groupEl.dataset.groupId = group.id;
         groupEl.innerHTML = `
             <span class="block text-xl font-bold">${group.groupName}</span>
-            <span class="join-code-label">${T.joinCode}</span>
+            <span class="join-code-label" data-i18n-dyn="joinCode">${T.joinCode}</span>
             <span class="join-code">${group.joinCode}</span>
         `;
+        
+        // Update dynamic i18n content when lang changes
+        if (groupEl.dataset.groupId === selectedGroupId) {
+            groupEl.classList.add('active');
+        }
+
         groupEl.addEventListener('click', (e) => {
             e.preventDefault();
+            // Update active state in UI
             document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
             groupEl.classList.add('active');
+            
+            // Set app state
             selectedGroupId = group.id;
+            
+            // Load data
             loadGroupData(group);
         });
         groupListContainer.appendChild(groupEl);
@@ -817,21 +920,35 @@
      */
     async function loadGroupData(group) {
         const T = strings[currentLang];
+        
+        // 1. === UX UPDATE: Show content, hide empty state ===
         resultsTitle.textContent = formatString(T.resultsTitleLoading, { groupName: group.groupName });
+        resultsEmptyState.classList.add('hidden');
+        resultsContent.classList.remove('hidden');
+
+        // 2. === UX UPDATE: Reset tabs to default ("Results") ===
+        tabBtnResults.classList.add('active');
+        tabBtnRoster.classList.remove('active');
+        tabPanelResults.classList.remove('hidden');
+        tabPanelRoster.classList.add('hidden');
+
+        // 3. Reset content areas
         resultsTable.classList.add('hidden');
+        resultsNoneMsg.classList.add('hidden');
         resultsTableBody.innerHTML = '';
         rosterList.innerHTML = '';
-        rosterContainer.classList.remove('hidden');
+        rosterNoneMsg.classList.add('hidden');
         
         try {
-            // 1. Load Students (Roster)
+            // 4. Load Students (Roster)
             const studentsQuery = query(
                 collection(db, "thelo-students"), 
                 where("groupId", "==", group.id)
             );
             const studentSnapshot = await getDocs(studentsQuery);
             if (studentSnapshot.empty) {
-                rosterList.innerHTML = `<span class="text-slate-500 italic">${T.rosterNone}</span>`;
+                rosterList.appendChild(rosterNoneMsg);
+                rosterNoneMsg.classList.remove('hidden');
             } else {
                 studentSnapshot.forEach(doc => {
                     const student = doc.data();
@@ -842,7 +959,7 @@
                 });
             }
 
-            // 2. Load Test Results (Client-side sorting)
+            // 5. Load Test Results
             const resultsQuery = query(
                 collection(db, "thelo-test-results"), 
                 where("groupId", "==", group.id)
@@ -850,16 +967,16 @@
             const resultsSnapshot = await getDocs(resultsQuery);
 
             if (resultsSnapshot.empty) {
-                resultsPlaceholder.textContent = T.resultsNone;
-                resultsPlaceholder.classList.remove('hidden');
+                resultsNoneMsg.classList.remove('hidden');
             } else {
-                resultsPlaceholder.classList.add('hidden');
+                resultsNoneMsg.classList.add('hidden');
                 
                 const results = [];
                 resultsSnapshot.forEach(doc => {
                     results.push({ id: doc.id, ...doc.data() });
                 });
                 
+                // Sort the results in JavaScript
                 results.sort((a, b) => {
                    const timeA = a.submittedAt?.seconds || 0;
                    const timeB = b.submittedAt?.seconds || 0;
@@ -873,11 +990,14 @@
                 resultsTable.classList.remove('hidden');
             }
             
+            // 6. Update title
             resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
 
         } catch (err) {
             console.error("Error loading group data:", err);
-            resultsPlaceholder.textContent = "Error loading results. Check console for details.";
+            resultsTitle.textContent = "Error loading data";
+            resultsNoneMsg.textContent = "Error loading results. Check console for details.";
+            resultsNoneMsg.classList.remove('hidden');
         }
     }
 
@@ -893,19 +1013,18 @@
         const timeText = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
         const dateText = result.submittedAt ? result.submittedAt.toDate().toLocaleString(currentLang) : 'N/A';
 
-        // UPDATED: Changed class to 'thelo-btn-subtle'
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${result.email}</td>
-            <td class="px-6 py-4 whitespace-nowGrap text-sm text-slate-600">${result.testId}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${result.testId}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${scoreText}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${timeText}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${dateText}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button class="thelo-btn-subtle" data-i18n="tableView">${T.tableView}</button>
+                <a href="#" class="text-[var(--thelo-blue)] hover:text-blue-700" data-i18n-dyn="tableView">${T.tableView}</a>
             </td>
         `;
         
-        row.querySelector('button').addEventListener('click', async (e) => {
+        row.querySelector('a').addEventListener('click', async (e) => {
             e.preventDefault();
             console.log("View button clicked! Result ID:", result.id);
             console.log("Result object:", result);
@@ -915,15 +1034,17 @@
         resultsTableBody.appendChild(row);
     }
 
-    // Initial call to set language
+    // Initial call to set language on load
     applyContent(currentLang);
 
 </script>
 
+<!-- Modal HTML (no changes, just moved to end of body for convention) -->
 <div id="modal-backdrop" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden transition-opacity duration-300 opacity-0"></div>
 <div id="result-modal" class="fixed inset-0 z-50 hidden p-4 md:p-8 overflow-y-auto transition-all duration-300 transform scale-95 opacity-0">
-    <div class="relative w-full max-w-4xl mx-auto bg-white rounded-xl shadow-2xl p-10">
-        <div>
+    <div class="relative w-full max-w-4xl mx-auto bg-white rounded-xl shadow-2xl window-container">
+        <!-- Modal content is unchanged -->
+        <div class="pt-8">
             <button id="modal-close-btn" class="absolute top-4 right-4 text-3xl font-light text-slate-400 hover:text-slate-700">&times;</button>
             <h2 class="text-2xl font-bold" id="modal-title">Test Result Details</h2>
             <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -947,7 +1068,8 @@
         </div>
         
         <div id="modal-results-container" class="mt-8 space-y-6 max-h-[60vh] overflow-y-auto pr-2">
-            </div>
+            <!-- Detailed results inserted by JS -->
+        </div>
     </div>
 </div>
 
