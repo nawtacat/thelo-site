@@ -480,6 +480,7 @@
     let currentLang = localStorage.getItem('thelo-lang') || 'en';
     let selectedTestId = null;
     let allGroups = []; 
+    let studentNameMap = new Map(); // NEW: To store student names for easy lookup
 
     // UI Strings (i18n)...
     const strings = {
@@ -762,7 +763,7 @@
     function hideResultDetail() { resultModalOverlay.classList.remove('show'); setTimeout(() => { resultModalOverlay.classList.add('hidden'); }, 300); }
 
     /** Loads data for the selected group */
-    async function loadGroupData(group) {
+    async function loadGroupData(group) { // <-- MODIFIED: Now fetches students first
         const T = strings[currentLang]; // Get current language strings
         resultsTitle.textContent = formatString(T.resultsTitleLoading, { groupName: group.groupName });
         resultsEmptyState.classList.add('hidden'); 
@@ -770,13 +771,32 @@
         testSelectionContainer.classList.remove('hidden'); // Show test selection area
         document.getElementById('test-list-container').innerHTML = ''; // Clear old tests
         document.getElementById('no-tests-msg').classList.add('hidden');
-        rosterList.innerHTML = ''; rosterNoneMsg.classList.add('hidden');
+        rosterList.innerHTML = ''; 
+        rosterNoneMsg.classList.add('hidden');
+        studentNameMap.clear(); // Clear previous student data
+
         try {
+            // Step 1: Fetch all students in the group and populate the roster and name map
             const studentsQuery = query(collection(db, "thelo-students"), where("groupId", "==", group.id));
             const studentSnapshot = await getDocs(studentsQuery);
-            if (studentSnapshot.empty) { rosterList.appendChild(rosterNoneMsg); rosterNoneMsg.classList.remove('hidden'); } else {
+            
+            if (studentSnapshot.empty) { 
+                rosterList.appendChild(rosterNoneMsg); 
+                rosterNoneMsg.classList.remove('hidden'); 
+            } else {
                 studentSnapshot.forEach(doc => { const el = document.createElement('span'); el.className = 'block text-sm text-slate-700'; el.textContent = doc.data().email; rosterList.appendChild(el); });
+                studentSnapshot.forEach(doc => {
+                    const studentData = doc.data();
+                    const fullName = `${studentData.name || ''} ${studentData.surname || ''}`.trim();
+                    studentNameMap.set(studentData.email, fullName || studentData.email); // Fallback to email
+                    const el = document.createElement('span'); 
+                    el.className = 'block text-sm text-slate-700'; 
+                    el.textContent = fullName || studentData.email; // Display full name in roster
+                    rosterList.appendChild(el);
+                });
             }
+
+            // Step 2: Fetch all test results for the group
             const resultsQuery = query(collection(db, "thelo-test-results"), where("groupId", "==", group.id));
             const resultsSnapshot = await getDocs(resultsQuery);
             
@@ -811,7 +831,7 @@
     }
 
     /** Loads and displays results for a specific test */
-    function loadTestResults(testId, allResults, groupName) {
+    function loadTestResults(testId, allResults, groupName) { // <-- MODIFIED: Now uses studentNameMap
         const T = strings[currentLang];
         resultsContent.classList.remove('hidden');
         switchTab('results');
@@ -833,13 +853,14 @@
 
     /** Renders a single result row */
     function renderResultRow(result) {
-        const T = strings[currentLang]; // **Ensure T uses currentLang**
+        const T = strings[currentLang];
         const row = document.createElement('tr'); row.className = 'hover:bg-slate-50';
         const scoreText = `${result.score} / ${result.totalQuestions}`;
         const timeText = formatString(T.tableTimeValue, { time: result.timeTakenSeconds });
         const dateText = result.submittedAt ? result.submittedAt.toDate().toLocaleString(currentLang.startsWith('hy') ? 'hy-AM' : 'en-US') : 'N/A';
-        // **Use T.tableView directly here**
-        row.innerHTML = `<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${result.email}</td> <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${result.testId}</td> <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${scoreText}</td> <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${timeText}</td> <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${dateText}</td> <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium"> <button class="thelo-btn-secondary-sm view-details-btn">${T.tableView}</button> </td>`;
+        const studentName = studentNameMap.get(result.email) || result.email; // Get name from map, fallback to email
+
+        row.innerHTML = `<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${studentName}</td> <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${result.testId}</td> <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${scoreText}</td> <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${timeText}</td> <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600">${dateText}</td> <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium"> <button class="thelo-btn-secondary-sm view-details-btn">${T.tableView}</button> </td>`;
         row.querySelector('.view-details-btn').addEventListener('click', async (e) => { e.preventDefault(); await showResultDetail(result); });
         resultsTableBody.appendChild(row);
     }
