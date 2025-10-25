@@ -771,15 +771,34 @@
             }
             const resultsQuery = query(collection(db, "thelo-test-results"), where("groupId", "==", group.id));
             const resultsSnapshot = await getDocs(resultsQuery);
-            resultsTableBody.innerHTML = ''; 
-            if (resultsSnapshot.empty) { resultsNoneMsg.classList.remove('hidden'); resultsTable.classList.add('hidden'); } else {
-                resultsNoneMsg.classList.add('hidden'); const results = [];
+            
+            if (resultsSnapshot.empty) {
+                document.getElementById('no-tests-msg').classList.remove('hidden');
+                resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
+            } else {
+                const results = [];
                 resultsSnapshot.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
-                results.sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0));
-                results.forEach(result => renderResultRow(result)); // Pass result to render function
-                resultsTable.classList.remove('hidden');
+                
+                // Find unique test IDs
+                const uniqueTestIds = [...new Set(results.map(r => r.testId))];
+                
+                const testListContainer = document.getElementById('test-list-container');
+                uniqueTestIds.forEach(testId => {
+                    const btn = document.createElement('button');
+                    btn.className = 'thelo-btn-secondary';
+                    btn.dataset.testId = testId;
+                    btn.textContent = testId;
+                    btn.onclick = () => {
+                        testListContainer.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        selectedTestId = testId;
+                        loadTestResults(testId, results, group.groupName);
+                    };
+                    testListContainer.appendChild(btn);
+                });
+
+                resultsTitle.textContent = T.resultsTitleSelectTest;
             }
-            resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
         } catch (err) { console.error("Error loading group data:", err); resultsTitle.textContent = "Error loading data"; resultsNoneMsg.textContent = "Error loading results."; resultsNoneMsg.classList.remove('hidden'); }
     }
 
