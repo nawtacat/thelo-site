@@ -91,6 +91,7 @@
         background-color: white;
         border: 1px solid var(--grid-color);
         border-radius: 0.75rem;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
         padding: 2.5rem;
     }
     .window-container::before {
@@ -500,19 +501,29 @@ function updateAuthUI(lang, targetDashboard) { // <-- Add targetDashboard argume
                 canvas.height = rect.height * devicePixelRatio;
                 ctx.scale(devicePixelRatio, devicePixelRatio);
                 if (drawingData) {
-                    renderDrawingAtTime(Infinity, drawingData, ctx);
+                    // Redraw the final frame if data is already loaded
+                    renderDrawingAtTime(Infinity, drawingData, ctx, true);
                 }
             };
-            const renderDrawingAtTime = (targetTime, data, context) => {
+            const renderDrawingAtTime = (targetTime, data, context, isRedraw = false) => {
                 const canvasWidth = context.canvas.width / devicePixelRatio;
                 const canvasHeight = context.canvas.height / devicePixelRatio;
                 context.clearRect(0, 0, canvasWidth, canvasHeight);
                 context.lineCap = 'round';
                 context.lineJoin = 'round';
+
+                // --- FIX: Calculate the initial delay (offset) ---
+                // This finds the timestamp of the very first point to remove dead air at the start.
+                // We only calculate this once and store it on the data object.
+                if (data.strokes.length > 0 && data.offset === undefined) {
+                    data.offset = data.strokes.reduce((min, s) => Math.min(min, s.startTime || 0), Infinity);
+                }
+                const offset = data.offset || 0;
+
                 data.strokes.forEach(stroke => {
-                    const strokeStartTime = stroke.startTime || 0;
+                    const strokeStartTime = (stroke.startTime || 0) - (isRedraw ? 0 : offset);
                     if (targetTime < strokeStartTime) return;
-                    context.strokeStyle = stroke.color || '#2563EB';
+                    context.strokeStyle = stroke.color || 'var(--thelo-blue)';
                     context.lineWidth = stroke.lineWidth || 4;
                     context.beginPath();
                     let movedToFirstPoint = false;
@@ -533,12 +544,12 @@ function updateAuthUI(lang, targetDashboard) { // <-- Add targetDashboard argume
             const startReplayAnimation = (data) => {
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
                 let startTime = 0;
-                const totalDuration = data.strokes.reduce((max, s) => Math.max(max, s.endTime), 0);
+                const totalDuration = data.strokes.reduce((max, s) => Math.max(max, s.endTime), 0) - (data.offset || 0);
                 const animate = (timestamp) => {
                     if (!startTime) startTime = timestamp;
                     const elapsedTime = timestamp - startTime;
                     renderDrawingAtTime(elapsedTime, data, ctx);
-                    if (elapsedTime < totalDuration) {
+                    if (elapsedTime < totalDuration + 200) { // Add a small buffer
                         animationFrameId = requestAnimationFrame(animate);
                     } else {
                         renderDrawingAtTime(Infinity, data, ctx);
