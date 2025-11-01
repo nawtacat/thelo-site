@@ -11,6 +11,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <!-- KaTeX for Math Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0KOVEMckDpbOc7ymOFAKfCcfdudfNP1YrGo8acCuAmvCIEtBdnDF0" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURPl3dqSvhQqdPkdFRGzOUrWbKcYdCgLdaCIneGdGaEZdM0KSMNBTR" crossorigin="anonymous"
+        onload="renderMathInElement(document.body);"></script>
 
   <style>
     /*
@@ -332,6 +337,24 @@
         return str.replace(/{(\w+)}/g, (match, key) => values[key] || match); 
     }
 
+    /**
+     * Finds custom /K ... K/ delimiters and replaces them with KaTeX-friendly delimiters.
+     * Then, it uses KaTeX's auto-render function on the element.
+     * @param {string} text The text content to process.
+     * @param {HTMLElement} element The container element to render math in.
+     */
+    function renderMathInText(text, element) {
+        // Replace our custom /K ... K/ delimiters with KaTeX's default $$...$$ (display mode)
+        const processedText = text.replace(/\/K\s*(.*?)\s*K\//g, '$$$1$$');
+        element.textContent = processedText; // Set the text first
+
+        // Now, ask KaTeX to render math in this specific element
+        renderMathInElement(element, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true}
+            ]
+        });
+    }
     /** Applies UI text based on language */
     function applyContent(lang) {
         const T = strings[lang];
@@ -434,21 +457,21 @@
                             <div>
                                 <span class="question-label">${T.labelFeedback}</span>
                                 <div class="feedback-text">
-                                    <p>${questionData.feedback || T.noFeedback}</p>
+                                    <p class="math-content" data-type="feedback">${questionData.feedback || T.noFeedback}</p>
                                 ...</div>
                             </div>
                             
                             <div>
                                 <span class="question-label">${T.labelQuestion}</span>
                                 <div class="feedback-text">
-                                    <p>${questionData.question || T.noQuestion}</p>
+                                    <p class="math-content" data-type="question">${questionData.question || T.noQuestion}</p>
                                 </div>
                             </div>
                             
                             <div>
                                 <span class="question-label">${T.labelCorrectAnswer}</span>
                                 <div class="feedback-text">
-                                    <p>${questionData.correctAnswer || T.noAnswer}</p>
+                                    <p class="math-content" data-type="correctAnswer">${questionData.correctAnswer || T.noAnswer}</p>
                                 </div>
                             </div>
                         </div>
@@ -457,6 +480,14 @@
                 </div>
             </div>
         `;
+        // After setting innerHTML, find the elements and render math in them
+        const feedbackP = section.querySelector('.math-content[data-type="feedback"]');
+        const questionP = section.querySelector('.math-content[data-type="question"]');
+        const answerP = section.querySelector('.math-content[data-type="correctAnswer"]');
+
+        renderMathInText(questionData.feedback || T.noFeedback, feedbackP);
+        renderMathInText(questionData.question || T.noQuestion, questionP);
+        renderMathInText(questionData.correctAnswer || T.noAnswer, answerP);
         questionBreakdownContainer.appendChild(section);
     }
     
