@@ -3330,87 +3330,84 @@ function handleNextCheckClick() {
     };
     }
     // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
-// REPLACE your entire addChatMessage function with this one
 /**
- * Finds simple math notations in a string and converts them to KaTeX HTML.
- * Supports:
- * - `sqrt(content)` -> rendered square root
- * - `base^exponent` -> rendered power
- * - `(base)^exponent` -> rendered power with parentheses
- * @param {string} text - The input string, potentially containing math.
- * @returns {string} An HTML string with math portions rendered by KaTeX.
+ * Finds and renders math expressions within a string of text.
+ * It handles explicit /K...K/ delimiters and also automatically
+ * detects and converts simple math like fractions and equations.
+ * @param {string} text The input string from the AI.
+ * @returns {string} An HTML string with math rendered by KaTeX.
  */
 function parseAndRenderMath(text) {
     if (!text || typeof text !== 'string') return '';
 
-    // This regex is specifically designed to avoid matching HTML tags.
-    // It looks for math expressions that are not immediately preceded by '<' or followed by '>'.
-    // It finds: sqrt(), powers, fractions (e.g., 4/5), and simple equations (e.g., 4/5 * 1/2 = 2/5).
-    const mathRegex = /(?<!<[^>]*)\b(sqrt\([^)]+\)|[a-zA-Z0-9]+\^\w+|\d+\/\d+|\d+\s*[\+\-\*\/]\s*\d+(?:\s*=\s*[\d\/]+)?)(?![^<]*>)/g;
+    // This regex finds either /K...K/ blocks OR simple math expressions.
+    // It avoids matching things inside HTML tags.
+    const mathRegex = /(\/K[\s\S]*?K\/)|(?<!<[^>]*)\b(\d+\s*-\s*\d+\/\d+\s*=\s*\d+\/\d+|\d+\/\d+\s*\*\s*\d+\/\d+\s*=\s*[\d\/]+|\d+\/\d+)(?![^<]*>)/g;
 
-    return text.replace(mathRegex, (match) => {
-        try {
-            // First, convert all simple math notations within the matched string to KaTeX syntax.
-            let katexString = match
-                .replace(/(\d+)\/(\d+)/g, '\\frac{$1}{$2}') // a/b -> \frac{a}{b}
-                .replace(/\*/g, '\\cdot');               // * -> ⋅
+    return text.replace(mathRegex, (match, kBlock, autoDetected) => {
+        let expression = autoDetected || match; // Use the auto-detected group if it exists
 
-            // Then, handle special functions like sqrt() and powers.
-            katexString = katexString.replace(/\bsqrt\(([^)]+)\)/g, '\\sqrt{$1}');
-            katexString = katexString.replace(/\(([^)]+)\)\^([\w\d]+)/g, '($1)^{$2}');
-            katexString = katexString.replace(/(\b[\w\d]+)\^([\w\d]+)\b/g, '$1^{$2}');
-
-            // Finally, render the complete KaTeX string to HTML.
-            return katex.renderToString(katexString, { throwOnError: false, displayMode: false });
-        } catch (e) {
-            console.warn("KaTeX rendering failed for:", match, e);
-            return match; // In case of error, fall back to the original text.
+        // If it's a /K...K/ block, strip the delimiters
+        if (expression.startsWith('/K')) {
+            expression = expression.slice(2, -2).trim();
         }
+
+        // Convert simple notations to proper KaTeX syntax
+        const katexString = expression
+            .replace(/(\d+)\/(\d+)/g, '\\frac{$1}{$2}') // e.g., 4/5 -> \frac{4}{5}
+            .replace(/\*/g, '\\cdot');               // * -> ⋅
+
+        // Render the final string
+        return katex.renderToString(katexString, {
+            throwOnError: false,
+            displayMode: false // Always render inline for chat
+        });
     });
 }
-// REPLACE your entire addChatMessage function with this one
 
+// REPLACE your old addChatMessage function with this one:
 function addChatMessage(sender, rawMsg) {
     if (isTabletMode) {
         // Tablet toast logic remains the same
         const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
         showToast(rawMsg, isImportant ? 5000 : 3500);
-	    showFeedback(rawMsg, 3500);
+	    showOnCanvasFeedback(rawMsg);
     } else {
         // Desktop/mobile terminal chat
         const chatArea = document.getElementById('chat');
         if (!chatArea) return;
 
+
         const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
         const TXT = getCurrentUIText();
         let emoji = '🫧';
+
 
         const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
         const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
         const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
         const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
         const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
-        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('&lt;')[0]);
 
         if(isWrong) emoji = '🤔';
         else if (isCorrect || isPoints) emoji = '🎉';
         else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
         else if (isWelcome) emoji = '👋';
         else if (isChecking) emoji = '⏳';
-        
-        // ======================= THE CHANGE IS HERE =======================
-        // Use our new function to parse the message for math before displaying it.
-        const finalHTML = parseAndRenderMath(msg);
-        // ================================================================
-
+        
         const bubble = document.createElement('div');
         bubble.className = 'ai-message'; // Starts with opacity: 0
-        
-        // And now we use the processed HTML instead of the raw message.
+
+        // Use our new function to parse the message for math before displaying it.
+        const finalHTML = parseAndRenderMath(msg);
+
+        // Set the final content
         bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${finalHTML}</span>`;
+
         chatArea.appendChild(bubble);
 
-        // Force the browser to paint the initial state before animating
+        // Animation logic remains the same
         requestAnimationFrame(() => {
             setTimeout(() => {
                 bubble.classList.add('show');
