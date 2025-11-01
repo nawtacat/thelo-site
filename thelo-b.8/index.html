@@ -3330,40 +3330,7 @@ function handleNextCheckClick() {
     };
     }
     // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
-/**
- * Finds and renders math expressions within a string of text.
- * It handles explicit /K...K/ delimiters and also automatically
- * detects and converts simple math like fractions and equations.
- * @param {string} text The input string from the AI.
- * @returns {string} An HTML string with math rendered by KaTeX.
- */
-function parseAndRenderMath(text) {
-    if (!text || typeof text !== 'string') return '';
-
-    // This regex finds either /K...K/ blocks OR simple math expressions.
-    // It avoids matching things inside HTML tags.
-    const mathRegex = /(\/K[\s\S]*?K\/)|(?<!<[^>]*)\b(\d+\s*-\s*\d+\/\d+\s*=\s*\d+\/\d+|\d+\/\d+\s*\*\s*\d+\/\d+\s*=\s*[\d\/]+|\d+\/\d+)(?![^<]*>)/g;
-
-    return text.replace(mathRegex, (match, kBlock, autoDetected) => {
-        let expression = autoDetected || match; // Use the auto-detected group if it exists
-
-        // If it's a /K...K/ block, strip the delimiters
-        if (expression.startsWith('/K')) {
-            expression = expression.slice(2, -2).trim();
-        }
-
-        // Convert simple notations to proper KaTeX syntax
-        const katexString = expression
-            .replace(/(\d+)\/(\d+)/g, '\\frac{$1}{$2}') // e.g., 4/5 -> \frac{4}{5}
-            .replace(/\*/g, '\\cdot');               // * -> ⋅
-
-        // Render the final string
-        return katex.renderToString(katexString, {
-            throwOnError: false,
-            displayMode: false // Always render inline for chat
-        });
-    });
-}
+// The faulty parseAndRenderMath function has been deleted.
 
 // REPLACE your old addChatMessage function with this one:
 function addChatMessage(sender, rawMsg) {
@@ -3399,12 +3366,22 @@ function addChatMessage(sender, rawMsg) {
         const bubble = document.createElement('div');
         bubble.className = 'ai-message'; // Starts with opacity: 0
 
-        // Use our new function to parse the message for math before displaying it.
-        const finalHTML = parseAndRenderMath(msg);
+        // 1. Add the emoji
+        const emojiSpan = document.createElement('span');
+        emojiSpan.className = 'emoji';
+        emojiSpan.setAttribute('role', 'img');
+        emojiSpan.setAttribute('aria-label', 'icon');
+        emojiSpan.textContent = emoji;
+        bubble.appendChild(emojiSpan);
 
-        // Set the final content
-        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${finalHTML}</span>`;
-
+        // 2. Create a container for the text/math content
+        const contentSpan = document.createElement('span');
+        
+        // 3. Use the CORRECT rendering function from your file
+        // This will parse the /K ... K/ delimiters properly
+        renderMixedKaTeXInto(contentSpan, msg);
+        
+        bubble.appendChild(contentSpan);
         chatArea.appendChild(bubble);
 
         // Animation logic remains the same
