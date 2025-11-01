@@ -1,1285 +1,599 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Advanced Interactive Calculator</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
-    
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.css"/>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.1/math.min.js"></script>
-    
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title data-i18n="title">Test Result | thelo</title>
+        <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+        <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+        <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+        <!-- KaTeX for Math Rendering -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"></script>
+
     <style>
-        /* --- General Setup & Variables --- */
-        :root {
-            --thelo-blue: #2563eb;
-            --thelo-blue-dark: #1d4ed8;
-            --thelo-bg: #f9fafb;
-            --sidebar-bg: #ffffff;
-            --thelo-text: #111827;
-            --thelo-text-light: #6b7280;
-            --thelo-border: #e5e7eb;
-            --error-red: #ef4444;
-            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        /*
+        * ============================================
+        * Custom Font Definitions for Armenian (Montserrat Arm)
+        * ============================================
+        */
+        @font-face {
+        font-family: 'Montserrat Arm';
+        src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype');
+        font-weight: 400; /* Regular */
+        font-style: normal;
+        font-display: swap;
+        unicode-range: U+0530-058F, U+FB13-FB17;
         }
+        @font-face {
+        font-family: 'Montserrat Arm';
+        src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf') format('opentype');
+        font-weight: 600; /* SemiBold */
+        font-style: normal;
+        font-display: swap;
+        unicode-range: U+0530-058F, U+FB13-FB17;
+        }
+        @font-face {
+        font-family: 'Montserrat Arm';
+        src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf') format('opentype');
+        font-weight: 800; /* ExtraBold */
+        font-style: normal;
+        font-display: swap;
+        unicode-range: U+0530-058F, U+FB13-FB17;
+        }
+
+        /*
+        * ============================================
+        * Main Site Styles (Copied from Dashboard)
+        * ============================================
+        */
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+        }
+        html { scroll-behavior: smooth; }
         body {
-            margin: 0;
-            font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-            display: flex;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
+            font-family: 'Montserrat Arm', 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
             background-color: var(--thelo-bg);
             color: var(--thelo-text);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-image:
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            min-height: 100vh;
         }
 
-        /* --- Sidebar & Header --- */
-        #sidebar {
-            width: 420px;
-            min-width: 320px;
-            height: 100%;
-            background-color: var(--sidebar-bg);
-            border-right: 1px solid var(--thelo-border);
-            box-shadow: var(--shadow-lg);
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            resize: horizontal;
-            overflow: auto;
+        h1, h2, h3, h4, h5, h6 { font-weight: 800; }
+
+        .nav-link { 
+            @apply font-semibold text-[var(--thelo-text)] transition-colors duration-200;
         }
-        .sidebar-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid var(--thelo-border);
-            flex-shrink: 0;
+        .nav-link:hover { 
+            color: var(--thelo-blue); 
         }
-        .sidebar-header h1 {
-            margin: 0;
-            font-size: 1.25rem;
+
+        .window-container {
+            position: relative;
+            background-color: white;
+            border: 1px solid var(--grid-color);
+            border-radius: 0.75rem; 
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); 
+            padding: 2.5rem; 
         }
-        .header-buttons {
-            display: flex;
-            gap: 0.5rem;
+        .window-container::before {
+            content: ' ';
+            position: absolute;
+            top: 1.5rem; 
+            left: 1.5rem; 
+            width: 52px;
+            height: 12px;
+            background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
+            background-repeat: no-repeat;
+            z-index: 1;
         }
-        .header-btn {
-            background-color: var(--sidebar-bg);
-            color: var(--thelo-text-light);
-            border: 1px solid var(--thelo-border);
-            border-radius: 8px;
-            padding: 0.5rem;
-            cursor: pointer;
-            transition: background-color 0.2s, color 0.2s;
-            width: 36px;
-            height: 36px;
-            display: flex;
+        
+        /* Button Styles (Kept for consistency) */
+        .thelo-btn-secondary {
+            font-weight: 700;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease-in-out;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-        }
-        .header-btn:hover, .header-btn.active {
-            background-color: var(--thelo-blue);
-            color: white;
+            border: 1px solid transparent;
+            cursor: pointer; 
+            background-color: transparent;
+            color: var(--thelo-blue);
             border-color: var(--thelo-blue);
         }
-        .header-btn svg {
-            width: 20px;
-            height: 20px;
-            stroke-width: 2;
-        }
-        #addFunctionBtn {
+        .thelo-btn-secondary:hover {
             background-color: var(--thelo-blue);
             color: white;
-            font-size: 1.5rem;
-            line-height: 1;
-        }
-        #addFunctionBtn:hover {
-            background-color: var(--thelo-blue-dark);
         }
 
-        /* --- Expression List --- */
-        #expressionListContainer {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 0.5rem 0;
+        /* Language Button Styles */
+        .lang-btn {
+            @apply cursor-pointer font-bold text-slate-400;
         }
-        .expression-item {
-            border-bottom: 1px solid var(--thelo-border);
-            padding: 0.5rem 1rem 0.5rem 0.75rem;
+        .lang-btn.active {
+            @apply text-[var(--thelo-blue)];
         }
-        .expression-main {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .expression-color-bar {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            flex-shrink: 0;
-            cursor: pointer;
-            border: 2px solid;
-            transition: opacity 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            user-select: none;
-        }
-        .expression-color-bar.hidden-expr {
-            opacity: 0.3;
-        }
-        .expression-number {
-            color: var(--thelo-text-light);
-            font-weight: 500;
-            user-select: none;
-            width: 20px;
-            text-align: center;
-        }
-        .expression-input-wrapper {
-    display: flex;
-    align-items: center;
-    flex-grow: 1;
-}
-        .expression-result {
-            padding: 0 0.75rem;
-            font-size: 1rem;
-            color: var(--thelo-text-light);
-            font-weight: 500;
-            white-space: nowrap;
-        }
-        .remove-expression-btn {
-            background: transparent;
-            border: none;
-            font-size: 1.75rem;
-            color: var(--thelo-text-light);
-            cursor: pointer;
-            padding: 0 0.5rem;
-            transition: color 0.2s;
-        }
-        .remove-expression-btn:hover {
-            color: var(--error-red);
-        }
-
-         /* ADD THIS NEW BLOCK IN ITS PLACE */
-.math-input-field {
-    width: 100%;
-    padding: 9px 8px; /* Added 1px top/bottom padding to maintain alignment */
-    font-size: 1.3rem;
-    cursor: text;
-    border: 1px solid transparent; /* Make the border transparent */
-    background-color: transparent; /* Make the background transparent */
-}
-.math-input-field, .math-input-field.mq-focused {
-    width: 100%;
-    padding: 9px 8px;
-    font-size: 1.3rem;
-    cursor: text;
-    
-    /* This ensures the field is always invisible */
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-}
         
-        /* --- Sliders & Extras --- */
-        .expression-extras {
-            padding: 0.5rem 0 0.5rem 52px;
-        }
-        .slider-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 5px;
-        }
-        .slider-container label {
-            font-family: monospace;
-            width: 80px;
-            white-space: nowrap;
-        }
-        .slider-container input[type=range] {
-            flex-grow: 1;
-        }
-
-        /* --- Math Keyboard --- */
-        #mathKeyboard {
-            background: #f0f3ff;
-            padding: 1rem;
-            border-top: 1px solid var(--thelo-border);
-            flex-shrink: 0;
-            display: none; /* Hidden by default */
-            grid-template-columns: repeat(auto-fill, minmax(45px, 1fr));
-            gap: 8px;
-        }
-        #sidebar.keyboard-open #mathKeyboard {
-            display: grid; /* Show when class is present */
-        }
-        #mathKeyboard button {
-            background: #fff;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 1.1rem;
-            height: 40px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        #mathKeyboard button:hover {
-            background-color: #e0e8ff;
-        }
-
-        /* --- Canvas & Graphing Area --- */
-        #canvasContainer {
-            flex-grow: 1;
-            position: relative;
-        }
-        #graphCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            cursor: grab;
-        }
-        #graphCanvas:active {
-            cursor: grabbing;
-        }
-        #homeBtn {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 44px;
-            height: 44px;
-            background-color: var(--sidebar-bg);
-            border: 1px solid var(--thelo-border);
-            border-radius: 50%;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.2s, box-shadow 0.2s;
-            z-index: 5;
-        }
-        #homeBtn:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-        }
-        #homeBtn svg {
-            width: 24px;
-            height: 24px;
-            stroke: var(--thelo-text-light);
-        }
-
-        /* --- Responsive Design --- */
-        @media (max-width: 768px) {
-            body {
-                flex-direction: column;
-            }
-            #sidebar {
-                width: 100%;
-                height: 45vh;
-                resize: none;
-            }
-            #homeBtn {
-                bottom: 15px;
-                right: 15px;
-            }
-        }
+        .question-label { 
+        display: block;
+        font-size: 0.75rem;       /* from text-xs */
+        font-weight: 800;         /* This is font-extrabold */
+        color: rgb(148 163 184);  /* from text-slate-400 */
+        text-transform: uppercase;
+        letter-spacing: 0.05em;   /* from tracking-wider */
+        margin-bottom: 0.5rem;    /* from mb-2 */
+    } 
+        .student-solution-img { @apply w-full h-auto bg-white border border-slate-300 rounded-md object-contain; }
+        .feedback-text { @apply p-3 bg-slate-50 rounded-md text-slate-700 text-sm prose max-w-none; }
+        .question-status-correct { @apply inline-block text-sm font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full; }
+        .question-status-incorrect { @apply inline-block text-sm font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full; }
     </style>
-</head>
-<body>
+    </head>
 
-    <div id="sidebar">
-        <div class="sidebar-header">
-            <h1>Graphing Calculator</h1>
-            <div class="header-buttons">
-                <button id="toggleKeyboardBtn" class="header-btn" title="Toggle Keyboard">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h18M3 7h18M3 11h18M3 15h18M4 21h4M10 21h4M16 21h4" />
-                    </svg>
-                </button>
-                <button id="addFunctionBtn" class="header-btn" title="Add new expression">+</button>
-            </div>
-        </div>
-        <div id="expressionListContainer">
-            </div>
-        <div id="mathKeyboard">
-            </div>
-    </div>
+    <body class="antialiased">
 
-    <div id="canvasContainer">
-        <canvas id="graphCanvas"></canvas>
-        <button id="homeBtn" title="Reset View">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h7.5" />
-            </svg>                      
-        </button>
-    </div>
-
-    <script>
-    // --- Advanced Interactive Calculator ---
-    document.addEventListener('DOMContentLoaded', () => {
-        // --- DOM ELEMENTS & CONSTANTS ---
-        const sidebar = document.getElementById('sidebar');
-        const canvas = document.getElementById('graphCanvas');
-        const ctx = canvas.getContext('2d');
-        const expressionListContainer = document.getElementById('expressionListContainer');
-        const addFunctionBtn = document.getElementById('addFunctionBtn');
-        const homeBtn = document.getElementById('homeBtn');
-        const mathKeyboard = document.getElementById('mathKeyboard');
-        const toggleKeyboardBtn = document.getElementById('toggleKeyboardBtn');
-
-        const devicePixelRatio = window.devicePixelRatio || 1;
-        const PLOT_COLORS = ['#2563eb', '#c026d3', '#22c55e', '#f97316', '#8b5cf6', '#d946ef'];
-        const INEQUALITY_ALPHA = 0.2;
-        const POI_RADIUS = 5 * devicePixelRatio;
-        const KEYBOARD_SYMBOLS = [
-            'x', 'y', 'π', 'θ', '^', '√', '(', ')', 
-            '7', '8', '9', '/', 'sin', 'cos', 'tan',
-            '4', '5', '6', '*', '<', '>', '≤', '≥',
-            '1', '2', '3', '-', '{', '}', 'd/dx',
-            '0', '.', '=', '+', 'abs', 'log', 'ln'
-        ];
-        
-        // --- STATE MANAGEMENT ---
-        let graphState = {
-            originX: 0, originY: 0, scale: 40,
-            isPanning: false, panStart: { x: 0, y: 0 },
-            expressions: [],
-            activeInput: null,
-            touchState: { isPinching: false, initialPinchDistance: 0 },
-            intersections: [],
-            hoverPoint: { visible: false, x: 0, y: 0 },
-            lockedPoint: { visible: false, x: 0, y: 0, color: '#000' }
-        };
-
-        // --- OPTIMIZATION ---
-        function debounce(func, delay) {
-            let timeout;
-            return function(...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), delay);
-            };
-        }
-        const debouncedEvaluateAndPlotAll = debounce(evaluateAndPlotAll, 250);
-
-        // --- INITIALIZATION ---
-        function initialize() {
-            setupMathKeyboard();
-            resizeCanvas();
-            addExpressionInput(''); // Start with one empty expression bar
-            setupEventListeners();
-            evaluateAndPlotAll();
-        }
-
-        function setupEventListeners() {
-            window.addEventListener('resize', resizeCanvas);
-            addFunctionBtn.addEventListener('click', () => addExpressionInput());
-            homeBtn.addEventListener('click', () => resetView());
-            toggleKeyboardBtn.addEventListener('click', () => {
-                sidebar.classList.toggle('keyboard-open');
-                toggleKeyboardBtn.classList.toggle('active', sidebar.classList.contains('keyboard-open'));
-            });
-            canvas.addEventListener('wheel', handleGraphZoom, { passive: false });
-            canvas.addEventListener('mousedown', handleGraphPanStart);
-            canvas.addEventListener('mousemove', handleGraphPanMove);
-            window.addEventListener('mouseup', handleGraphPanEnd);
-            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-            canvas.addEventListener('touchend', handleTouchEnd);
+    <!-- Navbar: Updated with language switcher and button ID -->
+    <nav id="mainNav" class="w-full z-40"> 
+        <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-6 lg:px-8">
+            <a href="/" class="flex items-center gap-2">
+                <img src="https://thelo.space/img/bluethelo.svg" alt="thelo logo" class="h-12 w-auto" />
+            </a>
             
-            canvas.addEventListener('click', handleGraphClick);
-            canvas.addEventListener('mousemove', handleMouseMoveForHover);
-            canvas.addEventListener('mouseleave', () => {
-                graphState.hoverPoint.visible = false;
-                requestAnimationFrame(renderAll);
-            });
-        }
-        
-        // --- MATH KEYBOARD ---
-        function setupMathKeyboard() {
-            KEYBOARD_SYMBOLS.forEach(symbol => {
-                const btn = document.createElement('button');
-                btn.textContent = symbol;
-                btn.addEventListener('click', () => insertSymbol(symbol));
-                mathKeyboard.appendChild(btn);
-            });
-        }
-        
-        // REPLACE your old insertSymbol function with this new one
-        function insertSymbol(symbol) {
-    const mathField = graphState.activeInput;
-    if (!mathField) return;
-
-    if (['sin', 'cos', 'tan', 'log', 'ln', 'sqrt'].includes(symbol)) {
-        mathField.write(`\\${symbol}\\left(\\right)`);
-        mathField.keystroke('Left');
-    } else if (symbol === '^') {
-        mathField.cmd('^');
-    } else if (symbol === '√') {
-        mathField.cmd('\\sqrt');
-    } else if (symbol === 'π') {
-        mathField.cmd('\\pi');
-    } else if (symbol === 'θ') {
-        mathFiel.cmd('\\theta');
-    } else if (symbol === '≤') {
-        mathField.cmd('\\le');
-    } else if (symbol === '≥') {
-        mathField.cmd('\\ge');
-    } else if (symbol === 'd/dx') {
-        mathField.write('d/dx()');
-        mathField.keystroke('Left');
-    } else {
-        mathField.write(symbol);
-    }
-    
-    mathField.focus();
-    }        
-            function addExpressionInput(str = '') {
-    const exprIndex = graphState.expressions.length;
-    const newExpr = {
-        id: `expr-${Date.now()}`,
-        str: str,
-        visible: true,
-        color: PLOT_COLORS[exprIndex % PLOT_COLORS.length],
-    };
-    graphState.expressions.push(newExpr);
-
-    const item = document.createElement('div');
-    item.className = 'expression-item';
-    item.id = newExpr.id;
-    item.innerHTML = `
-        <div class="expression-main">
-            <span class="expression-number">${exprIndex + 1}</span>
-            <div class="expression-color-bar" title="Toggle visibility"></div>
-            <div class="expression-input-wrapper">
-                <span class="math-input-field"></span>
+            <div class="flex items-center gap-4">
+                <a href="https://thelo.space/tdashboard" id="back-to-dashboard-btn" class="thelo-btn-secondary" data-i18n="navBackToDashboard">
+                    Back to Dashboard
+                </a>
+                <!-- Language Switcher -->
+                <div class="flex items-center gap-2 text-sm border-l pl-4 ml-2">
+                    <span id="lang-en" class="lang-btn">EN</span>
+                    <span class="text-slate-300">|</span>
+                    <span id="lang-hy" class="lang-btn">HY</span>
+                </div>
             </div>
-            <span class="expression-result"></span>
-            <button class="remove-expression-btn" title="Remove expression">&times;</button>
         </div>
-        <div class="expression-extras"></div>
-    `;
-    expressionListContainer.appendChild(item);
+    </nav>
 
-    const mathFieldSpan = item.querySelector('.math-input-field');
-    
-    var MQ = MathQuill.getInterface(2);
-    
-    const mathField = MQ.MathField(mathFieldSpan, {
-        spaceBehavesLikeTab: true,
-        handlers: {
-            edit: function() {
-                let latexString = mathField.latex();
+    <!-- 
+    MAIN CONTENT: 
+    This is now a wrapper with a loading state and an empty content block.
+    The JavaScript will fill this in.
+    -->
+    <main class="pt-12 pb-16 lg:pt-16 lg:pb-24">
+        <div class="mx-auto max-w-7xl px-6 lg:px-8">
+
+            <!-- Loading State -->
+            <div id="loading-state" class="text-center py-20">
+                <h2 class="text-2xl font-bold text-slate-600" data-i18n="loading">Loading Result Details...</h2>
+            </div>
+
+            <!-- Main Content (Hidden by default) -->
+            <div id="main-content" class="hidden">
+            
+                <!-- Page Header -->
+                <div class="mb-12">
+                    <h1 class="text-4xl font-extrabold tracking-tighter text-[var(--thelo-text)] sm:text-5xl" data-i18n="pageTitle">Test Result Details</h1>
+                    <!-- This <p> tag will be filled by JS -->
+                    <p class="text-lg text-slate-600 mt-4" id="page-subtitle"></p>
+                </div>
+
+                <!-- Summary Card (First "Floating Window") -->
+                <div class="window-container mb-12">
+                    <!-- pt-10 is added to avoid the traffic lights -->
+                    <div class="mt-4 pt-10 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="summaryStudent">Student</span>
+                            <!-- This <span> will be filled by JS -->
+                            <span class="block font-medium text-slate-800" id="summary-student-email">...</span>
+                        </div>
+                        <div>
+                            <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="summaryTestID">Test ID</span>
+                            <span class="block font-medium text-slate-800" id="summary-test-id">...</span>
+                        </div>
+                        <div>
+                            <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="summaryScore">Score</span>
+                            <span class="block font-medium text-slate-800" id="summary-score">...</span>
+                        </div>
+                        <div>
+                            <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="summaryTime">Time Taken</span>
+                            <span class="block font-medium text-slate-800" id="summary-time">...</span>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Question Breakdown -->
+                <h2 class="text-3xl font-bold mb-8" data-i18n="breakdownTitle">Question Breakdown</h2>
                 
-                // This section contains the corrected conversion logic
-                let mathjsString = latexString
-                    // Add a space after each function name to ensure separation
-                    .replace(/\\sin/g, 'sind ')
-                    .replace(/\\cos/g, 'cosd ')
-                    .replace(/\\tan/g, 'tand ')
-                    .replace(/\\log/g, 'log10 ')
-                    .replace(/\\ln/g, 'log ')
-                    .replace(/\\sqrt/g, 'sqrt ')
-                    // Symbols
-                    .replace(/\\pi/g, 'pi')
-                    // Inequalities
-                    .replace(/\\le/g, '<=')
-                    .replace(/\\ge/g, '>=')
-                    // Formatting
-                    .replace(/\\left\(/g, '(')
-                    .replace(/\\right\)/g, ')')
-                    .replace(/\\cdot/g, '*')
-                    .replace(/\\frac{/g, '(/')
-                    .replace(/}{/g, ')/(')
-                    .replace(/}/g, ')');
-                
-                newExpr.str = mathjsString;
-                debouncedEvaluateAndPlotAll();
-            },
-            enter: function() {
-                addExpressionInput();
-            },
-            deleteOutOf: function(dir) {
-                if (dir === -1 && graphState.expressions.length > 1) {
-                    const currentId = newExpr.id;
-                    const prevItem = item.previousElementSibling;
-                    
-                    item.remove();
-                    graphState.expressions = graphState.expressions.filter(e => e.id !== currentId);
-                    
-                    updateExpressionNumbers();
-                    evaluateAndPlotAll();
-                    
-                    if (prevItem) {
-                        const prevMathField = MQ(prevItem.querySelector('.math-input-field'));
-                        if (prevMathField) {
-                            prevMathField.focus();
-                            graphState.activeInput = prevMathField;
-                        }
-                    }
-                }
-            }
-        }
-    });
+                <!-- 
+                This container will be dynamically filled by the script.
+                -->
+                <div id="question-breakdown-container" class="space-y-12">
+                    <!-- JavaScript will add question cards here -->
+                </div>
 
-    if (str) {
-        mathField.latex(str);
-    }
-    
-    mathField.focus();
-    graphState.activeInput = mathField;
+            </div> <!-- /#main-content -->
 
-    item.querySelector('.remove-expression-btn').addEventListener('click', () => {
-        if (graphState.expressions.length > 1) {
-            item.remove();
-            graphState.expressions = graphState.expressions.filter(e => e.id !== newExpr.id);
-            updateExpressionNumbers();
-            evaluateAndPlotAll();
-        }
-    });
+        </div>
+    </main>
 
-    item.querySelector('.expression-color-bar').addEventListener('click', (e) => {
-        newExpr.visible = !newExpr.visible;
-        e.currentTarget.classList.toggle('hidden-expr', !newExpr.visible);
-        evaluateAndPlotAll();
-    });
-}
-    function updateExpressionNumbers() {
-            expressionListContainer.querySelectorAll('.expression-item').forEach((item, index) => {
-                item.querySelector('.expression-number').textContent = index + 1;
-            });
-        }
+
+    <!-- 
+    ============================================
+    DYNAMIC SCRIPT
+    ============================================
+    This script fetches and renders all the data
+    for this page.
+    -->
+    <script type="module">
+        // Firebase SDK imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, collection, query, getDocs, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Config (Copied from your dashboard)
+        const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", projectId: "physmathacademy-722b3", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        try { setLogLevel('debug'); } catch (e) { console.warn("Could not set Firestore log level:", e); }
+
+        // --- DOM Elements ---
+        const loadingState = document.getElementById('loading-state');
+        const mainContent = document.getElementById('main-content');
+        const pageSubtitle = document.getElementById('page-subtitle');
+        const backToDashboardBtn = document.getElementById('back-to-dashboard-btn');
         
-        // --- PARSING & EVALUATION ENGINE ---
+        // Summary Card Elements
+        const summaryStudentEmail = document.getElementById('summary-student-email');
+        const summaryTestId = document.getElementById('summary-test-id');
+        const summaryScore = document.getElementById('summary-score');
+        const summaryTime = document.getElementById('summary-time');
+        
+        // Question List Container
+        const questionBreakdownContainer = document.getElementById('question-breakdown-container');
+        
+        // Language Elements
+        const langEnBtn = document.getElementById('lang-en');
+        const langHyBtn = document.getElementById('lang-hy');
+
+        // --- App State ---
+        let currentLang = localStorage.getItem('thelo-lang') || 'en';
+
+        // --- UI Strings (i18n) ---
+        const strings = {
+            en: {
+                title: 'Test Result | thelo',
+                navBackToDashboard: 'Back to Dashboard',
+                loading: 'Loading Result Details...',
+                errorTitle: 'Result Not Found',
+                errorSubtitle: 'Could not find a result with the specified ID. Please check the link and try again.',
+                pageTitle: 'Test Result Details',
+                pageSubtitle: 'Viewing result for <strong class="text-slate-800">{email}</strong>',
+                summaryStudent: 'Student',
+                summaryTestID: 'Test ID',
+                summaryScore: 'Score',
+                summaryTime: 'Time Taken',
+                breakdownTitle: 'Question Breakdown',
+                questionTitle: 'Question {index}',
+                solutionTitle: "Student's Solution",
+                feedbackTitle: 'Feedback & Details',
+                statusCorrect: 'Correct',
+                statusIncorrect: 'Incorrect',
+                labelSolution: "Student's Solution",
+                labelFeedback: 'AI Feedback',
+                labelQuestion: 'Question',
+                labelCorrectAnswer: 'Correct Answer',
+                tableTimeValue: '{time}s', // Used for summary
+                noFeedback: 'No feedback provided.',
+                noQuestion: 'N/A',
+                noAnswer: 'N/A'
+            },
+            hy: {
+                title: 'Թեստի Արդյունք | Թելո',
+                navBackToDashboard: 'Վերադառնալ',
+                loading: 'Բեռնվում են Արդյունքները...',
+                errorTitle: 'Արդյունքը Չի Գտնվել',
+                errorSubtitle: 'Նշված ID-ով արդյունք չի գտնվել։ Խնդրում ենք ստուգել հղումը։',
+                pageTitle: 'Թեստի Արդյունքներ',
+                pageSubtitle: 'Դիտում եք <strong class="text-slate-800">{email}</strong>-ի արդյունքը',
+                summaryStudent: 'Աշակերտ',
+                summaryTestID: 'Թեստի ID',
+                summaryScore: 'Միավոր',
+                summaryTime: 'Ծախսած Ժամանակ',
+                breakdownTitle: 'Հարցերի Վերլուծություն',
+                questionTitle: 'Հարց {index}',
+                solutionTitle: 'Աշակերտի Լուծումը',
+                feedbackTitle: 'Կարծիք և Մանրամասներ',
+                statusCorrect: 'Ճիշտ է',
+                statusIncorrect: 'Սխալ է',
+                labelSolution: 'Աշակերտի Լուծումը',
+                labelFeedback: 'AI-ի Կարծիքը',
+                labelQuestion: 'Հարց',
+                labelCorrectAnswer: 'Ճիշտ Պատասխան',
+                tableTimeValue: '{time}վ', // Used for summary
+                noFeedback: 'Կարծիք չի տրամադրվել։',
+                noQuestion: 'N/A',
+                noAnswer: 'N/A'
+            }
+        };
+        
+        /** Formats string with values */
+        function formatString(str, values) { 
+            if (!str) return '';
+            return str.replace(/{(\w+)}/g, (match, key) => values[key] || match); 
+        }
 
         /**
-         * Recursively traverses a math.js node tree to find the coefficients of a linear expression ax+b.
-         * @param {math.Node} node - The root node of the expression.
-         * @returns {{a: number, b: number}|null} - An object with coefficients {a, b}, or null if not linear.
+         * Renders text containing mixed KaTeX delimiters (/K...K/ and $...$) into an element.
+         * This function manually parses and renders math to avoid auto-render inconsistencies.
+         * @param {string} text The text content to process.
+         * @param {HTMLElement} element The container element to render math in.
          */
-        function getLinearCoefficients(node) {
-            if (node.isConstantNode) {
-                return { a: 0, b: node.value };
-            }
-            if (node.isSymbolNode && node.name === 'x') {
-                return { a: 1, b: 0 };
-            }
-            if (node.isOperatorNode) {
-                if (node.op === '+' && node.args.length === 2) {
-                    const c1 = getLinearCoefficients(node.args[0]);
-                    const c2 = getLinearCoefficients(node.args[1]);
-                    if (!c1 || !c2) return null;
-                    return { a: c1.a + c2.a, b: c1.b + c2.b };
-                }
-                if (node.op === '-' && node.args.length === 2) {
-                    const c1 = getLinearCoefficients(node.args[0]);
-                    const c2 = getLinearCoefficients(node.args[1]);
-                    if (!c1 || !c2) return null;
-                    return { a: c1.a - c2.a, b: c1.b - c2.b };
-                }
-                if (node.op === '*' && node.args.length === 2) {
-                    const c1 = getLinearCoefficients(node.args[0]);
-                    const c2 = getLinearCoefficients(node.args[1]);
-                    if (!c1 || !c2) return null;
-                    if (c1.a === 0 && c2.a === 0) return { a: 0, b: c1.b * c2.b };
-                    if (c1.a === 0) return { a: c1.b * c2.a, b: c1.b * c2.b };
-                    if (c2.a === 0) return { a: c2.b * c1.a, b: c2.b * c1.b };
-                    return null;
-                }
-                if (node.op === '/' && node.args.length === 2) {
-                    const c1 = getLinearCoefficients(node.args[0]);
-                    const c2 = getLinearCoefficients(node.args[1]);
-                    if (!c1 || !c2 || c2.a !== 0 || c2.b === 0) return null;
-                    return { a: c1.a / c2.b, b: c1.b / c2.b };
-                }
-                if (node.op === 'unaryMinus' && node.args.length === 1) {
-                    const c1 = getLinearCoefficients(node.args[0]);
-                    if (!c1) return null;
-                    return { a: -c1.a, b: -c1.b };
-                }
-            }
-            return null;
-        }
-
-        function evaluateAndPlotAll() {
-            graphState.expressions.forEach(parseSingleExpression);
-            findAndStoreIntersections();
-            graphState.expressions.forEach(updateExpressionUI);
-            requestAnimationFrame(renderAll);
-        }
-                    function parseSingleExpression(expr) {
-    // Reset properties for re-evaluation
-    expr.type = 'calculation';
-    expr.compiled = null;
-    expr.error = null;
-    expr.result = null;
-    expr.sliders = expr.sliders || {}; // Keep existing slider values if they exist
-    expr.poi = { roots: [], y_intercept: null, extrema: [] };
-    expr.node = null;
-
-    let cleanStr = expr.str.trim();
-    if (!cleanStr) return;
-
-    try {
-        // --- Simplified Detection Logic ---
-        // An expression is a plottable function if it contains 'x' or is an equation with 'y'.
-        const isPlottable = /(^|[^a-zA-Z])x([^a-zA-Z]|$)/.test(cleanStr) || (cleanStr.includes('y') && cleanStr.includes('='));
-
-        if (isPlottable) {
-            expr.type = 'function';
-            let parseableStr = cleanStr;
-            
-            // If it's an equation like y = f(x), just parse the f(x) part
-            if (cleanStr.includes('=')) {
-                const parts = cleanStr.split('=');
-                if (parts[0].trim() === 'y') {
-                    parseableStr = parts[1];
-                } else if (parts[1].trim() === 'y') {
-                    parseableStr = parts[0];
-                }
-            }
-            
-            expr.node = math.parse(parseableStr);
-            expr.compiled = expr.node.compile();
-
-        } else if (cleanStr.includes('<') || cleanStr.includes('>')) {
-             // Basic inequality support (can be expanded later if needed)
-             expr.type = 'inequality'; // Note: This example does not plot inequalities, but correctly categorizes them.
-             expr.error = 'Inequality plotting not fully implemented in this version.';
-        
-        } else {
-            // Everything else is a simple calculation
-            expr.type = 'calculation';
-            // Use math.evaluate for direct, safe evaluation.
-            expr.result = math.evaluate(cleanStr);
-        }
-
-        // --- Smarter Slider Logic ---
-        if (expr.type === 'function') {
-            const knownSymbols = ['x', 'y', 'e', 'pi', 'i', 'true', 'false'];
-            
-            // Find all symbols in the expression tree
-            expr.node.filter(node => node.isSymbolNode).forEach(sliderNode => {
-                const name = sliderNode.name;
-                
-                // Create a slider ONLY if the symbol is NOT a default known symbol
-                // AND it's NOT a built-in function in the math.js library.
-                if (!knownSymbols.includes(name) && typeof math[name] !== 'function') {
-                    if (!expr.sliders[name]) {
-                        expr.sliders[name] = { val: 1, min: -5, max: 5, step: 0.1 };
-                    }
-                }
-            });
-            
-            // Find points of interest now that we know it's a valid function
-            findPointsOfInterest(expr);
-        }
-
-    } catch (err) {
-        expr.error = err.message;
-        console.error("Evaluation Error:", err); // Log the actual error to the console for debugging
-    }
-}
-        // REPLACE your parseSingleExpression function with this version
-        // REPLACE your old parseSingleExpression function with this new one
-        function updateExpressionUI(expr) {
-            const item = document.getElementById(expr.id);
-            if (!item) return;
-
-            const resultEl = item.querySelector('.expression-result');
-            const extrasEl = item.querySelector('.expression-extras');
-            const colorBar = item.querySelector('.expression-color-bar');
-            
-            resultEl.textContent = '';
-            extrasEl.innerHTML = '';
-            colorBar.style.backgroundColor = expr.error ? 'var(--error-red)' : (expr.visible ? expr.color : '#ccc');
-            colorBar.style.borderColor = expr.error ? 'var(--error-red)' : expr.color;
-
-            if (expr.error) {
-                resultEl.textContent = 'Error';
-            } else if (expr.result !== null) {
-                resultEl.textContent = `= ${math.format(expr.result, {precision: 5})}`;
+        function renderMathInText(text, element) {
+            if (!text) {
+                element.innerHTML = '';
+                return;
             }
 
-            Object.keys(expr.sliders).forEach(name => {
-                const slider = expr.sliders[name];
-                const sliderDiv = document.createElement('div');
-                sliderDiv.className = 'slider-container';
-                sliderDiv.innerHTML = `
-                    <label>${name} = ${slider.val}</label>
-                    <input type="range" min="${slider.min}" max="${slider.max}" value="${slider.val}" step="${slider.step}">
-                `;
-                extrasEl.appendChild(sliderDiv);
+            // Regex to find /K...K/ (display) or $...$ (inline) delimiters.
+            const regex = /(\/K[\s\S]*?K\/|\$[\s\S]*?\$)/g;
+            const parts = text.split(regex).filter(Boolean);
+            let finalHTML = '';
 
-                const rangeInput = sliderDiv.querySelector('input[type=range]');
-                rangeInput.addEventListener('input', (e) => {
-                    slider.val = parseFloat(e.target.value);
-                    sliderDiv.querySelector('label').textContent = `${name} = ${slider.val}`;
-                    if (expr.type === 'function') findPointsOfInterest(expr);
-                    requestAnimationFrame(renderAll);
-                });
-            });
-        }
-
-        // --- CORE DRAWING & ANALYSIS ---
-        function renderAll() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawGraphGrid();
-
-            graphState.expressions.forEach(expr => {
-                if (!expr.visible || !expr.compiled) return;
-                const scope = {};
-                Object.keys(expr.sliders).forEach(name => { scope[name] = expr.sliders[name].val; });
-                
-                if (expr.type === 'inequality') {
-                    plotInequality(expr, scope);
-                } else if (expr.type === 'vertical_inequality') {
-                    plotVerticalInequality(expr);
-                } else if (expr.type === 'function') {
-                    plotFunction(expr, scope);
-                    drawPointsOfInterest(expr);
-                }
-            });
-            
-            drawAllIntersectionPoints();
-            if (graphState.hoverPoint.visible) drawHoverPoint();
-            if (graphState.lockedPoint.visible) drawLockedPoint();
-        }
-        
-        function plotFunction(expr, scope) {
-            ctx.strokeStyle = expr.color;
-            ctx.lineWidth = 2.5 * devicePixelRatio;
-            ctx.beginPath();
-            let firstPoint = true;
-            for (let px = 0; px < canvas.width; px++) {
-                const x = (px - graphState.originX) / graphState.scale;
-                scope.x = x;
-                
-                try {
-                    const y = expr.compiled.evaluate(scope);
-                    if (!Number.isFinite(y)) { firstPoint = true; continue; }
-
-                    const py = graphState.originY - (y * graphState.scale);
-                    if (firstPoint) {
-                        ctx.moveTo(px, py);
-                        firstPoint = false;
-                    } else {
-                        ctx.lineTo(px, py);
-                    }
-                } catch (e) { firstPoint = true; }
-            }
-            ctx.stroke();
-        }
-        
-        function plotInequality(expr, scope) {
-            ctx.fillStyle = expr.color;
-            ctx.globalAlpha = INEQUALITY_ALPHA;
-            
-            const step = 8;
-            for(let px = 0; px < canvas.width; px += step) {
-                for (let py_px = 0; py_px < canvas.height; py_px += step) {
-                    const x = (px - graphState.originX) / graphState.scale;
-                    const y = (graphState.originY - py_px) / graphState.scale;
-                    scope.x = x;
-                    
-                    try {
-                        const y_func = expr.compiled.evaluate(scope);
-                        let satisfied = false;
-                        if (expr.inequalityType === '<') satisfied = y < y_func;
-                        else if (expr.inequalityType === '<=') satisfied = y <= y_func;
-                        else if (expr.inequalityType === '>') satisfied = y > y_func;
-                        else if (expr.inequalityType === '>=') satisfied = y >= y_func;
-                        
-                        if(satisfied) {
-                            ctx.fillRect(px, py_px, step, step);
-                        }
-                    } catch(e) {}
-                }
-            }
-            ctx.globalAlpha = 1.0;
-
-            // Draw boundary line
-            ctx.strokeStyle = expr.color;
-            ctx.lineWidth = 2.5 * devicePixelRatio;
-            if (expr.inequalityType === '<' || expr.inequalityType === '>') {
-                ctx.setLineDash([8 * devicePixelRatio, 8 * devicePixelRatio]);
-            }
-            plotFunction(expr, scope);
-            ctx.setLineDash([]); // Reset for other plots
-        }
-
-        // NEW: Function to plot vertical inequalities like x > 2
-        function plotVerticalInequality(expr) {
-            ctx.fillStyle = expr.color;
-            ctx.globalAlpha = INEQUALITY_ALPHA;
-
-            const boundaryPx = graphState.originX + expr.x_value * graphState.scale;
-            const op = expr.inequalityType;
-
-            if (op.includes('<')) { // < or <=
-                ctx.fillRect(0, 0, boundaryPx, canvas.height);
-            }
-            if (op.includes('>')) { // > or >=
-                ctx.fillRect(boundaryPx, 0, canvas.width - boundaryPx, canvas.height);
-            }
-
-            ctx.globalAlpha = 1.0;
-
-            // Draw boundary line
-            ctx.strokeStyle = expr.color;
-            ctx.lineWidth = 2.5 * devicePixelRatio;
-            
-            // Dotted line for strict inequalities
-            if (!op.includes('=')) {
-                ctx.setLineDash([8 * devicePixelRatio, 8 * devicePixelRatio]);
-            }
-
-            ctx.beginPath();
-            ctx.moveTo(boundaryPx, 0);
-            ctx.lineTo(boundaryPx, canvas.height);
-            ctx.stroke();
-
-            // Reset line dash for other plots
-            ctx.setLineDash([]);
-        }
-
-        function findPointsOfInterest(expr) {
-            expr.poi = { roots: [], y_intercept: null, extrema: [] };
-            const scope = {};
-            Object.keys(expr.sliders).forEach(name => { scope[name] = expr.sliders[name].val; });
-
-            try {
-                scope.x = 0;
-                const y_intercept = expr.compiled.evaluate(scope);
-                if (Number.isFinite(y_intercept)) expr.poi.y_intercept = { x: 0, y: y_intercept };
-            } catch (e) {}
-
-            let prev_y, prev_slope_sign;
-            const step = 1 / graphState.scale;
-            for (let px = 0; px < canvas.width; px++) {
-                 const x = (px - graphState.originX) / graphState.scale;
-                 scope.x = x;
-                 
-                 try {
-                     const y = expr.compiled.evaluate(scope);
-                     if (prev_y !== undefined && Number.isFinite(y) && Number.isFinite(prev_y)) {
-                         if (Math.sign(y) !== Math.sign(prev_y)) {
-                              expr.poi.roots.push({ x: (x - step/2), y: 0 });
-                         }
-                         const next_y = expr.compiled.evaluate({ ...scope, x: x + step });
-                         if (Number.isFinite(next_y)) {
-                             const slope_sign = Math.sign(next_y - y);
-                             if (prev_slope_sign !== undefined && slope_sign !== prev_slope_sign) {
-                                 expr.poi.extrema.push({ x: x, y: y });
-                             }
-                             prev_slope_sign = slope_sign;
-                         }
-                     }
-                     prev_y = y;
-                 } catch (e) { prev_y = undefined; }
-            }
-        }
-        
-        function drawPointsOfInterest(expr) {
-            ctx.fillStyle = expr.color;
-            const all_pois = [...expr.poi.roots, ...expr.poi.extrema];
-            if(expr.poi.y_intercept) all_pois.push(expr.poi.y_intercept);
-
-            all_pois.forEach(point => {
-                if(!point) return;
-                const px = graphState.originX + point.x * graphState.scale;
-                const py = graphState.originY - point.y * graphState.scale;
-                ctx.beginPath();
-                ctx.arc(px, py, POI_RADIUS, 0, Math.PI * 2);
-                ctx.fill();
-            });
-        }
-        
-        // --- INTERSECTION FUNCTIONS ---
-        function bisectionSolve(f1, f2, a, b, scope1, scope2, tolerance = 1e-7, maxIterations = 50) {
-            let fa = f1.evaluate({...scope1, x: a}) - f2.evaluate({...scope2, x: a});
-            let fb = f1.evaluate({...scope1, x: b}) - f2.evaluate({...scope2, x: b});
-
-            if (isNaN(fa) || isNaN(fb) || Math.sign(fa) === Math.sign(fb)) {
-                return null;
-            }
-
-            let c = a;
-            for (let i = 0; i < maxIterations; i++) {
-                c = (a + b) / 2;
-                let fc = f1.evaluate({...scope1, x: c}) - f2.evaluate({...scope2, x: c});
-
-                if (Math.abs(fc) < tolerance || (b - a) / 2 < tolerance) {
-                    return c;
-                }
-
-                if (Math.sign(fc) === Math.sign(fa)) {
-                    a = c;
-                    fa = fc;
+            for (const part of parts) {
+                if (part.startsWith('/K') && part.endsWith('K/')) {
+                    const math = part.slice(2, -2).trim();
+                    finalHTML += katex.renderToString(math, { displayMode: false, throwOnError: false });
+                } else if (part.startsWith('$') && part.endsWith('$')) {
+                    const math = part.slice(1, -1).trim();
+                    finalHTML += katex.renderToString(math, { displayMode: false, throwOnError: false });
                 } else {
-                    b = c;
+                    // This is plain text. Find simple math-like expressions and wrap them for KaTeX.
+                    // This regex finds:
+                    // 1. number/number (e.g., 2/5)
+                    // 2. number - number/number = number/number (e.g., 1 - 1/5 = 4/5)
+                    // 3. number/number * number/number = number/number (e.g., 4/5 * 1/2 = 2/5)
+                    const processedPart = part.replace(/(\b\d+\s*-\s*\d+\/\d+\s*=\s*\d+\/\d+\b)|(\b\d+\/\d+\s*\*\s*\d+\/\d+\s*=\s*\d+\/\d+\b)|(\b\d+\/\d+\b)/g, (match) => {
+                        // Inside the matched string (e.g., "1 - 1/5 = 4/5"), find all fractions and convert them.
+                        const withFractions = match.replace(/(\d+)\/(\d+)/g, '\\frac{$1}{$2}');
+                        // Also, replace the standard asterisk with a proper multiplication dot.
+                        const finalMatch = withFractions.replace(/\*/g, '\\cdot');
+                        return `$${finalMatch}$`; // Wrap the fully converted string in $ for KaTeX
+                    });
+
+                    // Escape the processed part to prevent accidental HTML injection before adding to finalHTML
+                    const textNode = document.createTextNode(processedPart);
+                    const tempDiv = document.createElement('div');
+                    tempDiv.appendChild(textNode);
+                    finalHTML += tempDiv.innerHTML.replace(/\$([\s\S]+?)\$/g, (m, katexContent) => katex.renderToString(katexContent, { throwOnError: false }));
                 }
             }
-            return c;
+
+            element.innerHTML = finalHTML;
+        }
+        /** Applies UI text based on language */
+        function applyContent(lang) {
+            const T = strings[lang];
+            if (!T) return;
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.dataset.i18n;
+                if (T[key]) { el.innerHTML = T[key]; }
+            });
+            
+            document.documentElement.lang = lang;
+            document.title = T.title;
+            langEnBtn.classList.toggle('active', lang === 'en');
+            langHyBtn.classList.toggle('active', lang === 'hy');
+
+            // Apply text to elements without data-i18n
+            if (backToDashboardBtn) backToDashboardBtn.textContent = T.navBackToDashboard;
         }
 
-        function findAndStoreIntersections() {
-            graphState.intersections = [];
-            const validFuncs = graphState.expressions.filter(e => e.visible && e.compiled && (e.type === 'function' || e.type === 'inequality'));
-            if (validFuncs.length < 2) return;
+        /** Switches active language */
+        function switchLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('thelo-lang', currentLang);
+            applyContent(currentLang);
+            // Re-load data to get localized strings
+            const urlParams = new URLSearchParams(window.location.search);
+            const resultId = urlParams.get('id');
+            if (resultId) {
+                loadResultData(resultId);
+            }
+        }
 
-            for (let i = 0; i < validFuncs.length; i++) {
-                for (let j = i + 1; j < validFuncs.length; j++) {
-                    const f1_expr = validFuncs[i];
-                    const f2_expr = validFuncs[j];
-                    const f1 = f1_expr.compiled;
-                    const f2 = f2_expr.compiled;
+        /** Renders the top summary card */
+        function renderSummary(resultData) {
+            const T = strings[currentLang];
+            pageSubtitle.innerHTML = formatString(T.pageSubtitle, { email: resultData.email });
+            summaryStudentEmail.textContent = resultData.email;
+            summaryTestId.textContent = resultData.testId;
+            summaryScore.textContent = `${resultData.score} / ${resultData.totalQuestions}`;
+            summaryTime.textContent = formatString(T.tableTimeValue, { time: resultData.timeTakenSeconds });
+            
+            // Update summary labels
+            document.querySelector('[data-i18n="summaryStudent"]').textContent = T.summaryStudent;
+            document.querySelector('[data-i18n="summaryTestID"]').textContent = T.summaryTestID;
+            document.querySelector('[data-i18n="summaryScore"]').textContent = T.summaryScore;
+            document.querySelector('[data-i18n="summaryTime"]').textContent = T.summaryTime;
+        }
+
+        /** Renders a single question section */
+        function renderQuestion(questionData, index) {
+            const T = strings[currentLang];
+            
+            // Determine status
+            let statusClass = '', statusText = '';
+            if (questionData.status === 'correct') { 
+                statusClass = 'question-status-correct'; 
+                statusText = T.statusCorrect; 
+            } else if (questionData.status === 'incorrect') { 
+                statusClass = 'question-status-incorrect'; 
+                statusText = T.statusIncorrect; 
+            }
+            
+            const questionTitle = formatString(T.questionTitle, { index: index });
+
+            const section = document.createElement('section');
+            // Handle potential errors for images, providing a fallback
+            const solutionImage = questionData.solutionImage || 'https://placehold.co/400x300/e2e8f0/94a3b8?text=No+Solution+Image';
+            
+            section.innerHTML = `
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-2xl font-bold">${questionTitle}</h3>
+                    ${statusText ? `<span class="${statusClass}">${statusText}</span>` : ''}
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
                     
-                    const scope1 = {};
-                    Object.keys(f1_expr.sliders).forEach(name => { scope1[name] = f1_expr.sliders[name].val; });
-                    const scope2 = {};
-                    Object.keys(f2_expr.sliders).forEach(name => { scope2[name] = f2_expr.sliders[name].val; });
+                    <!-- Solution Card -->
+                    <div class="lg:col-span-2">
+                        <div class="window-container">
+                            <!-- pt-10 to clear traffic lights -->
+                            <h4 class="text-lg font-bold pt-10">${T.solutionTitle}</h4>
+                            <a href="${solutionImage}" target="_blank" rel="noopener noreferrer">
+                                <img 
+                                    src="${solutionImage}" 
+                                    alt="Student solution for ${questionTitle}" 
+                                    class="student-solution-img mt-4 cursor-pointer"
+                                    onerror="this.src='https://placehold.co/400x300/e2e8f0/94a3b8?text=Image+Load+Error'; this.onerror=null;"
+                                >
+                            </a>
+                        </div>
+                    </div>
 
-                    let prev_diff;
-                    for (let px = 0; px < canvas.width; px++) {
-                        const x = (px - graphState.originX) / graphState.scale;
-                        try {
-                            const y1 = f1.evaluate({...scope1, x: x});
-                            const y2 = f2.evaluate({...scope2, x: x});
-                            const diff = y1 - y2;
+                    <!-- Feedback Card -->
+                    <div class="lg:col-span-3">
+                        <div class="window-container">
+                            <!-- pt-10 to clear traffic lights -->
+                            <h4 class="text-lg font-bold pt-10">${T.feedbackTitle}</h4>
+                            
+                            <div class="mt-4 space-y-6">
+                                <div>
+                                    <span class="question-label">${T.labelFeedback}</span>
+                                    <div class="feedback-text">
+                                        <p class="math-content" data-type="feedback"></p>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <span class="question-label">${T.labelQuestion}</span>
+                                    <div class="feedback-text">
+                                        <p class="math-content" data-type="question"></p>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <span class="question-label">${T.labelCorrectAnswer}</span>
+                                    <div class="feedback-text">
+                                        <p class="math-content" data-type="correctAnswer"></p>
+                                    </div>
+                                </div>
+                            </div>
 
-                            if (prev_diff !== undefined && Math.sign(diff) !== Math.sign(prev_diff)) {
-                                const intersectionX = bisectionSolve(f1, f2, x - (1 / graphState.scale), x, scope1, scope2);
-                                if (intersectionX !== null) {
-                                    const intersectionY = f1.evaluate({...scope1, x: intersectionX});
-                                    if(Number.isFinite(intersectionY)) {
-                                        graphState.intersections.push({ x: intersectionX, y: intersectionY });
-                                    }
-                                }
-                            }
-                            prev_diff = diff;
-                        } catch (e) {
-                            prev_diff = undefined;
-                        }
-                    }
-                }
-            }
-        }
+                        </div>
+                    </div>
+                </div>
+            `;
+            questionBreakdownContainer.appendChild(section);
 
-        function drawAllIntersectionPoints() {
-            ctx.fillStyle = '#000';
-            graphState.intersections.forEach(point => {
-                const pixelX = graphState.originX + point.x * graphState.scale;
-                const pixelY = graphState.originY - point.y * graphState.scale;
-                ctx.beginPath();
-                ctx.arc(pixelX, pixelY, POI_RADIUS, 0, Math.PI * 2);
-                ctx.fill();
-            });
-        }
-        
-        function drawHoverPoint() {
-            const { x, y } = graphState.hoverPoint;
-            const pixelX = graphState.originX + x * graphState.scale;
-            const pixelY = graphState.originY - y * graphState.scale;
-            ctx.fillStyle = '#000';
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.lineWidth = 3 * devicePixelRatio;
-            ctx.beginPath();
-            ctx.arc(pixelX, pixelY, POI_RADIUS * 1.2, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.fill();
-        }
+            // After setting innerHTML, find the elements and render math in them
+            const feedbackP = section.querySelector('.math-content[data-type="feedback"]');
+            const questionP = section.querySelector('.math-content[data-type="question"]');
+            const answerP = section.querySelector('.math-content[data-type="correctAnswer"]');
 
-        function drawLockedPoint() {
-            const { x, y } = graphState.lockedPoint;
-            const pixelX = graphState.originX + x * graphState.scale;
-            const pixelY = graphState.originY - y * graphState.scale;
-
-            // Draw Point
-            ctx.fillStyle = '#000';
-            ctx.beginPath();
-            ctx.arc(pixelX, pixelY, POI_RADIUS * 1.2, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Draw Coordinate Box
-            const coordText = `(${x.toFixed(3)}, ${y.toFixed(3)})`;
-            const FONT_SIZE = 12 * devicePixelRatio;
-            ctx.font = `bold ${FONT_SIZE}px 'Manrope'`;
-            const textMetrics = ctx.measureText(coordText);
-            const boxWidth = textMetrics.width + 16 * devicePixelRatio;
-            const boxHeight = FONT_SIZE + 12 * devicePixelRatio;
-            
-            let boxX = pixelX + 15 * devicePixelRatio;
-            let boxY = pixelY - (boxHeight / 2);
-
-            if (boxX + boxWidth > canvas.width) boxX = pixelX - boxWidth - 15 * devicePixelRatio;
-            if (boxY < 0) boxY = 5 * devicePixelRatio;
-            if (boxY + boxHeight > canvas.height) boxY = canvas.height - boxHeight - 5 * devicePixelRatio;
-            
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.shadowColor = 'rgba(0,0,0,0.2)';
-            ctx.shadowBlur = 10;
-            ctx.beginPath();
-            ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5 * devicePixelRatio);
-            ctx.fill();
-            ctx.shadowColor = 'transparent';
-
-            ctx.fillStyle = '#000';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(coordText, boxX + boxWidth / 2, boxY + boxHeight / 2);
-        }
-
-        function findClosestPoint(pixelX, pixelY, points) {
-            let closestDist = Infinity;
-            let closestPoint = null;
-            const CLICK_RADIUS = 20 * devicePixelRatio;
-
-            points.forEach(point => {
-                const pointPixelX = graphState.originX + point.x * graphState.scale;
-                const pointPixelY = graphState.originY - point.y * graphState.scale;
-                const dist = Math.sqrt(Math.pow(pixelX - pointPixelX, 2) + Math.pow(pixelY - pointPixelY, 2));
-
-                if (dist < closestDist && dist < CLICK_RADIUS) {
-                    closestDist = dist;
-                    closestPoint = point;
-                }
-            });
-            return closestPoint;
-        }
-
-        // --- UTILITY & INTERACTION FUNCTIONS ---
-        function resizeCanvas() {
-            const rect = canvas.parentElement.getBoundingClientRect();
-            canvas.width = rect.width * devicePixelRatio;
-            canvas.height = rect.height * devicePixelRatio;
-            canvas.style.width = `${rect.width}px`;
-            canvas.style.height = `${rect.height}px`;
-            resetView(false);
-        }
-
-        function resetView(redraw = true) {
-            graphState.originX = canvas.width / 2;
-            graphState.originY = canvas.height / 2;
-            graphState.scale = 40;
-            if (redraw) {
-                evaluateAndPlotAll();
-            }
-        }
-
-        function handleGraphZoom(e) {
-            e.preventDefault();
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = (e.clientX - rect.left) * devicePixelRatio;
-            const mouseY = (e.clientY - rect.top) * devicePixelRatio;
-            const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-            applyZoom(mouseX, mouseY, zoomFactor);
-        }
-
-        function handleGraphPanStart(e) {
-            if (e.button !== 0) return;
-            graphState.isPanning = true;
-            graphState.panStart.x = e.clientX;
-            graphState.panStart.y = e.clientY;
-            if (graphState.lockedPoint.visible) {
-                 graphState.lockedPoint.visible = false;
-                 requestAnimationFrame(renderAll);
-            }
-        }
-
-        function handleGraphPanMove(e) {
-            if (!graphState.isPanning) return;
-            const dx = (e.clientX - graphState.panStart.x) * devicePixelRatio;
-            const dy = (e.clientY - graphState.panStart.y) * devicePixelRatio;
-            graphState.originX += dx;
-            graphState.originY += dy;
-            graphState.panStart.x = e.clientX;
-            graphState.panStart.y = e.clientY;
-            requestAnimationFrame(renderAll);
-        }
-
-        function handleGraphPanEnd() {
-            graphState.isPanning = false;
-        }
-
-        function handleTouchStart(e) {
-            e.preventDefault();
-            const touches = e.touches;
-            if (touches.length === 1) {
-                graphState.isPanning = true;
-                graphState.panStart.x = touches[0].clientX;
-                graphState.panStart.y = touches[0].clientY;
-            } else if (touches.length === 2) {
-                graphState.isPanning = false;
-                graphState.touchState.isPinching = true;
-                graphState.touchState.initialPinchDistance = getPinchDistance(touches);
-            }
-        }
-
-        function handleTouchMove(e) {
-            e.preventDefault();
-            const touches = e.touches;
-            if (graphState.isPanning && touches.length === 1) {
-                const dx = (touches[0].clientX - graphState.panStart.x) * devicePixelRatio;
-                const dy = (touches[0].clientY - graphState.panStart.y) * devicePixelRatio;
-                graphState.originX += dx;
-                graphState.originY += dy;
-                graphState.panStart.x = touches[0].clientX;
-                graphState.panStart.y = touches[0].clientY;
-                requestAnimationFrame(renderAll);
-            } else if (graphState.touchState.isPinching && touches.length === 2) {
-                const newDist = getPinchDistance(touches);
-                const zoomFactor = newDist / graphState.touchState.initialPinchDistance;
-                const rect = canvas.getBoundingClientRect();
-                const midX = ((touches[0].clientX + touches[1].clientX) / 2 - rect.left) * devicePixelRatio;
-                const midY = ((touches[0].clientY + touches[1].clientY) / 2 - rect.top) * devicePixelRatio;
-                applyZoom(midX, midY, zoomFactor);
-                graphState.touchState.initialPinchDistance = newDist;
-            }
-        }
-
-        function handleTouchEnd(e) {
-            graphState.isPanning = false;
-            graphState.touchState.isPinching = false;
-        }
-
-        function getPinchDistance(touches) {
-            const dx = touches[0].clientX - touches[1].clientX;
-            const dy = touches[0].clientY - touches[1].clientY;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
-
-        function applyZoom(centerX, centerY, zoomFactor) {
-            const mouseGraphX_before = (centerX - graphState.originX) / graphState.scale;
-            const mouseGraphY_before = (graphState.originY - centerY) / graphState.scale;
-            
-            graphState.scale *= zoomFactor;
-            graphState.scale = Math.max(0.1, Math.min(graphState.scale, 10000));
-
-            const mouseGraphX_after = (centerX - graphState.originX) / graphState.scale;
-            const mouseGraphY_after = (graphState.originY - centerY) / graphState.scale;
-
-            graphState.originX += (mouseGraphX_after - mouseGraphX_before) * graphState.scale;
-            graphState.originY -= (mouseGraphY_after - mouseGraphY_before) * graphState.scale;
-
-            evaluateAndPlotAll();
+            renderMathInText(questionData.feedback || T.noFeedback, feedbackP); // This now targets the <p> tag
+            renderMathInText(questionData.question || T.noQuestion, questionP); // This now targets the <p> tag
+            renderMathInText(questionData.correctAnswer || T.noAnswer, answerP); // This now targets the <p> tag
         }
         
-        function handleMouseMoveForHover(e) {
-            if (graphState.isPanning) return;
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = (e.clientX - rect.left) * devicePixelRatio;
-            const mouseY = (e.clientY - rect.top) * devicePixelRatio;
-            
-            const allPoints = [...graphState.intersections];
-            graphState.expressions.forEach(expr => {
-                if (expr.poi) {
-                    allPoints.push(...expr.poi.roots, ...expr.poi.extrema, expr.poi.y_intercept);
-                }
-            });
-
-            const closestPoint = findClosestPoint(mouseX, mouseY, allPoints.filter(p => p));
-            
-            if (closestPoint) {
-                graphState.hoverPoint.visible = true;
-                graphState.hoverPoint.x = closestPoint.x;
-                graphState.hoverPoint.y = closestPoint.y;
-            } else {
-                graphState.hoverPoint.visible = false;
-            }
-            requestAnimationFrame(renderAll);
+        /** Shows a full-page error */
+        function showError(title, message) {
+            const T = strings[currentLang];
+            loadingState.innerHTML = `
+                <h2 class="text-3xl font-bold text-red-600">${title || T.errorTitle}</h2>
+                <p class="text-lg text-slate-600 mt-4">${message || T.errorSubtitle}</p>
+            `;
+            loadingState.classList.remove('hidden');
+            mainContent.classList.add('hidden');
         }
+
+        /** Main function to load all data */
+        async function loadResultData(resultId) {
+            try {
+                // 1. Fetch the main result document
+                const resultDocRef = doc(db, "thelo-test-results", resultId);
+                const resultDoc = await getDoc(resultDocRef);
+
+                if (!resultDoc.exists()) {
+                    showError();
+                    return;
+                }
+                
+                const resultData = { id: resultDoc.id, ...resultDoc.data() };
+                
+                // 2. Fetch all question results from the sub-collection
+                const questionsQuery = query(collection(db, "thelo-test-results", resultId, "results"));
+                const questionsSnapshot = await getDocs(questionsQuery);
+                
+                const questions = [];
+                questionsSnapshot.forEach(doc => questions.push({ id: doc.id, ...doc.data() }));
+                // Sort questions by their ID, which is assumed to be a number (e.g., "0", "1", "2")
+                questions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+
+                // 3. Render the page
+                renderSummary(resultData);
+                
+                questionBreakdownContainer.innerHTML = ''; // Clear any static content
+                questions.forEach((q, index) => {
+                    renderQuestion(q, index + 1);
+                });
+
+                // 4. Show the content
+                loadingState.classList.add('hidden');
+                mainContent.classList.remove('hidden');
+
+            } catch (err) {
+                console.error("Error loading result data:", err);
+                showError("An Error Occurred", "There was a problem loading the test results. Please try again later.");
+            }
+        }
+
+        // --- INITIALIZATION ---
         
-        function handleGraphClick(e) {
-            const rect = canvas.getBoundingClientRect();
-            const clickX = (e.clientX - rect.left) * devicePixelRatio;
-            const clickY = (e.clientY - rect.top) * devicePixelRatio;
-
-            const allPoints = [...graphState.intersections];
-            graphState.expressions.forEach(expr => {
-                if (expr.poi) {
-                    allPoints.push(...expr.poi.roots, ...expr.poi.extrema, expr.poi.y_intercept);
-                }
-            });
-            
-            const pointToLock = findClosestPoint(clickX, clickY, allPoints.filter(p => p));
-
-            if (pointToLock) {
-                graphState.lockedPoint.visible = true;
-                graphState.lockedPoint.x = pointToLock.x;
-                graphState.lockedPoint.y = pointToLock.y;
-            }
-            requestAnimationFrame(renderAll);
-        }
-
-        function drawGraphGrid() {
-            const computedStyles = getComputedStyle(document.documentElement);
-            const THELO_BORDER_COLOR = computedStyles.getPropertyValue('--thelo-border').trim();
-            const THELO_TEXT_LIGHT_COLOR = computedStyles.getPropertyValue('--thelo-text-light').trim();
-            
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.restore();
-
-            const baseGridUnits = 1;
-            let dynamicGrid = baseGridUnits;
-            while (dynamicGrid * graphState.scale < 50 * devicePixelRatio) dynamicGrid *= 2;
-            while (dynamicGrid * graphState.scale > 100 * devicePixelRatio) dynamicGrid /= 2;
-
-            ctx.strokeStyle = THELO_BORDER_COLOR;
-            ctx.lineWidth = 1 * devicePixelRatio;
-            ctx.font = `${10 * devicePixelRatio}px 'Manrope'`;
-            ctx.fillStyle = THELO_TEXT_LIGHT_COLOR;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-
-            const startX = Math.floor(-graphState.originX / (graphState.scale * dynamicGrid)) * dynamicGrid;
-            for (let x = startX; (x * graphState.scale + graphState.originX) < canvas.width; x += dynamicGrid) {
-                const px = x * graphState.scale + graphState.originX;
-                ctx.beginPath();
-                ctx.moveTo(px, 0);
-                ctx.lineTo(px, canvas.height);
-                ctx.stroke();
-                if (Math.abs(x) > 1e-9) {
-                    ctx.fillText(x.toPrecision(3), px, graphState.originY - 5 * devicePixelRatio);
-                }
-            }
-
-            const startY = Math.floor(graphState.originY / (graphState.scale * dynamicGrid)) * dynamicGrid;
-            for (let y = startY; (graphState.originY - y * graphState.scale) < canvas.height; y -= dynamicGrid) {
-                const py = graphState.originY - y * graphState.scale;
-                ctx.beginPath();
-                ctx.moveTo(0, py);
-                ctx.lineTo(canvas.width, py);
-                ctx.stroke();
-                if (Math.abs(y) > 1e-9) {
-                    ctx.save();
-                    ctx.textAlign = 'right';
-                    ctx.fillText(y.toPrecision(3), graphState.originX - 5 * devicePixelRatio, py);
-                    ctx.restore();
-                }
-            }
-
-            ctx.strokeStyle = THELO_TEXT_LIGHT_COLOR;
-            ctx.lineWidth = 1.5 * devicePixelRatio;
-            ctx.beginPath();
-            ctx.moveTo(0, graphState.originY);
-            ctx.lineTo(canvas.width, graphState.originY);
-            ctx.moveTo(graphState.originX, 0);
-            ctx.lineTo(graphState.originX, canvas.height);
-            ctx.stroke();
-        }
+        // 1. Apply language first
+        applyContent(currentLang);
         
-        // --- START THE APP ---
-        initialize();
-    });
+        // 2. Setup language listeners
+        langEnBtn.addEventListener('click', () => switchLanguage('en'));
+        langHyBtn.addEventListener('click', () => switchLanguage('hy'));
+
+        // 3. Get Result ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const resultId = urlParams.get('id');
+
+        // 4. Load data
+        if (resultId) {
+            loadResultData(resultId);
+        } else {
+            showError(); // Show "Result Not Found"
+        }
+
     </script>
-</body>
-</html>
+
+    </body>
+    </html>
