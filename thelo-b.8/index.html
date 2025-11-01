@@ -3343,26 +3343,24 @@ function handleNextCheckClick() {
 function parseAndRenderMath(text) {
     if (!text || typeof text !== 'string') return '';
 
-    // This regex finds all potential math-like expressions:
-    // - sqrt(content)
-    // - (base)^exponent or base^exponent
-    // - Simple fractions like a/b
-    // - Simple equations like a/b * c/d = e/f
-    const mathRegex = /(\bsqrt\([^)]+\))|(\(?[a-zA-Z0-9\.\s]+\)?\^[\w\d]+)|(\b\d+(\.\d+)?\s*[\+\-\*\/]\s*\d+(\.\d+)?(?:\s*=\s*[\d\.\/]+)?)|(\b\d+\/\d+\b)/g;
+    // This regex is specifically designed to avoid matching HTML tags.
+    // It looks for math expressions that are not immediately preceded by '<' or followed by '>'.
+    // It finds: sqrt(), powers, fractions (e.g., 4/5), and simple equations (e.g., 4/5 * 1/2 = 2/5).
+    const mathRegex = /(?<!<[^>]*)\b(sqrt\([^)]+\)|[a-zA-Z0-9]+\^\w+|\d+\/\d+|\d+\s*[\+\-\*\/]\s*\d+(?:\s*=\s*[\d\/]+)?)(?![^<]*>)/g;
 
     return text.replace(mathRegex, (match) => {
         try {
-            // First, convert all simple math notations within the matched string to KaTeX syntax
+            // First, convert all simple math notations within the matched string to KaTeX syntax.
             let katexString = match
                 .replace(/(\d+)\/(\d+)/g, '\\frac{$1}{$2}') // a/b -> \frac{a}{b}
                 .replace(/\*/g, '\\cdot');               // * -> ⋅
 
-            // Then, handle special functions like sqrt() and powers
+            // Then, handle special functions like sqrt() and powers.
             katexString = katexString.replace(/\bsqrt\(([^)]+)\)/g, '\\sqrt{$1}');
             katexString = katexString.replace(/\(([^)]+)\)\^([\w\d]+)/g, '($1)^{$2}');
             katexString = katexString.replace(/(\b[\w\d]+)\^([\w\d]+)\b/g, '$1^{$2}');
 
-            // Finally, render the complete KaTeX string to HTML
+            // Finally, render the complete KaTeX string to HTML.
             return katex.renderToString(katexString, { throwOnError: false, displayMode: false });
         } catch (e) {
             console.warn("KaTeX rendering failed for:", match, e);
