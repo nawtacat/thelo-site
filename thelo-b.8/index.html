@@ -3343,36 +3343,33 @@ function handleNextCheckClick() {
 function parseAndRenderMath(text) {
     if (!text || typeof text !== 'string') return '';
 
-    // This regex now also looks for fractions (e.g., "a/b") and simple equations.
+    // This regex finds:
     // 1. sqrt(content)
     // 2. (base)^exponent
     // 3. base^exponent
-    // 4. number/number * number/number = number/number
-    // 5. number - number/number = number/number
-    // 6. number/number (simple fraction)
-    const mathRegex = /(\bsqrt\(([^)]+)\))|(\(([^)]+)\)\^(\w+))|(\b(\w+)\^(\w+)\b)|(\b\d+\s*-\s*\d+\/\d+\s*=\s*\d+\/\d+\b)|(\b\d+\/\d+\s*\*\s*\d+\/\d+\s*=\s*\d+\/\d+\b)|(\b\d+\/\d+\b)/g;
+    // 4. Simple equations with fractions (e.g., "1 - 1/5 = 4/5")
+    // 5. Simple fractions (e.g., "2/5")
+    const mathRegex = /(\bsqrt\(([^)]+)\))|(\(([^)]+)\)\^([\w\d]+))|(\b([\w\d]+)\^([\w\d]+)\b)|(\b\d+\s*[\+\-\*\/]\s*\d+(?:\s*=\s*[\d\.\/]+)?\b)|(\b\d+\/\d+\b)/g;
 
-    // First pass: Wrap all identified math-like patterns in a temporary delimiter, e.g., $$...$$
-    // This helps to process them all at once later.
-    const processedText = text.replace(mathRegex, (match) => {
+    return text.replace(mathRegex, (match) => {
         try {
-            // Case 1: Matched sqrt(content)
-            if (sqrtFull) {
-                return katex.renderToString(`\\sqrt{${sqrtContent}}`, { throwOnError: false, displayMode: false });
-            }
-            // Case 2: Matched (base)^exponent
-            if (powerParenFull) {
-                return katex.renderToString(`{(${powerParenBase})}^{${powerParenExp}}`, { throwOnError: false, displayMode: false });
-            }
-            // Case 3: Matched base^exponent
-            if (powerWordFull) {
-                return katex.renderToString(`${powerWordBase}^{${powerWordExp}}`, { throwOnError: false, displayMode: false });
-            }
+            // First, convert all simple math notations within the matched string to KaTeX syntax.
+            let katexString = match
+                .replace(/(\d+)\/(\d+)/g, '\\frac{$1}{$2}') // a/b -> \frac{a}{b}
+                .replace(/\*/g, '\\cdot');               // a * b -> a \cdot b
+
+            // Then, handle special functions like sqrt() and powers.
+            katexString = katexString.replace(/\bsqrt\(([^)]+)\)/g, '\\sqrt{$1}');
+            katexString = katexString.replace(/\(([^)]+)\)\^([\w\d]+)/g, '($1)^{$2}');
+            katexString = katexString.replace(/(\b[\w\d]+)\^([\w\d]+)\b/g, '$1^{$2}');
+
+            // Finally, render the complete KaTeX string to HTML.
+            return katex.renderToString(katexString, { throwOnError: false, displayMode: false });
+
         } catch (e) {
             console.warn("KaTeX rendering failed for:", match, e);
             return match; // In case of error, fall back to the original text.
         }
-        return match; // Should not be reached, but good practice.
     });
 }
 // REPLACE your entire addChatMessage function with this one
