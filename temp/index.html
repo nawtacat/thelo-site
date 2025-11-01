@@ -337,31 +337,39 @@
         }
 
         /**
-         * Finds custom /K ... K/ delimiters and replaces them with KaTeX-friendly delimiters.
-         * Then, it uses KaTeX's auto-render function on the element.
+         * Renders text containing mixed KaTeX delimiters (/K...K/ and $...$) into an element.
+         * This function manually parses and renders math to avoid auto-render inconsistencies.
          * @param {string} text The text content to process.
          * @param {HTMLElement} element The container element to render math in.
          */
         function renderMathInText(text, element) {
-            // Ensure the function from the KaTeX script is available
-            if (typeof renderMathInElement !== 'function') {
-                console.error("KaTeX auto-render script not loaded yet.");
-                element.textContent = text; // Fallback to plain text
+            if (!text) {
+                element.innerHTML = '';
                 return;
             }
 
-            // Replace our custom /K ... K/ delimiters with KaTeX's default $$...$$ (display mode)
-            const processedText = text.replace(/\/K\s*(.*?)\s*K\//g, '$$$1$$');
-            element.textContent = processedText; // Set the text first
+            // Regex to find /K...K/ (display) or $...$ (inline) delimiters.
+            const regex = /(\/K[\s\S]*?K\/|\$[\s\S]*?\$)/g;
+            const parts = text.split(regex).filter(Boolean);
+            let finalHTML = '';
 
-            // Now, ask KaTeX to render math in this specific element.
-            // By not providing a 'delimiters' array, we use the KaTeX default, which is more robust.
-            // Default delimiters are:
-            // {left: "$$", right: "$$", display: true},
-            // {left: "\\(", right: "\\)", display: false},
-            // {left: "$", right: "$", display: false},
-            // {left: "\\[", right: "\\]", display: true}
-            renderMathInElement(element);
+            for (const part of parts) {
+                if (part.startsWith('/K') && part.endsWith('K/')) {
+                    const math = part.slice(2, -2).trim();
+                    finalHTML += katex.renderToString(math, { displayMode: true, throwOnError: false });
+                } else if (part.startsWith('$') && part.endsWith('$')) {
+                    const math = part.slice(1, -1).trim();
+                    finalHTML += katex.renderToString(math, { displayMode: false, throwOnError: false });
+                } else {
+                    // This is plain text. Escape it to prevent accidental HTML injection.
+                    const textNode = document.createTextNode(part);
+                    const tempDiv = document.createElement('div');
+                    tempDiv.appendChild(textNode);
+                    finalHTML += tempDiv.innerHTML;
+                }
+            }
+
+            element.innerHTML = finalHTML;
         }
         /** Applies UI text based on language */
         function applyContent(lang) {
