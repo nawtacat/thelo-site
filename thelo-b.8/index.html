@@ -3330,61 +3330,135 @@ function handleNextCheckClick() {
     };
     }
     // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
-// The faulty parseAndRenderMath function has been deleted.
+// ADD THIS NEW HELPER FUNCTION before `addChatMessage`
+/**
+ * Renders text containing math expressions into an HTML string with KaTeX.
+ * - Handles explicit KaTeX delimiters like $...$
+ * - Automatically converts simple fractions (e.g., 1/2)
+ * - Automatically converts asterisks to multiplication dots (e.g., 2*3)
+ * @param {string} text The text content to process.
+ * @returns {string} The processed HTML string.
+ */
+function renderMathInText(text) {
+    if (!text) return '';
 
-// REPLACE your old addChatMessage function with this one:
+    // Regex to find explicit $...$ delimiters.
+    const regex = /(\$[\s\S]*?\$)/g;
+    const parts = text.split(regex).filter(Boolean);
+    let finalHTML = '';
+
+    for (const part of parts) {
+        if (part.startsWith('$') && part.endsWith('$')) {
+            // This is an explicit KaTeX block
+            const math = part.slice(1, -1).trim();
+            try {
+                finalHTML += katex.renderToString(math, { displayMode: false, throwOnError: false });
+            } catch (e) {
+                console.warn('KaTeX rendering failed for explicit math:', math, e);
+                finalHTML += part; // Fallback to original text
+            }
+        } else {
+            // This is plain text. Find simple math-like expressions and wrap them for KaTeX.
+            // This regex finds fractions (e.g., 2/5) or expressions with asterisks.
+            const processedPart = part.replace(/(\b\d+\/\d+\b)|(\*)/g, (match, fraction, asterisk) => {
+                if (fraction) {
+                    // It's a fraction, convert to \frac
+                    return `$\\frac{${fraction.replace('/', '}{')}}$`;
+                }
+                if (asterisk) {
+                    // It's a multiplication asterisk, convert to \cdot
+                    return '$\\cdot$';
+                }
+                return match;
+            });
+            finalHTML += processedPart;
+        }
+    }
+    return finalHTML;
+}
+// REPLACE your entire addChatMessage function with this one
+/**
+ * Finds simple math notations in a string and converts them to KaTeX HTML.
+ * Supports:
+ * - `sqrt(content)` -> rendered square root
+ * - `base^exponent` -> rendered power
+ * - `(base)^exponent` -> rendered power with parentheses
+ * @param {string} text - The input string, potentially containing math.
+ * @returns {string} An HTML string with math portions rendered by KaTeX.
+ */
+function parseAndRenderMath(text) {
+    if (!text || typeof text !== 'string') return '';
+
+    // This regex looks for one of three patterns using the OR | operator:
+    // 1. The full "sqrt(content)" expression, capturing the "content".
+    // 2. A parenthesized "(base)" followed by "^exponent", capturing "base" and "exponent".
+    // 3. A simple "base" word followed by "^exponent", capturing "base" and "exponent".
+    const mathRegex = /(\bsqrt\(([^)]+)\))|(\(([^)]+)\)\^(\w+))|(\b(\w+)\^(\w+)\b)/g;
+
+    return text.replace(mathRegex, (match, sqrtFull, sqrtContent, powerParenFull, powerParenBase, powerParenExp, powerWordFull, powerWordBase, powerWordExp) => {
+        try {
+            // Case 1: Matched sqrt(content)
+            if (sqrtFull) {
+                return katex.renderToString(`\\sqrt{${sqrtContent}}`, { throwOnError: false, displayMode: false });
+            }
+            // Case 2: Matched (base)^exponent
+            if (powerParenFull) {
+                return katex.renderToString(`{(${powerParenBase})}^{${powerParenExp}}`, { throwOnError: false, displayMode: false });
+            }
+            // Case 3: Matched base^exponent
+            if (powerWordFull) {
+                return katex.renderToString(`${powerWordBase}^{${powerWordExp}}`, { throwOnError: false, displayMode: false });
+            }
+        } catch (e) {
+            console.warn("KaTeX rendering failed for:", match, e);
+            return match; // In case of error, fall back to the original text.
+        }
+        return match; // Should not be reached, but good practice.
+    });
+}
+// REPLACE your entire addChatMessage function with this one
+
 function addChatMessage(sender, rawMsg) {
     if (isTabletMode) {
         // Tablet toast logic remains the same
         const isImportant = rawMsg.includes('🎉') || rawMsg.includes('🤔') || rawMsg.includes('⚠️');
         showToast(rawMsg, isImportant ? 5000 : 3500);
-	    showOnCanvasFeedback(rawMsg);
+	    showFeedback(rawMsg, 3500);
     } else {
         // Desktop/mobile terminal chat
         const chatArea = document.getElementById('chat');
         if (!chatArea) return;
 
-
         const msg = rawMsg.replace(/^[\p{Extended_Pictographic}\uFE0F]+\s*/u, '');
         const TXT = getCurrentUIText();
         let emoji = '🫧';
-
 
         const isPoints = /points? gained/i.test(msg) || (TXT.pointsGained && msg.includes(TXT.pointsGained.split("{")[0].trim()));
         const isWrong = msg.includes('Not quite') || (TXT.incorrect && msg.includes(TXT.incorrect)) || msg.includes('Incorrect') || msg.includes('Wrong');
         const isCorrect = !isWrong && ((TXT.correct && msg.includes(TXT.correct)) || /^correct/i.test(msg));
         const isWarning = msg.includes('⚠️') || (TXT.error && msg.includes(TXT.error));
         const isWelcome = TXT.welcome && msg.includes(TXT.welcome);
-        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('&lt;')[0]);
+        const isChecking = TXT.checkingAI && msg.includes(TXT.checkingAI.split('<')[0]);
 
         if(isWrong) emoji = '🤔';
         else if (isCorrect || isPoints) emoji = '🎉';
         else if (isWarning || msg.includes('🛑')) emoji = '⚠️';
         else if (isWelcome) emoji = '👋';
         else if (isChecking) emoji = '⏳';
-        
+        
+        // ======================= THE CHANGE IS HERE =======================
+        // Use our new, more powerful function to render math before displaying.
+        const finalHTML = renderMathInText(msg);
+        // ================================================================
+
         const bubble = document.createElement('div');
         bubble.className = 'ai-message'; // Starts with opacity: 0
-
-        // 1. Add the emoji
-        const emojiSpan = document.createElement('span');
-        emojiSpan.className = 'emoji';
-        emojiSpan.setAttribute('role', 'img');
-        emojiSpan.setAttribute('aria-label', 'icon');
-        emojiSpan.textContent = emoji;
-        bubble.appendChild(emojiSpan);
-
-        // 2. Create a container for the text/math content
-        const contentSpan = document.createElement('span');
         
-        // 3. Use the CORRECT rendering function from your file
-        // This will parse the /K ... K/ delimiters properly
-        renderMixedKaTeXInto(contentSpan, msg);
-        
-        bubble.appendChild(contentSpan);
+        // And now we use the processed HTML instead of the raw message.
+        bubble.innerHTML = `<span class="emoji" role="img" aria-label="icon">${emoji}</span> <span>${finalHTML}</span>`;
         chatArea.appendChild(bubble);
 
-        // Animation logic remains the same
+        // Force the browser to paint the initial state before animating
         requestAnimationFrame(() => {
             setTimeout(() => {
                 bubble.classList.add('show');
