@@ -269,6 +269,7 @@
             </button>
             <a href="https://thelo.space/settings" aria-label="Go to settings">
                 <img id="profile-photo-nav" src="https://via.placeholder.com/150/E5E7EB/FFFFFF?text=L" alt="Profile" class="h-11 w-11 rounded-full cursor-pointer border-2 border-transparent hover:border-blue-500">
+                <img id="profile-photo-nav" src="https://via.placeholder.com/150/E5E7EB/FFFFFF?text=" alt="Profile" class="h-11 w-11 rounded-full cursor-pointer border-2 border-transparent hover:border-blue-500">
             </a>
         </div>
     </header>
@@ -276,6 +277,7 @@
     <main>
         <section id="welcome-section" class="text-center mb-16 opacity-0 -translate-y-3 transition-all duration-700 ease-out">
             <img id="welcome-avatar" src="https://via.placeholder.com/150/E5E7EB/FFFFFF?text=L" alt="User Avatar" class="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white shadow-lg object-cover">
+            <img id="welcome-avatar" src="https://via.placeholder.com/150/E5E7EB/FFFFFF?text=" alt="User Avatar" class="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white shadow-lg object-cover">
             <h1 id="welcome-message" class="text-4xl md:text-5xl font-extrabold text-gray-800">
                 Good to see you <span id="welcome-name" class="text-[var(--thelo-blue)]">...</span>
             </h1>
@@ -544,36 +546,64 @@
             const codeInput = document.getElementById('class-code-input');
             const joinBtn = document.getElementById('join-class-btn');
             const joinCode = codeInput.value.trim().toUpperCase();
+        async function handleJoinGroup(userId, userEmail) {
+            const codeInput = document.getElementById('class-code-input');
+            const joinBtn = document.getElementById('join-class-btn');
+            const joinCode = codeInput.value.trim().toUpperCase();
 
             if (!joinCode) {
                 showNotification("Please enter a group code.", true);
                 return;
             }
+            if (!joinCode) {
+                showNotification("Please enter a group code.", true);
+                return;
+            }
 
             joinBtn.disabled = true;
             joinBtn.textContent = 'Joining...';
+            joinBtn.disabled = true;
+            joinBtn.textContent = 'Joining...';
 
             try {
                 // Step 1: Find the group with the matching join code
                 const groupsRef = collection(db, 'groups');
                 const q = query(groupsRef, where("joinCode", "==", joinCode));
                 const querySnapshot = await getDocs(q);
+            try {
+                // Step 1: Find the group with the matching join code
+                const groupsRef = collection(db, 'groups');
+                const q = query(groupsRef, where("joinCode", "==", joinCode));
+                const querySnapshot = await getDocs(q);
 
                 if (querySnapshot.empty) {
                     throw new Error("Invalid group code. Please check and try again.");
                 }
+                if (querySnapshot.empty) {
+                    throw new Error("Invalid group code. Please check and try again.");
+                }
 
                 // Step 2: Get the group's data
                 const groupDoc = querySnapshot.docs[0];
                 const groupId = groupDoc.id;
                 const groupData = groupDoc.data(); // <-- Get group data
                 const studentRef = doc(db, 'thelo-students', userId);
+                // Step 2: Get the group's data
+                const groupDoc = querySnapshot.docs[0];
+                const groupId = groupDoc.id;
+                const groupData = groupDoc.data(); // <-- Get group data
+                const studentRef = doc(db, 'thelo-students', userId);
 
                 // Step 3: Update the student's document with the groupId and email
                 await updateDoc(studentRef, {
                     groupId: groupId,
                     email: userEmail
                 });
+                // Step 3: Update the student's document with the groupId and email
+                await updateDoc(studentRef, {
+                    groupId: groupId,
+                    email: userEmail
+                });
 
                 // --- MODIFIED STEP 4: Manually update the member list ---
                 // Get the old member list, or an empty array if it doesn't exist
@@ -587,11 +617,27 @@
                     memberIds: newMemberIds
                 });
                 // --- END OF MODIFIED STEP 4 ---
+                // --- MODIFIED STEP 4: Manually update the member list ---
+                // Get the old member list, or an empty array if it doesn't exist
+                const oldMemberIds = groupData.memberIds || [];
+                
+                // Create the new member list (Set ensures no duplicates)
+                const newMemberIds = [...new Set([...oldMemberIds, userId])];
+                
+                // Update the group with the *full* new array
+                await updateDoc(doc(db, 'groups', groupId), {
+                    memberIds: newMemberIds
+                });
+                // --- END OF MODIFIED STEP 4 ---
 
                 // Step 5: Create the "Welcome" post on the bulletin board
                 // First, get the student's name
                 const studentSnap = await getDoc(studentRef);
                 const studentName = studentSnap.data()?.name || 'A new member';
+                // Step 5: Create the "Welcome" post on the bulletin board
+                // First, get the student's name
+                const studentSnap = await getDoc(studentRef);
+                const studentName = studentSnap.data()?.name || 'A new member';
 
                 // Then, create the post document
                 await addDoc(collection(db, "bulletin-posts"), {
@@ -603,8 +649,19 @@
                         newMemberName: studentName
                     }
                 });
+                // Then, create the post document
+                await addDoc(collection(db, "bulletin-posts"), {
+                    groupId: groupId,
+                    authorId: userId,
+                    type: "welcome",
+                    timestamp: serverTimestamp(),
+                    content: {
+                        newMemberName: studentName
+                    }
+                });
 
                 showNotification(`Successfully joined the group: "${groupData.groupName}"!`);
+                showNotification(`Successfully joined the group: "${groupData.groupName}"!`);
                 // Hide the modal and the trigger button
                 joinClassModal.classList.add('hidden');
                 joinClassModalTrigger.style.display = 'none';
@@ -616,6 +673,11 @@
             } finally {
                 joinBtn.disabled = false;
                 joinBtn.textContent = 'Join Class';
+            } catch (error) {
+                console.error("Error joining group:", error);
+                showNotification(error.message, true);
+            } finally {
+                joinBtn.disabled = false;
                 // Restore the icon on the button
                 const icon = document.createElement('i');
                 icon.className = 'fas fa-arrow-right';
@@ -623,6 +685,8 @@
                 joinBtn.appendChild(icon);
             }
         }
+            }
+        }
         // --- Main Execution ---
         onAuthStateChanged(auth, async (user) => {
             // ✅ Check if user exists AND if their email is verified
