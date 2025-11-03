@@ -267,6 +267,7 @@
                             </button>
                         </div>
                         <div id="in-class-container" class="hidden text-sm text-gray-700"></div>
+                        <div id="in-class-container" class="hidden items-center justify-between gap-4 text-sm text-gray-700 md:flex"></div>
                     </div>
                 </div>
 
@@ -550,7 +551,20 @@
                             joinClassContainer.classList.add('hidden');
                             inClassContainer.classList.remove('hidden');
                             inClassContainer.innerHTML = `You are in <strong>${groupData.groupName}</strong>. <br>Your tutor can see your progress.`;
+                            inClassContainer.innerHTML = `
+                                <div>
+                                    You are in <strong>${groupData.groupName}</strong>. <br>Your tutor can see your progress.
+                                </div>
+                                <button id="leave-class-btn" class="thelo-btn-destructive text-sm px-4 py-2 whitespace-nowrap">
+                                    <i class="fas fa-times-circle mr-2"></i>
+                                    <span>Leave</span>
+                                </button>
+                            `;
                             joinClassDescription.textContent = "You are currently in a classroom.";
+
+                            document.getElementById('leave-class-btn').addEventListener('click', () => {
+                                handleLeaveGroup(user.uid, studentData.groupId, groupData.groupName);
+                            });
                         }
                     } else {
                         joinClassContainer.classList.remove('hidden');
@@ -641,6 +655,52 @@
             } finally {
                 joinClassBtn.disabled = false;
                 joinClassBtn.querySelector('span').textContent = 'Join';
+            }
+        }
+
+        /**
+         * Handles the logic for a student to leave their current group.
+         */
+        async function handleLeaveGroup(userId, groupId, groupName) {
+            if (!confirm(`Are you sure you want to leave the classroom "${groupName}"? Your tutor will no longer be able to see your progress.`)) {
+                return;
+            }
+
+            const leaveBtn = document.getElementById('leave-class-btn');
+            if(leaveBtn) {
+                leaveBtn.disabled = true;
+                leaveBtn.querySelector('span').textContent = 'Leaving...';
+            }
+
+            try {
+                const studentRef = doc(db, 'thelo-students', userId);
+                const groupRef = doc(db, 'groups', groupId);
+
+                // Step 1: Remove groupId from the student's document
+                await updateDoc(studentRef, {
+                    groupId: deleteField()
+                });
+
+                // Step 2: Remove the student's ID from the group's member list
+                const groupSnap = await getDoc(groupRef);
+                if (groupSnap.exists()) {
+                    const groupData = groupSnap.data();
+                    const updatedMemberIds = (groupData.memberIds || []).filter(id => id !== userId);
+                    await updateDoc(groupRef, {
+                        memberIds: updatedMemberIds
+                    });
+                }
+
+                showNotification(`You have successfully left "${groupName}".`);
+                await updateSettingsPage(auth.currentUser); // Refresh the UI
+
+            } catch (error) {
+                console.error("Error leaving group:", error);
+                showNotification("Could not leave the classroom. Please try again.", true);
+                if(leaveBtn) {
+                    leaveBtn.disabled = false;
+                    leaveBtn.querySelector('span').textContent = 'Leave';
+                }
             }
         }
 
