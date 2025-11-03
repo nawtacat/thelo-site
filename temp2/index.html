@@ -266,7 +266,7 @@
                                 <span>Join</span>
                             </button>
                         </div>
-                        <div id="in-class-container" class="hidden text-sm text-gray-700"></div>
+                        <!-- MODIFICATION: Removed the duplicate div. This is the only one now. -->
                         <div id="in-class-container" class="hidden items-center justify-between gap-4 text-sm text-gray-700 md:flex"></div>
                     </div>
                 </div>
@@ -360,7 +360,8 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         // UPDATED: Imported more auth functions
         import { getAuth, signOut, onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteField } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // MODIFICATION: Removed deleteField as it's no longer needed
+        import { getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // Firebase configuration
@@ -476,7 +477,7 @@
                 alert_pw_weak: 'Գաղտնաբառը չափազանց թույլ է։ Այն պետք է լինի առնվազն 6 նիշ։',
                 alert_pw_wrong: 'Ձեր մուտքագրած ընթացիկ գաղտնաբառը սխալ է։',
                 alert_pw_reauth_needed: 'Անվտանգության համար խնդրում ենք դուրս գալ և նորից մուտք գործել՝ նախքան գաղտնաբառը փոխելը։',
-                alert_pw_success: 'Ձեր գաղտնաբառը հաջողությամբ թարմացվել է։',
+g                alert_pw_success: 'Ձեր գաղտնաբառը հաջողությամբ թարմացվել է։',
                 alert_pw_error: 'Տեղի ունեցավ անսպասելի սխալ։ Խնդրում ենք փորձել կրկին։',
                 alert_join_success: 'Դուք հաջողությամբ միացաք խմբին։',
                 alert_join_invalid_code: 'Խմբի կոդը սխալ է։ Խնդրում ենք ստուգել և փորձել կրկին։'
@@ -550,25 +551,21 @@
                             const groupData = groupSnap.data();
                             joinClassContainer.classList.add('hidden');
                             inClassContainer.classList.remove('hidden');
-                            inClassContainer.innerHTML = `You are in <strong>${groupData.groupName}</strong>. <br>Your tutor can see your progress.`;
+                            // MODIFICATION: Removed the "Leave" button from the innerHTML
                             inClassContainer.innerHTML = `
                                 <div>
                                     You are in <strong>${groupData.groupName}</strong>. <br>Your tutor can see your progress.
                                 </div>
-                                <button id="leave-class-btn" class="thelo-btn-destructive text-sm px-4 py-2 whitespace-nowrap">
-                                    <i class="fas fa-times-circle mr-2"></i>
-                                    <span>Leave</span>
-                                </button>
                             `;
                             joinClassDescription.textContent = "You are currently in a classroom.";
-
-                            document.getElementById('leave-class-btn').addEventListener('click', () => {
-                                handleLeaveGroup(user.uid, studentData.groupId, groupData.groupName);
-                            });
+                            
+                            // MODIFICATION: Removed the 'leave-class-btn' event listener
                         }
                     } else {
                         joinClassContainer.classList.remove('hidden');
                         inClassContainer.classList.add('hidden');
+                        // MODIFICATION: Reset description if user is not in a group
+                        joinClassDescription.textContent = "Enter a code from your tutor to join their classroom.";
                     }
                 } else {
                     console.warn("No student profile found for UID:", user.uid);
@@ -647,15 +644,11 @@
                     content: { newMemberName: studentName }
                 });
 
-                showNotification(`${t.alert_join_success} "${groupData.groupName}"!`);
-                await updateSettingsPage(auth.currentUser); // Refresh the UI
-                // No need to call updateSettingsPage, since we are about to reload.
-                showNotification(`${t.alert_join_success} "${groupData.groupName}"! Page will now refresh.`);
-                setTimeout(() => window.location.reload(), 1000); // Refresh the page after a short delay
+                // MODIFICATION: Removed page reload.
                 // Show success notification
                 showNotification(`${t.alert_join_success} "${groupData.groupName}"!`, false); 
                 // Dynamically refresh the settings page UI
-                await updateSettingsPage(auth.currentUser);
+                await updateSettingsPage(auth.currentUser); 
 
             } catch (error) {
                 showNotification(error.message, true);
@@ -665,54 +658,8 @@
             }
         }
 
-        /**
-         * Handles the logic for a student to leave their current group.
-         */
-        async function handleLeaveGroup(userId, groupId, groupName) {
-            if (!confirm(`Are you sure you want to leave the classroom "${groupName}"? Your tutor will no longer be able to see your progress.`)) {
-                return;
-            }
+        // MODIFICATION: Removed the entire 'handleLeaveGroup' function
 
-            const leaveBtn = document.getElementById('leave-class-btn');
-            if(leaveBtn) {
-                leaveBtn.disabled = true;
-                leaveBtn.querySelector('span').textContent = 'Leaving...';
-            }
-
-            try {
-                const studentRef = doc(db, 'thelo-students', userId);
-                const groupRef = doc(db, 'groups', groupId);
-
-                // Step 1: Remove groupId from the student's document
-                await updateDoc(studentRef, {
-                    groupId: deleteField()
-                });
-
-                // Step 2: Remove the student's ID from the group's member list
-                const groupSnap = await getDoc(groupRef);
-                if (groupSnap.exists()) {
-                    const groupData = groupSnap.data();
-                    const updatedMemberIds = (groupData.memberIds || []).filter(id => id !== userId);
-                    await updateDoc(groupRef, {
-                        memberIds: updatedMemberIds
-                    });
-                }
-
-                showNotification(`You have successfully left "${groupName}".`);
-                await updateSettingsPage(auth.currentUser); // Refresh the UI
-                // No need to call updateSettingsPage, since we are about to reload.
-                showNotification(`You have successfully left "${groupName}". Page will now refresh.`);
-                setTimeout(() => window.location.reload(), 1000); // Refresh the page after a short delay
-
-            } catch (error) {
-                console.error("Error leaving group:", error);
-                showNotification("Could not leave the classroom. Please try again.", true);
-                if(leaveBtn) {
-                    leaveBtn.disabled = false;
-                    leaveBtn.querySelector('span').textContent = 'Leave';
-                }
-            }
-        }
 
         // --- EVENT LISTENERS ---
         if (settingsProfilePhoto) settingsProfilePhoto.addEventListener('click', e => alert('Profile Photo clicked!'));
