@@ -146,7 +146,8 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+// UPDATED: Added getDoc import
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const firebaseConfig = {
     // IMPORTANT: SECURE YOUR API KEYS USING FIREBASE APP CHECK
     apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
@@ -464,36 +465,47 @@ form.addEventListener('submit', async (e) => {
         }
 
     } else {
-        // --- SIGN IN LOGIC (Unchanged) ---
+        // --- SIGN IN LOGIC (MODIFIED for REDIRECT) ---
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
             if (!user.emailVerified) {
                 showToast("Please verify your email before signing in. Another verification email has been sent.", true);
-                showToast("Please verify your email. A new verification link has been sent.", true);
                 await sendEmailVerification(user);
                 setLoading(false);
                 return;
             }
 
             console.log("User signed in:", user.uid);
-            showToast("Signed in successfully! Redirecting...", false);
-            // TODO: This should redirect to a "role" checker, or /sdashboard for students and /tdashboard for tutors.
-            // For now, it just goes to sdashboard.
-            setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
+            showToast("Signed in successfully! Checking account type...", false);
+            
+            // --- NEW: Check if user is a tutor ---
+            // Tutors are stored by email
+            const tutorDocRef = doc(db, "tutors", user.email);
+            const tutorDocSnap = await getDoc(tutorDocRef);
 
-            // Check if the user is a student first
-            const studentDocRef = doc(db, 'thelo-students', user.uid);
-            const studentDocSnap = await getDoc(studentDocRef);
-
-            if (studentDocSnap.exists()) {
-                // User is a student, redirect to student dashboard
-                setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
-            } else {
-                // Not a student, assume tutor and redirect to tutor dashboard
-                // A more robust check could be added here if there are more roles
+            if (tutorDocSnap.exists()) {
+                // User is a tutor
+                console.log("User is a tutor. Redirecting to /tdashboard");
+                showToast("Redirecting to tutor dashboard...", false);
                 setTimeout(() => { window.location.href = 'https://thelo.space/tdashboard'; }, 1500);
+            } else {
+                // User is not a tutor, check student collection
+                // Students are stored by UID
+                const studentDocRef = doc(db, "thelo-students", user.uid);
+                const studentDocSnap = await getDoc(studentDocRef);
+
+                if (studentDocSnap.exists()) {
+                     console.log("User is a student. Redirecting to /sdashboard");
+                     showToast("Redirecting to student dashboard...", false);
+                    setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
+                } else {
+                    // This case is unlikely if sign-up logic is correct, but good to handle.
+                    console.error("User document not found in 'tutors' or 'thelo-students'.");
+                    showToast("Error: Could not determine your account type. Please contact support.", true);
+                    setLoading(false);
+                }
             }
 
         } catch (error) {
