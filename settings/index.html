@@ -197,6 +197,19 @@
             font-weight: 600;
             font-size: 0.875rem;
         }
+        
+        /* === NEW NOTIFICATION STYLES === */
+        #notification-toast {
+            @apply fixed bottom-5 right-5 bg-green-600 text-white p-4 rounded-lg shadow-lg transition-all duration-300 transform translate-y-10 opacity-0 z-50;
+        }
+        #notification-toast.show {
+            @apply transform-none opacity-100;
+        }
+        #notification-toast.error {
+            @apply bg-red-600;
+        }
+        /* === END NOTIFICATION STYLES === */
+
 
         @media (max-width: 767px) {
             main { padding-left: 1rem; padding-right: 1rem; }
@@ -236,6 +249,24 @@
                             <p class="settings-item-title" id="user-full-name-display">Loading Name...</p>
                             <p class="settings-item-description" id="user-email-main-display">Loading Email...</p>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ### NEW: JOIN CLASSROOM SECTION ### -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title">Classroom</p>
+                        <p class="settings-item-description" id="join-class-description">Enter a code from your tutor to join their classroom.</p>
+                    </div>
+                    <div class="settings-item-action w-full md:w-auto">
+                        <div id="join-class-container" class="flex flex-col sm:flex-row gap-2">
+                            <input type="text" id="class-code-input" placeholder="ABC123" maxlength="6" class="flex-grow w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase tracking-widest text-center font-bold text-sm">
+                            <button id="join-class-btn" class="thelo-btn text-sm px-4 py-2">
+                                <i class="fas fa-users mr-2"></i>
+                                <span>Join</span>
+                            </button>
+                        </div>
+                        <div id="in-class-container" class="hidden text-sm text-gray-700"></div>
                     </div>
                 </div>
 
@@ -292,6 +323,11 @@
         </div>
     </main>
 
+    <!-- Notification Toast Container -->
+    <div id="notification-toast" class="hidden">
+        <span id="notification-message"></span>
+    </div>
+
     <div id="password-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 class="text-xl font-bold mb-4" data-i18n="modal_pw_title">Change Password</h3>
@@ -323,7 +359,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         // UPDATED: Imported more auth functions
         import { getAuth, signOut, onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; 
+        import { getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; 
         import { getStorage, ref, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // Firebase configuration
@@ -361,6 +397,12 @@
         const newPasswordInput = document.getElementById('new-password');
         const confirmPasswordInput = document.getElementById('confirm-password');
 
+        // NEW: Join Class Elements
+        const joinClassContainer = document.getElementById('join-class-container');
+        const inClassContainer = document.getElementById('in-class-container');
+        const joinClassDescription = document.getElementById('join-class-description');
+        const classCodeInput = document.getElementById('class-code-input');
+        const joinClassBtn = document.getElementById('join-class-btn');
 
         let isAuthReady = false; 
         let currentLang = 'en'; 
@@ -399,7 +441,9 @@
                 alert_pw_wrong: 'The current password you entered is incorrect.',
                 alert_pw_reauth_needed: 'For security, please log out and log back in before changing your password.',
                 alert_pw_success: 'Your password has been updated successfully!',
-                alert_pw_error: 'An unexpected error occurred. Please try again.'
+                alert_pw_error: 'An unexpected error occurred. Please try again.',
+                alert_join_success: 'Successfully joined the group!',
+                alert_join_invalid_code: 'Invalid group code. Please check and try again.'
             },
             hy: {
                 settingsTitle: 'Կարգավորումներ',
@@ -432,7 +476,9 @@
                 alert_pw_wrong: 'Ձեր մուտքագրած ընթացիկ գաղտնաբառը սխալ է։',
                 alert_pw_reauth_needed: 'Անվտանգության համար խնդրում ենք դուրս գալ և նորից մուտք գործել՝ նախքան գաղտնաբառը փոխելը։',
                 alert_pw_success: 'Ձեր գաղտնաբառը հաջողությամբ թարմացվել է։',
-                alert_pw_error: 'Տեղի ունեցավ անսպասելի սխալ։ Խնդրում ենք փորձել կրկին։'
+                alert_pw_error: 'Տեղի ունեցավ անսպասելի սխալ։ Խնդրում ենք փորձել կրկին։',
+                alert_join_success: 'Դուք հաջողությամբ միացաք խմբին։',
+                alert_join_invalid_code: 'Խմբի կոդը սխալ է։ Խնդրում ենք ստուգել և փորձել կրկին։'
             }
         };
 
@@ -447,6 +493,31 @@
             
             if (langToggle) langToggle.textContent = (lang === 'hy') ? 'EN' : 'Հայ';
             if (currentLanguageNameSpan) currentLanguageNameSpan.textContent = t[`languageFullName_${currentLang}`] || '';
+        }
+
+        /**
+         * Shows a non-blocking notification toast
+         */
+        function showNotification(message, isError = false) {
+            const toast = document.getElementById('notification-toast');
+            const msgEl = document.getElementById('notification-message');
+            if (!toast || !msgEl) return;
+
+            msgEl.textContent = message;
+            toast.classList.toggle('error', isError);
+            toast.classList.remove('hidden');
+            
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                    toast.classList.remove('error');
+                }, 300);
+            }, 3000);
         }
 
         async function updateSettingsPage(user) {
@@ -468,6 +539,22 @@
                     if (studentData.language && typeof studentData.language === 'string') {
                         currentLang = studentData.language; 
                     }
+
+                    // NEW: Handle classroom UI
+                    if (studentData.groupId) {
+                        const groupDocRef = doc(db, 'groups', studentData.groupId);
+                        const groupSnap = await getDoc(groupDocRef);
+                        if (groupSnap.exists()) {
+                            const groupData = groupSnap.data();
+                            joinClassContainer.classList.add('hidden');
+                            inClassContainer.classList.remove('hidden');
+                            inClassContainer.innerHTML = `You are in <strong>${groupData.groupName}</strong>. <br>Your tutor can see your progress.`;
+                            joinClassDescription.textContent = "You are currently in a classroom.";
+                        }
+                    } else {
+                        joinClassContainer.classList.remove('hidden');
+                        inClassContainer.classList.add('hidden');
+                    }
                 } else {
                     console.warn("No student profile found for UID:", user.uid);
                     if (userFullNameDisplay) userFullNameDisplay.textContent = 'New User';
@@ -483,12 +570,78 @@
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // Add event listener for join class button, passing user details
+                if (joinClassBtn) {
+                    joinClassBtn.addEventListener('click', () => handleJoinGroup(user.uid, user.email));
+                }
                 await updateSettingsPage(user); 
             } else {
                 if (isAuthReady) window.location.href = 'index.html'; 
             }
             isAuthReady = true; 
         });
+
+        /**
+         * Handles the logic for a student to join a group using a code.
+         */
+        async function handleJoinGroup(userId, userEmail) {
+            const joinCode = classCodeInput.value.trim().toUpperCase();
+            const t = strings[currentLang];
+
+            if (!joinCode) {
+                showNotification("Please enter a class code.", true);
+                return;
+            }
+
+            joinClassBtn.disabled = true;
+            joinClassBtn.querySelector('span').textContent = 'Joining...';
+
+            try {
+                const groupsRef = collection(db, 'groups');
+                const q = query(groupsRef, where("joinCode", "==", joinCode));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    throw new Error(t.alert_join_invalid_code);
+                }
+
+                const groupDoc = querySnapshot.docs[0];
+                const groupId = groupDoc.id;
+                const groupData = groupDoc.data();
+                const studentRef = doc(db, 'thelo-students', userId);
+
+                // Update student's doc
+                await updateDoc(studentRef, {
+                    groupId: groupId,
+                    email: userEmail // Also update email just in case
+                });
+
+                // Update group's member list
+                const oldMemberIds = groupData.memberIds || [];
+                const newMemberIds = [...new Set([...oldMemberIds, userId])];
+                await updateDoc(doc(db, 'groups', groupId), {
+                    memberIds: newMemberIds
+                });
+
+                // Create a "welcome" post on the bulletin board
+                const studentSnap = await getDoc(studentRef);
+                const studentName = studentSnap.data()?.name || 'A new member';
+                await addDoc(collection(db, "bulletin-posts"), {
+                    groupId: groupId, authorId: userId, type: "welcome",
+                    timestamp: serverTimestamp(),
+                    content: { newMemberName: studentName }
+                });
+
+                showNotification(`${t.alert_join_success} "${groupData.groupName}"!`);
+                await updateSettingsPage(auth.currentUser); // Refresh the UI
+
+            } catch (error) {
+                showNotification(error.message, true);
+            } finally {
+                joinClassBtn.disabled = false;
+                joinClassBtn.querySelector('span').textContent = 'Join';
+            }
+        }
 
         // --- EVENT LISTENERS ---
         if (settingsProfilePhoto) settingsProfilePhoto.addEventListener('click', e => alert('Profile Photo clicked!'));
