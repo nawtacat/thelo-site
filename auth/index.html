@@ -471,6 +471,7 @@ form.addEventListener('submit', async (e) => {
 
             if (!user.emailVerified) {
                 showToast("Please verify your email before signing in. Another verification email has been sent.", true);
+                showToast("Please verify your email. A new verification link has been sent.", true);
                 await sendEmailVerification(user);
                 setLoading(false);
                 return;
@@ -481,6 +482,19 @@ form.addEventListener('submit', async (e) => {
             // TODO: This should redirect to a "role" checker, or /sdashboard for students and /tdashboard for tutors.
             // For now, it just goes to sdashboard.
             setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
+
+            // Check if the user is a student first
+            const studentDocRef = doc(db, 'thelo-students', user.uid);
+            const studentDocSnap = await getDoc(studentDocRef);
+
+            if (studentDocSnap.exists()) {
+                // User is a student, redirect to student dashboard
+                setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
+            } else {
+                // Not a student, assume tutor and redirect to tutor dashboard
+                // A more robust check could be added here if there are more roles
+                setTimeout(() => { window.location.href = 'https://thelo.space/tdashboard'; }, 1500);
+            }
 
         } catch (error) {
             console.error("Sign in error:", error);
