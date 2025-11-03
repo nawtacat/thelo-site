@@ -209,6 +209,24 @@
             transform: translateY(-5px);
         }
     }
+
+    /* === NEW MODAL STYLES === */
+    #join-class-modal {
+        @apply fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300;
+    }
+    #join-class-modal.hidden {
+        @apply opacity-0 pointer-events-none;
+    }
+    #join-class-modal-overlay {
+        @apply absolute inset-0 bg-black bg-opacity-50;
+    }
+    #join-class-modal-content {
+        @apply relative bg-white rounded-xl shadow-2xl w-full max-w-lg transition-transform duration-300 scale-95;
+    }
+    #join-class-modal:not(.hidden) #join-class-modal-content {
+        @apply scale-100;
+    }
+    /* === END MODAL STYLES === */
         
 
 </style>
@@ -243,6 +261,9 @@
             </div>
         </div>
         <div class="flex items-center gap-4">
+            <button id="join-class-modal-trigger" class="text-gray-600 hover:text-blue-600" title="Join a Class">
+                <i class="fas fa-users text-xl"></i>
+            </button>
                 <button id="open-thelobook-btn" class="text-gray-600 hover:text-blue-600" title="Coming Soon">
                 <i class="fas fa-book-open text-xl"></i>
             </button>
@@ -263,33 +284,30 @@
             </p>
         </section>
 
-        <!-- ### REDESIGNED SECTION TO JOIN A CLASS ### -->
-        <section id="join-class-card" class="mb-16 max-w-3xl mx-auto">
-            <div class="bg-gradient-to-br from-white to-slate-50 p-8 rounded-xl shadow-lg border border-slate-200 flex flex-col md:flex-row items-center gap-8">
-                <!-- Icon Column -->
-                <div class="flex-shrink-0 text-center">
-                    <div class="bg-blue-100 text-blue-600 rounded-full h-24 w-24 flex items-center justify-center">
-                        <i class="fas fa-users text-4xl"></i>
-                    </div>
-                </div>
-                <!-- Content Column -->
-                <div class="flex-grow text-center md:text-left">
-                    <h2 class="text-2xl font-bold text-slate-800 mb-2">Have a Class Code?</h2>
-                    <p class="text-slate-600 mb-6">Enter the 6-character code from your tutor to join their group.</p>
-                    <div class="flex flex-col sm:flex-row items-center gap-3">
-                        <input type="text" id="class-code-input" placeholder="ABCDEF" maxlength="6" class="flex-grow w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase tracking-[0.5em] sm:tracking-[1em] text-center font-bold text-xl bg-slate-50 placeholder:tracking-normal">
-                        <button id="join-class-btn" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[var(--thelo-blue)] text-white font-bold rounded-lg shadow-md transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
-                            <span>Join Class</span>
-                            <i class="fas fa-arrow-right"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-
         <div class="learning-path" id="learning-path-container"></div>
     </main>
+
+    <!-- ### NEW JOIN CLASS MODAL ### -->
+    <div id="join-class-modal" class="hidden">
+        <div id="join-class-modal-overlay" class="cursor-pointer"></div>
+        <div id="join-class-modal-content" class="p-8">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">Join a Classroom</h2>
+                    <p class="text-slate-600 mt-1">Enter the 6-character code from your tutor.</p>
+                </div>
+                <button id="join-class-modal-close" class="text-slate-400 hover:text-slate-600">&times;</button>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row items-center gap-3">
+                <input type="text" id="class-code-input" placeholder="ABCDEF" maxlength="6" class="flex-grow w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase tracking-[0.5em] sm:tracking-[1em] text-center font-bold text-xl bg-slate-50 placeholder:tracking-normal">
+                <button id="join-class-btn" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[var(--thelo-blue)] text-white font-bold rounded-lg shadow-md transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                    <span>Join</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Notification Toast Container -->
     <div id="notification-toast" class="hidden">
@@ -326,6 +344,12 @@
         const welcomeAvatar = document.getElementById('welcome-avatar');
         const welcomeName = document.getElementById('welcome-name');
         const statsSummary = document.getElementById('stats-summary');
+        // --- NEW Modal Elements ---
+        const joinClassModal = document.getElementById('join-class-modal');
+        const joinClassModalTrigger = document.getElementById('join-class-modal-trigger');
+        const joinClassModalClose = document.getElementById('join-class-modal-close');
+        const joinClassModalOverlay = document.getElementById('join-class-modal-overlay');
+
 
         /**
          * Shows a non-blocking notification toast
@@ -489,11 +513,9 @@
                     streakCountSpan.textContent = streak;
                     lessonsCompletedCountSpan.textContent = lessons;
                     
-                    // Hide the "Join Class" card if student already in a group
-                    if (studentData.groupId) {
-                        const joinCard = document.getElementById('join-class-card');
-                        if (joinCard) {
-                            joinCard.style.display = 'none';
+                    // Hide the "Join Class" modal trigger if student already in a group
+                    if (studentData.groupId && joinClassModalTrigger) {
+                        joinClassModalTrigger.style.display = 'none';
                         }
                     }
 
@@ -583,7 +605,10 @@
                 });
 
                 showNotification(`Successfully joined the group: "${groupData.groupName}"!`);
-                document.getElementById('join-class-card').style.display = 'none';
+                // Hide the modal and the trigger button
+                joinClassModal.classList.add('hidden');
+                joinClassModalTrigger.style.display = 'none';
+
 
             } catch (error) {
             console.error("Error joining group:", error);
@@ -591,6 +616,11 @@
             } finally {
                 joinBtn.disabled = false;
                 joinBtn.textContent = 'Join Class';
+                // Restore the icon on the button
+                const icon = document.createElement('i');
+                icon.className = 'fas fa-arrow-right';
+                joinBtn.textContent = 'Join';
+                joinBtn.appendChild(icon);
             }
         }
         // --- Main Execution ---
@@ -599,12 +629,19 @@
             if (user && user.emailVerified) {
                 console.log("User authenticated and verified:", user.uid, user.email);
                 
-                // Add event listener for the join class button
+                // --- Setup Modal Listeners ---
+                joinClassModalTrigger?.addEventListener('click', () => joinClassModal.classList.remove('hidden'));
+                joinClassModalClose?.addEventListener('click', () => joinClassModal.classList.add('hidden'));
+                joinClassModalOverlay?.addEventListener('click', () => joinClassModal.classList.add('hidden'));
+
+                // --- Setup Join Button Logic ---
                 const joinBtn = document.getElementById('join-class-btn');
                 if(joinBtn) {
                     // Pass user.uid and user.email to the handler
                     joinBtn.addEventListener('click', () => handleJoinGroup(user.uid, user.email)); 
                 }
+
+
                 
                 // Update the dashboard UI and render the course in parallel
                 await Promise.all([
