@@ -48,7 +48,7 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
     .fixed.top-4.left-4,.fixed.top-4.right-4{top:.5rem;font-size:.75rem;padding:.25rem .5rem}
     .fixed.top-4.left-4{left:.5rem}.fixed.top-4.right-4{right:.5rem}}
 
-/* ===== NEW STYLES for Character Selection ===== */
+/* ===== STYLES for Character Selection ===== */
 .char-option {
     cursor: pointer;
     border-radius: 9999px; /* pill shape */
@@ -65,6 +65,29 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
     box-shadow: 0 0 10px rgba(37, 99, 235, 0.3);
 }
 
+/* ===== NEW STYLES for Account Type ===== */
+.account-type-btn {
+    flex: 1; /* Make buttons share space */
+    padding: 0.75rem 1rem;
+    border: 2px solid #D1D5DB; /* default border */
+    border-radius: 0.5rem;
+    font-weight: 700;
+    color: #6B7280; /* text-slate-500 */
+    background-color: #F9FAFB; /* bg-slate-50 */
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+}
+.account-type-btn:hover {
+    border-color: #9CA3AF; /* border-slate-400 */
+    color: #374151; /* text-slate-700 */
+}
+.account-type-btn.selected {
+    border-color: var(--thelo-blue);
+    background-color: #EFF6FF; /* blue-50 */
+    color: var(--thelo-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
 </style>
 </head>
 
@@ -78,6 +101,14 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
     <p id="welcomeMessage" class="text-center text-sm text-slate-600 mb-6"></p>
 
     <form id="authForm" class="grid grid-cols-1 gap-y-4">
+
+        <div id="accountTypeDiv" class="hidden">
+            <label id="labelAccountType" class="block text-sm font-bold mb-2">I am a:</label>
+            <div class="flex gap-3">
+                <button type="button" id="btn-student" class="account-type-btn selected">Student</button>
+                <button type="button" id="btn-tutor" class="account-type-btn">Tutor</button>
+            </div>
+        </div>
 
         <div id="fullNameDiv" class="hidden">
             <label id="labelFullName" class="block text-sm font-bold mb-1" for="fullName">Full Name</label>
@@ -114,7 +145,6 @@ html[lang="hy"] body{font-family:'Noto Serif Armenian',serif}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-// ===== MODIFIED: Added sendEmailVerification =====
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const firebaseConfig = {
@@ -138,13 +168,16 @@ const TXT = {
         signInBtn: "Sign In",
         signUpBtn: "Create Account",
         welcomeMessageSignIn: "Welcome back! Please enter your details.",
-        welcomeMessageSignUp: "Join thelo to start your learning journey.",
+        welcomeMessageSignUp: "Join thelo to start your journey.",
         email: "Email",
         password: "Password",
         fullName: "Full Name",
         avatar: "Choose Your Character",
         toggleToSignUp: "Don't have an account? Sign Up",
         toggleToSignIn: "Already have an account? Sign In",
+        accountType: "I am a:", // NEW
+        student: "Student",     // NEW
+        tutor: "Tutor"          // NEW
     },
     hy: {
         home: "Գլխավոր",
@@ -153,19 +186,23 @@ const TXT = {
         signInBtn: "Մուտք",
         signUpBtn: "Ստեղծել Հաշիվ",
         welcomeMessageSignIn: "Ուրախ ենք Ձեզ նորից տեսնել։",
-        welcomeMessageSignUp: "Միացեք thelo-ին՝ սկսելու ձեր ուսումնական ճամփորդությունը։",
+        welcomeMessageSignUp: "Միացեք thelo-ին՝ սկսելու ձեր ճամփորդությունը։",
         email: "Էլ-փոստ",
         password: "Գաղտնաբառ",
         fullName: "Անուն Ազգանուն",
         avatar: "Ընտրեք Ձեր Նկարը",
         toggleToSignUp: "Չունե՞ք հաշիվ։ Գրանցվել",
         toggleToSignIn: "Արդեն ունե՞ք հաշիվ։ Մուտք",
+        accountType: "Ես",     // NEW
+        student: "Աշակերտ",     // NEW
+        tutor: "Ուսուցիչ"       // NEW
     }
 };
 
 let lang = 'en';
 let isSignUpMode = false;
 let selectedAvatarUrl = '';
+let selectedAccountType = 'student'; // NEW: Default to student
 
 const langBtn = document.getElementById('langToggle');
 const homeLink = document.getElementById('homeLink');
@@ -186,6 +223,13 @@ const avatarDiv = document.getElementById('avatarDiv');
 const avatarGrid = document.getElementById('avatarGrid');
 const labelAvatar = document.getElementById('labelAvatar');
 
+// ===== NEW: Account Type DOM Elements =====
+const accountTypeDiv = document.getElementById('accountTypeDiv');
+const labelAccountType = document.getElementById('labelAccountType');
+const btnStudent = document.getElementById('btn-student');
+const btnTutor = document.getElementById('btn-tutor');
+
+
 function updateFormUI() {
     const s = TXT[lang];
     if (isSignUpMode) {
@@ -193,16 +237,28 @@ function updateFormUI() {
         welcomeMessage.textContent = s.welcomeMessageSignUp;
         submitBtn.textContent = s.signUpBtn;
         toggleAuthModeLink.textContent = s.toggleToSignIn;
+        // Show all sign-up fields
+        accountTypeDiv.classList.remove('hidden'); // NEW
         fullNameDiv.classList.remove('hidden');
-        avatarDiv.classList.remove('hidden');
+        
+        // NEW: Only show avatar if student is selected
+        if (selectedAccountType === 'student') {
+            avatarDiv.classList.remove('hidden');
+        } else {
+            avatarDiv.classList.add('hidden');
+        }
+        
         fullNameInput.required = true;
     } else {
         formTitle.textContent = s.signInTitle;
         welcomeMessage.textContent = s.welcomeMessageSignIn;
         submitBtn.textContent = s.signInBtn;
         toggleAuthModeLink.textContent = s.toggleToSignUp;
+        // Hide all sign-up fields
+        accountTypeDiv.classList.add('hidden'); // NEW
         fullNameDiv.classList.add('hidden');
         avatarDiv.classList.add('hidden');
+        
         fullNameInput.required = false;
     }
 }
@@ -216,6 +272,11 @@ function applyLang() {
     labelPassword.textContent = s.password;
     labelFullName.textContent = s.fullName;
     labelAvatar.textContent = s.avatar;
+    // ===== NEW: Translate new fields =====
+    labelAccountType.textContent = s.accountType;
+    btnStudent.textContent = s.student;
+    btnTutor.textContent = s.tutor;
+    
     updateFormUI();
 }
 
@@ -262,51 +323,63 @@ function populateAvatars() {
 }
 
 /**
- * ===== MODIFIED: Added email verification step =====
- * Handles the new user sign-up process.
+ * ===== MODIFIED: Handles new user sign-up for BOTH students and tutors =====
  */
-async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
+async function handleNewUserSignUp(email, password, fullName, avatarUrl, accountType) {
     try {
         // Step 1: Create user in Authentication
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // ===== NEW: Send verification email immediately =====
+        // Step 2: Send verification email
         await sendEmailVerification(user);
 
         const nameParts = fullName.split(' ');
         const firstName = nameParts[0] || '';
         const lastName = nameParts.slice(1).join(' ') || '';
 
-        // Step 2: Create user profile in Firestore
-        await setDoc(doc(db, "thelo-students", user.uid), {
-            name: firstName,
-            surname: lastName,
-            email: user.email,
-            language: "en",
-            profilePicture: avatarUrl,
-            points: 0,
-            lessonsCompleted: 0,
-            groupId: null,
-            createdAt: serverTimestamp(),
-            streakData: {
-                currentStreak: 0,
-                longestStreak: 0,
-                lastActivityWeek: null
-            },
-            visionUsage: {
-                count: 0,
-                month: new Date().toISOString().slice(0, 7)
-            }
-        });
-        await addDoc(collection(db, "analytics_events"), {
-            type: "user_signed_up",
-            userId: user.uid,
-            timestamp: serverTimestamp(),
-            signupLanguage: lang // This is a useful detail to capture!
-        });
-        console.log("Successfully created user and sent verification email.");
-        // ===== MODIFIED: Inform user to check their email =====
+        // ===== NEW: Step 3: Create profile in Firestore based on account type =====
+        if (accountType === 'student') {
+            // --- Create a Student Document (by UID) ---
+            await setDoc(doc(db, "thelo-students", user.uid), {
+                name: firstName,
+                surname: lastName,
+                email: user.email,
+                language: lang,
+                profilePicture: avatarUrl, // Student gets an avatar
+                points: 0,
+                lessonsCompleted: 0,
+                groupId: null,
+                createdAt: serverTimestamp(),
+                streakData: { currentStreak: 0, longestStreak: 0, lastActivityWeek: null },
+                visionUsage: { count: 0, month: new Date().toISOString().slice(0, 7) }
+            });
+            
+            await addDoc(collection(db, "analytics_events"), {
+                type: "student_signed_up", // Specific analytics event
+                userId: user.uid,
+                timestamp: serverTimestamp(),
+                signupLanguage: lang
+            });
+
+        } else if (accountType === 'tutor') {
+            // --- Create a Tutor Document (by Email, as per tutor dashboard logic) ---
+            await setDoc(doc(db, "tutors", user.email), {
+                uid: user.uid,
+                email: user.email,
+                fullName: fullName,
+                createdAt: serverTimestamp()
+            });
+            
+            await addDoc(collection(db, "analytics_events"), {
+                type: "tutor_signed_up", // Specific analytics event
+                userId: user.uid,
+                timestamp: serverTimestamp(),
+                signupLanguage: lang
+            });
+        }
+        
+        console.log(`Successfully created ${accountType} and sent verification email.`);
         showToast("Account created! Please check your inbox to verify your email.", false);
         setLoading(false); // Stop loading but don't redirect
         setTimeout(() => { location.reload(); }, 5000);
@@ -324,6 +397,8 @@ async function handleNewUserSignUp(email, password, fullName, avatarUrl) {
     }
 }
 
+// --- Event Listeners ---
+
 langBtn.addEventListener('click', () => { lang = lang === 'en' ? 'hy' : 'en'; applyLang(); });
 
 toggleAuthModeLink.addEventListener('click', (e) => {
@@ -331,10 +406,31 @@ toggleAuthModeLink.addEventListener('click', (e) => {
     isSignUpMode = !isSignUpMode;
     form.reset();
     hideToast();
+    // Reset selections
     selectedAvatarUrl = '';
     avatarGrid.querySelectorAll('.char-option').forEach(img => img.classList.remove('selected'));
+    selectedAccountType = 'student'; // NEW: Reset to default
+    btnStudent.classList.add('selected'); // NEW
+    btnTutor.classList.remove('selected'); // NEW
+    
     updateFormUI();
 });
+
+// ===== NEW: Event listeners for account type buttons =====
+btnStudent.addEventListener('click', () => {
+    selectedAccountType = 'student';
+    btnStudent.classList.add('selected');
+    btnTutor.classList.remove('selected');
+    avatarDiv.classList.remove('hidden'); // Show avatar grid for students
+});
+
+btnTutor.addEventListener('click', () => {
+    selectedAccountType = 'tutor';
+    btnTutor.classList.add('selected');
+    btnStudent.classList.remove('selected');
+    avatarDiv.classList.add('hidden'); // Hide avatar grid for tutors
+});
+
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -351,29 +447,39 @@ form.addEventListener('submit', async (e) => {
             setLoading(false);
             return;
         }
-        if (!selectedAvatarUrl) {
-            showToast("Please choose a character avatar.", true);
-            setLoading(false);
-            return;
+
+        // ===== MODIFIED: Branched logic for student vs. tutor =====
+        if (selectedAccountType === 'student') {
+            if (!selectedAvatarUrl) {
+                showToast("Please choose a character avatar.", true);
+                setLoading(false);
+                return;
+            }
+            // Sign up as a Student
+            await handleNewUserSignUp(email, password, fullName, selectedAvatarUrl, 'student');
+        
+        } else if (selectedAccountType === 'tutor') {
+            // Sign up as a Tutor (no avatar needed)
+            await handleNewUserSignUp(email, password, fullName, null, 'tutor');
         }
-        await handleNewUserSignUp(email, password, fullName, selectedAvatarUrl);
 
     } else {
-        // --- SIGN IN LOGIC with VERIFICATION CHECK ---
+        // --- SIGN IN LOGIC (Unchanged) ---
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // ===== NEW: Check if the user's email is verified =====
             if (!user.emailVerified) {
                 showToast("Please verify your email before signing in. Another verification email has been sent.", true);
-                await sendEmailVerification(user); // Resend email for convenience
+                await sendEmailVerification(user);
                 setLoading(false);
-                return; // Stop the sign-in process
+                return;
             }
 
             console.log("User signed in:", user.uid);
             showToast("Signed in successfully! Redirecting...", false);
+            // TODO: This should redirect to a "role" checker, or /sdashboard for students and /tdashboard for tutors.
+            // For now, it just goes to sdashboard.
             setTimeout(() => { window.location.href = 'https://thelo.space/sdashboard'; }, 1500);
 
         } catch (error) {
@@ -390,6 +496,7 @@ form.addEventListener('submit', async (e) => {
     }
 });
 
+// --- Initial Page Load ---
 populateAvatars();
 applyLang();
 </script>
