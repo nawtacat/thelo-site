@@ -139,7 +139,8 @@
         margin-bottom: 0.5rem;    /* from mb-2 */
     } 
         .student-solution-img { @apply w-full h-auto bg-white border border-slate-300 rounded-md object-contain; }
-        .feedback-text { @apply p-3 bg-slate-50 rounded-md text-slate-700 text-sm prose max-w-none; }
+        /* FIX: Removed 'prose' */
+.feedback-text { @apply p-3 bg-slate-50 rounded-md text-slate-700 text-sm max-w-none; }
         .question-status-correct { @apply inline-block text-sm font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full; }
         .question-status-incorrect { @apply inline-block text-sm font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full; }
     </style>
@@ -320,7 +321,7 @@
                 statusCorrect: 'Ճիշտ է',
                 statusIncorrect: 'Սխալ է',
                 labelSolution: 'Աշակերտի Լուծումը',
-                labelFeedback: 'AI-ի Կարծիքը',
+                labelFeedback: 'ԱԲ-ի Կարծիքը',
                 labelQuestion: 'Հարց',
                 labelCorrectAnswer: 'Ճիշտ Պատասխան',
                 tableTimeValue: '{time}վ', // Used for summary
@@ -361,11 +362,24 @@
                     const math = part.slice(1, -1).trim();
                     finalHTML += katex.renderToString(math, { displayMode: false, throwOnError: false });
                 } else {
-                    // This is plain text. Escape it to prevent accidental HTML injection.
-                    const textNode = document.createTextNode(part);
+                    // This is plain text. Find simple math-like expressions and wrap them for KaTeX.
+                    // This regex finds:
+                    // 1. number/number (e.g., 2/5)
+                    // 2. number - number/number = number/number (e.g., 1 - 1/5 = 4/5)
+                    // 3. number/number * number/number = number/number (e.g., 4/5 * 1/2 = 2/5)
+                    const processedPart = part.replace(/(\b\d+\s*-\s*\d+\/\d+\s*=\s*\d+\/\d+\b)|(\b\d+\/\d+\s*\*\s*\d+\/\d+\s*=\s*\d+\/\d+\b)|(\b\d+\/\d+\b)/g, (match) => {
+                        // Inside the matched string (e.g., "1 - 1/5 = 4/5"), find all fractions and convert them.
+                        const withFractions = match.replace(/(\d+)\/(\d+)/g, '\\frac{$1}{$2}');
+                        // Also, replace the standard asterisk with a proper multiplication dot.
+                        const finalMatch = withFractions.replace(/\*/g, '\\cdot');
+                        return `$${finalMatch}$`; // Wrap the fully converted string in $ for KaTeX
+                    });
+
+                    // Escape the processed part to prevent accidental HTML injection before adding to finalHTML
+                    const textNode = document.createTextNode(processedPart);
                     const tempDiv = document.createElement('div');
                     tempDiv.appendChild(textNode);
-                    finalHTML += tempDiv.innerHTML;
+                    finalHTML += tempDiv.innerHTML.replace(/\$([\s\S]+?)\$/g, (m, katexContent) => katex.renderToString(katexContent, { throwOnError: false }));
                 }
             }
 
