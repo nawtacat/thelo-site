@@ -199,23 +199,51 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupMessageListener() {
         window.addEventListener('message', (event) => {
             const receivedData = event.data;
-            if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-                // Adjust devicePixelRatio and canvas size based on recorder metadata
+
+            // --- THIS IS THE NEW LOGIC ---
+            // Check for the 'loadTimeline' command from your lesson player
+            if (receivedData && receivedData.command === 'loadTimeline' && Array.isArray(receivedData.actions)) {
+                console.log("Replayer: Received 'loadTimeline' command with", receivedData.actions.length, "actions.");
+                
+                // Create a default 'meta' object for compatibility
+                const meta = {
+                    devicePixelRatio: window.devicePixelRatio || 1,
+                    canvasDimensions: { 
+                        width: canvas.width / (window.devicePixelRatio || 1), 
+                        height: canvas.height / (window.devicePixelRatio || 1) 
+                    }
+                };
+                
+                // Adjust canvas and start the replay
+                resizeCanvases(meta.canvasDimensions); 
+                startReplay(receivedData.actions);
+
+            // Check for the *other* format this file was built for
+            } else if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
+                console.log("Replayer: Received raw data object with", receivedData.actions.length, "actions.");
                 if (receivedData.meta.devicePixelRatio) {
                     currentDevicePixelRatio = receivedData.meta.devicePixelRatio;
                     POI_RADIUS = 4 * currentDevicePixelRatio;
                 }
-                resizeCanvases(receivedData.meta.canvasDimensions); // Pass recorded dimensions
+                resizeCanvases(receivedData.meta.canvasDimensions);
                 startReplay(receivedData.actions);
+
+            // Handle seek commands (this part was already correct)
             } else if (receivedData && receivedData.command === 'seekToTime' && typeof receivedData.timeMs === 'number') {
                 seekToAbsoluteTime(receivedData.timeMs);
             } else if (receivedData && receivedData.command === 'seek') {
-                // Internal directional seek (e.g., keyboard within iframe)
                 seekRelative(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
             }
         });
-    }
 
+        // --- THIS IS THE OTHER NEW PART ---
+        // Tell the parent window (lesson player) that the iframe is ready to receive commands
+        if (window.parent && window.parent !== window) {
+            console.log("Replayer: Sending 'ready' message to parent.");
+            // This is the "handshake" your lesson player is waiting for
+            window.parent.postMessage({ command: 'ready' }, '*');
+        }
+    }
     function setupKeyListeners() {
         window.addEventListener('keydown', (e) => {
             if (timeline.length === 0) return; // No replay loaded
