@@ -955,6 +955,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- START THE APP ---
     initialize();
+    // ======================================================
+    // ================ REPLAYER LOGIC ======================
+    // ======================================================
+    
+    let playbackTimeline = []; // Stores the actions from the parent
+
+    // 1. Listen for messages from the parent window (the lesson player)
+    window.addEventListener('message', (event) => {
+        const command = event.data.command;
+        const payload = event.data;
+
+        if (!command) return;
+
+        switch (command) {
+            case 'loadTimeline':
+                // Parent sent the timeline, store it
+                console.log("Replayer: Received timeline with", payload.actions.length, "actions.");
+                playbackTimeline = payload.actions;
+                break;
+            
+            case 'renderAtTime':
+                // Parent wants us to show a specific frame
+                // We use your *existing* function to render the state!
+                setStateAtTime(payload.timeMs, playbackTimeline);
+                break;
+                
+            case 'seekToTime':
+                 // Parent wants to jump to a time (for scrubbing)
+                 setStateAtTime(payload.timeMs, playbackTimeline);
+                 break;
+        }
+    });
+
+    // 2. Tell the parent window (lesson player) that the iframe is ready to receive commands
+    if (window.parent && window.parent !== window) {
+        console.log("Replayer: Sending 'ready' message to parent.");
+        window.parent.postMessage({ command: 'ready' }, '*');
+        
+        // Hide the recorder UI since we are in playback mode
+        const recorderUI = document.getElementById('recordingControls');
+        if (recorderUI) {
+            recorderUI.style.display = 'none';
+        }
+    }
 });
 </script>
 </body>
