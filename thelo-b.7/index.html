@@ -2765,7 +2765,7 @@ async function openReplayPlayer() {
         };
 
         window.addEventListener('message', onIframeReady);
-        replayFrame.src = 'https://thelo.space/replay'; // Or your replay URL
+        replayFrame.src = 'https://thelo.space/replay3'; // Or your replay URL
         replayPlayerContainer.classList.remove('replay-hidden');
 
     } catch (error) {
@@ -2902,8 +2902,6 @@ function renderStageUI(index, isResize = false) {
                         json.actions.forEach(action => {
                             if (action.action === 'delay') {
                                 totalReplayTime += action.ms;
-                            } else if (action.action === 'animateView') {
-                                totalReplayTime += action.payload.duration;
                             }
                         });
                         return totalReplayTime / 1000;
@@ -3330,6 +3328,52 @@ function handleNextCheckClick() {
     };
     }
     // Find your addChatMessage function (around line 1774 or search for 'function addChatMessage(sender, rawMsg)')
+// ADD THIS NEW HELPER FUNCTION before `addChatMessage`
+/**
+ * Renders text containing math expressions into an HTML string with KaTeX.
+ * - Handles explicit KaTeX delimiters like $...$
+ * - Automatically converts simple fractions (e.g., 1/2)
+ * - Automatically converts asterisks to multiplication dots (e.g., 2*3)
+ * @param {string} text The text content to process.
+ * @returns {string} The processed HTML string.
+ */
+function renderMathInText(text) {
+    if (!text) return '';
+
+    // Regex to find explicit $...$ delimiters.
+    const regex = /(\$[\s\S]*?\$)/g;
+    const parts = text.split(regex).filter(Boolean);
+    let finalHTML = '';
+
+    for (const part of parts) {
+        if (part.startsWith('$') && part.endsWith('$')) {
+            // This is an explicit KaTeX block
+            const math = part.slice(1, -1).trim();
+            try {
+                finalHTML += katex.renderToString(math, { displayMode: false, throwOnError: false });
+            } catch (e) {
+                console.warn('KaTeX rendering failed for explicit math:', math, e);
+                finalHTML += part; // Fallback to original text
+            }
+        } else {
+            // This is plain text. Find simple math-like expressions and wrap them for KaTeX.
+            // This regex finds fractions (e.g., 2/5) or expressions with asterisks.
+            const processedPart = part.replace(/(\b\d+\/\d+\b)|(\*)/g, (match, fraction, asterisk) => {
+                if (fraction) {
+                    // It's a fraction, convert to \frac
+                    return `$\\frac{${fraction.replace('/', '}{')}}$`;
+                }
+                if (asterisk) {
+                    // It's a multiplication asterisk, convert to \cdot
+                    return '$\\cdot$';
+                }
+                return match;
+            });
+            finalHTML += processedPart;
+        }
+    }
+    return finalHTML;
+}
 // REPLACE your entire addChatMessage function with this one
 /**
  * Finds simple math notations in a string and converts them to KaTeX HTML.
@@ -3401,8 +3445,8 @@ function addChatMessage(sender, rawMsg) {
         else if (isChecking) emoji = '⏳';
         
         // ======================= THE CHANGE IS HERE =======================
-        // Use our new function to parse the message for math before displaying it.
-        const finalHTML = parseAndRenderMath(msg);
+        // Use our new, more powerful function to render math before displaying.
+        const finalHTML = renderMathInText(msg);
         // ================================================================
 
         const bubble = document.createElement('div');
@@ -4458,6 +4502,82 @@ function initApp() {
     
     console.log("KaTeX is ready. Initializing app.");
     checkTabletMode();
+	// --- ADD THIS TO initApp() in the Main App ---
+
+if (stageProgressBarContainer) {
+    // Function to handle seeking via click or drag
+    const handleSeek = (e) => {
+        if (!currentStageTotalDuration || currentStageTotalDuration <= 0) return;
+        if (!isReplayActive && !currentStageDrawingData && !currentStageAudio) return;
+
+        const rect = stageProgressBarContainer.getBoundingClientRect();
+        // Handle both Mouse and Touch events
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let x = clientX - rect.left;
+        
+        // Clamp values
+        x = Math.max(0, Math.min(x, rect.width));
+        
+        // Calculate percentage and new time
+        const percentage = x / rect.width;
+        const newTime = percentage * currentStageTotalDuration;
+
+        // 1. Update Main App State
+        internalPlaybackTime = newTime;
+        // Force the main loop to wake up if it was stopped
+        isMediaScrubbingActive = true; 
+        
+        // 2. Sync Audio
+        if (currentStageAudio) {
+            currentStageAudio.currentTime = newTime;
+        }
+
+        // 3. Sync Graph (Send the message to the fixed iframe)
+        if (isReplayActive && replayFrame && replayFrame.contentWindow) {
+            replayFrame.contentWindow.postMessage({ 
+                command: 'seekToTime', 
+                timeMs: newTime * 1000 
+            }, '*');
+        }
+
+        // 4. Sync Ink (Immediate visual feedback)
+        if (currentStageDrawingData && replayCtx) {
+            renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx);
+        }
+        
+        updateMediaProgressBar(newTime, currentStageTotalDuration);
+        
+        // Restart the loop if needed
+        if (!currentReplayAnimationId) {
+            lastFrameTimestampForManualAdvance = 0;
+            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+        }
+    };
+
+    // Click/Tap listener
+    stageProgressBarContainer.addEventListener('mousedown', (e) => {
+        handleSeek(e);
+        // Optional: Add drag support
+        const onMouseMove = (moveEvent) => handleSeek(moveEvent);
+        const onMouseUp = () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    });
+    
+    // Touch support for tablets
+    stageProgressBarContainer.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Prevent scrolling while scrubbing
+        handleSeek(e);
+    }, { passive: false });
+    
+    stageProgressBarContainer.addEventListener('touchmove', (e) => {
+        e.preventDefault(); 
+        handleSeek(e);
+    }, { passive: false });
+}
     const audioIdsToLoad = [
         'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
         'audio_approve1_en', 'audio_approve2_en', 'audio_dis1_en', 'audio_dis2_en', 'gotItSound'
