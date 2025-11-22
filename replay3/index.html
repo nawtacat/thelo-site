@@ -197,53 +197,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupMessageListener() {
-        window.addEventListener('message', (event) => {
-            const receivedData = event.data;
+    window.addEventListener('message', (event) => {
+        const receivedData = event.data;
 
-            // --- THIS IS THE NEW LOGIC ---
-            // Check for the 'loadTimeline' command from your lesson player
-            if (receivedData && receivedData.command === 'loadTimeline' && Array.isArray(receivedData.actions)) {
-                console.log("Replayer: Received 'loadTimeline' command with", receivedData.actions.length, "actions.");
-                
-                // Create a default 'meta' object for compatibility
-                const meta = {
-                    devicePixelRatio: window.devicePixelRatio || 1,
-                    canvasDimensions: { 
-                        width: canvas.width / (window.devicePixelRatio || 1), 
-                        height: canvas.height / (window.devicePixelRatio || 1) 
-                    }
-                };
-                
-                // Adjust canvas and start the replay
-                resizeCanvases(meta.canvasDimensions); 
-                startReplay(receivedData.actions);
+        if (!receivedData) return;
 
-            // Check for the *other* format this file was built for
-            } else if (receivedData && Array.isArray(receivedData.actions) && receivedData.meta) {
-                console.log("Replayer: Received raw data object with", receivedData.actions.length, "actions.");
-                if (receivedData.meta.devicePixelRatio) {
-                    currentDevicePixelRatio = receivedData.meta.devicePixelRatio;
-                    POI_RADIUS = 4 * currentDevicePixelRatio;
+        // 1. Load the timeline data
+        if (receivedData.command === 'loadTimeline' && Array.isArray(receivedData.actions)) {
+            // Pause internal playback loop so we don't fight the parent
+            if (isPlaying) pause(); 
+            
+            const meta = {
+                devicePixelRatio: window.devicePixelRatio || 1,
+                canvasDimensions: { 
+                    width: canvas.width / (window.devicePixelRatio || 1), 
+                    height: canvas.height / (window.devicePixelRatio || 1) 
                 }
-                resizeCanvases(receivedData.meta.canvasDimensions);
-                startReplay(receivedData.actions);
+            };
+            resizeCanvases(meta.canvasDimensions); 
+            
+            // Just build the timeline, don't auto-play. Let the parent drive.
+            buildTimeline(receivedData.actions); 
+            seekToAbsoluteTime(0);
 
-            // Handle seek commands (this part was already correct)
-            } else if (receivedData && receivedData.command === 'seekToTime' && typeof receivedData.timeMs === 'number') {
-                seekToAbsoluteTime(receivedData.timeMs);
-            } else if (receivedData && receivedData.command === 'seek') {
-                seekRelative(receivedData.direction === 'forward' ? SEEK_AMOUNT_MS : -SEEK_AMOUNT_MS);
+        // 2. SYNCHRONIZATION (The Missing Fix)
+        // The parent sends this every ~40ms. We must obey exactly.
+        } else if (receivedData.command === 'renderAtTime') {
+            if (typeof receivedData.timeMs === 'number') {
+                // Stop internal loop if it's running accidentally
+                if (isPlaying) pause();
+                
+                // Update internal time tracker
+                playbackTime = receivedData.timeMs;
+                
+                // Force a hard render at this exact timestamp
+                // This ensures the graph looks exactly as it should at this millisecond
+                renderStateAtTime(playbackTime);
             }
-        });
 
-        // --- THIS IS THE OTHER NEW PART ---
-        // Tell the parent window (lesson player) that the iframe is ready to receive commands
-        if (window.parent && window.parent !== window) {
-            console.log("Replayer: Sending 'ready' message to parent.");
-            // This is the "handshake" your lesson player is waiting for
-            window.parent.postMessage({ command: 'ready' }, '*');
+        // 3. JUMP / SCRUB
+        } else if (receivedData.command === 'seekToTime') {
+            if (typeof receivedData.timeMs === 'number') {
+                if (isPlaying) pause();
+                seekToAbsoluteTime(receivedData.timeMs);
+            }
         }
+    });
+
+    // Handshake with parent
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ command: 'ready' }, '*');
     }
+}
     function setupKeyListeners() {
         window.addEventListener('keydown', (e) => {
             if (timeline.length === 0) return; // No replay loaded
