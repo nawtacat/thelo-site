@@ -2290,29 +2290,39 @@ async function getKatexCSSWithEmbeddedFonts() {
   return katexCSSInlined;
 }
 // Wait until the UI font used for headline text is available
+// Updated: More robust font loading check
 async function ensureHeadlineFontsLoaded() {
-  try {
-    const family = (currentLang === 'en') ? 'Manrope' : 'Montserrat Arm';
-    // Load a specific face/size so measureText uses the right metrics
-    if (document.fonts && document.fonts.load) {
-      // Try to load; don't hang forever if the browser doesn't support it
-      await Promise.race([
-        (async () => {
-          await document.fonts.load(`20px "${family}"`);
-          await document.fonts.ready; // resolves when all pending fonts are ready
-        })(),
-        new Promise(res => setTimeout(res, 800)) // safety timeout
-      ]);
-    }
-  } catch (_) { /* ignore */ }
-}
+    try {
+        const families = ['KaTeX_Main', 'KaTeX_Math', 'Manrope', 'Montserrat Arm'];
+        const loaders = [];
 
-// Mixed text + KaTeX headline renderer (SVG with embedded KaTeX fonts)
-// - Segments delimited by /K ... K/ are rendered with KaTeX
-// - Lines are wrapped to widthFraction of the canvas and centered per line
-// - Adds 2px pad in SVG to prevent right-edge clipping of last glyphs
+        // 1. Force the document to acknowledge the fonts exist
+        if (document.fonts && document.fonts.load) {
+            // Load the UI font
+            const uiFamily = (currentLang === 'en') ? 'Manrope' : 'Montserrat Arm';
+            loaders.push(document.fonts.load(`20px "${uiFamily}"`));
+            
+            // Load common KaTeX fonts explicitly
+            loaders.push(document.fonts.load('20px "KaTeX_Main"'));
+            loaders.push(document.fonts.load('italic 20px "KaTeX_Math"'));
+        }
+
+        // 2. Wait for specific font loads + global ready state
+        await Promise.all(loaders);
+        await document.fonts.ready; 
+
+        // 3. Safety delay: Allow the layout engine to recalculate after font swap
+        await new Promise(res => setTimeout(res, 50)); 
+    } catch (e) {
+        console.warn("Font loading check warning:", e);
+    }
+}
+// Updated: Robust Mixed text + KaTeX renderer
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   if (!headline || !bgCtx) return;
+
+  // Ensure fonts are ready before we start measuring anything
+  await ensureHeadlineFontsLoaded();
 
   // ---- config ----
   const widthFraction = Math.min(Math.max(opts.widthFraction ?? 0.88, 0.5), 0.98);
@@ -2325,18 +2335,17 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       .getPropertyValue('--thelo-text')
       .trim() || '#111827';
 
-  // KaTeX CSS with embedded fonts (so data-URL SVG can render the same as DOM)
+  // KaTeX CSS with embedded fonts
   const katexCSS = await getKatexCSSWithEmbeddedFonts();
 
-  // Extra font-family overrides to keep headline matching MCQs
   const extraRules = `
-.katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
-.katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
-.katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
-.katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
-`;
+    .katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
+    .katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
+    .katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
+    .katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
+  `;
 
-  // ---- parse headline into segments: /K ... K/ => math
+  // ---- parse headline ----
   const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || [])
     .filter(Boolean)
     .map(p =>
@@ -2345,16 +2354,19 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
         : { type: 'text', content: p }
     );
 
-  // A hidden host for measuring KaTeX DOM sizes (one per call)
+  // Create measure host
   const measureHost = document.createElement('div');
   measureHost.style.position = 'absolute';
   measureHost.style.visibility = 'hidden';
   measureHost.style.left = '-9999px';
   measureHost.style.top = '-9999px';
+  // CRITICAL: Force the measure host to be wide enough
+  measureHost.style.whiteSpace = 'nowrap'; 
+  measureHost.style.width = 'max-content';
   document.body.appendChild(measureHost);
 
-  // ---- tokenize with measurements ----
   const tokens = [];
+  
   for (const seg of segments) {
     if (seg.type === 'text') {
       const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
@@ -2374,33 +2386,38 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
     try {
       const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
 
-       const style = document.createElement('style');
- style.textContent = katexCSS;          // the CSS you built with embedded fonts
- measureHost.appendChild(style);
+      // Clean host for this token
+      while (measureHost.firstChild) measureHost.removeChild(measureHost.firstChild);
 
- const tmp = document.createElement('div');
- tmp.style.color = fontColor;
- tmp.style.fontSize = `${mathFontSize}px`;
- tmp.innerHTML = html;
- measureHost.appendChild(tmp);
+      const style = document.createElement('style');
+      style.textContent = katexCSS;
+      measureHost.appendChild(style);
+
+      const tmp = document.createElement('div');
+      tmp.style.color = fontColor;
+      tmp.style.fontSize = `${mathFontSize}px`;
+      tmp.style.display = 'inline-block'; // Ensure tight wrap
+      tmp.innerHTML = html;
+      measureHost.appendChild(tmp);
 
       const katexEl = tmp.querySelector('.katex') || tmp;
       const rect = katexEl.getBoundingClientRect();
 
-      // remove measured node (keep host)
-      tmp.remove();
+      // CRITICAL FIX: Robust Padding
+      // If font loads late, rect might be narrow. We add a base padding PLUS 
+      // a percentage safety buffer.
+      const basePad = 15; 
+      const safetyBuffer = Math.ceil(rect.width * 0.1); // Add 10% width as safety
+      const w = Math.ceil(rect.width) + basePad + safetyBuffer;
+      const h = Math.ceil(rect.height) + basePad;
 
-      // Pad & round to avoid clipping last glyphs
-      const PAD = 10; // More aggressive padding to guarantee space
-      const w = Math.ceil(rect.width) + PAD;
-      const h = Math.ceil(rect.height) + PAD;
-
+      // Generate SVG with the calculated safer dimensions
       const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
           <style>${katexCSS}\n${extraRules}</style>
           <foreignObject width="100%" height="100%">
             <div xmlns="http://www.w3.org/1999/xhtml"
-                 style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;">
+                 style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;white-space:nowrap;padding:2px;">
               ${html}
             </div>
           </foreignObject>
@@ -2409,20 +2426,18 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
       const image = new Image();
       image.src = dataUrl;
-      await image.decode();
+      await image.decode(); // Wait for image to be paint-ready
 
       tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
     } catch (e) {
-      // graceful fallback to text measurement
       const w = bgCtx.measureText(seg.content).width;
       tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
     }
   }
 
-  // cleanup measure host
   measureHost.remove();
 
-  // ---- build lines to fit available width ----
+  // ---- build lines ----
   const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
   const maxWidth = canvasW * widthFraction;
   const lineGap = 8;
@@ -2431,9 +2446,9 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   let line = { tokens: [], width: 0, height: fontSize };
 
   for (const t of tokens) {
-    // allow scaling down oversized math to fit
     let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
 
+    // Scale down if a single math element is wider than the whole screen
     if (t.type === 'math' && width > maxWidth) {
       const s = maxWidth / width;
       width = Math.floor(width * s);
@@ -2447,6 +2462,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       lines.push(line);
       line = { tokens: [], width: 0, height: fontSize };
     }
+    // Don't start a line with a space
     if (!(line.tokens.length === 0 && tok.isSpace)) {
       line.tokens.push(tok);
       line.width += width;
@@ -2455,7 +2471,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   }
   if (line.tokens.length) lines.push(line);
 
-  // ---- render lines, centered horizontally ----
+  // ---- render ----
   const prevAlign = bgCtx.textAlign;
   const prevBase = bgCtx.textBaseline;
   const prevFill = bgCtx.fillStyle;
@@ -2468,6 +2484,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   for (const L of lines) {
     let x = (canvasW - L.width) / 2;
     for (const t of L.tokens) {
+      // Vertically center tokens in the line
       const topY = curY + (L.height - t.height) / 2;
       if (t.type === 'text') {
         bgCtx.fillText(t.content, x, topY);
@@ -2479,12 +2496,10 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
     curY += L.height + lineGap;
   }
 
-  // restore ctx
   bgCtx.textAlign = prevAlign || 'center';
   bgCtx.textBaseline = prevBase || 'top';
   bgCtx.fillStyle = prevFill || fontColor;
 }
-
 
 
 	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
