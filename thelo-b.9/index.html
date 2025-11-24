@@ -2760,17 +2760,31 @@ function openReplayPlayer() {
     const url = currentStageData.replayDataUrl;
     console.log("Embedding website:", url);
     
+    // 1. Assign the source
     replayFrame.src = url;
+    
+    // 2. NEW: Automatically force focus to the iframe once it loads
+    // This makes the iframe's internal keyboard shortcuts work immediately 
+    // without requiring a click.
+    replayFrame.onload = function() {
+        // Short delay to ensure the browser is ready to accept the focus switch
+        setTimeout(() => {
+            if (replayFrame.contentWindow) {
+                replayFrame.contentWindow.focus();
+            }
+        }, 100);
+    };
+
     replayPlayerContainer.classList.remove('replay-hidden');
 
-    // Disable the internal media scrubbing loop since we can't control external sites
+    // Disable the internal media scrubbing loop since we are handing control to the iframe
     isMediaScrubbingActive = false; 
     if (currentReplayAnimationId) {
         cancelAnimationFrame(currentReplayAnimationId);
         currentReplayAnimationId = null;
     }
-}		// In your MAIN app's <script> tag
-function closeReplayPlayer() {
+}
+	  function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
 
@@ -4380,23 +4394,54 @@ function closeCalculator() {
 }
 function handleKeyDown(event) {
     // 1. Universal Replay Seeking (Highest Priority)
-    if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    // FIX: Allow seeking if duration exists OR if we are in active replay mode (even with 0 duration)
+    if ((currentStageTotalDuration > 0 || isReplayActive) && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        
         const isReplayActiveStage = currentStageData?.type === 'explanation_with_media' || currentStageData?.type === 'calculator_replay';
+        
         if (isReplayActiveStage || isMediaScrubbingActive) {
-            event.preventDefault(); isMediaScrubbingActive = true;
-            if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-            const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
-            let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, currentStageTotalDuration));
+            event.preventDefault(); 
+            isMediaScrubbingActive = true;
+            
+            if (currentReplayAnimationId) { 
+                cancelAnimationFrame(currentReplayAnimationId); 
+                currentReplayAnimationId = null; 
+            }
+            
+            const step = 5; 
+            const diff = event.key === 'ArrowLeft' ? -step : step;
+            
+            // FIX: If duration is 0 (just a website embed), treat limit as Infinite so we don't get stuck at 0
+            const maxTime = currentStageTotalDuration > 0 ? currentStageTotalDuration : Infinity;
+            
+            let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, maxTime));
             internalPlaybackTime = newTime;
+            
+            // Sync Audio (if it exists)
             if (currentStageAudio) {
                 const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
-                currentStageAudio.currentTime = audioTargetTime;
-                if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) { currentStageAudio.play().catch(() => {}); }
+                if (isFinite(audioTargetTime)) { // Safety check
+                     currentStageAudio.currentTime = audioTargetTime;
+                     if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) { 
+                         currentStageAudio.play().catch(() => {}); 
+                     }
+                }
             }
-            if (isReplayActive && replayFrame && replayFrame.contentWindow) { replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*'); }
-            if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx); }
+            
+            // Send Command to Iframe
+            if (isReplayActive && replayFrame && replayFrame.contentWindow) { 
+                replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*'); 
+            }
+            
+            // Sync Drawing (if it exists)
+            if (currentStageDrawingData && replayCtx) { 
+                renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx); 
+            }
+            
+            // Update UI
             updateMediaProgressBar(newTime, currentStageTotalDuration);
-            lastFrameTimestampForManualAdvance = 0; currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+            lastFrameTimestampForManualAdvance = 0; 
+            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
             return;
         }
     }
@@ -4427,14 +4472,18 @@ function handleKeyDown(event) {
     const isMcqActive = !!(currentStageData && currentStageData.type === "explanation_with_mcq" && mcqDetails && mcqDetails.choices);
 
     if (isMcqActive && !isMcqAnsweredCorrectly) {
-        event.preventDefault();
-        const optionCount = mcqDetails.choices.length;
-        let newIndex = selectedMcqIndex;
+        // Only prevent default if we are actually using the arrows for MCQ
+        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+             event.preventDefault();
+             const optionCount = mcqDetails.choices.length;
+             let newIndex = selectedMcqIndex;
 
-        if (event.key === 'ArrowRight') { newIndex = (selectedMcqIndex + 1) % optionCount; } 
-        else if (event.key === 'ArrowLeft') { newIndex = (selectedMcqIndex - 1 + optionCount) % optionCount; }
-        
-        updateMcqSelectionVisuals(newIndex);
+             if (event.key === 'ArrowRight') { newIndex = (selectedMcqIndex + 1) % optionCount; } 
+             else if (event.key === 'ArrowLeft') { newIndex = (selectedMcqIndex - 1 + optionCount) % optionCount; }
+             
+             updateMcqSelectionVisuals(newIndex);
+             return;
+        }
         
         if (event.key !== ' ' && event.key !== 'Enter') { return; }
     }
@@ -4459,7 +4508,7 @@ function handleKeyDown(event) {
                 break;
         }
     }
-}	  
+}
 	  window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
@@ -4500,6 +4549,20 @@ function clearUserCanvas() {
     // REPLACE your existing initApp function with this entire block
 
 function initApp() {
+	// Listen for Spacebar signal from the Iframe
+    window.addEventListener('message', (event) => {
+        if (event.data === 'TRIGGER_SPACE_ACTION') {
+            // 1. Steal focus back to the main window
+            window.focus(); 
+            
+            // 2. Trigger the main action button
+            if (dashboardBtn && dashboardBtn.classList.contains('visible')) {
+                dashboardBtn.click();
+            } else if (nextCheckBtn && !nextCheckBtn.disabled) {
+                handleNextCheckClick();
+            }
+        }
+    });
     // NEW: Add this check at the very top of the function
    
     // --- The rest of your original initApp function continues below ---
