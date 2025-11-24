@@ -1,546 +1,1109 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thelobook</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="title">thelo</title>
     <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
-
+    <link rel="apple-touch-icon" href="https://thelo.space/img/yarnicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome is kept for icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
-    <style>
-        :root {
-            --thelo-blue: #2563EB;
-            --thelo-bg: #F8F9FA;
-            --thelo-text: #111827;
-            --grid-color: #E5E7EB;
-            --card-hover-shadow: 0 8px 15px rgba(0, 0, 0, 0.08);
-            --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.05);
-        }
+   <style>
+    /*
+      ============================================
+      RESET & VARIABLES (Simulating Tailwind Base)
+      ============================================
+    */
+    :root {
+        /* Core Brand Colors */
+        --thelo-blue: #2563EB;
+        --thelo-bg: #F8F9FA;
+        --thelo-text: #111827;
+        --grid-color: #E5E7EB;
 
-        html {
-            height: 100%;
-            overflow: hidden;
-        }
-
-        body {
-            font-family: 'Manrope', system-ui, -apple-system, sans-serif;
-            background-color: var(--thelo-bg);
-            color: var(--thelo-text);
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-            background-image:
-                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-            background-size: 40px 40px;
-        }
-
-        /* --- App Structure --- */
-        #app {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            width: 100%;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 2rem;
-            flex-shrink: 0;
-            position: relative;
-            z-index: 10;
-        }
+        /* Tailwind Slate Palette Approximation */
+        --slate-100: #f1f5f9;
+        --slate-200: #e2e8f0;
+        --slate-300: #cbd5e1;
+        --slate-500: #64748b;
+        --slate-600: #475569;
+        --slate-800: #1e293b;
         
-        main#drawing-area {
-            flex-grow: 1;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 1rem;
-            box-sizing: border-box;
-            overflow: hidden;
-        }
+        --white: #ffffff;
+    }
 
-        #notebook-canvas {
-            background-color: white;
-            box-shadow: var(--shadow-md);
-            border-radius: 0.75rem;
-            border: 1px solid var(--grid-color);
-            cursor: crosshair;
-            touch-action: none; /* Prevents scrolling on touch devices while drawing */
-        }
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        border-width: 0;
+        border-style: solid;
+        border-color: var(--slate-200);
+    }
 
-        #notebook-canvas.eraser-active {
-            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="rgba(0,0,0,0.5)" d="M19.78,2.22a1,1,0,0,0-1.42,0L9.12,11.46a1,1,0,0,0,0,1.41L11.24,15A1,1,0,0,0,12.66,15L22.22,5.39A1,1,0,0,0,22.22,4L19.78,2.22ZM8.41,12.88,2,19.29V21a1,1,0,0,0,1,1H4.71l6.47-6.46-1.42-1.42A1,1,0,0,0,8.41,12.88Z"/></svg>') 12 12, auto;
-        }
+    html { scroll-behavior: smooth; }
+
+    body {
+        font-family: 'Montserrat Arm', 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        background-color: var(--thelo-bg);
+        color: var(--thelo-text);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        line-height: 1.5;
         
-        /* --- Floating Controls & Navigation --- */
-        .controls-bar {
-            position: absolute;
-            bottom: 2rem;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 0.5rem;
-            padding: 0.5rem;
-            background-color: rgba(255, 255, 255, 0.75);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid var(--grid-color);
-            border-radius: 9999px;
-            box-shadow: var(--shadow-md);
-            z-index: 20;
-        }
+        /* Background Grid Pattern */
+        background-image:
+            linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+            linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+        background-size: 40px 40px;
+    }
 
-        .tool-btn {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            border: none;
-            background-color: transparent;
-            font-size: 1.25rem;
-            color: var(--thelo-text);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: background-color 0.2s, color 0.2s;
-        }
+    img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+    }
 
-        .tool-btn:hover:not(:disabled) {
-            background-color: rgba(0, 0, 0, 0.05);
-        }
+    a {
+        text-decoration: none;
+        color: inherit;
+    }
 
-        .tool-btn.active {
-            background-color: var(--thelo-blue);
-            color: white;
-        }
+    ul { list-style: none; }
 
-        .tool-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+    button {
+        background: transparent;
+        cursor: pointer;
+    }
 
-        .page-indicator {
-            font-weight: 700;
-            padding: 0 1rem;
-            display: flex;
-            align-items: center;
-            white-space: nowrap;
-        }
-        
-        /* --- Page Grid View Overlay --- */
-        #page-grid-view {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(248, 249, 250, 0.9);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            z-index: 30;
-            display: none;
-            opacity: 0;
-            flex-direction: column;
-            padding: 2rem;
-            box-sizing: border-box;
-            transition: opacity 0.3s ease-in-out;
-        }
-
-        #page-grid-view.visible {
-            display: flex;
-            opacity: 1;
-        }
-
-        #grid-header {
-            text-align: center;
-            margin-bottom: 2rem;
-            flex-shrink: 0;
-        }
-
-        #grid-content {
-            flex-grow: 1;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1.5rem;
-            justify-content: center;
-            align-content: flex-start;
-            overflow-y: auto;
-            padding: 1rem;
-        }
-
-        .page-thumbnail {
-            position: relative;
-            width: 180px;
-            height: 135px;
-            background-color: white;
-            border: 1px solid var(--grid-color);
-            border-radius: 0.5rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .page-thumbnail:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--card-hover-shadow);
-        }
-
-        .page-thumbnail img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            border-radius: 0.5rem;
-        }
-
-        .thumb-page-number {
-            position: absolute;
-            bottom: 5px;
-            right: 8px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            background-color: rgba(255, 255, 255, 0.8);
-            padding: 2px 6px;
-            border-radius: 4px;
-        }
-        
-        /* --- Utility & Button Styles --- */
-        .thelo-btn {
-            background-color: var(--thelo-blue);
-            color: white;
-            font-weight: 700;
-            padding: 0.6rem 1.2rem;
-            border-radius: 0.5rem;
-            transition: background-color 0.2s, transform 0.1s;
-            border: none;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .thelo-btn:hover {
-            background-color: #1a56d2;
-            transform: translateY(-1px);
-        }
-
-        /* --- Loader / Message Overlay --- */
-        #message-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(248, 249, 250, 0.8);
-            backdrop-filter: blur(5px);
-            display: flex; /* Changed to flex */
-            align-items: center;
-            justify-content: center;
-            z-index: 999;
-            text-align: center;
-        }
-        #message-overlay div {
-            padding: 2rem;
-            border-radius: 1rem;
-            max-width: 400px;
-        }
-        #message-overlay h2 {
-            font-size: 1.5rem;
-            color: var(--thelo-text);
-            font-weight: 800;
-            margin-bottom: 0.5rem;
-        }
-        #message-overlay p {
-            color: #6B7280;
-        }
-
-    </style>
-</head>
-<body>
-
-    <div id="app">
-        <header>
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <img src="https://thelo.space/img/thelo-Photoroom.png" alt="Thelo logo" style="height: 36px; width: auto;" />
-                <h1 style="font-size: 1.5rem; font-weight: 800; margin: 0;">thelobook</h1>
-            </div>
-            <!-- This button can link back to your dashboard page -->
-            <a href="#" class="thelo-btn" onclick="alert('This will link back to the student dashboard.'); return false;">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
-            </a>
-        </header>
-
-        <main id="drawing-area">
-            <canvas id="notebook-canvas"></canvas>
-        </main>
-
-        <div id="controls" class="controls-bar">
-            <button id="view-pages-btn" class="tool-btn" title="View All Pages"><i class="fas fa-th-large"></i></button>
-            <button id="pen-btn" class="tool-btn active" title="Pen"><i class="fas fa-pen"></i></button>
-            <button id="eraser-btn" class="tool-btn" title="Eraser"><i class="fas fa-eraser"></i></button>
-            <button id="add-page-btn" class="tool-btn" title="Add New Page"><i class="fas fa-plus"></i></button>
-            
-            <span style="border-left: 1px solid var(--grid-color); margin: 0 0.5rem;"></span>
-
-            <button id="prev-page-btn" class="tool-btn" title="Previous Page"><i class="fas fa-chevron-left"></i></button>
-            <span id="page-indicator" class="page-indicator">Page 1 / 32</span>
-            <button id="next-page-btn" class="tool-btn" title="Next Page"><i class="fas fa-chevron-right"></i></button>
-        </div>
-    </div>
+    /* Typography Utilities */
+    h1, h2, h3, h4, h5, h6 { font-weight: 800; line-height: 1.1; }
+    .font-bold { font-weight: 700; }
+    .font-semibold { font-weight: 600; }
+    .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+    .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+    .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
     
-    <div id="page-grid-view">
-        <div id="grid-header">
-            <button id="close-grid-btn" class="thelo-btn"><i class="fas fa-times"></i> Close Grid View</button>
+    /*
+      ============================================
+      CUSTOM FONTS (Armenian)
+      ============================================
+    */
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf') format('opentype');
+      font-weight: 600;
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+    @font-face {
+      font-family: 'Montserrat Arm';
+      src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf') format('opentype');
+      font-weight: 800;
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0530-058F, U+FB13-FB17;
+    }
+
+    /*
+      ============================================
+      LAYOUT UTILITIES
+      ============================================
+    */
+    .container-max {
+        max-width: 80rem; /* 7xl */
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+       /*
+  ============================================
+  LANGUAGE-SPECIFIC OVERRIDES (NEW SECTION)
+  ============================================
+*/
+
+/* Reduce font size for Armenian headline for different screen sizes */
+html[lang="hy"] .hero-title {
+    font-size: 2.5rem; /* Reduced from 3rem (5xl) */
+}
+
+@media (min-width: 768px) {
+    html[lang="hy"] .hero-title {
+        font-size: 3.25rem; /* Reduced from 3.75rem (6xl) */
+    }
+}
+
+@media (min-width: 1024px) {
+    html[lang="hy"] .hero-title {
+        font-size: 4rem; /* Reduced from 4.5rem (7xl) */
+    }
+}
+
+    @media (min-width: 1024px) {
+        .container-max {
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
+    }
+
+    .container-narrow {
+        max-width: 56rem; /* 4xl */
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+
+    /*
+      ============================================
+      NAVIGATION
+      ============================================
+    */
+    #mainNav {
+        width: 100%;
+        z-index: 40;
+        position: relative;
+        margin-top: 0.5rem; /* Reduced margin to move it up slightly */
+    }
+
+    .nav-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 1.5rem;
+        padding-bottom: 1.5rem;
+        position: relative;
+    }
+
+    .logo img {
+        height: 3rem; /* Slightly increased logo size again */
+        width: auto;
+    }
+
+    .nav-links-desktop {
+        display: none; /* Keep hidden for mobile by default */
+        /* For desktop, it will be displayed by the media query below */
+        margin: 0 auto; /* Center the links */
+    }
+
+    .nav-links-desktop ul {
+        display: flex;
+        gap: 1.5rem;
+    }
+
+    .nav-link {
+        color: var(--thelo-text);
+        transition: color 0.2s;
+    }
+
+    .nav-link:hover {
+        color: var(--thelo-blue);
+    }
+
+    .nav-controls {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .lang-switcher {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .lang-btn {
+        cursor: pointer;
+        font-weight: 600;
+        opacity: 0.6;
+    }
+    
+    .lang-btn:hover { opacity: 1; }
+    
+    /* Utility classes manipulated by JS */
+    .opacity-100 { opacity: 1 !important; }
+    .opacity-60 { opacity: 0.6 !important; }
+    
+    .divider { color: var(--slate-300); }
+
+    .mobile-menu-btn {
+        border-radius: 0.375rem;
+        padding: 0.5rem;
+        color: var(--slate-600);
+    }
+    
+    .mobile-menu-btn:hover { background-color: var(--slate-100); }
+    .mobile-menu-btn:focus { outline: 2px solid rgba(37, 99, 235, 0.5); }
+    .mobile-menu-btn svg { height: 1.5rem; width: 1.5rem; stroke: currentColor; }
+
+    /* Mobile Menu Dropdown */
+    #mobileMenu {
+        display: none; /* Hidden by default */
+    }
+    
+    #mobileMenu.hidden { display: none; }
+    #mobileMenu:not(.hidden) { display: block; }
+
+    #mobileMenu ul {
+        background-color: var(--white);
+        border-top: 1px solid var(--slate-200);
+        padding: 0.5rem 1rem 1rem 1rem;
+    }
+    
+    #mobileMenu a {
+        display: block;
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+
+   @media (min-width: 768px) {
+    .nav-links-desktop { 
+        display: flex; 
+        /* Ensure alignment for desktop layout */
+        align-items: center; 
+    }
+    .mobile-menu-btn, #mobileMenu { display: none !important; }
+}
+
+    /*
+      ============================================
+      HERO SECTION
+      ============================================
+    */
+    header {
+        position: relative;
+        padding-top: 8rem; /* 32 */
+        padding-bottom: 6rem; /* 24 */
+    }
+
+    @media (min-width: 1024px) {
+        header {
+            padding-top: 10rem; /* 40 */
+            padding-bottom: 8rem; /* 32 */
+        }
+    }
+
+    .hero-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        max-width: 42rem; /* 2xl */
+    }
+    
+    @media (min-width: 1024px) {
+        .hero-grid { max-width: 32rem; /* lg */ }
+    }
+
+    .hero-text-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .hero-title {
+        font-size: 3rem; /* 5xl */
+        letter-spacing: -0.05em;
+        color: var(--thelo-text);
+    }
+
+    .text-blue-highlight { color: var(--thelo-blue); }
+
+    @media (min-width: 768px) { .hero-title { font-size: 3.75rem; /* 6xl */ } }
+    @media (min-width: 1024px) { .hero-title { font-size: 4.5rem; /* 7xl */ } }
+
+    /* Hero Image Positioning */
+    .hero-img-container {
+        margin-top: 3rem;
+        margin-right: -1.5rem;
+        transition-delay: 0.3s;
+    }
+
+    @media (min-width: 1024px) {
+        .hero-img-container {
+            margin-right: 0;
+            margin-top: 0;
+            position: absolute;
+            bottom: -3rem;
+            right: 0;
+            width: 40%;
+        }
+    }
+
+    /*
+      ============================================
+      TEXT SECTIONS
+      ============================================
+    */
+    .text-section {
+        padding-top: 8rem;
+        padding-bottom: 6rem;
+    }
+    @media (min-width: 640px) { .text-section { padding-bottom: 8rem; } }
+
+    .text-content-wrapper {
+        text-align: left;
+        max-width: 48rem; /* 3xl */
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
+    .text-slate-600 { color: var(--slate-600); }
+    .mt-4 { margin-top: 1rem; }
+
+    /*
+      ============================================
+      "WHY" SECTION (Grid Features)
+      ============================================
+    */
+    .section-padding {
+        padding-top: 6rem;
+        padding-bottom: 6rem;
+    }
+    @media (min-width: 640px) { .section-padding { padding-top: 8rem; padding-bottom: 8rem; } }
+
+    .section-header {
+        max-width: 48rem;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+    }
+
+    .section-title {
+        font-size: 2.25rem; /* 4xl */
+        color: var(--thelo-text);
+    }
+    @media (min-width: 640px) { .section-title { font-size: 3rem; /* 5xl */ } }
+
+    .window-container {
+        position: relative;
+        background-color: white;
+        border: 1px solid var(--grid-color);
+        border-radius: 0.75rem;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        padding: 2.5rem;
+        margin-top: 4rem;
+        transition-delay: 0.2s;
+    }
+
+    .window-container::before {
+        content: ' ';
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        width: 52px;
+        height: 12px;
+        background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
+        background-repeat: no-repeat;
+    }
+
+    .feature-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 3rem; /* 12 */
+        text-align: center;
+        padding-top: 2rem;
+    }
+
+    @media (min-width: 768px) {
+        .feature-grid {
+            grid-template-columns: repeat(3, 1fr);
+            text-align: left;
+        }
+    }
+
+    .mt-2 { margin-top: 0.5rem; }
+
+    /*
+      ============================================
+      THELOPAD SECTION
+      ============================================
+    */
+    .split-layout {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 2.5rem; /* gap-y-10 */
+    }
+
+    @media (min-width: 1024px) {
+        .split-layout {
+            grid-template-columns: repeat(2, 1fr);
+            column-gap: 4rem; /* gap-x-16 */
+        }
+    }
+
+    .pill-tag {
+        margin-top: 1rem;
+        display: inline-block;
+        border-radius: 9999px;
+        background-color: var(--thelo-blue);
+        padding: 0.375rem 1rem;
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: var(--white);
+        width: fit-content;
+    }
+
+    .mt-8 { margin-top: 2rem; }
+
+    /*
+      ============================================
+      CANVAS REPLAY SECTION
+      ============================================
+    */
+    #drawing-replay {
+        display: none;
+        padding-top: 6rem;
+        padding-bottom: 4rem;
+    }
+
+    @media (min-width: 640px) {
+        #drawing-replay {
+            display: block;
+            padding-top: 8rem;
+            padding-bottom: 5rem;
+        }
+    }
+
+    .aspect-video-container {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+    }
+
+    #replayCanvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: transparent;
+    }
+
+    #replay-feedback {
+        position: absolute;
+        opacity: 0;
+        transition: opacity 700ms ease-out;
+        pointer-events: none;
+        transform: translate(-50%, 49px);
+    }
+
+    .feedback-box {
+        max-width: 28rem;
+        padding: 1rem;
+        background-color: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(4px);
+        border: 1px solid var(--slate-200);
+        border-radius: 1rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        pointer-events: auto;
+    }
+
+    .feedback-text {
+        font-weight: 600;
+        color: var(--slate-800);
+    }
+
+    /*
+      ============================================
+      CONTACT SECTION
+      ============================================
+    */
+    .contact-links {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    @media (min-width: 640px) {
+        .contact-links {
+            flex-direction: row;
+            gap: 2rem;
+        }
+    }
+
+    .email-link {
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: color 0.2s;
+    }
+    .email-link:hover { color: var(--thelo-blue); }
+
+    .mb-4 { margin-bottom: 1rem; }
+
+    /*
+      ============================================
+      FOOTER
+      ============================================
+    */
+    footer {
+        padding-top: 2.5rem;
+        padding-bottom: 2.5rem;
+        text-align: center;
+        font-size: 0.875rem;
+        color: var(--slate-500);
+    }
+
+    /*
+      ============================================
+      ANIMATIONS
+      ============================================
+    */
+    .anim-target {
+        opacity: 0;
+        transition: opacity 0.7s cubic-bezier(0.215, 0.610, 0.355, 1), transform 0.7s cubic-bezier(0.215, 0.610, 0.355, 1);
+        transform: translateY(20px);
+    }
+    .anim-target.is-visible { opacity: 1; transform: translateY(0); }
+
+</style>
+</head>
+
+<body class="antialiased">
+
+<nav id="mainNav">
+    <div class="container-max nav-inner">
+        <a href="/" class="logo">
+            <img src="https://thelo.space/img/bluethelo.svg" alt="thelo logo" />
+        </a>
+        <div class="nav-links-desktop">
+            <ul>
+                <li><a href="#why" class="nav-link font-semibold" data-i18n="navWhy"></a></li>
+                <li><a href="#thelopad" class="nav-link font-semibold" data-i18n="navThelopad"></a></li>
+                <li><a href="#contact" class="nav-link font-semibold" data-i18n="navContact"></a></li>
+                <li><a href="https://thelo.space/auth" class="nav-link font-semibold" data-i18n="navAuth"></a></li>
+            </ul>
         </div>
-        <div id="grid-content">
-            <!-- Thumbnails will be generated here by JavaScript -->
+        <div class="nav-controls">
+             <div class="lang-switcher">
+                  <!-- SUGGESTION: Convert these spans to buttons for accessibility -->
+                  <span id="lang-en" class="lang-btn opacity-60" aria-label="Switch to English">EN</span>
+                  <span class="divider">|</span>
+                  <span id="lang-hy" class="lang-btn opacity-60" aria-label="Switch to Armenian">HY</span>
+             </div>
+            <button id="mobileMenuButton" class="mobile-menu-btn" aria-label="Toggle menu">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <title>Toggle menu</title>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+                </svg>
+            </button>
         </div>
     </div>
-
-    <!-- This overlay can be used for login prompts or other messages -->
-    <div id="message-overlay" style="display: none;">
-        <div>
-            <h2>Authenticating...</h2>
-            <p>Please wait while we connect your thelobook.</p>
-        </div>
+    <div id="mobileMenu" class="hidden">
+        <ul>
+            <li><a href="#why" class="nav-link font-semibold" data-i18n="navWhy"></a></li>
+            <li><a href="#thelopad" class="nav-link font-semibold" data-i18n="navThelopad"></a></li>
+            <li><a href="https://thelo.space/auth" class="nav-link font-semibold" data-i18n="navAuth"></a></li>
+            <li><a href="#contact" class="nav-link font-semibold" data-i18n="navContact"></a></li>
+            <li><a href="https://thelo.space/satmathteam/" class="nav-link font-semibold" data-i18n="navJoin"></a></li>
+        </ul>
     </div>
+</nav>
 
-    <script>
-        // --- DOM Elements ---
-        const canvas = document.getElementById('notebook-canvas');
-        const ctx = canvas.getContext('2d');
-        
-        const penBtn = document.getElementById('pen-btn');
-        const eraserBtn = document.getElementById('eraser-btn');
-        const addPageBtn = document.getElementById('add-page-btn');
-        const viewPagesBtn = document.getElementById('view-pages-btn');
-        const prevPageBtn = document.getElementById('prev-page-btn');
-        const nextPageBtn = document.getElementById('next-page-btn');
-        const pageIndicator = document.getElementById('page-indicator');
-        
-        const pageGridView = document.getElementById('page-grid-view');
-        const gridContent = document.getElementById('grid-content');
-        const closeGridBtn = document.getElementById('close-grid-btn');
-
-        // --- State ---
-        const MAX_PAGES = 32;
-        // Initialize with 32 empty pages for this prototype
-        let pages = new Array(MAX_PAGES).fill(null); 
-        let currentPageIndex = 0;
-        let currentTool = 'pen';
-        let isDrawing = false;
-        let lastPos = { x: 0, y: 0 };
-        let devicePixelRatio = window.devicePixelRatio || 1;
-
-        // --- Canvas & Drawing Logic ---
-        function resizeCanvas() {
-            const drawingArea = document.getElementById('drawing-area');
-            const rect = drawingArea.getBoundingClientRect();
+    <!-- 
+      ============================================
+      UPDATED HERO SECTION
+      ============================================
+    -->
+    <header>
+        <div class="container-max">
+            <div class="hero-grid">
+                <div class="anim-target hero-text-container">
+                    <h1 class="hero-title" data-i18n="heroTitle"> </h1>
+                </div>
+            </div>
             
-            // --- MODIFIED CODE: A4 Landscape Aspect Ratio ---
-            const aspectRatio = 297 / 210; 
-            
-            // Start by fitting to the width of the container
-            let canvasWidth = rect.width - 40; // Subtract some padding
-            let canvasHeight = canvasWidth / aspectRatio;
-
-            // If that makes it too tall for the container, fit to height instead
-            if (canvasHeight > rect.height - 40) {
-                canvasHeight = rect.height - 40;
-                canvasWidth = canvasHeight * aspectRatio;
-            }
-            
-            // Save the current drawing before resizing
-            saveCurrentPageToMemory(); 
-            
-            canvas.style.width = `${canvasWidth}px`;
-            canvas.style.height = `${canvasHeight}px`;
-
-            canvas.width = Math.floor(canvasWidth * devicePixelRatio);
-            canvas.height = Math.floor(canvasHeight * devicePixelRatio);
-
-            ctx.scale(devicePixelRatio, devicePixelRatio);
-            
-            renderPage(currentPageIndex); // Re-render the current page after resize
-        }
-        
-        function getEventPos(evt) {
-            const rect = canvas.getBoundingClientRect();
-            const source = evt.touches ? evt.touches[0] : evt;
-            return {
-                x: (source.clientX - rect.left),
-                y: (source.clientY - rect.top)
-            };
-        }
-
-        function startDrawing(e) {
-            e.preventDefault();
-            isDrawing = true;
-            lastPos = getEventPos(e);
-        }
-
-        function stopDrawing() {
-            if (isDrawing) {
-                isDrawing = false;
-                ctx.beginPath(); // Reset the path
-            }
-        }
-
-        function draw(e) {
-            if (!isDrawing) return;
-            e.preventDefault();
-            const pos = getEventPos(e);
-
-            ctx.beginPath();
-            ctx.lineWidth = currentTool === 'pen' ? 3 : 25;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.strokeStyle = '#111827';
-            ctx.globalCompositeOperation = currentTool === 'pen' ? 'source-over' : 'destination-out';
-            
-            ctx.moveTo(lastPos.x, lastPos.y);
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-            
-            lastPos = pos;
-        }
-
-        // --- Page Logic ---
-        function saveCurrentPageToMemory() {
-             // Create a temporary canvas to get a clean image data without scaling issues
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(canvas, 0, 0);
-
-            // Store the unscaled ImageData
-            pages[currentPageIndex] = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-        }
-
-        function renderPage(index) {
-            // Clear canvas considering the scale
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.restore();
-
-            if (index >= 0 && index < pages.length && pages[index]) {
-                ctx.putImageData(pages[index], 0, 0);
-            }
-        }
-
-        function updateUI() {
-            pageIndicator.textContent = `Page ${currentPageIndex + 1} / ${pages.length}`;
-            prevPageBtn.disabled = currentPageIndex === 0;
-            nextPageBtn.disabled = currentPageIndex >= pages.length - 1;
-            addPageBtn.disabled = true; // Disabled in this prototype
-        }
-
-        function changePage(direction) {
-            saveCurrentPageToMemory(); // Save before leaving
-            const newIndex = currentPageIndex + direction;
-            if (newIndex >= 0 && newIndex < pages.length) {
-                currentPageIndex = newIndex;
-                renderPage(currentPageIndex);
-                updateUI();
-            }
-        }
-        
-        // --- Grid View Logic ---
-        function renderGridView() {
-            saveCurrentPageToMemory(); // Ensure the last drawing is captured
-            gridContent.innerHTML = '';
-            pages.forEach((pageData, index) => {
-                const thumb = document.createElement('div');
-                thumb.className = 'page-thumbnail';
+            <div class="hero-img-container anim-target">
+                <img src="https://thelo.space/img/thelo_people.png"
+                     alt="A teacher helping a student use thelo on a computer and tablet"
+                     style="width: 100%; height: auto; object-fit: contain;">
+            </div>
+        </div>
+    </header>
+    
+    <!-- 
+      ============================================
+      NEW TEXT SECTION
+      ============================================
+    -->
+    <section class="text-section">
+        <div class="container-max">
+            <div>
+                <!-- Empty left column for spacing handled by margin auto in wrapper below -->
                 
-                const thumbImg = document.createElement('img');
-                if (pageData) {
-                    // Use a temporary canvas to generate a data URL from ImageData
-                    const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = pageData.width;
-                    tempCanvas.height = pageData.height;
-                    tempCanvas.getContext('2d').putImageData(pageData, 0, 0);
-                    thumbImg.src = tempCanvas.toDataURL();
+                <div class="anim-target text-content-wrapper">
+                    <p class="text-xl font-semibold" data-i18n="heroP1"></p>
+                    <p class="mt-4 text-xl text-slate-600" data-i18n="heroP2"></p>
+                    <p class="mt-4 text-xl text-slate-600" data-i18n="heroP3"></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="why" class="section-padding">
+    <div class="container-max">
+        <div class="section-header anim-target">
+            <h2 class="section-title font-bold" data-i18n="whyTitle"></h2>
+        </div>
+        <div class="window-container anim-target">
+            <div class="feature-grid">
+                <div>
+                    <h3 class="text-xl font-bold" data-i18n="why1h"></h3>
+                    <p class="mt-2 text-slate-600" data-i18n="why1p"></p>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold" data-i18n="why2h"></h3>
+                    <p class="mt-2 text-slate-600" data-i18n="why2p"></p>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold" data-i18n="why3h"></h3>
+                    <p class="mt-2 text-slate-600" data-i18n="why3p"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="thelopad" class="section-padding">
+    <div class="container-max">
+        <div class="split-layout">
+            <div class="anim-target" style="display: flex; flex-direction: column; justify-content: center;">
+                <h2 class="section-title font-bold" data-i18n="thelopadTitle"></h2>
+                <div class="pill-tag" data-i18n="thelopadTag"></div>
+                <p class="mt-8 text-slate-600 text-lg" data-i18n="thelopadSub"></p>
+            </div>
+            <div class="anim-target" style="transition-delay: 0.2s;">
+                <img id="laptopImage" src="https://thelo.space/img/theloLaptopEn.png" alt="A mockup of the thelopad tablet and a laptop showing thelo's interface" style="width: 100%; height: auto; object-fit: contain;">
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="drawing-replay">
+    <div class="container-max">
+        <div class="aspect-video-container">
+            <canvas id="replayCanvas"></canvas>
+            <div id="replay-feedback">
+                <div class="feedback-box">
+                    <p class="feedback-text" data-i18n="replayFeedback"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="contact" class="section-padding">
+    <div class="container-narrow" style="text-align: center;">
+        <div class="anim-target">
+            <h2 class="section-title font-bold" data-i18n="contactTitle"></h2>
+            <p class="mt-8 text-lg text-slate-600" data-i18n="contactSub" style="margin-top: 1.5rem;"></p>
+        </div>
+        <div class="anim-target mt-8 text-slate-600" style="transition-delay: 0.1s;">
+            <p class="mb-4" data-i18n="contactAlt"></p>
+            <div class="contact-links">
+                <a href="mailto:community.relations@thelo.space" class="email-link">
+                    <i class="fas fa-envelope fa-fw"></i> <span>community.relations@thelo.space</span>
+                </a>
+            </div>
+        </div>
+        <div class="calendly-inline-widget anim-target" data-url="https://calendly.com/aramasatryan290/30min" style="min-width:320px; height:700px; transition-delay: 0.2s; margin-top: 3rem;"> </div>
+        <script type="text/javascript" src="https://assets.calendly.com/assets/external/widget.js" async></script>
+    </div>
+</section>
+
+<footer>
+    <p data-i18n="footer"></p>
+</footer>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    document.addEventListener('DOMContentLoaded', () => {
+
+        let currentUser = null;
+        let targetDashboard = null;
+
+        const strings = {
+            en: {
+                title: 'thelo | AI Tutoring for Schools',
+                navWhy: 'For Schools',
+                navThelopad: 'How It Works',
+                navAuth: 'Log in',
+                navDash: 'Dashboard',
+                navContact: 'Partner With Us',
+                navJoin: 'Join',
+                heroTitle: 'All of us for mathematics<br><span class="text-blue-highlight">and math for all</span>',
+                heroP1: 'thelo transforms your existing computer labs into interactive, AI-powered learning ecosystems.',
+                heroP2: 'Using our unique tablet pair that connects to any computer, student handwriting is instantly digitized and analyzed, providing every student with a personal AI tutor for real-time, step-by-step guidance.',
+                heroP3: 'Bridge the feedback gap, boost student outcomes, and bring world-class educational tools to your classrooms.',
+                whyTitle: 'A Seamless Upgrade For Your School',
+                why1h: 'Builds Mastery and Confidence',
+                why1p: 'Our AI provides private, real-time feedback, allowing students to correct mistakes instantly and build the confidence to tackle complex problems.',
+                why2h: 'Empowers True Differentiation',
+                why2p: 'By automating step-by-step corrections, our AI co-pilot frees teachers from repetitive grading to focus on targeted, one-on-one student support.',
+                why3h: 'Makes Learning Gaps Visible',
+                why3p: 'We digitize the entire problem-solving process, not just the final answer, giving teachers the visibility to spot learning gaps early and intervene effectively.',
+                thelopadTitle: 'Simple to Deploy, Powerful to Use.',
+                thelopadTag: 'Built for the Classroom',
+                thelopadSub: 'Setting up a thelo lab is straightforward. Our system integrates with your school\'s existing computers. We provide our unique tablet pairs that connect in minutes, turning any desk into an advanced learning station. No complex installations or special hardware required.',
+                replayFeedback: 'That is the correct formula. Great work! 🎉',
+                contactTitle: 'Partner With Us',
+                contactSub: 'We are seeking forward-thinking schools, NGOs, and partners to bring the future of education to students across Armenia and beyond. Let\'s discuss how we can build a learning ecosystem together.',
+                contactAlt: 'The best way to start is to schedule an introductory call or email us directly:',
+                footer: '© 2025 thelo',
+                laptopImageSrc: 'https://thelo.space/img/theloLaptopEn.png'
+            },
+            hy: {
+                title: 'Թելո | ԱԲ ուսուցում դպրոցների համար',
+                navWhy: 'Դպրոցներ',
+                navThelopad: 'Ինչպե՞ս է աշխատում',
+                navAuth: 'Մուտք',
+                navDash: 'Վահանակ',
+                navContact: 'Դարձե՛ք գործընկեր',
+                navJoin: 'Միանալ',
+                heroTitle: 'Բոլորը թվերի՝<br><span class="text-blue-highlight">և թվերը բոլորի համար</span>',
+                heroP1: 'Թելոն դպրոցների համակարգչային լսարաններին հնարավորություն է տալիս դառնալ ինտերակտիվ, մաթեմատիկական ուսուցման էկոհամակարգերի։',
+                heroP2: 'Մեր յուրահատուկ թաբլեթների զույգը, միանալով ցանկացած համակարգչի, աշակերտի ձեռագիրն ակնթարթորեն թվայնացվում է և վերլուծում՝ ստուգելով նրա աշխատանքը։',
+                heroP3: 'Հնարավորություն ընձեռնեք՛ ձեր դպրոցի աշակերտներին սովորել մաթեմատիկա՝ ասես դա երբեք ավելի արդյունավետ չի եղել։',
+                whyTitle: 'Նորարական ձեռքբերում ձեր դպրոցի համար',
+                why1h: 'Օգնում է վարժվել',
+                why1p: 'Մեր ԱԲ֊ն տրամադրում է անհատական ուղղորդում՝ թույլ տալով աշակերտներին ակնթարթորեն ուղղել սխալները և ձեռք բերել բարդ խնդիրներ լուծելու վստահություն։',
+                why2h: 'Ստեղծում է իրական տարբերություն',
+                why2p: 'Ավտոմատացնելով քայլ առ քայլ ստուգումները՝ մեր ԱԲ օգնականը ուսուցիչներին ազատում է կարմիր գրչի անվերջ ժամերից՝ կենտրոնանալու աշակերտների անհատական աջակցության վրա։',
+                why3h: 'Տեսանելի է դարձնում ուսումնական բացերը',
+                why3p: 'Մենք թվայնացնում ենք խնդրի լուծման ողջ գործընթացը, ոչ միայն պատասխանը, ինչը ուսուցիչներին տալիս է տեսանելիություն՝ ուսումնական բացերը վաղ նկատելու և արդյունավետ միջամտելու համար։',
+                thelopadTitle: 'Հեշտ տեղակայվող, արդյունավետ կիրառմամբ',
+                thelopadTag: 'Դասարանի համար',
+                thelopadSub: 'Թելոլաբ ստեղծելը պարզ է։ Մեր համակարգը ինտեգրվում է ձեր դպրոցի առկա համակարգիչներին։ Մենք տրամադրում ենք մեր թաբլեթեները, որոնք րոպեների ընթացքում ցանկացած գրասեղան վերածում են առաջադեմ ուսումնական կայանի։',
+                replayFeedback: 'Դու ճիշտ ես օգտագործել բանաձևը։ Ապրե՜ս',
+                contactTitle: 'Դարձե՛ք մեր գործընկերը',
+                contactSub: 'Մենք փնտրում ենք առաջադեմ դպրոցներ և հասարակական կազմակերպություններ՝ կրթության ապագան Հայաստանի և նրա սահմաններից դուրս գտնվող աշակերտներին հասցնելու համար։ Եկե՛ք քննարկենք, թե ինչպես կարող ենք միասին կառուցել ուսումնական էկոհամակարգեր։',
+                contactAlt: 'Լավագույn միջոցը՝ նախապես զանգահարելը՝ կամ մեզ ուղղակիորեն նամակ գրելն է։',
+                footer: '© 2025 thelo',
+                laptopImageSrc: 'https://thelo.space/img/theloLaptopHy.png'
+            }
+        };
+
+        let currentLang = localStorage.getItem('thelo-lang') || 'en';
+
+        const laptopImage = document.getElementById('laptopImage');
+        const langEnBtn = document.getElementById('lang-en');
+        const langHyBtn = document.getElementById('lang-hy');
+
+        // --- Active state class for lang buttons ---
+        // Note: these classes are now defined in the CSS block above
+        const activeLangClass = 'opacity-100';
+        const inactiveLangClass = 'opacity-60';
+
+        // --- MODIFY THIS FUNCTION DEFINITION ---
+        function updateAuthUI(lang, targetDashboard) { // <-- Add targetDashboard argument
+            const T = strings[lang];
+            const loginAnchors = document.querySelectorAll('[data-i18n="navAuth"]');
+
+            loginAnchors.forEach(anchor => {
+                if (currentUser && targetDashboard) { // <-- Check for targetDashboard
+                    // --- USE targetDashboard HERE ---
+                    anchor.href = targetDashboard;
+                    // --- END CHANGE ---
+                    anchor.textContent = T.navDash;
                 } else {
-                    // Show a placeholder for empty pages
-                    thumbImg.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3C/svg%3E";
-                    thumb.style.backgroundColor = '#f9fafb';
+                    anchor.href = "/auth";
+                    anchor.textContent = T.navAuth;
                 }
-
-                const pageNumSpan = document.createElement('span');
-                pageNumSpan.className = 'thumb-page-number';
-                pageNumSpan.textContent = index + 1;
-
-                thumb.appendChild(thumbImg);
-                thumb.appendChild(pageNumSpan);
-
-                thumb.onclick = () => {
-                    currentPageIndex = index;
-                    renderPage(currentPageIndex);
-                    updateUI();
-                    closeGridView();
-                };
-                gridContent.appendChild(thumb);
             });
-            pageGridView.classList.add('visible');
         }
 
-        function closeGridView() {
-            pageGridView.classList.remove('visible');
-        }
+       function applyContent(lang) {
+            const T = strings[lang];
+            if (!T) return;
 
-        // --- Initialization and Event Listeners ---
-        function initApp() {
-            resizeCanvas();
+            // Updates all text content based on the selected language
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.dataset.i18n;
+                if (key !== 'navAuth' && T[key]) {
+                    el.innerHTML = T[key];
+                }
+            });
+            
+            // Updates the laptop image source for the correct language
+            if (laptopImage) { // Add check in case element doesn't exist
+                laptopImage.src = T.laptopImageSrc;
+            }
+            
+            // Sets the 'lang' attribute on the HTML tag for accessibility
+            document.documentElement.lang = lang;
+            
+            // Toggles the active state on the language switcher buttons
+            langEnBtn.classList.toggle(activeLangClass, lang === 'en');
+            langEnBtn.classList.toggle(inactiveLangClass, lang !== 'en');
+            langHyBtn.classList.toggle(activeLangClass, lang === 'hy');
+            langHyBtn.classList.toggle(inactiveLangClass, lang !== 'hy');
+
+
+            // Logic for Navbar Font Weight
+            const navLinks = document.querySelectorAll('a.nav-link.font-semibold');
+            navLinks.forEach(link => {
+                if (lang === 'hy') {
+                    link.style.fontWeight = '400'; // Apply REGULAR weight for Armenian
+                } else {
+                    link.style.fontWeight = '600'; // Revert to SEMIBOLD for English
+                }
+            });
+            const heroTitleEl = document.querySelector('[data-i18n="heroTitle"]');
+            if (heroTitleEl) {
+                if (lang === 'en') {
+                    // Use ExtraBold (800) for Manrope in English
+                    heroTitleEl.style.fontWeight = '800'; 
+                } else {
+                    // You can set a different weight for Armenian here if needed
+                    // For now, we'll keep it at ExtraBold as well
+                    heroTitleEl.style.fontWeight = '800';
+                }
+            }
+
+            // --- Logic for Feedback Message Width ---
+            const replayFeedbackEl = document.getElementById('replay-feedback');
+            if (replayFeedbackEl) {
+                const innerFeedbackDiv = replayFeedbackEl.querySelector('div');
+
+                if (lang === 'hy') {
+                    // Set specific width for Armenian
+                    if (innerFeedbackDiv) {
+                        innerFeedbackDiv.style.maxWidth = 'none';
+                        innerFeedbackDiv.style.width = '420px'; // Set to 500px
+                    }
+                } else {
+                    // Revert to default for English
+                    if (innerFeedbackDiv) {
+                        innerFeedbackDiv.style.maxWidth = '';
+                        innerFeedbackDiv.style.width = '';
+                    }
+                }
+            }
+            // --- END Logic ---
+        }
+        
+        langEnBtn.addEventListener('click', () => {
+            currentLang = 'en';
+            localStorage.setItem('thelo-lang', currentLang);
+            applyContent(currentLang);
+            updateAuthUI(currentLang, targetDashboard); // <-- ADD THIS LINE
+        });
+
+        langHyBtn.addEventListener('click', () => {
+            currentLang = 'hy';
+            localStorage.setItem('thelo-lang', currentLang);
+            applyContent(currentLang);
+            updateAuthUI(currentLang, targetDashboard); // <-- ADD THIS LINE
+        });
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain: "physmathacademy-722b3.firebaseapp.com",
+            projectId: "physmathacademy-722b3",
+            storageBucket: "physmathacademy-722b3.appspot.com",
+            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        onAuthStateChanged(auth, async (user) => { // <-- Make the function async
+            currentUser = user;
+
+            if (currentUser) {
+                // --- START MODIFICATION ---
+                // User is logged in, check if they are a tutor or student
+                console.log("User logged in:", currentUser.email); // Debugging line
+                let isTutor = false;
+                let isStudent = false;
+                
+                // Default target dashboard
+                targetDashboard = "/sdashboard"; 
+
+                try {
+                    // Check tutors collection (using email as ID)
+                    const tutorDocRef = doc(db, "tutors", currentUser.email);
+                    const tutorDocSnap = await getDoc(tutorDocRef);
+                    if (tutorDocSnap.exists()) {
+                        console.log("User is a tutor."); // Debugging line
+                        isTutor = true;
+                        targetDashboard = "/tdashboard"; // Set target to tutor dashboard
+                    } else {
+                        // Optional: Check students collection if not a tutor (using UID as ID)
+                        const studentDocRef = doc(db, "thelo-students", currentUser.uid);
+                        const studentDocSnap = await getDoc(studentDocRef);
+                        if (studentDocSnap.exists()) {
+                            console.log("User is a student."); // Debugging line
+                            isStudent = true;
+                            targetDashboard = "/sdashboard"; // Explicitly set target
+                        } else {
+                             console.warn("User document not found in tutors or thelo-students. Defaulting to student dashboard."); // Debugging line
+                             // targetDashboard remains "/sdashboard"
+                        }
+                    }
+
+                    // Update the UI after checking Firestore
+                    updateAuthUI(currentLang, targetDashboard);
+
+                } catch (error) {
+                    console.error("Error checking user role:", error);
+                    // Fallback: update UI with default dashboard link in case of error
+                    updateAuthUI(currentLang, targetDashboard);
+                }
+                // --- END MODIFICATION ---
+
+            } else {
+                // User is logged out, update UI normally
+                targetDashboard = null; // <-- ADD THIS LINE
+                updateAuthUI(currentLang, null); // Pass null when logged out
+            }
+        });
+
+        const mobileMenuButton = document.getElementById('mobileMenuButton');
+        const mobileMenu = document.getElementById('mobileMenu');
+        mobileMenuButton.addEventListener('click', () => {
+            mobileMenu.classList.toggle('hidden');
+        });
+        document.querySelectorAll('#mobileMenu a').forEach(link => {
+            link.addEventListener('click', () => {
+                mobileMenu.classList.add('hidden');
+            });
+        });
+
+        const animationObserver = new IntersectionObserver((entries) => entries.forEach(entry => {
+            if(entry.isIntersecting){ entry.target.classList.add('is-visible'); animationObserver.unobserve(entry.target); }
+        }), { threshold: 0.1 });
+        document.querySelectorAll('.anim-target').forEach(el => animationObserver.observe(el));
+
+        // Drawing Replay Logic (no changes needed here)
+        const setupDrawingReplay = () => {
+            const canvas = document.getElementById('replayCanvas');
+            const feedbackEl = document.getElementById('replay-feedback');
+            if (!canvas || !feedbackEl) return;
+            const ctx = canvas.getContext('2d');
+            let drawingData = null;
+            let animationFrameId = null;
+            const devicePixelRatio = window.devicePixelRatio || 1;
+            const resizeCanvas = () => {
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * devicePixelRatio;
+                canvas.height = rect.height * devicePixelRatio;
+                ctx.scale(devicePixelRatio, devicePixelRatio);
+                if (drawingData) {
+                    // Redraw the final frame if data is already loaded
+                    renderDrawingAtTime(Infinity, drawingData, ctx, true);
+                }
+            };
+            const renderDrawingAtTime = (targetTime, data, context, isRedraw = false) => {
+                const canvasWidth = context.canvas.width / devicePixelRatio;
+                const canvasHeight = context.canvas.height / devicePixelRatio;
+                context.clearRect(0, 0, canvasWidth, canvasHeight);
+                context.lineCap = 'round';
+                context.lineJoin = 'round';
+
+                // --- FIX: Calculate the initial delay (offset) ---
+                // This finds the timestamp of the very first point to remove dead air at the start.
+                // We only calculate this once and store it on the data object.
+                if (data.strokes.length > 0 && data.offset === undefined) {
+                    data.offset = data.strokes.reduce((min, s) => Math.min(min, s.startTime || 0), Infinity);
+                }
+                const offset = data.offset || 0;
+
+                data.strokes.forEach(stroke => {
+                    const strokeStartTime = (stroke.startTime || 0) - (isRedraw ? 0 : offset);
+                    if (targetTime < strokeStartTime) return;
+                    context.strokeStyle = stroke.color || 'var(--thelo-blue)';
+                    context.lineWidth = stroke.lineWidth || 4;
+                    context.beginPath();
+                    let movedToFirstPoint = false;
+                    for (let i = 0; i < stroke.points.length; i++) {
+                        const point = stroke.points[i];
+                        const pointTimeAbsolute = strokeStartTime + (point.timeOffset || 0);
+                        if (pointTimeAbsolute > targetTime) break;
+                        if (!movedToFirstPoint) {
+                            context.moveTo(point.normX * canvasWidth, point.normY * canvasHeight);
+                            movedToFirstPoint = true;
+                        } else {
+                            context.lineTo(point.normX * canvasWidth, point.normY * canvasHeight);
+                        }
+                    }
+                    if (movedToFirstPoint) context.stroke();
+                });
+            };
+            const startReplayAnimation = (data) => {
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                let startTime = 0;
+                const totalDuration = data.strokes.reduce((max, s) => Math.max(max, s.endTime), 0) - (data.offset || 0);
+                const animate = (timestamp) => {
+                    if (!startTime) startTime = timestamp;
+                    const elapsedTime = timestamp - startTime;
+                    renderDrawingAtTime(elapsedTime, data, ctx);
+                    if (elapsedTime < totalDuration + 200) { // Add a small buffer
+                        animationFrameId = requestAnimationFrame(animate);
+                    } else {
+                        renderDrawingAtTime(Infinity, data, ctx);
+                        animationFrameId = null;
+                        setTimeout(() => {
+                            try {
+                                const container = canvas.parentElement;
+                                const rect = container.getBoundingClientRect();
+                                const lastStroke = data.strokes.reduce((a, b) => (a.endTime > b.endTime ? a : b));
+                                const lastPt = lastStroke.points[lastStroke.points.length - 1];
+                                const xPx = lastPt.normX * rect.width;
+                                const yPx = lastPt.normY * rect.height;
+                                feedbackEl.style.right = 'auto';
+                                feedbackEl.style.bottom = 'auto';
+                                feedbackEl.style.left = `${xPx}px`;
+                                feedbackEl.style.top  = `${yPx}px`;
+                                feedbackEl.classList.remove('opacity-0');
+                                feedbackEl.classList.add('opacity-100');
+                            } catch (e) { console.error('Could not place feedback:', e); feedbackEl.classList.remove('opacity-0'); feedbackEl.classList.add('opacity-100'); }
+                        }, 500);
+                    }
+                };
+                animationFrameId = requestAnimationFrame(animate);
+            };
+            const replayObserver = new IntersectionObserver(async (entries, observer) => {
+                if (entries[0].isIntersecting) {
+                    try {
+                        const response = await fetch('https://thelo.space/lessons/drawings/main.json');
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        drawingData = await response.json();
+                        resizeCanvas();
+                        startReplayAnimation(drawingData);
+                        observer.unobserve(canvas);
+                    } catch (error) { console.error('Failed to load drawing data:', error); }
+                }
+            }, { threshold: 0.4 }); 
+            replayObserver.observe(canvas);
             window.addEventListener('resize', resizeCanvas);
-            
-            // Full-screen mouseup listener to catch leaving the canvas while drawing
-            window.addEventListener('mouseup', stopDrawing);
-            window.addEventListener('touchend', stopDrawing);
-            
-            canvas.addEventListener('mousedown', startDrawing);
-            canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('touchstart', startDrawing, { passive: false });
-            canvas.addEventListener('touchmove', draw, { passive: false });
+        };
 
-            // Tool Listeners
-            penBtn.onclick = () => {
-                currentTool = 'pen';
-                penBtn.classList.add('active');
-                eraserBtn.classList.remove('active');
-                canvas.classList.remove('eraser-active');
-            };
-            eraserBtn.onclick = () => {
-                currentTool = 'eraser';
-                eraserBtn.classList.add('active');
-                penBtn.classList.remove('active');
-                canvas.classList.add('eraser-active');
-            };
-            addPageBtn.onclick = () => alert("This feature will be enabled with Firebase. This prototype has a fixed 32 pages.");
-            
-            // Page Nav Listeners
-            prevPageBtn.onclick = () => changePage(-1);
-            nextPageBtn.onclick = () => changePage(1);
-            
-            // Grid View Listeners
-            viewPagesBtn.onclick = renderGridView;
-            closeGridBtn.onclick = closeGridView;
+        // Initial Load
+        applyContent(currentLang);
+        setupDrawingReplay();
+    });
+</script>
 
-            updateUI(); // Initial UI state
-        }
-
-        // --- Run the app ---
-        // In a real app, this would be inside onAuthStateChanged
-        document.addEventListener('DOMContentLoaded', initApp);
-
-    </script>
 </body>
 </html>
