@@ -1282,8 +1282,8 @@ body.mcq-active .mcq-option-btn.selected {
                 <button id="calculatorCloseBtn" title="Close Calculator">✕</button>
             </div>
 		    <div id="replayPlayerContainer" class="replay-hidden">
-            <div id="dynamicGraphRoot" style="width: 90%; height: 80%; max-width: 1200px; max-height: 700px; position: relative;"></div>
-        </div>
+			<iframe id="replayFrame" src="about:blank" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+		</div>
                 <div id="thelobookControls">
                     <button id="thelobookPrevPageBtn" title="Previous Page">‹</button>
                     <span id="thelobookPageIndicator">Page 1 / 1</span>
@@ -1980,7 +1980,8 @@ function resizeCanvases() {
 // In your MAIN app's <script> tag - REPLACE this function
 
 // In your MAIN app's <script> tag - REPLACE this function
-/* REPLACE THE ENTIRE mediaPlaybackLoop FUNCTION WITH THIS */
+
+// In your MAIN app's <script> tag - REPLACE this function
 function mediaPlaybackLoop(timestamp) {
     // Exit if playback is no longer supposed to be active
     if (!isMediaScrubbingActive) {
@@ -1989,7 +1990,7 @@ function mediaPlaybackLoop(timestamp) {
         return;
     }
 
-    // --- HYBRID TIME CALCULATION ---
+    // --- HYBRID TIME CALCULATION (Unchanged) ---
     const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
     if (audioIsPlaying) {
         internalPlaybackTime = currentStageAudio.currentTime;
@@ -2003,32 +2004,36 @@ function mediaPlaybackLoop(timestamp) {
         lastFrameTimestampForManualAdvance = timestamp;
     }
     
-    // Ensure playback stops precisely at the end
+    // Ensure playback stops precisely at the end (Unchanged)
     if (internalPlaybackTime >= currentStageTotalDuration) {
         internalPlaybackTime = currentStageTotalDuration;
         isMediaScrubbingActive = false; 
     }
 
-    // --- UNIVERSAL UPDATES ---
+    // --- UNIVERSAL UPDATES (Now with throttling) ---
 
-    // 1. Update the drawing replay on the main canvas (cheap, runs every frame)
+    // Update the drawing replay on the main canvas (cheap, runs every frame)
     if (currentStageDrawingData && replayCtx) {
         renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
     }
 
-    // 2. Update the DYNAMIC GRAPH ENGINE
-    if (isReplayActive && window.GraphController && typeof window.GraphController.renderAtTime === 'function') {
-        // Pass milliseconds to the controller
-        window.GraphController.renderAtTime(internalPlaybackTime * 1000);
+    // ======================== THE FIX ========================
+    // Only update the expensive iframe if enough time has passed.
+    if (isReplayActive && replayFrame.contentWindow && (timestamp - lastIframeUpdateTime > IFRAME_UPDATE_INTERVAL)) {
+        replayFrame.contentWindow.postMessage({
+            command: 'renderAtTime',
+            timeMs: internalPlaybackTime * 1000
+        }, '*');
+        // Update the timestamp of the last update
+        lastIframeUpdateTime = timestamp;
     }
+    // =========================================================
     
-    // 3. Update the progress bar (cheap, runs every frame for smoothness)
+    // Update the progress bar (cheap, runs every frame for smoothness)
     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
 
     // Continue the loop
-    if (isMediaScrubbingActive) {
-        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-    }
+    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
 }
 function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         if (isMediaScrubbingActive) { if (typeof onFinished === 'function') onFinished(); return; }
@@ -2725,102 +2730,45 @@ function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
         bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
     }
 }
-/* REPLACE openReplayPlayer AND closeReplayPlayer WITH THIS BLOCK */
+/**
+ * Opens the replay player, fetches the replay data, and sends it to the iframe.
+ */
+// In your MAIN app's <script> tag
 
-// --- NEW HELPER: Load scripts dynamically from your server ---
-function loadGraphScript(scriptName) {
-    return new Promise((resolve, reject) => {
-        const scriptId = 'dynamic-graph-engine';
-        
-        // Optional: Remove existing script to ensure a clean state
-        const existing = document.getElementById(scriptId);
-        if (existing) existing.remove();
-
-        const script = document.createElement('script');
-        // Points to your specific folder
-        script.src = `https://thelo.space/lessons/graphs/${scriptName}`;
-        script.id = scriptId;
-        script.async = true;
-        
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error(`Failed to load script: ${scriptName}`));
-        
-        document.body.appendChild(script);
-    });
-}
-
-async function openReplayPlayer() {
-    if (isReplayActive || !currentStageData) return;
-    
-    // 1. Determine which script to load. 
-    // If the JSON doesn't specify "graphEngine", fallback to a default file.
-    const scriptName = currentStageData.graphEngine || 'default-replay.js';
-    
-    isReplayActive = true;
-    const container = document.getElementById('replayPlayerContainer');
-    const root = document.getElementById('dynamicGraphRoot');
-    
-    try {
-        // 2. Show container (loading state)
-        container.classList.remove('replay-hidden');
-        // Simple styling for the loading text
-        root.innerHTML = '<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--thelo-text);">Loading Graph Engine...</div>';
-
-        // 3. Load the external logic
-        await loadGraphScript(scriptName);
-
-        // 4. Initialize the loaded engine
-        // We expect the external script to set window.GraphController
-        if (window.GraphController && typeof window.GraphController.init === 'function') {
-            root.innerHTML = ''; // Clear loading text
-            
-            // Initialize the graph into the root div
-            await window.GraphController.init(root, currentStageData);
-            
-            // 5. Start the main playback loop
-            isMediaScrubbingActive = true;
-            internalPlaybackTime = 0;
-            lastFrameTimestampForManualAdvance = 0;
-            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-        } else {
-            throw new Error("Graph Controller object not found in the loaded script.");
-        }
-
-    } catch (error) {
-        console.error("Failed to load graph engine:", error);
-        root.innerHTML = `<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--error-red);">Error: ${error.message}</div>`;
+function openReplayPlayer() {
+    // Basic validation
+    if (isReplayActive || !currentStageData || !currentStageData.replayDataUrl) {
+        return;
     }
-}
+    isReplayActive = true;
 
+    // Direct embed of the website URL
+    const url = currentStageData.replayDataUrl;
+    console.log("Embedding website:", url);
+    
+    replayFrame.src = url;
+    replayPlayerContainer.classList.remove('replay-hidden');
+
+    // Disable the internal media scrubbing loop since we can't control external sites
+    isMediaScrubbingActive = false; 
+    if (currentReplayAnimationId) {
+        cancelAnimationFrame(currentReplayAnimationId);
+        currentReplayAnimationId = null;
+    }
+}		// In your MAIN app's <script> tag
 function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
 
-    // 1. Stop Main Loop
+    // CRITICAL: Stop the main app's animation loop
     if (currentReplayAnimationId) {
         cancelAnimationFrame(currentReplayAnimationId);
         currentReplayAnimationId = null;
     }
     isMediaScrubbingActive = false;
 
-    // 2. Cleanup the Dynamic Controller
-    if (window.GraphController && typeof window.GraphController.destroy === 'function') {
-        window.GraphController.destroy();
-    }
-
-    // 3. Reset DOM
-    const container = document.getElementById('replayPlayerContainer');
-    const root = document.getElementById('dynamicGraphRoot');
-    
-    container.classList.add('replay-hidden');
-    if (root) root.innerHTML = '';
-    
-    // 4. Cleanup Script Tag
-    const scriptTag = document.getElementById('dynamic-graph-engine');
-    if (scriptTag) scriptTag.remove();
-    
-    // 5. Clear Global Reference
-    window.GraphController = null;
+    replayPlayerContainer.classList.add('replay-hidden');
+    replayFrame.src = 'about:blank';
 }
 // In your main HTML file, REPLACE your entire renderStageUI function with this one.
 
@@ -2917,45 +2865,53 @@ function renderStageUI(index, isResize = false) {
             }
 
             if (currentStageData.type === 'calculator_replay') {
-                openReplayPlayer();
-                if (!isResize) {
-                    internalPlaybackTime = 0;
-                    lastFrameTimestampForManualAdvance = 0;
-                }
-                const audioMetaPromise = new Promise((resolveAudio) => {
-                    if (currentStageData.audioFile) {
-                        playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
-                    } else {
-                        resolveAudio(0);
-                    }
-                });
-                const replayDataDurationPromise = fetch(currentStageData.replayDataUrl)
-                    .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-                    .then(json => {
-                        let totalReplayTime = 0;
-                        json.actions.forEach(action => {
-                            if (action.action === 'delay') {
-                                totalReplayTime += action.ms;
-                            }
-                        });
-                        return totalReplayTime / 1000;
-                    })
-                    .catch(e => { console.error("Failed to load replay data for duration calculation:", e); return 0; });
-                Promise.all([audioMetaPromise, replayDataDurationPromise]).then(([audioDuration, replayDuration]) => {
-                    currentStageTotalDuration = Math.max(audioDuration, replayDuration);
-                    isMediaScrubbingActive = true;
-                    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
-                    if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
-                    if (!currentReplayAnimationId) {
-                        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-                    }
-                }).catch(e => console.error("Error setting up replay stage durations:", e));
-                if (nextCheckBtn) {
-                    nextCheckBtn.textContent = TXT.gotIt;
-                    nextCheckBtn.disabled = false;
-                }
-                if (clearBtn) clearBtn.style.display = 'none';
-            } else if (isQuestionStage) {
+                // 1. Open the website embed immediately
+                openReplayPlayer();
+
+                // 2. Reset internal timers (we rely on the website now)
+                if (!isResize) {
+                    internalPlaybackTime = 0;
+                    lastFrameTimestampForManualAdvance = 0;
+                    isMediaScrubbingActive = false; // Disable internal scrubber
+                }
+
+                // 3. Handle optional audio (if the lesson still has a separate audio track)
+                // Note: We no longer fetch the replayDataUrl to calculate duration.
+                const audioMetaPromise = new Promise((resolveAudio) => {
+                    if (currentStageData.audioFile) {
+                        playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
+                    } else {
+                        resolveAudio(0);
+                    }
+                });
+
+                audioMetaPromise.then((audioDuration) => {
+                    // Set duration based only on audio, or default to 0 if just a website
+                    currentStageTotalDuration = audioDuration;
+                    
+                    // Only show progress bar if there is actual audio to scrub
+                    if (currentStageTotalDuration > 0) {
+                        isMediaScrubbingActive = true;
+                        updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+                        if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+                        if (!currentReplayAnimationId) {
+                            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+                        }
+                    } else {
+                        // If no audio, hide the progress bar
+                        if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                    }
+                }).catch(e => console.error("Error setting up embed stage:", e));
+
+                // 4. Setup Buttons
+                if (nextCheckBtn) {
+                    nextCheckBtn.textContent = TXT.gotIt;
+                    nextCheckBtn.disabled = false;
+                }
+                if (clearBtn) clearBtn.style.display = 'none';
+
+            } else if (isQuestionStage) {
+                // ... (The rest of your function remains exactly the same from here)
                 if (!isResize) isMediaScrubbingActive = false;
                 if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                 
@@ -4408,56 +4364,25 @@ function closeCalculator() {
     // Resume lesson state
     resumeMediaState();
 }
-/* REPLACE THE ENTIRE handleKeyDown FUNCTION WITH THIS */
 function handleKeyDown(event) {
     // 1. Universal Replay Seeking (Highest Priority)
     if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         const isReplayActiveStage = currentStageData?.type === 'explanation_with_media' || currentStageData?.type === 'calculator_replay';
-        
         if (isReplayActiveStage || isMediaScrubbingActive) {
-            event.preventDefault(); 
-            isMediaScrubbingActive = true;
-            
-            // Stop loop temporarily while calculating
+            event.preventDefault(); isMediaScrubbingActive = true;
             if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-            
-            const step = 5; 
-            const diff = event.key === 'ArrowLeft' ? -step : step;
+            const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
             let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, currentStageTotalDuration));
-            
-            // Update internal time
             internalPlaybackTime = newTime;
-            
-            // Sync Audio
             if (currentStageAudio) {
                 const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
                 currentStageAudio.currentTime = audioTargetTime;
-                if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) { 
-                    currentStageAudio.play().catch(() => {}); 
-                }
+                if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) { currentStageAudio.play().catch(() => {}); }
             }
-
-            // Sync Dynamic Graph Engine
-            if (isReplayActive && window.GraphController) {
-                // A. Specific Time Seek
-                if (typeof window.GraphController.renderAtTime === 'function') {
-                    window.GraphController.renderAtTime(newTime * 1000);
-                }
-                // B. Specific Key Input (e.g., Next Step)
-                if (typeof window.GraphController.handleInput === 'function') {
-                    window.GraphController.handleInput(event.key);
-                }
-            }
-
-            // Sync Canvas Drawings
-            if (currentStageDrawingData && replayCtx) { 
-                renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx); 
-            }
-            
-            // Update UI
+            if (isReplayActive && replayFrame && replayFrame.contentWindow) { replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*'); }
+            if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx); }
             updateMediaProgressBar(newTime, currentStageTotalDuration);
-            lastFrameTimestampForManualAdvance = 0; 
-            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+            lastFrameTimestampForManualAdvance = 0; currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
             return;
         }
     }
@@ -4520,7 +4445,7 @@ function handleKeyDown(event) {
                 break;
         }
     }
-}
+}	  
 	  window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
