@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Desmos Solver: System of Equations</title>
+    <title>Desmos Tutor: Slower, Narrated Problem Solving</title>
     
     <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
 
@@ -47,7 +47,7 @@
             padding: 12px 24px;
             font-size: 16px;
             font-weight: 600;
-            background-color: #2d70b3;
+            background-color: #007bff; /* Blue for a clean look */
             color: white;
             border: none;
             border-radius: 50px;
@@ -56,7 +56,7 @@
         }
 
         button:hover {
-            background-color: #1e548a;
+            background-color: #0056b3;
             transform: scale(1.05);
         }
 
@@ -66,20 +66,24 @@
             font-weight: 500;
             min-width: 300px;
             text-align: center;
+            padding: 5px 10px;
+            border: 1px dashed #aaa;
+            border-radius: 4px;
+            background-color: #fff;
         }
     </style>
 </head>
 <body>
 
     <div id="header">
-        <h2>System of Equations Solver</h2>
-        <p style="margin:5px 0; color:#666; font-size:0.9em;">Solving for (x + y)</p>
+        <h2>Interactive System Solver Demonstration</h2>
+        <p style="margin:5px 0; color:#666; font-size:0.9em;">Watch the steps slowly, just like a human tutor would teach.</p>
     </div>
 
     <div id="calculator"></div>
 
     <div id="controls">
-        <button onclick="runSolverSequence()">Solve My Problem</button>
+        <button onclick="runTutorSession()">Restart Lesson</button>
         <div id="status">Status: Ready</div>
     </div>
 
@@ -95,48 +99,45 @@
         // Helper to create delays (Pause logic)
         const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        // --- MAIN SEQUENCE ---
-        async function runSolverSequence() {
+        // --- MAIN TUTOR SEQUENCE ---
+        async function runTutorSession() {
             // 1. Reset
             calculator.setBlank();
             calculator.setMathBounds({ left: -10, right: 10, bottom: -10, top: 10 });
-            updateStatus("Starting tutor session...");
-            await wait(1000);
+            updateStatus("👋 Welcome! Let's solve this system of equations.");
+            await wait(2000);
 
             // 2. Type Equation 1: 0.5x + y = 1
-            // We use 0.5x to represent 1/2x for cleaner typing animation
-            updateStatus("Typing Equation 1...");
+            updateStatus("✍️ First, we enter the first equation: 0.5x + y = 1.");
             await typeHuman("0.5x + y = 1", "eq1", Desmos.Colors.RED);
-            await wait(800);
+            await wait(2500); // Long pause for student to analyze the line
 
             // 3. Type Equation 2: -2x - y = 5
-            updateStatus("Typing Equation 2...");
+            updateStatus("✍️ Now, we enter the second equation: -2x - y = 5. The solution is where they meet.");
             await typeHuman("-2x - y = 5", "eq2", Desmos.Colors.BLUE);
-            await wait(1000);
+            await wait(2500); // Long pause for student to find the intersection
 
-            // 4. Pan to the Intersection
-            // Algebraically: 
-            // 0.5x + y = 1
-            // -2x - y = 5
-            // Add them: -1.5x = 6 -> x = -4. 
-            // If x = -4, y = 3. 
-            // Intersection is (-4, 3).
-            updateStatus("Looking for intersection...");
+            // 4. Pan to the Intersection (-4, 3)
+            updateStatus("🔎 Let's zoom in and focus on the intersection point.");
             await smoothPanTo(-4, 3); 
-            await wait(500);
+            await wait(1500);
 
             // 5. Mark the intersection point
-            updateStatus("Found solution (-4, 3)");
-            // We type this instantly or animate it? Let's animate it quickly.
-            await typeHuman("(-4, 3)", "sol", Desmos.Colors.BLACK, "Solution");
-            await wait(1000);
+            updateStatus("💡 The point of intersection is (-4, 3). This is our solution (x, y).");
+            await typeHuman("(-4, 3)", "sol", Desmos.Colors.BLACK, "Solution (x, y)");
+            await wait(2000);
 
             // 6. Calculate the final answer (x + y)
-            updateStatus("Calculating x + y...");
-            // We will type the arithmetic to show the logic: -4 + 3
-            await typeHuman("-4 + 3", "ans", Desmos.Colors.GREEN, "x + y");
-            
-            updateStatus("Answer is -1 (Option B)");
+            updateStatus("🤔 The question asks for the value of x + y. Let's plug in our numbers.");
+            await typeHuman("x + y = (-4) + 3", "calc_setup", Desmos.Colors.GREEN);
+            await wait(1500);
+
+            // 7. Show the final result
+            updateStatus("✅ The final calculation is -1. The answer is B.");
+            await typeHuman("= -1", "ans", Desmos.Colors.GREEN);
+            await wait(3000);
+
+            updateStatus("Lesson Complete! Press 'Restart Lesson' to review the steps.");
         }
 
         // --- HUMAN TYPING HELPER (Returns Promise) ---
@@ -144,7 +145,6 @@
             return new Promise((resolve) => {
                 let index = 0;
                 
-                // Initialize the expression object
                 let exprObj = { 
                     id: id, 
                     color: color, 
@@ -160,12 +160,12 @@
                         exprObj.latex = fullString.substring(0, index);
                         calculator.setExpression(exprObj);
 
-                        // Randomized typing speed
+                        // Randomized typing speed for human feel
                         let char = fullString.charAt(index);
-                        let delay = 50 + Math.random() * 100; // base speed
+                        let delay = 75 + Math.random() * 150; // base speed is slightly slower
                         
-                        // Pause longer for spaces, equals, or operators to "think"
-                        if ([" ", "=", "+", "-"].includes(char)) delay += 200;
+                        // Pause longer for complex characters
+                        if ([" ", "=", "+", "-"].includes(char)) delay += 250;
 
                         index++;
                         setTimeout(typeLoop, delay);
@@ -182,10 +182,10 @@
         function smoothPanTo(targetX, targetY) {
             return new Promise((resolve) => {
                 const currentBounds = calculator.graphpaperBounds.mathCoordinates;
+                // Preserve the current zoom level, just center the view
                 const width = currentBounds.right - currentBounds.left;
                 const height = currentBounds.top - currentBounds.bottom;
 
-                // We want the target (x,y) to be in the center
                 const targetBounds = {
                     left: targetX - (width / 2),
                     right: targetX + (width / 2),
@@ -194,25 +194,19 @@
                 };
 
                 let frame = 0;
-                const totalFrames = 80; // approx 1.5 seconds
+                const totalFrames = 100; // longer animation (about 1.6 seconds)
 
                 function animate() {
                     frame++;
                     const progress = frame / totalFrames;
-                    // Ease Out Cubic: 1 - (1 - t)^3
-                    const ease = 1 - Math.pow(1 - progress, 3);
+                    const ease = 1 - Math.pow(1 - progress, 3); // Ease Out Cubic
 
                     const newL = currentBounds.left + (targetBounds.left - currentBounds.left) * ease;
                     const newR = currentBounds.right + (targetBounds.right - currentBounds.right) * ease;
                     const newB = currentBounds.bottom + (targetBounds.bottom - currentBounds.bottom) * ease;
                     const newT = currentBounds.top + (targetBounds.top - currentBounds.top) * ease;
 
-                    calculator.setMathBounds({
-                        left: newL, 
-                        right: newR, 
-                        bottom: newB, 
-                        top: newT
-                    });
+                    calculator.setMathBounds({ left: newL, right: newR, bottom: newB, top: newT });
 
                     if (frame < totalFrames) {
                         requestAnimationFrame(animate);
@@ -225,14 +219,13 @@
         }
 
         function updateStatus(text) {
-            document.getElementById('status').innerText = "Status: " + text;
+            document.getElementById('status').innerText = text;
         }
         
-        // Auto-start for convenience
+        // Auto-start
         window.onload = () => {
-            setTimeout(runSolverSequence, 1000);
+            setTimeout(runTutorSession, 1000);
         };
-
     </script>
 </body>
 </html>
