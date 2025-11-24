@@ -1282,8 +1282,8 @@ body.mcq-active .mcq-option-btn.selected {
                 <button id="calculatorCloseBtn" title="Close Calculator">✕</button>
             </div>
 		    <div id="replayPlayerContainer" class="replay-hidden">
-			<iframe id="replayFrame" src="about:blank"></iframe>
-		</div>
+            <div id="dynamicGraphRoot" style="width: 90%; height: 80%; max-width: 1200px; max-height: 700px; position: relative;"></div>
+        </div>
                 <div id="thelobookControls">
                     <button id="thelobookPrevPageBtn" title="Previous Page">‹</button>
                     <span id="thelobookPageIndicator">Page 1 / 1</span>
@@ -1980,8 +1980,7 @@ function resizeCanvases() {
 // In your MAIN app's <script> tag - REPLACE this function
 
 // In your MAIN app's <script> tag - REPLACE this function
-
-// In your MAIN app's <script> tag - REPLACE this function
+/* REPLACE THE ENTIRE mediaPlaybackLoop FUNCTION WITH THIS */
 function mediaPlaybackLoop(timestamp) {
     // Exit if playback is no longer supposed to be active
     if (!isMediaScrubbingActive) {
@@ -1990,7 +1989,7 @@ function mediaPlaybackLoop(timestamp) {
         return;
     }
 
-    // --- HYBRID TIME CALCULATION (Unchanged) ---
+    // --- HYBRID TIME CALCULATION ---
     const audioIsPlaying = currentStageAudio && !currentStageAudio.paused && !currentStageAudio.ended;
     if (audioIsPlaying) {
         internalPlaybackTime = currentStageAudio.currentTime;
@@ -2004,36 +2003,32 @@ function mediaPlaybackLoop(timestamp) {
         lastFrameTimestampForManualAdvance = timestamp;
     }
     
-    // Ensure playback stops precisely at the end (Unchanged)
+    // Ensure playback stops precisely at the end
     if (internalPlaybackTime >= currentStageTotalDuration) {
         internalPlaybackTime = currentStageTotalDuration;
         isMediaScrubbingActive = false; 
     }
 
-    // --- UNIVERSAL UPDATES (Now with throttling) ---
+    // --- UNIVERSAL UPDATES ---
 
-    // Update the drawing replay on the main canvas (cheap, runs every frame)
+    // 1. Update the drawing replay on the main canvas (cheap, runs every frame)
     if (currentStageDrawingData && replayCtx) {
         renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
     }
 
-    // ======================== THE FIX ========================
-    // Only update the expensive iframe if enough time has passed.
-    if (isReplayActive && replayFrame.contentWindow && (timestamp - lastIframeUpdateTime > IFRAME_UPDATE_INTERVAL)) {
-        replayFrame.contentWindow.postMessage({
-            command: 'renderAtTime',
-            timeMs: internalPlaybackTime * 1000
-        }, '*');
-        // Update the timestamp of the last update
-        lastIframeUpdateTime = timestamp;
+    // 2. Update the DYNAMIC GRAPH ENGINE
+    if (isReplayActive && window.GraphController && typeof window.GraphController.renderAtTime === 'function') {
+        // Pass milliseconds to the controller
+        window.GraphController.renderAtTime(internalPlaybackTime * 1000);
     }
-    // =========================================================
     
-    // Update the progress bar (cheap, runs every frame for smoothness)
+    // 3. Update the progress bar (cheap, runs every frame for smoothness)
     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
 
     // Continue the loop
-    currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+    if (isMediaScrubbingActive) {
+        currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+    }
 }
 function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
         if (isMediaScrubbingActive) { if (typeof onFinished === 'function') onFinished(); return; }
@@ -2730,78 +2725,102 @@ function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
         bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
     }
 }
-/**
- * Opens the replay player, fetches the replay data, and sends it to the iframe.
- */
-// In your MAIN app's <script> tag
+/* REPLACE openReplayPlayer AND closeReplayPlayer WITH THIS BLOCK */
 
-// In your MAIN app's <script> tag
+// --- NEW HELPER: Load scripts dynamically from your server ---
+function loadGraphScript(scriptName) {
+    return new Promise((resolve, reject) => {
+        const scriptId = 'dynamic-graph-engine';
+        
+        // Optional: Remove existing script to ensure a clean state
+        const existing = document.getElementById(scriptId);
+        if (existing) existing.remove();
+
+        const script = document.createElement('script');
+        // Points to your specific folder
+        script.src = `https://thelo.space/lessons/graphs/${scriptName}`;
+        script.id = scriptId;
+        script.async = true;
+        
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`Failed to load script: ${scriptName}`));
+        
+        document.body.appendChild(script);
+    });
+}
+
 async function openReplayPlayer() {
-    if (isReplayActive || !currentStageData || !currentStageData.replayDataUrl) {
-        return;
-    }
+    if (isReplayActive || !currentStageData) return;
+    
+    // 1. Determine which script to load. 
+    // If the JSON doesn't specify "graphEngine", fallback to a default file.
+    const scriptName = currentStageData.graphEngine || 'default-replay.js';
+    
     isReplayActive = true;
-
+    const container = document.getElementById('replayPlayerContainer');
+    const root = document.getElementById('dynamicGraphRoot');
     
     try {
-        // 1. Fetch the JSON file containing the array of Desmos states
-        const response = await fetch(currentStageData.replayDataUrl);
-        const replayJson = await response.json();
-        const replayActions = replayJson.actions;
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const desmosStates = await response.json();
+        // 2. Show container (loading state)
+        container.classList.remove('replay-hidden');
+        // Simple styling for the loading text
+        root.innerHTML = '<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--thelo-text);">Loading Graph Engine...</div>';
 
-        // 2. Define a listener for when the iframe is ready
-        const onIframeReady = (event) => {
-            if (event.source === replayFrame.contentWindow && event.data.command === 'ready') {
-                // 3. Once ready, send the array of states to the iframe
-                replayFrame.contentWindow.postMessage({
-                    command: 'loadTimeline',
-                    actions: replayActions
-                    command: 'loadStates',
-                    states: desmosStates
-                }, '*');
+        // 3. Load the external logic
+        await loadGraphScript(scriptName);
 
-                // Clean up the listener
-                window.removeEventListener('message', onIframeReady);
-
-                // Start the main app's playback loop
-                isMediaScrubbingActive = true;
-                lastFrameTimestampForManualAdvance = 0;
-                internalPlaybackTime = 0;
-                currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-            }
-        };
-
-        // 4. Set up the listener and load the iframe
-        window.addEventListener('message', onIframeReady);
-        replayFrame.src = 'https://thelo.space/desmos-tutor.html'; // Or your replay URL
-        replayFrame.src = 'https://thelo.space/desmos-tutor.html';
-        replayPlayerContainer.classList.remove('replay-hidden');
+        // 4. Initialize the loaded engine
+        // We expect the external script to set window.GraphController
+        if (window.GraphController && typeof window.GraphController.init === 'function') {
+            root.innerHTML = ''; // Clear loading text
+            
+            // Initialize the graph into the root div
+            await window.GraphController.init(root, currentStageData);
+            
+            // 5. Start the main playback loop
+            isMediaScrubbingActive = true;
+            internalPlaybackTime = 0;
+            lastFrameTimestampForManualAdvance = 0;
+            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+        } else {
+            throw new Error("Graph Controller object not found in the loaded script.");
+        }
 
     } catch (error) {
-        console.error("Failed to load or send replay data:", error);
-        isReplayActive = false;
+        console.error("Failed to load graph engine:", error);
+        root.innerHTML = `<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--error-red);">Error: ${error.message}</div>`;
     }
 }
-		// In your MAIN app's <script> tag
+
 function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
 
-    // CRITICAL: Stop the main app's animation loop
+    // 1. Stop Main Loop
     if (currentReplayAnimationId) {
         cancelAnimationFrame(currentReplayAnimationId);
         currentReplayAnimationId = null;
-    // Send a reset command to the iframe to clear its state
-    if (replayFrame.contentWindow) {
-        replayFrame.contentWindow.postMessage({ command: 'reset' }, '*');
     }
     isMediaScrubbingActive = false;
 
-    replayPlayerContainer.classList.add('replay-hidden');
-    replayFrame.src = 'about:blank';
-    // It's better to leave the src and let the reset command handle cleanup
+    // 2. Cleanup the Dynamic Controller
+    if (window.GraphController && typeof window.GraphController.destroy === 'function') {
+        window.GraphController.destroy();
+    }
+
+    // 3. Reset DOM
+    const container = document.getElementById('replayPlayerContainer');
+    const root = document.getElementById('dynamicGraphRoot');
+    
+    container.classList.add('replay-hidden');
+    if (root) root.innerHTML = '';
+    
+    // 4. Cleanup Script Tag
+    const scriptTag = document.getElementById('dynamic-graph-engine');
+    if (scriptTag) scriptTag.remove();
+    
+    // 5. Clear Global Reference
+    window.GraphController = null;
 }
 // In your main HTML file, REPLACE your entire renderStageUI function with this one.
 
@@ -4389,36 +4408,56 @@ function closeCalculator() {
     // Resume lesson state
     resumeMediaState();
 }
+/* REPLACE THE ENTIRE handleKeyDown FUNCTION WITH THIS */
 function handleKeyDown(event) {
     // 1. Universal Replay Seeking (Highest Priority)
     if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         const isReplayActiveStage = currentStageData?.type === 'explanation_with_media' || currentStageData?.type === 'calculator_replay';
+        
         if (isReplayActiveStage || isMediaScrubbingActive) {
-            event.preventDefault(); isMediaScrubbingActive = true;
+            event.preventDefault(); 
+            isMediaScrubbingActive = true;
+            
+            // Stop loop temporarily while calculating
             if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-            const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
+            
+            const step = 5; 
+            const diff = event.key === 'ArrowLeft' ? -step : step;
             let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, currentStageTotalDuration));
+            
+            // Update internal time
             internalPlaybackTime = newTime;
+            
+            // Sync Audio
             if (currentStageAudio) {
                 const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
                 currentStageAudio.currentTime = audioTargetTime;
-                if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) { currentStageAudio.play().catch(() => {}); }
+                if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) { 
+                    currentStageAudio.play().catch(() => {}); 
+                }
             }
-            if (isReplayActive && replayFrame && replayFrame.contentWindow) { replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*'); }
-            if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx); }
+
+            // Sync Dynamic Graph Engine
+            if (isReplayActive && window.GraphController) {
+                // A. Specific Time Seek
+                if (typeof window.GraphController.renderAtTime === 'function') {
+                    window.GraphController.renderAtTime(newTime * 1000);
+                }
+                // B. Specific Key Input (e.g., Next Step)
+                if (typeof window.GraphController.handleInput === 'function') {
+                    window.GraphController.handleInput(event.key);
+                }
+            }
+
+            // Sync Canvas Drawings
+            if (currentStageDrawingData && replayCtx) { 
+                renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx); 
+            }
+            
+            // Update UI
             updateMediaProgressBar(newTime, currentStageTotalDuration);
-            lastFrameTimestampForManualAdvance = 0; currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-    if (isReplayActive && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-        event.preventDefault();
-        if (replayFrame.contentWindow) {
-            const command = event.key === 'ArrowLeft' ? 'prevStep' : 'nextStep';
-            replayFrame.contentWindow.postMessage({ command: command }, '*');
-        }
-        // If there's audio, we can try to sync it, but the primary control is step-based.
-        // For simplicity, we'll let the user control the steps manually.
-        if (currentStageAudio && !currentStageAudio.paused) {
-            currentStageAudio.pause();
-        }
+            lastFrameTimestampForManualAdvance = 0; 
+            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
             return;
         }
     }
@@ -4481,7 +4520,7 @@ function handleKeyDown(event) {
                 break;
         }
     }
-}	  
+}
 	  window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
