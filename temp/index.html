@@ -1,97 +1,127 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Desmos API Typing and Zoom Demo (FIXED)</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desmos API: Typing Simulation</title>
+    
+    <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
+
     <style>
-        /* Styles to make the calculator visible on the page */
-        #calculator {
-            width: 600px;
-            height: 400px;
-            border: 1px solid #333;
-            margin: 20px auto;
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
         }
-        body {
-            font-family: Arial, sans-serif;
+
+        #header {
+            padding: 20px;
             text-align: center;
         }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
+
+        /* Container for the calculator */
+        #calculator {
+            width: 800px;
+            height: 600px;
+            border: 2px solid #333;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        #status {
             margin-top: 10px;
+            font-style: italic;
+            color: #555;
         }
     </style>
-    <script src="https://www.desmos.com/api/v1.9/calculator.js"></script>
 </head>
 <body>
 
-    <h1>Desmos API Demo: Typing and Zoom</h1>
-    <p>Click the button to start the scripted demonstration. Watch the equation bar and the graph!</p>
-    
+    <div id="header">
+        <h2>Desmos Scripted Presentation</h2>
+        <button onclick="startPresentation()">Replay Animation</button>
+    </div>
+
     <div id="calculator"></div>
-    <button onclick="startDemo()">Run Demonstration</button>
+    <div id="status">Status: Ready...</div>
 
     <script>
-        let calculator;
+        // 1. Initialize the Calculator
+        var elt = document.getElementById('calculator');
+        var calculator = Desmos.GraphingCalculator(elt, {
+            keypad: false,       // Hide keypad for cleaner "presentation" look
+            expressions: false,  // Hide the side list to focus on the graph
+            settingsMenu: false  // Hide settings for presentation mode
+        });
+
+        // The equation to "type"
+        const finalEquation = "y=x^2";
+        const expressionId = 'graph1';
         
-        // This function initializes the calculator once the page (and Desmos API) loads
-        window.onload = function() {
-            const elt = document.getElementById('calculator');
-            // Initialize the calculator with some basic settings
-            calculator = Desmos.Calculator(elt, {
-                keypad: false,
-                expressions: false,
-                settingsMenu: false
-            });
-            // Set an initial default view
-            calculator.setMathBounds({ left: -10, right: 10, bottom: -10, top: 10 });
+        // Animation settings
+        const typingSpeed = 300; // ms per character
+        
+        // Run automatically on load
+        window.onload = () => {
+            setTimeout(startPresentation, 1000);
         };
 
-        // The core function to run the scripted demo
-        function startDemo() {
-            // Define the equation to "type"
-            const fullEquation = 'y=x^2'; 
+        function startPresentation() {
+            // Reset graph
+            calculator.setBlank();
+            // Reset View
+            calculator.setMathBounds({
+                left: -10,
+                right: 10,
+                bottom: -10,
+                top: 10
+            });
             
-            // Start with an empty expression, giving it a unique ID
-            calculator.setExpression({ id: 'demoEq', latex: '' });
+            document.getElementById('status').innerText = "Status: Typing equation...";
             
-            let currentIndex = 0;
-            const typingInterval = 150; // Milliseconds between each character
+            // Start the recursive typing loop
+            typeCharacter(0);
+        }
 
-            // Function to simulate typing one character at a time
-            function typeNextCharacter() {
-                if (currentIndex < fullEquation.length) {
-                    const currentLatex = fullEquation.substring(0, currentIndex + 1);
-                    
-                    // Update the expression in Desmos with the new substring
-                    calculator.setExpression({ id: 'demoEq', latex: currentLatex });
-                    
-                    currentIndex++;
-                    
-                    // Schedule the next character to be typed
-                    setTimeout(typeNextCharacter, typingInterval);
-                } else {
-                    // All characters are typed, now perform the zoom/pan action
-                    setTimeout(zoomToFocus, 1500); // Wait 1.5 seconds after typing finishes
-                }
-            }
-
-            // Function to zoom and pan the graph (Viewport Control)
-            function zoomToFocus() {
-                // Set the viewport (x-min, x-max, y-min, y-max)
-                // Zooms in to focus on the vertex (0,0) and the surrounding area.
-                calculator.setMathBounds({
-                    left: -2,    // X-min
-                    right: 2,   // X-max
-                    bottom: -1, // Y-min
-                    top: 5      // Y-max
+        // 2. Logic to Simulate Typing
+        function typeCharacter(index) {
+            if (index <= finalEquation.length) {
+                // substring(0, index) grabs the characters typed so far
+                const currentString = finalEquation.substring(0, index);
+                
+                // Update the calculator state
+                calculator.setExpression({ 
+                    id: expressionId, 
+                    latex: currentString,
+                    color: Desmos.Colors.BLUE 
                 });
-            }
 
-            // Begin the typing process
-            typeNextCharacter();
+                // Schedule next character
+                setTimeout(function() {
+                    typeCharacter(index + 1);
+                }, typingSpeed);
+            } else {
+                // Typing is complete, trigger the viewport change
+                document.getElementById('status').innerText = "Status: Equation complete. Adjusting viewport...";
+                setTimeout(focusOnVertex, 500);
+            }
+        }
+
+        // 3. Logic to Control Viewport (Zoom to Vertex)
+        function focusOnVertex() {
+            // The vertex of y=x^2 is (0,0). We zoom in close to that point.
+            calculator.setMathBounds({
+                left: -2,
+                right: 2,
+                bottom: -1,
+                top: 3
+            });
+            document.getElementById('status').innerText = "Status: Presentation finished.";
         }
     </script>
-
 </body>
 </html>
