@@ -5,87 +5,173 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Desmos Tutor Embedded View</title>
     
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
     <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
 
     <style>
-        /* 1. BACKGROUND AND BODY/HTML STYLING FOR EMBEDDING */
+        /* ============================================
+           THELO BRAND VARIABLES & RESET 
+           ============================================ 
+        */
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-blue-hover: #1d4ed8;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+            --slate-200: #e2e8f0;
+            --slate-600: #475569;
+            --white: #ffffff;
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
         body, html {
             margin: 0;
             padding: 0;
             height: 100%;
-            font-family: 'Segoe UI', sans-serif;
-            background-color: transparent; /* KEY: Makes the background transparent */
+            font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            
+            /* Thelo Grid Pattern */
+            background-image: 
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
         }
         
-        /* Container for the main content to ensure proper layout */
+        /* Container */
         #embed-container {
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             width: 100%;
             height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
-        /* 2. DESMOS CALCULATOR STYLING */
+        /* ============================================
+           CALCULATOR "WINDOW" STYLING 
+           ============================================ 
+        */
+        .window-frame {
+            position: relative;
+            background-color: var(--white);
+            border: 1px solid var(--slate-200);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            padding: 20px;
+            padding-top: 50px; /* Space for the dots */
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 30px;
+            box-sizing: border-box;
+        }
+
+        /* The Mac-style Traffic Light Dots */
+        .window-frame::before {
+            content: '';
+            position: absolute;
+            top: 18px;
+            left: 20px;
+            width: 52px;
+            height: 12px;
+            background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+        }
+
         #calculator {
-            /* Set a fixed size or a percentage relative to the parent iframe/container */
-            width: 800px; /* Adjust size as needed for your website */
-            height: 500px; 
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            margin-bottom: 15px;
+            width: 100%;
+            height: 450px; 
+            border-radius: 4px;
+            /* Remove default border as the window frame provides it */
+            border: 1px solid var(--slate-200);
         }
 
-        /* 3. CONTROLS AND STATUS STYLING */
+        /* ============================================
+           CONTROLS & BUTTONS
+           ============================================ 
+        */
         #controls {
             display: flex;
-            gap: 20px;
+            gap: 16px;
             align-items: center;
-            padding: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            max-width: 800px;
         }
 
         button {
-            padding: 10px 20px;
-            font-size: 14px;
-            font-weight: 600;
-            background-color: #007bff;
-            color: white;
+            padding: 12px 24px;
+            font-family: 'Manrope', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            background-color: var(--thelo-blue);
+            color: var(--white);
             border: none;
-            border-radius: 50px;
+            border-radius: 9999px; /* Pill shape */
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+            white-space: nowrap;
         }
 
         button:hover:not(:disabled) {
-            background-color: #0056b3;
+            background-color: var(--thelo-blue-hover);
+            transform: translateY(-1px);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
         }
 
         button:disabled {
-            background-color: #cccccc;
+            background-color: var(--slate-200);
+            color: var(--slate-600);
             cursor: not-allowed;
+            box-shadow: none;
+            opacity: 0.7;
         }
 
+        /* ============================================
+           STATUS BOX (Feedback Style)
+           ============================================ 
+        */
         #status {
-            font-size: 1.0rem;
-            color: #333;
-            font-weight: 500;
-            min-width: 300px;
+            font-family: 'Manrope', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--thelo-text);
+            
+            background-color: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(4px);
+            border: 1px solid var(--slate-200);
+            border-radius: 12px;
+            
+            padding: 12px 24px;
             text-align: center;
-            padding: 8px 15px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: white; /* Keep status box visible */
+            flex-grow: 1; /* Takes up remaining space */
+            min-width: 250px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
     </style>
 </head>
 <body>
 
     <div id="embed-container">
-        <div id="calculator"></div>
+        
+        <div class="window-frame">
+            <div id="calculator"></div>
+        </div>
 
         <div id="controls">
-            <button id="prevBtn" onclick="goToStep(-1)" disabled>◀️ Previous Step</button>
+            <button id="prevBtn" onclick="goToStep(-1)" disabled>◀️ Back</button>
             <div id="status">Status: Initializing...</div>
             <button id="nextBtn" onclick="goToStep(1)" disabled>Next Step ▶️</button>
         </div>
@@ -178,7 +264,7 @@
 
         // --- UTILITY FUNCTIONS ---
         function updateStatus(text) {
-            document.getElementById('status').innerText = text;
+            document.getElementById('status').innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>'); // Simple markdown bold parser
         }
 
         // --- RUN ON LOAD ---
