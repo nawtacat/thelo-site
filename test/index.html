@@ -2760,17 +2760,31 @@ function openReplayPlayer() {
     const url = currentStageData.replayDataUrl;
     console.log("Embedding website:", url);
     
+    // 1. Assign the source
     replayFrame.src = url;
+    
+    // 2. NEW: Automatically force focus to the iframe once it loads
+    // This makes the iframe's internal keyboard shortcuts work immediately 
+    // without requiring a click.
+    replayFrame.onload = function() {
+        // Short delay to ensure the browser is ready to accept the focus switch
+        setTimeout(() => {
+            if (replayFrame.contentWindow) {
+                replayFrame.contentWindow.focus();
+            }
+        }, 100);
+    };
+
     replayPlayerContainer.classList.remove('replay-hidden');
 
-    // Disable the internal media scrubbing loop since we can't control external sites
+    // Disable the internal media scrubbing loop since we are handing control to the iframe
     isMediaScrubbingActive = false; 
     if (currentReplayAnimationId) {
         cancelAnimationFrame(currentReplayAnimationId);
         currentReplayAnimationId = null;
     }
-}		// In your MAIN app's <script> tag
-function closeReplayPlayer() {
+}
+	  function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
 
