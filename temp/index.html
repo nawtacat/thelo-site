@@ -3,125 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Desmos API: Typing Simulation</title>
+    <title>Desmos Human Tutor Simulation</title>
     
-    <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
+    <script src="https://www.desmos.com/api/v1.10/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
 
     <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            font-family: sans-serif;
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            background-color: #f0f0f0;
-        }
-
-        #header {
+            background-color: #f4f4f9;
+            margin: 0;
             padding: 20px;
-            text-align: center;
         }
-
-        /* Container for the calculator */
-        #calculator {
-            width: 800px;
+        h2 { color: #2c3e50; margin-bottom: 10px; }
+        
+        /* Container to make it look like a software demo */
+        #demo-container {
+            width: 900px;
             height: 600px;
-            border: 2px solid #333;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            overflow: hidden; /* keeps corners rounded */
+            background: white;
         }
 
-        #status {
-            margin-top: 10px;
+        #calculator {
+            width: 100%;
+            height: 100%;
+        }
+
+        #tutor-commentary {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #fff;
+            border-left: 5px solid #2e7d32;
+            color: #333;
+            width: 860px;
             font-style: italic;
-            color: #555;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
     </style>
 </head>
 <body>
 
-    <div id="header">
-        <h2>Desmos Scripted Presentation</h2>
-        <button onclick="startPresentation()">Replay Animation</button>
+    <h2>Virtual Math Tutor</h2>
+    
+    <div id="demo-container">
+        <div id="calculator"></div>
     </div>
 
-    <div id="calculator"></div>
-    <div id="status">Status: Ready...</div>
+    <div id="tutor-commentary">
+        Tutor: "Initializing session..."
+    </div>
 
     <script>
-        // 1. Initialize the Calculator
+        // --- 1. SETUP ---
         var elt = document.getElementById('calculator');
+        var commentary = document.getElementById('tutor-commentary');
+        
+        // Initialize with expressions panel OPEN
         var calculator = Desmos.GraphingCalculator(elt, {
-            keypad: false,       // Hide keypad for cleaner "presentation" look
-            expressions: false,  // Hide the side list to focus on the graph
-            settingsMenu: false  // Hide settings for presentation mode
+            expressions: true, // Ensure the left panel is visible
+            keypad: true       // Show keypad for realism
         });
 
-        // The equation to "type"
-        const finalEquation = "y=x^2";
-        const expressionId = 'graph1';
-        
-        // Animation settings
-        const typingSpeed = 300; // ms per character
-        
-        // Run automatically on load
-        window.onload = () => {
-            setTimeout(startPresentation, 1000);
-        };
+        // --- 2. HELPER FUNCTIONS FOR "HUMAN" FEEL ---
 
-        function startPresentation() {
-            // Reset graph
-            calculator.setBlank();
-            // Reset View
-            calculator.setMathBounds({
-                left: -10,
-                right: 10,
-                bottom: -10,
-                top: 10
-            });
-            
-            document.getElementById('status').innerText = "Status: Typing equation...";
-            
-            // Start the recursive typing loop
-            typeCharacter(0);
+        function updateTutor(text) {
+            commentary.textContent = 'Tutor: "' + text + '"';
         }
 
-        // 2. Logic to Simulate Typing
-        function typeCharacter(index) {
-            if (index <= finalEquation.length) {
-                // substring(0, index) grabs the characters typed so far
-                const currentString = finalEquation.substring(0, index);
+        // Returns a random delay between min and max ms to simulate distinct keystrokes
+        function getRandomTypingDelay() {
+            // Fast typist: between 100ms and 300ms per key
+            return Math.floor(Math.random() * 200) + 100;
+        }
+
+        // --- 3. SMOOTH ANIMATION LOGIC (The "Panning" Effect) ---
+        
+        // Smoothly interpolates from current bounds to target bounds over 'duration' ms
+        function smoothZoomTo(targetBounds, duration) {
+            const startBounds = calculator.graphpaperBounds.mathCoordinates;
+            const startTime = performance.now();
+
+            function step(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
                 
-                // Update the calculator state
-                calculator.setExpression({ 
-                    id: expressionId, 
-                    latex: currentString,
-                    color: Desmos.Colors.BLUE 
+                // Easing function (Ease-in-out cubic) for natural movement
+                // This makes it start slow, speed up, then slow down at the end
+                const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+                // Calculate intermediate values
+                const currentLeft = startBounds.left + (targetBounds.left - startBounds.left) * ease;
+                const currentRight = startBounds.right + (targetBounds.right - startBounds.right) * ease;
+                const currentBottom = startBounds.bottom + (targetBounds.bottom - startBounds.bottom) * ease;
+                const currentTop = startBounds.top + (targetBounds.top - startBounds.top) * ease;
+
+                calculator.setMathBounds({
+                    left: currentLeft,
+                    right: currentRight,
+                    bottom: currentBottom,
+                    top: currentTop
                 });
 
-                // Schedule next character
-                setTimeout(function() {
-                    typeCharacter(index + 1);
-                }, typingSpeed);
+                if (progress < 1) {
+                    requestAnimationFrame(step);
+                } else {
+                    updateTutor("Here is the vertex at (0,0). Notice the symmetry.");
+                }
+            }
+            
+            requestAnimationFrame(step);
+        }
+
+
+        // --- 4. TYPING LOGIC ---
+
+        var equationToType = "y=x^2";
+        
+        function humanType(index, currentStr) {
+            if (index < equationToType.length) {
+                
+                let char = equationToType[index];
+                currentStr += char;
+
+                // Update the calculator state
+                calculator.setExpression({ id: 'graph1', latex: currentStr });
+
+                // Determine delay for next keystroke
+                let delay = getRandomTypingDelay();
+                
+                // If we hit the equals sign or power, add a slight "thinking" pause
+                if (char === '=' || char === '^') delay += 400;
+
+                setTimeout(() => {
+                    humanType(index + 1, currentStr);
+                }, delay);
             } else {
-                // Typing is complete, trigger the viewport change
-                document.getElementById('status').innerText = "Status: Equation complete. Adjusting viewport...";
-                setTimeout(focusOnVertex, 500);
+                // Finished typing
+                updateTutor("Okay, we have our parabola. Let's take a closer look...");
+                
+                // Wait 1.5 seconds before moving the camera
+                setTimeout(() => {
+                    // Target viewport: Zoomed in on vertex (0,0)
+                    smoothZoomTo({ left: -2, right: 2, bottom: -1, top: 3 }, 2000); 
+                }, 1500);
             }
         }
 
-        // 3. Logic to Control Viewport (Zoom to Vertex)
-        function focusOnVertex() {
-            // The vertex of y=x^2 is (0,0). We zoom in close to that point.
-            calculator.setMathBounds({
-                left: -2,
-                right: 2,
-                bottom: -1,
-                top: 3
-            });
-            document.getElementById('status').innerText = "Status: Presentation finished.";
-        }
+        // --- 5. START THE SCRIPT ---
+        
+        setTimeout(() => {
+            updateTutor("Today we're going to graph a simple quadratic equation.");
+            
+            setTimeout(() => {
+                updateTutor("Typing equation...");
+                humanType(0, "");
+            }, 2000);
+
+        }, 1000);
+
     </script>
 </body>
 </html>
