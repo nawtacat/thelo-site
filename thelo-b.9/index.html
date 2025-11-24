@@ -3054,44 +3054,54 @@ function renderStageUI(index, isResize = false) {
         }
     });
 }     
-	  function transitionToStage(newIndex) {
-    if (isTransitioning || isLessonLoading || !lessonStages.length) return;
+	 function transitionToStage(newIndex) {
+    if (isTransitioning || isLessonLoading || !lessonStages.length) return;
+    
     isMcqAnsweredCorrectly = false;
     // All feedback is now hidden either by the 'A' key or by advancing a stage.
     hideOnCanvasFeedback();
 
     selectedMcqIndex = null;
     if (isReplayActive) closeReplayPlayer();
-    if (isThelobookActive) closeThelobook(true);
-    if (isPageGridVisible) closePageGridView();
+    if (isThelobookActive) closeThelobook(true);
+    if (isPageGridVisible) closePageGridView();
 
-    if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-    if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
-    isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
-    if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-    if (stageProgressFill) stageProgressFill.style.width = '0%';
+    if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+    if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+    isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
+    if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+    if (stageProgressFill) stageProgressFill.style.width = '0%';
 
-    if (newIndex < 0 || newIndex >= lessonStages.length) {
-        if (newIndex >= lessonStages.length) {
-            displayLessonComplete();
-        }
-        return;
-    }
-    isTransitioning = true;
-    backgroundCanvas.classList.add('fade-out');
-    if (replayCanvas) replayCanvas.classList.add('fade-out');
-    if (mcqOptionsContainer) mcqOptionsContainer.style.opacity = 0;
+    if (newIndex < 0 || newIndex >= lessonStages.length) {
+        if (newIndex >= lessonStages.length) {
+            displayLessonComplete();
+        }
+        return;
+    }
+    isTransitioning = true;
+    backgroundCanvas.classList.add('fade-out');
+    if (replayCanvas) replayCanvas.classList.add('fade-out');
+    if (mcqOptionsContainer) mcqOptionsContainer.style.opacity = 0;
 
-    const fadeDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000;
-    
-    setTimeout(() => {
-        currentStageIndex = newIndex;
-        renderStageUI(currentStageIndex, false).then(() => {
-            backgroundCanvas.classList.remove('fade-out');
-            if (replayCanvas) replayCanvas.classList.remove('fade-out');
-            isTransitioning = false;
-        });
-    }, fadeDuration);
+    const fadeDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000;
+    
+    setTimeout(() => {
+        currentStageIndex = newIndex;
+        renderStageUI(currentStageIndex, false).then(() => {
+            backgroundCanvas.classList.remove('fade-out');
+            if (replayCanvas) replayCanvas.classList.remove('fade-out');
+            isTransitioning = false;
+            
+            // --- NEW FIX: FORCE FOCUS BACK TO CORE APP ---
+            // This ensures that immediately after the slide changes, 
+            // the main window grabs keyboard control.
+            window.focus();
+            if (document.activeElement && document.activeElement !== document.body) {
+                document.activeElement.blur();
+            }
+            // ---------------------------------------------
+        });
+    }, fadeDuration);
 }
     function nextStage() { transitionToStage(currentStageIndex + 1); }
     function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
