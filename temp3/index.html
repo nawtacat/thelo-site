@@ -3,204 +3,193 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Desmos Tutor Embedded View</title>
+    <title>Thelo Graph Replay</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
     
     <script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
 
     <style>
         /* ============================================
-           THELO BRAND VARIABLES & RESET 
-           ============================================ 
+           DESIGN SYSTEM (Matches Core App)
+           ============================================
         */
         :root {
             --thelo-blue: #2563EB;
-            --thelo-blue-hover: #1d4ed8;
-            --thelo-bg: #F8F9FA;
+            --thelo-blue-dark: #1d4ed8;
             --thelo-text: #111827;
-            --grid-color: #E5E7EB;
-            --slate-200: #e2e8f0;
             --slate-600: #475569;
             --white: #ffffff;
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
         }
 
+        /* Custom Armenian Font Definition */
+        @font-face {
+            font-family: 'Montserrat Arm';
+            src: url('https://thelo.space/fonts/Montserratarm-Regular.otf') format('opentype');
+            font-weight: 400;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Montserrat Arm';
+            src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf') format('opentype');
+            font-weight: 600;
+            font-display: swap;
+        }
+
+        /* ============================================
+           BASE STYLES
+           ============================================
+        */
         body, html {
             margin: 0;
             padding: 0;
             height: 100%;
-            font-family: 'Manrope', system-ui, -apple-system, sans-serif;
-            background-color: var(--thelo-bg);
-            color: var(--thelo-text);
-            
-            /* Thelo Grid Pattern */
-            background-image: 
-                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-            background-size: 40px 40px;
+            width: 100%;
+            /* Primary font stack */
+            font-family: 'Manrope', 'Montserrat Arm', sans-serif; 
+            /* TRANSPARENT BACKGROUND - Removes the white box look */
+            background-color: transparent; 
+            overflow: hidden; /* Prevent scrollbars */
         }
-        
-        /* Container */
-        #embed-container {
+
+        #app-container {
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
+            height: 100%;
+            width: 100%;
+            position: relative;
+        }
+
+        /* ============================================
+           CALCULATOR STYLING
+           ============================================
+        */
+        #calculator {
+            flex-grow: 1; /* Take up all available space */
             width: 100%;
             height: 100%;
-            padding: 20px;
-            box-sizing: border-box;
+            border: none !important; /* Force removal of borders */
+            box-shadow: none !important; /* Force removal of shadows */
         }
+
+        /* Hide the Desmos branding/footer if desired for cleaner look (optional) */
+        .dcg-footer { display: none !important; }
 
         /* ============================================
-           CALCULATOR "WINDOW" STYLING 
-           ============================================ 
+           FLOATING CONTROLS (Pill Design)
+           ============================================
         */
-        .window-frame {
-            position: relative;
-            background-color: var(--white);
-            border: 1px solid var(--slate-200);
-            border-radius: 12px;
-            box-shadow: var(--shadow-lg);
-            padding: 20px;
-            padding-top: 50px; /* Space for the dots */
-            width: 100%;
-            max-width: 800px;
-            margin-bottom: 30px;
-            box-sizing: border-box;
-        }
-
-        /* The Mac-style Traffic Light Dots */
-        .window-frame::before {
-            content: '';
+        #controls-overlay {
             position: absolute;
-            top: 18px;
-            left: 20px;
-            width: 52px;
-            height: 12px;
-            background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-        }
-
-        #calculator {
-            width: 100%;
-            height: 450px; 
-            border-radius: 4px;
-            /* Remove default border as the window frame provides it */
-            border: 1px solid var(--slate-200);
-        }
-
-        /* ============================================
-           CONTROLS & BUTTONS
-           ============================================ 
-        */
-        #controls {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            
             display: flex;
-            gap: 16px;
             align-items: center;
-            flex-wrap: wrap;
-            justify-content: center;
-            width: 100%;
-            max-width: 800px;
+            gap: 12px;
+            
+            /* Glassmorphism Look */
+            background-color: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            
+            padding: 8px 12px;
+            border-radius: 9999px; /* Pill shape */
+            border: 1px solid rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-lg);
+            
+            transition: opacity 0.3s ease;
         }
 
-        button {
-            padding: 12px 24px;
-            font-family: 'Manrope', sans-serif;
-            font-size: 1rem;
-            font-weight: 700;
+        .control-btn {
             background-color: var(--thelo-blue);
-            color: var(--white);
+            color: white;
             border: none;
-            border-radius: 9999px; /* Pill shape */
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
             transition: all 0.2s ease;
-            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
-            white-space: nowrap;
+            font-size: 14px;
         }
 
-        button:hover:not(:disabled) {
-            background-color: var(--thelo-blue-hover);
+        .control-btn:hover:not(:disabled) {
+            background-color: var(--thelo-blue-dark);
             transform: translateY(-1px);
         }
 
-        button:active:not(:disabled) {
-            transform: translateY(0);
-        }
-
-        button:disabled {
-            background-color: var(--slate-200);
-            color: var(--slate-600);
+        .control-btn:disabled {
+            background-color: #cbd5e1; /* Slate-300 */
             cursor: not-allowed;
-            box-shadow: none;
-            opacity: 0.7;
+            transform: none;
         }
 
-        /* ============================================
-           STATUS BOX (Feedback Style)
-           ============================================ 
-        */
-        #status {
-            font-family: 'Manrope', sans-serif;
-            font-size: 1rem;
-            font-weight: 600;
+        #status-text {
+            font-size: 0.95rem;
             color: var(--thelo-text);
-            
-            background-color: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(4px);
-            border: 1px solid var(--slate-200);
-            border-radius: 12px;
-            
-            padding: 12px 24px;
+            font-weight: 600;
+            padding: 0 12px;
+            min-width: 200px;
             text-align: center;
-            flex-grow: 1; /* Takes up remaining space */
-            min-width: 250px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            white-space: nowrap;
         }
+
     </style>
 </head>
 <body>
 
-    <div id="embed-container">
-        
-        <div class="window-frame">
-            <div id="calculator"></div>
-        </div>
+    <div id="app-container">
+        <div id="calculator"></div>
 
-        <div id="controls">
-            <button id="prevBtn" onclick="goToStep(-1)" disabled>◀️ Back</button>
-            <div id="status">Status: Initializing...</div>
-            <button id="nextBtn" onclick="goToStep(1)" disabled>Next Step ▶️</button>
+        <div id="controls-overlay">
+            <button id="prevBtn" class="control-btn" onclick="goToStep(-1)" disabled title="Previous Step">
+                <i class="fa-solid fa-chevron-left">◀</i>
+            </button>
+            
+            <span id="status-text">Initializing...</span>
+            
+            <button id="nextBtn" class="control-btn" onclick="goToStep(1)" disabled title="Next Step">
+                <i class="fa-solid fa-chevron-right">▶</i>
+            </button>
         </div>
     </div>
 
     <script>
-        // --- JAVASCRIPT LOGIC (UNCHANGED) ---
+        // --- JAVASCRIPT LOGIC (Maintained from your example) ---
 
         var calculator = Desmos.GraphingCalculator(document.getElementById('calculator'), {
-            keypad: true, expressions: true, settingsMenu: true
+            keypad: true, 
+            expressions: true, 
+            settingsMenu: true,
+            border: false, // API setting to help remove border
+            lockViewport: false
         });
 
         let TUTOR_STEPS = []; 
         let currentStepIndex = 0;
 
         const STEP_NARRATION = [
-            "👋 Welcome! We'll solve the system. Press Next to start.",
-            "✍️ Step 1: We've entered the first equation, **0.5x + y = 1** (The red line).",
-            "✍️ Step 2: Now we've added the second equation, **-2x - y = 5**. The solution is where they meet.",
-            "🔎 Step 3: We've zoomed in to focus on the exact intersection point.",
-            "💡 Step 4: The intersection is **(-4, 3)**. This is our (x, y) solution.",
-            "✅ Step 5: We calculate **x + y = -4 + 3 = -1**. The answer is B."
+            "👋 Welcome! We'll solve the system.",
+            "✍️ Step 1: Entered 0.5x + y = 1",
+            "✍️ Step 2: Added -2x - y = 5",
+            "🔎 Step 3: Focusing on intersection.",
+            "💡 Step 4: Intersection is (-4, 3)",
+            "✅ Step 5: x + y = -1. Answer is B."
         ];
 
         // --- ASYNCHRONOUSLY BUILD THE TUTOR STATES ---
         async function buildTutorStates() {
-            updateStatus("Building lesson states...");
+            updateStatus("Loading...");
             
-            // 0. Initial State (Blank Graph)
+            // 0. Initial State
             calculator.setBlank();
             calculator.setMathBounds({ left: -10, right: 10, bottom: -10, top: 10 });
             TUTOR_STEPS.push(calculator.getState()); 
@@ -227,7 +216,7 @@
             TUTOR_STEPS.push(calculator.getState()); 
 
             // 4. State after Marking Solution
-            calculator.setExpression({ id: 'sol', latex: '(-4, 3)', color: Desmos.Colors.BLACK, label: "Solution (x, y)", showLabel: true });
+            calculator.setExpression({ id: 'sol', latex: '(-4, 3)', color: Desmos.Colors.BLACK, label: "Solution", showLabel: true });
             TUTOR_STEPS.push(calculator.getState()); 
 
             // 5. State after Final Calculation
@@ -235,7 +224,7 @@
             calculator.setExpression({ id: 'ans', latex: '=-1', color: Desmos.Colors.GREEN });
             TUTOR_STEPS.push(calculator.getState()); 
 
-            // Reset to the initial state (State 0) and enable buttons
+            // Reset to State 0
             await loadState(0);
             document.getElementById('prevBtn').disabled = true;
             document.getElementById('nextBtn').disabled = false;
@@ -264,7 +253,7 @@
 
         // --- UTILITY FUNCTIONS ---
         function updateStatus(text) {
-            document.getElementById('status').innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>'); // Simple markdown bold parser
+            document.getElementById('status-text').innerText = text;
         }
 
         // --- RUN ON LOAD ---
