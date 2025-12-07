@@ -1006,6 +1006,10 @@ body.lang-en {
 }
 /* REPLACE the old #calculatorOverlay and #calculatorFrame rules with these */
 
+/* ===== MODIFIED CALCULATOR STYLES ===== */
+
+/* ===== FIXED: Transparent Overlay & Bottom-Aligned Calculator ===== */
+
 #calculatorOverlay {
     position: absolute;
     top: 0;
@@ -1014,24 +1018,41 @@ body.lang-en {
     height: 100%;
     z-index: 50;
     display: flex;
-    align-items: center;
+    
+    /* 1. Push calculator to the bottom */
+    align-items: flex-end; 
     justify-content: center;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    background-color: rgba(255, 255, 255, 0.5); /* Soft white background */
+    padding-bottom: 15px; /* Add space from the bottom edge */
+    box-sizing: border-box;
+
+    /* 2. REMOVED BLUR & BACKGROUND COLOR */
+    /* The overlay is now invisible, only the calculator box will be seen */
+    background-color: transparent; 
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+    
+    /* Optional: This allows you to click on the headline behind the overlay 
+       while the calculator is open. */
+    pointer-events: none; 
 }
 
 #calculatorFrame {
     width: 98%;
-    height: 98%;
+    /* 3. Shorten height to leave top 15-20% open for the headline */
+    height: 80%; 
+    
     border: none;
     border-radius: 1rem;
     box-shadow: var(--shadow-lg);
-}
-/* ADD THIS NEW RULE */
+    background-color: white; /* Ensure the calculator itself is solid */
+    
+    /* Re-enable clicks on the calculator itself */
+    pointer-events: auto; 
+}	/* ADD THIS NEW RULE */
 .terminal-hidden-by-calculator {
     display: none !important;
 }
@@ -1051,17 +1072,22 @@ body.lang-en {
     height: 40px;
     border-radius: 50%;
     border: none;
-    background-color: rgba(255, 255, 255, 0.7);
+    background-color: rgba(255, 255, 255, 0.9); /* Increased opacity slightly for visibility */
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     font-size: 1.2rem;
+    
+    /* === THE FIX === */
+    pointer-events: auto; 
     cursor: pointer;
+    /* ================= */
+
     box-shadow: var(--shadow-md);
     display: flex;
     align-items: center;
     justify-content: center;
-}
-	/* ===== NEW: Embedded Replay Player Styles ===== */
+    z-index: 60; /* Ensure it stays above the frame */
+}	/* ===== NEW: Embedded Replay Player Styles ===== */
 
 #replayPlayerContainer {
     position: absolute;
@@ -1107,37 +1133,6 @@ body.lang-en {
     box-shadow: var(--shadow-lg);
 }
   .mcq-option-btn .katex { vertical-align: middle; }
-/* ===== NEW: Drawing Minimap ===== */
-#minimapContainer {
-    position: absolute;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    width: 220px;
-    height: 165px;
-    background-color: rgba(255, 255, 255, 0.95);
-    border: 1px solid var(--thelo-border);
-    border-radius: 0.75rem;
-    box-shadow: var(--shadow-lg);
-    z-index: 10;
-    overflow: hidden;
-    /* Animation styles */
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    transform: scale(0.95) translateY(10px);
-    opacity: 0;
-    pointer-events: none; /* Don't let it block clicks */
-}
-
-/* This class will be toggled by JS to show the minimap */
-#minimapContainer:not(.minimap-hidden) {
-    transform: scale(1) translateY(0);
-    opacity: 1;
-}
-
-#minimapCanvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
 	/* ===== NEW: Animated Feedback System ===== */
 #feedbackOverlay {
     position: fixed;
@@ -1261,6 +1256,16 @@ body.mcq-active .mcq-option-btn.selected {
 	#thelobookBtn {
     display: none !important;
 }
+	/* Force cursor to be visible when this class is present */
+body.cursor-visible {
+    cursor: auto !important;
+}
+	/* Add this to your CSS for the fade-out effect */
+#backgroundCanvas.dimmed-for-feedback {
+    opacity: 0.05 !important; /* Almost invisible */
+    filter: grayscale(100%);   /* Optional: removes color distraction */
+    transition: opacity 0.4s ease, filter 0.4s ease;
+}
 </style>
 </head>
 <body>
@@ -1299,9 +1304,7 @@ body.mcq-active .mcq-option-btn.selected {
                     <div id="thelobookPageGridContentContainer">
                     </div>
                 </div>
-		    <div id="minimapContainer" class="minimap-hidden">
-    <canvas id="minimapCanvas"></canvas>
-</div>
+		    
 
                 <div id="mcqOptionsContainer" style="display: none;"></div>
             </div>
@@ -1538,9 +1541,7 @@ function getPreviousWeekIdentifier(weekId) {
     const bottomBar = document.getElementById('bottomBar');
     const stageProgressBarContainer = document.getElementById('stageProgressBarContainer');
     const stageProgressFill = document.getElementById('stageProgressFill');
-	  const minimapContainer = document.getElementById('minimapContainer');
-const minimapCanvas = document.getElementById('minimapCanvas');
-let minimapCtx = null;
+	  
 	  const feedbackCanvas = document.getElementById('feedbackCanvas');
 let feedbackCtx = null; // Will be initialized in setupContexts
 let feedbackAnimationId = null; // To manage animations
@@ -1789,109 +1790,92 @@ let lastIframeUpdateTime = 0;
     }
 }
 function resizeCanvases() {
-    clearTimeout(window.resizeTimeout);
-    window.resizeTimeout = setTimeout(() => {
-        checkTabletMode();
-        if (!boardWrapper) return;
+    clearTimeout(window.resizeTimeout);
+    window.resizeTimeout = setTimeout(() => {
+        checkTabletMode();
+        if (!boardWrapper) return;
 
-        // Save the current drawing before it gets erased by the resize.
-        let userDrawingData = null;
-        if (userDrawingOccurred && canvas.width > 0 && canvas.height > 0) {
-            userDrawingData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        }
+        // Save the current drawing before it gets erased by the resize.
+        let userDrawingData = null;
+        if (userDrawingOccurred && canvas.width > 0 && canvas.height > 0) {
+            userDrawingData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        }
 
-        const rect = boardWrapper.getBoundingClientRect();
-        const cssWidth = Math.max(1, Math.floor(rect.width));
-        const cssHeight = Math.max(1, Math.floor(rect.height));
-        devicePixelRatio = window.devicePixelRatio || 1;
-        const internalWidth = Math.floor(cssWidth * devicePixelRatio);
-        const internalHeight = Math.floor(cssHeight * devicePixelRatio);
+        const rect = boardWrapper.getBoundingClientRect();
+        const cssWidth = Math.max(1, Math.floor(rect.width));
+        const cssHeight = Math.max(1, Math.floor(rect.height));
+        devicePixelRatio = window.devicePixelRatio || 1;
+        const internalWidth = Math.floor(cssWidth * devicePixelRatio);
+        const internalHeight = Math.floor(cssHeight * devicePixelRatio);
 
-        // This loop erases the canvases when it sets the new width/height.
-        [backgroundCanvas, replayCanvas, canvas, thelobookCanvas, feedbackCanvas].forEach(c => {
-            if (c) {
-                c.width = internalWidth;
-                c.height = internalHeight;
-                c.style.width = `${cssWidth}px`;
-                c.style.height = `${cssHeight}px`;
-            }
-        });
-        
-        setupContexts();
+        // This loop erases the canvases when it sets the new width/height.
+        [backgroundCanvas, replayCanvas, canvas, thelobookCanvas, feedbackCanvas].forEach(c => {
+            if (c) {
+                c.width = internalWidth;
+                c.height = internalHeight;
+                c.style.width = `${cssWidth}px`;
+                c.style.height = `${cssHeight}px`;
+            }
+        });
+        
+        setupContexts();
 
-        // Restore the saved drawing onto the newly resized canvas.
-        if (userDrawingData) {
-            ctx.putImageData(userDrawingData, 0, 0);
-        }
+        // Restore the saved drawing onto the newly resized canvas.
+        if (userDrawingData) {
+            ctx.putImageData(userDrawingData, 0, 0);
+        }
 
-        // Redraw the rest of the UI.
-        if (currentStageIndex >= 0 && lessonStages.length > 0) renderStageUI(currentStageIndex, true);
-        
-        if (isThelobookActive) {
-            setTimeout(() => {
-                if (isThelobookActive) loadThelobookPageDrawing(currentThelobookPageIndex);
-            }, 50);
-        }
-        
-        if(isPageGridVisible) renderPageGridBatch(currentPageGridBatch, false);
+        // Redraw the rest of the UI.
+        if (currentStageIndex >= 0 && lessonStages.length > 0) renderStageUI(currentStageIndex, true);
+        
+        if (isThelobookActive) {
+            setTimeout(() => {
+                if (isThelobookActive) loadThelobookPageDrawing(currentThelobookPageIndex);
+            }, 50);
+        }
+        
+        if(isPageGridVisible) renderPageGridBatch(currentPageGridBatch, false);
 
-    // At the end of the resizeCanvases function
-    if (minimapCanvas) {
-        const minimapRect = minimapCanvas.getBoundingClientRect();
-        minimapCanvas.width = minimapRect.width * devicePixelRatio;
-        minimapCanvas.height = minimapRect.height * devicePixelRatio;
+        setupContexts();
+    }, 150);
+}
+	  function setupContexts() {
+    if (!backgroundCanvas || !replayCanvas || !canvas || !thelobookCanvas) return;
+    
+    replayCtx = replayCanvas.getContext('2d'); 
+    thelobookCtx = thelobookCanvas.getContext('2d');
+    
+    [bgCtx, replayCtx, ctx, thelobookCtx].forEach(context => {
+        if (context) { 
+            context.resetTransform(); 
+            context.scale(devicePixelRatio, devicePixelRatio); 
+        }
+    });
+    
+    bgCtx.lineWidth = 2; 
+    bgCtx.strokeStyle = '#333'; 
+    bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
+    
+    const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+    bgCtx.font = `20px ${fontFamily}`; 
+    bgCtx.textAlign = 'center'; 
+    bgCtx.textBaseline = 'top';
+    
+    if (replayCtx) { 
+        replayCtx.lineCap = 'round'; 
+        replayCtx.lineJoin = 'round'; 
+    }
+    
+    ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH; 
+    ctx.lineCap = 'round'; 
+    ctx.lineJoin = 'round'; 
+    ctx.strokeStyle = INK_COLORS.blue; // Hardcoded to blue
+    
+    if (thelobookCtx) {
+        thelobookCtx.lineCap = 'round'; 
+        thelobookCtx.lineJoin = 'round';
     }
 
-    // The call to setupContexts() should be after this new block
-    setupContexts();
-    }, 150);
-}
-	function setupContexts() {
-    if (!backgroundCanvas || !replayCanvas || !canvas || !thelobookCanvas) return;
-    
-    replayCtx = replayCanvas.getContext('2d'); 
-    thelobookCtx = thelobookCanvas.getContext('2d');
-    
-    [bgCtx, replayCtx, ctx, thelobookCtx].forEach(context => {
-        if (context) { 
-            context.resetTransform(); 
-            context.scale(devicePixelRatio, devicePixelRatio); 
-        }
-    });
-    
-    bgCtx.lineWidth = 2; 
-    bgCtx.strokeStyle = '#333'; 
-    bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
-    
-    const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-    bgCtx.font = `20px ${fontFamily}`; 
-    bgCtx.textAlign = 'center'; 
-    bgCtx.textBaseline = 'top';
-    
-    if (replayCtx) { 
-        replayCtx.lineCap = 'round'; 
-        replayCtx.lineJoin = 'round'; 
-    }
-    
-    ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH; 
-    ctx.lineCap = 'round'; 
-    ctx.lineJoin = 'round'; 
-    ctx.strokeStyle = INK_COLORS.blue; // Hardcoded to blue
-    
-    if (thelobookCtx) {
-        thelobookCtx.lineCap = 'round'; 
-        thelobookCtx.lineJoin = 'round';
-    }
-    if (minimapCanvas) {
-        minimapCtx = minimapCanvas.getContext('2d');
-        if (minimapCtx) {
-            minimapCtx.scale(devicePixelRatio, devicePixelRatio);
-            minimapCtx.lineWidth = 2;
-            minimapCtx.lineCap = 'round';
-            minimapCtx.lineJoin = 'round';
-            minimapCtx.strokeStyle = INK_COLORS.blue;
-        }
-    }
     if (feedbackCanvas) {
         feedbackCtx = feedbackCanvas.getContext('2d');
         if (feedbackCtx) {
@@ -1899,8 +1883,8 @@ function resizeCanvases() {
             feedbackCtx.scale(devicePixelRatio, devicePixelRatio);
         }
     }
-    
-    updateColorIndicator();
+    
+    updateColorIndicator();
 }
     function calculateDrawingDuration(drawingData){
         if (!drawingData || !drawingData.strokes || drawingData.strokes.length === 0) return 0;
@@ -2126,9 +2110,7 @@ function handleDrawingStart(e) {
     activeCtx.beginPath();
     activeCtx.moveTo(pos.x, pos.y);
 }
-	  // THIS IS THE NEW, UPDATED FUNCTION
-// REPLACE the old handleDrawingMove function with this one
-function handleDrawingMove(e) {
+	function handleDrawingMove(e) {
     if (!drawing) return;
 
     if (isTabletMode) {
@@ -2151,19 +2133,14 @@ function handleDrawingMove(e) {
     activeCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
     activeCtx.stroke();
     activeCtx.moveTo(midPoint.x, midPoint.y);
-	captureCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
-captureCtx.stroke();
+    
+    // Also draw to the capture canvas for AI processing
+    if (captureCtx) {
+        captureCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
+        captureCtx.stroke();
+    }
 
     lastPos = pos;
-
-    // --- NEW MINIMAP DRAWING LOGIC ---
-    // If the minimap context exists and we are NOT in thelobook mode...
-    if (minimapCtx && !isThelobookActive) {
-        // Clear the previous frame on the minimap
-        minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
-        // Draw the entire main canvas (where the ink is) onto the minimap, scaled to fit.
-        minimapCtx.drawImage(canvas, 0, 0, minimapCanvas.width / devicePixelRatio, minimapCanvas.height / devicePixelRatio);
-    }
 }
 function handleDrawingEnd(e) {
 	canvas.classList.remove('no-cursor');
@@ -2290,29 +2267,39 @@ async function getKatexCSSWithEmbeddedFonts() {
   return katexCSSInlined;
 }
 // Wait until the UI font used for headline text is available
+// Updated: More robust font loading check
 async function ensureHeadlineFontsLoaded() {
-  try {
-    const family = (currentLang === 'en') ? 'Manrope' : 'Montserrat Arm';
-    // Load a specific face/size so measureText uses the right metrics
-    if (document.fonts && document.fonts.load) {
-      // Try to load; don't hang forever if the browser doesn't support it
-      await Promise.race([
-        (async () => {
-          await document.fonts.load(`20px "${family}"`);
-          await document.fonts.ready; // resolves when all pending fonts are ready
-        })(),
-        new Promise(res => setTimeout(res, 800)) // safety timeout
-      ]);
-    }
-  } catch (_) { /* ignore */ }
-}
+    try {
+        const families = ['KaTeX_Main', 'KaTeX_Math', 'Manrope', 'Montserrat Arm'];
+        const loaders = [];
 
-// Mixed text + KaTeX headline renderer (SVG with embedded KaTeX fonts)
-// - Segments delimited by /K ... K/ are rendered with KaTeX
-// - Lines are wrapped to widthFraction of the canvas and centered per line
-// - Adds 2px pad in SVG to prevent right-edge clipping of last glyphs
+        // 1. Force the document to acknowledge the fonts exist
+        if (document.fonts && document.fonts.load) {
+            // Load the UI font
+            const uiFamily = (currentLang === 'en') ? 'Manrope' : 'Montserrat Arm';
+            loaders.push(document.fonts.load(`20px "${uiFamily}"`));
+            
+            // Load common KaTeX fonts explicitly
+            loaders.push(document.fonts.load('20px "KaTeX_Main"'));
+            loaders.push(document.fonts.load('italic 20px "KaTeX_Math"'));
+        }
+
+        // 2. Wait for specific font loads + global ready state
+        await Promise.all(loaders);
+        await document.fonts.ready; 
+
+        // 3. Safety delay: Allow the layout engine to recalculate after font swap
+        await new Promise(res => setTimeout(res, 50)); 
+    } catch (e) {
+        console.warn("Font loading check warning:", e);
+    }
+}
+// Updated: Robust Mixed text + KaTeX renderer
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   if (!headline || !bgCtx) return;
+
+  // Ensure fonts are ready before we start measuring anything
+  await ensureHeadlineFontsLoaded();
 
   // ---- config ----
   const widthFraction = Math.min(Math.max(opts.widthFraction ?? 0.88, 0.5), 0.98);
@@ -2325,18 +2312,17 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       .getPropertyValue('--thelo-text')
       .trim() || '#111827';
 
-  // KaTeX CSS with embedded fonts (so data-URL SVG can render the same as DOM)
+  // KaTeX CSS with embedded fonts
   const katexCSS = await getKatexCSSWithEmbeddedFonts();
 
-  // Extra font-family overrides to keep headline matching MCQs
   const extraRules = `
-.katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
-.katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
-.katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
-.katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
-`;
+    .katex, .katex .mathnormal { font-family: "KaTeX_Main", serif !important; }
+    .katex .mathit, .katex .textit { font-family: "KaTeX_MathItalic", serif !important; }
+    .katex .mathsf, .katex .textsf { font-family: "KaTeX_SansSerif", sans-serif !important; }
+    .katex .mathtt, .katex .texttt { font-family: "KaTeX_Typewriter", monospace !important; }
+  `;
 
-  // ---- parse headline into segments: /K ... K/ => math
+  // ---- parse headline ----
   const segments = (headline.split(/(\/K[\s\S]*?K\/)/g) || [])
     .filter(Boolean)
     .map(p =>
@@ -2345,16 +2331,19 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
         : { type: 'text', content: p }
     );
 
-  // A hidden host for measuring KaTeX DOM sizes (one per call)
+  // Create measure host
   const measureHost = document.createElement('div');
   measureHost.style.position = 'absolute';
   measureHost.style.visibility = 'hidden';
   measureHost.style.left = '-9999px';
   measureHost.style.top = '-9999px';
+  // CRITICAL: Force the measure host to be wide enough
+  measureHost.style.whiteSpace = 'nowrap'; 
+  measureHost.style.width = 'max-content';
   document.body.appendChild(measureHost);
 
-  // ---- tokenize with measurements ----
   const tokens = [];
+  
   for (const seg of segments) {
     if (seg.type === 'text') {
       const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
@@ -2374,33 +2363,38 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
     try {
       const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
 
-       const style = document.createElement('style');
- style.textContent = katexCSS;          // the CSS you built with embedded fonts
- measureHost.appendChild(style);
+      // Clean host for this token
+      while (measureHost.firstChild) measureHost.removeChild(measureHost.firstChild);
 
- const tmp = document.createElement('div');
- tmp.style.color = fontColor;
- tmp.style.fontSize = `${mathFontSize}px`;
- tmp.innerHTML = html;
- measureHost.appendChild(tmp);
+      const style = document.createElement('style');
+      style.textContent = katexCSS;
+      measureHost.appendChild(style);
+
+      const tmp = document.createElement('div');
+      tmp.style.color = fontColor;
+      tmp.style.fontSize = `${mathFontSize}px`;
+      tmp.style.display = 'inline-block'; // Ensure tight wrap
+      tmp.innerHTML = html;
+      measureHost.appendChild(tmp);
 
       const katexEl = tmp.querySelector('.katex') || tmp;
       const rect = katexEl.getBoundingClientRect();
 
-      // remove measured node (keep host)
-      tmp.remove();
+      // CRITICAL FIX: Robust Padding
+      // If font loads late, rect might be narrow. We add a base padding PLUS 
+      // a percentage safety buffer.
+      const basePad = 15; 
+      const safetyBuffer = Math.ceil(rect.width * 0.1); // Add 10% width as safety
+      const w = Math.ceil(rect.width) + basePad + safetyBuffer;
+      const h = Math.ceil(rect.height) + basePad;
 
-      // Pad & round to avoid clipping last glyphs
-      const PAD = 10; // More aggressive padding to guarantee space
-      const w = Math.ceil(rect.width) + PAD;
-      const h = Math.ceil(rect.height) + PAD;
-
+      // Generate SVG with the calculated safer dimensions
       const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
           <style>${katexCSS}\n${extraRules}</style>
           <foreignObject width="100%" height="100%">
             <div xmlns="http://www.w3.org/1999/xhtml"
-                 style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;">
+                 style="color:${fontColor};font-size:${mathFontSize}px;line-height:initial;display:inline-block;white-space:nowrap;padding:2px;">
               ${html}
             </div>
           </foreignObject>
@@ -2409,20 +2403,18 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
       const image = new Image();
       image.src = dataUrl;
-      await image.decode();
+      await image.decode(); // Wait for image to be paint-ready
 
       tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
     } catch (e) {
-      // graceful fallback to text measurement
       const w = bgCtx.measureText(seg.content).width;
       tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
     }
   }
 
-  // cleanup measure host
   measureHost.remove();
 
-  // ---- build lines to fit available width ----
+  // ---- build lines ----
   const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
   const maxWidth = canvasW * widthFraction;
   const lineGap = 8;
@@ -2431,9 +2423,9 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   let line = { tokens: [], width: 0, height: fontSize };
 
   for (const t of tokens) {
-    // allow scaling down oversized math to fit
     let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
 
+    // Scale down if a single math element is wider than the whole screen
     if (t.type === 'math' && width > maxWidth) {
       const s = maxWidth / width;
       width = Math.floor(width * s);
@@ -2447,6 +2439,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       lines.push(line);
       line = { tokens: [], width: 0, height: fontSize };
     }
+    // Don't start a line with a space
     if (!(line.tokens.length === 0 && tok.isSpace)) {
       line.tokens.push(tok);
       line.width += width;
@@ -2455,7 +2448,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   }
   if (line.tokens.length) lines.push(line);
 
-  // ---- render lines, centered horizontally ----
+  // ---- render ----
   const prevAlign = bgCtx.textAlign;
   const prevBase = bgCtx.textBaseline;
   const prevFill = bgCtx.fillStyle;
@@ -2468,6 +2461,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   for (const L of lines) {
     let x = (canvasW - L.width) / 2;
     for (const t of L.tokens) {
+      // Vertically center tokens in the line
       const topY = curY + (L.height - t.height) / 2;
       if (t.type === 'text') {
         bgCtx.fillText(t.content, x, topY);
@@ -2479,12 +2473,10 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
     curY += L.height + lineGap;
   }
 
-  // restore ctx
   bgCtx.textAlign = prevAlign || 'center';
   bgCtx.textBaseline = prevBase || 'top';
   bgCtx.fillStyle = prevFill || fontColor;
 }
-
 
 
 	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
@@ -2745,17 +2737,31 @@ function openReplayPlayer() {
     const url = currentStageData.replayDataUrl;
     console.log("Embedding website:", url);
     
+    // 1. Assign the source
     replayFrame.src = url;
+    
+    // 2. NEW: Automatically force focus to the iframe once it loads
+    // This makes the iframe's internal keyboard shortcuts work immediately 
+    // without requiring a click.
+    replayFrame.onload = function() {
+        // Short delay to ensure the browser is ready to accept the focus switch
+        setTimeout(() => {
+            if (replayFrame.contentWindow) {
+                replayFrame.contentWindow.focus();
+            }
+        }, 100);
+    };
+
     replayPlayerContainer.classList.remove('replay-hidden');
 
-    // Disable the internal media scrubbing loop since we can't control external sites
+    // Disable the internal media scrubbing loop since we are handing control to the iframe
     isMediaScrubbingActive = false; 
     if (currentReplayAnimationId) {
         cancelAnimationFrame(currentReplayAnimationId);
         currentReplayAnimationId = null;
     }
-}		// In your MAIN app's <script> tag
-function closeReplayPlayer() {
+}
+	  function closeReplayPlayer() {
     if (!isReplayActive) return;
     isReplayActive = false;
 
@@ -2772,110 +2778,106 @@ function closeReplayPlayer() {
 // In your main HTML file, REPLACE your entire renderStageUI function with this one.
 
 function renderStageUI(index, isResize = false) {
-    return new Promise(async (resolve, reject) => {
-        if (isLessonLoading || index < 0 || index >= lessonStages.length) {
-            if (index < 0) {
-                if (nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = getCurrentUIText().start; }
-                if (prevBtn) prevBtn.disabled = true;
-                if (clearBtn && clearBtn.style) clearBtn.style.display = 'none';
-                if (colorIndicator && colorIndicator.style) colorIndicator.style.display = 'none';
-                if (mcqOptionsContainer && mcqOptionsContainer.style) mcqOptionsContainer.style.display = 'none';
-            }
-            return resolve();
-        }
+    return new Promise(async (resolve, reject) => {
+        if (isLessonLoading || index < 0 || index >= lessonStages.length) {
+            if (index < 0) {
+                if (nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = getCurrentUIText().start; }
+                if (prevBtn) prevBtn.disabled = true;
+                if (clearBtn && clearBtn.style) clearBtn.style.display = 'none';
+                if (colorIndicator && colorIndicator.style) colorIndicator.style.display = 'none';
+                if (mcqOptionsContainer && mcqOptionsContainer.style) mcqOptionsContainer.style.display = 'none';
+            }
+            return resolve();
+        }
 
-        const TXT = getCurrentUIText();
-        if (!isResize && isThelobookActive) closeThelobook(true);
-        if (!isResize && isPageGridVisible) closePageGridView();
-        if (!isResize) closeReplayPlayer();
+        const TXT = getCurrentUIText();
+        if (!isResize && isThelobookActive) closeThelobook(true);
+        if (!isResize && isPageGridVisible) closePageGridView();
+        if (!isResize) closeReplayPlayer();
 
-        if (!isResize) {
-            if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-            if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
-            isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
-            if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-            if (stageProgressFill) stageProgressFill.style.width = '0%';
-        }
+        if (!isResize) {
+            if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+            if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.currentTime = 0; currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+            isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
+            if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+            if (stageProgressFill) stageProgressFill.style.width = '0%';
+        }
 
-        currentStageData = lessonStages[index];
-        currentStageIndex = index;
-        isStudentInputAllowed = currentStageData.studentInput === true;
+        currentStageData = lessonStages[index];
+        currentStageIndex = index;
+        isStudentInputAllowed = currentStageData.studentInput === true;
 
-        if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
+        if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
 
-        if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
-        if (!isResize) {
-            clearUserCanvas();
-            if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-        }
+        if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+        if (!isResize) {
+            clearUserCanvas();
+            if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+        }
 
-        function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
-            const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
-            const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
-            
-            const hasMcq = currentStageData.optionsQuiz && Array.isArray(currentStageData.optionsQuiz.choices);
+        // --- Helper to draw image correctly ---
+        function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
+            const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
+            const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
+            
+            const hasMcq = currentStageData.optionsQuiz && Array.isArray(currentStageData.optionsQuiz.choices);
 
-            if (hasMcq) {
-                const sidePad = canvasWidth * 0.04;
-                const maxImgWidth = canvasWidth * 0.48;
-                const maxImgHeight = canvasHeight * 0.85;
-                const scale = Math.min(maxImgWidth / img.width, maxImgHeight / img.height);
-                
-                const scaledWidth = img.width * scale;
-                const scaledHeight = img.height * scale;
-                const x = sidePad;
-                const y = (canvasHeight - scaledHeight) / 2;
-                bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
-            } else {
-                const maxSizePercentage = 0.50;
-                const maxContainerWidth = canvasWidth * maxSizePercentage;
-                const maxContainerHeight = canvasHeight * maxSizePercentage;
-                const scale = Math.min(maxContainerWidth / img.width, maxContainerHeight / img.height);
-                
-                const scaledWidth = img.width * scale;
-                const scaledHeight = img.height * scale;
-                const x = (canvasWidth - scaledWidth) / 2;
-                const y = (canvasHeight - scaledHeight) / 2;
-                bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
-            }
-        }
+            if (hasMcq) {
+                const sidePad = canvasWidth * 0.04;
+                const maxImgWidth = canvasWidth * 0.48;
+                const maxImgHeight = canvasHeight * 0.85;
+                const scale = Math.min(maxImgWidth / img.width, maxImgHeight / img.height);
+                
+                const scaledWidth = img.width * scale;
+                const scaledHeight = img.height * scale;
+                const x = sidePad;
+                const y = (canvasHeight - scaledHeight) / 2;
+                bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
+            } else {
+                const maxSizePercentage = 0.50;
+                const maxContainerWidth = canvasWidth * maxSizePercentage;
+                const maxContainerHeight = canvasHeight * maxSizePercentage;
+                const scale = Math.min(maxContainerWidth / img.width, maxContainerHeight / img.height);
+                
+                const scaledWidth = img.width * scale;
+                const scaledHeight = img.height * scale;
+                const x = (canvasWidth - scaledWidth) / 2;
+                const y = (canvasHeight - scaledHeight) / 2;
+                bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
+            }
+        }
 
-        async function drawHeadlineText() {
-            const padding = 27;
-            let headlineCurrentY = padding * 2;
-            const headlineText = currentStageData.headline || '';
+        async function drawHeadlineText() {
+            const padding = 27;
+            let headlineCurrentY = padding * 2;
+            const headlineText = currentStageData.headline || '';
 
-            if (headlineText && bgCtx && bgCtx.canvas.width > 0) {
-              // FIX: This line is updated to use 'Montserrat Arm'
-                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-                bgCtx.font = `20px ${fontFamily}`;
-                await ensureHeadlineFontsLoaded();
-                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
-            }
-        }
+            if (headlineText && bgCtx && bgCtx.canvas.width > 0) {
+                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+                bgCtx.font = `20px ${fontFamily}`;
+                await ensureHeadlineFontsLoaded();
+                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
+            }
+        }
 
-        function setupStageContent() {
-            const mcqDetails = currentStageData.optionsQuiz;
-            const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
-            const isQuestionStage = currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution' || isMCQDisplayStage;
+        function setupStageContent() {
+            const mcqDetails = currentStageData.optionsQuiz;
+            const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
+            const isQuestionStage = currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution' || isMCQDisplayStage;
 
-            if (!isMCQDisplayStage && nextCheckBtn) {
-                nextCheckBtn.style.display = 'inline-flex';
-            }
+            if (!isMCQDisplayStage && nextCheckBtn) {
+                nextCheckBtn.style.display = 'inline-flex';
+            }
 
-            if (currentStageData.type === 'calculator_replay') {
-                // 1. Open the website embed immediately
+            if (currentStageData.type === 'calculator_replay') {
                 openReplayPlayer();
 
-                // 2. Reset internal timers (we rely on the website now)
                 if (!isResize) {
                     internalPlaybackTime = 0;
                     lastFrameTimestampForManualAdvance = 0;
-                    isMediaScrubbingActive = false; // Disable internal scrubber
+                    isMediaScrubbingActive = false; 
                 }
 
-                // 3. Handle optional audio (if the lesson still has a separate audio track)
-                // Note: We no longer fetch the replayDataUrl to calculate duration.
                 const audioMetaPromise = new Promise((resolveAudio) => {
                     if (currentStageData.audioFile) {
                         playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
@@ -2885,10 +2887,8 @@ function renderStageUI(index, isResize = false) {
                 });
 
                 audioMetaPromise.then((audioDuration) => {
-                    // Set duration based only on audio, or default to 0 if just a website
                     currentStageTotalDuration = audioDuration;
                     
-                    // Only show progress bar if there is actual audio to scrub
                     if (currentStageTotalDuration > 0) {
                         isMediaScrubbingActive = true;
                         updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
@@ -2897,12 +2897,10 @@ function renderStageUI(index, isResize = false) {
                             currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
                         }
                     } else {
-                        // If no audio, hide the progress bar
                         if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                     }
                 }).catch(e => console.error("Error setting up embed stage:", e));
 
-                // 4. Setup Buttons
                 if (nextCheckBtn) {
                     nextCheckBtn.textContent = TXT.gotIt;
                     nextCheckBtn.disabled = false;
@@ -2910,159 +2908,159 @@ function renderStageUI(index, isResize = false) {
                 if (clearBtn) clearBtn.style.display = 'none';
 
             } else if (isQuestionStage) {
-                // ... (The rest of your function remains exactly the same from here)
-                if (!isResize) isMediaScrubbingActive = false;
-                if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                
-                if (isMCQDisplayStage && mcqDetails) {
-            if (bottomBar) bottomBar.style.display = 'flex';
-            displayMcq(mcqDetails);
-            if (clearBtn) clearBtn.style.display = 'none';
+                if (!isResize) isMediaScrubbingActive = false;
+                if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                
+                if (isMCQDisplayStage && mcqDetails) {
+                    if (bottomBar) bottomBar.style.display = 'flex';
+                    displayMcq(mcqDetails);
+                    if (clearBtn) clearBtn.style.display = 'none';
 
-            if (nextCheckBtn) {
-                nextCheckBtn.style.display = 'inline-flex';
-                nextCheckBtn.disabled = false; // Button starts ENABLED for keyboard
-                nextCheckBtn.textContent = TXT.check;
+                    if (nextCheckBtn) {
+                        nextCheckBtn.style.display = 'inline-flex';
+                        nextCheckBtn.disabled = false;
+                        nextCheckBtn.textContent = TXT.check;
+                    }
+                } else if (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution') {
+                    if (bottomBar) bottomBar.style.display = 'flex';
+                    if (nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
+                    if (clearBtn) clearBtn.style.display = 'inline-flex';
+                }
+                if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => { }, () => { }, isResize); }
+            } else {
+                if (bottomBar) bottomBar.style.display = 'flex';
+                if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
+                const isDrawingInputStage = currentStageData.studentInput === true;
+                if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
+                if (currentStageData.audioFile || currentStageData.drawingRecord) {
+                    if (!isResize) {
+                        isMediaScrubbingActive = true;
+                        lastFrameTimestampForManualAdvance = 0;
+                        internalPlaybackTime = 0;
+                    }
+                    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
+                    const audioMetaPromise = new Promise((resolveAudio) => {
+                        if (currentStageData.audioFile) {
+                            playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
+                        } else {
+                            resolveAudio(0);
+                        }
+                    });
+                    let drawingDataPromise;
+                    if (currentStageData.drawingRecord) {
+                        if (!isResize || !currentStageDrawingData) {
+                            drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
+                        } else {
+                            drawingDataPromise = Promise.resolve(currentStageDrawingData);
+                        }
+                    } else {
+                        currentStageDrawingData = null;
+                        drawingDataPromise = Promise.resolve(null);
+                    }
+                    Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
+                        if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
+                        const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
+                        currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
+                        if (isMediaScrubbingActive && currentStageTotalDuration > 0) {
+                            updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+                            if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
+                            if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
+                            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+                        }
+                    });
+                } else {
+                    isMediaScrubbingActive = false; if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                    currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
+                    if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+                }
+                if (nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
             }
-        } else if (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution') {
-                    if (bottomBar) bottomBar.style.display = 'flex';
-                    if (nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
-                    if (clearBtn) clearBtn.style.display = 'inline-flex';
-                }
-                if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (d) => { }, () => { }, isResize); }
-            } else {
-                if (bottomBar) bottomBar.style.display = 'flex';
-                if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
-                const isDrawingInputStage = currentStageData.studentInput === true;
-                if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
-                if (currentStageData.audioFile || currentStageData.drawingRecord) {
-                    if (!isResize) {
-                        isMediaScrubbingActive = true;
-                        lastFrameTimestampForManualAdvance = 0;
-                        internalPlaybackTime = 0;
-                    }
-                    updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
-                    const audioMetaPromise = new Promise((resolveAudio) => {
-                        if (currentStageData.audioFile) {
-                            playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
-                        } else {
-                            resolveAudio(0);
-                        }
-                    });
-                    let drawingDataPromise;
-                    if (currentStageData.drawingRecord) {
-                        if (!isResize || !currentStageDrawingData) {
-                            drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
-                        } else {
-                            drawingDataPromise = Promise.resolve(currentStageDrawingData);
-                        }
-                    } else {
-                        currentStageDrawingData = null;
-                        drawingDataPromise = Promise.resolve(null);
-                    }
-                    Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
-                        if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
-                        const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
-                        currentStageTotalDuration = Math.max(audioDuration, drawingAnimDuration);
-                        if (isMediaScrubbingActive && currentStageTotalDuration > 0) {
-                            updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
-                            if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
-                            if (currentReplayAnimationId) cancelAnimationFrame(currentReplayAnimationId);
-                            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-                        }
-                    });
-                } else {
-                    isMediaScrubbingActive = false; if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-                    currentStageAudio = null; currentStageDrawingData = null; currentStageTotalDuration = 0;
-                    if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
-                }
-                if (nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
-            }
-            updateColorIndicator();
-            canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible && !isReplayActive) ? 'auto' : 'none';
-            if (nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
-            if (!isResize) userDrawingOccurred = false;
-            if (prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible || isReplayActive);
-            if (nextCheckBtn) {
-                const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
-                if (!isMCQDisplayStage) {
-                    nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || isCorrectlyAnsweredHW || isReplayActive && !currentStageData.audioFile);
-                }
-            }
-            if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
-        }
+            updateColorIndicator();
+            canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible && !isReplayActive) ? 'auto' : 'none';
+            if (nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
+            if (!isResize) userDrawingOccurred = false;
+            if (prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible || isReplayActive);
+            if (nextCheckBtn) {
+                const isCorrectlyAnsweredHW = currentStageData.type === 'question_handwriting' && nextCheckBtn.classList.contains('correct');
+                if (!isMCQDisplayStage) {
+                    nextCheckBtn.disabled = (isThelobookActive || isPageGridVisible || isCorrectlyAnsweredHW || isReplayActive && !currentStageData.audioFile);
+                }
+            }
+            if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
+        }
 
-        if (currentStageData.image && bgCtx) {
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.src = currentStageData.image;
-            img.onload = async () => {
-                drawImageWithCorrectLayout(bgCtx, img, currentStageData);
-                await drawHeadlineText();
-		    const isStudentDrawingStage = currentStageData.studentInput === true && currentStageData.type !== 'explanation_with_mcq';
-
-        // Show or hide the minimap container based on the stage type
-        if (minimapContainer) {
-            if (isStudentDrawingStage) {
-                minimapContainer.classList.remove('minimap-hidden');
-            } else {
-                minimapContainer.classList.add('minimap-hidden');
-            }
-        }
-                setupStageContent();
-                resolve();
-            };
-            img.onerror = async () => {
-                console.error("Failed to load stage image:", currentStageData.image);
-                await drawHeadlineText();
-                setupStageContent();
-                resolve();
-            };
-        } else {
-            await drawHeadlineText();
-            setupStageContent();
-            resolve();
-        }
-    });
-}     
+        if (currentStageData.image && bgCtx) {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.src = currentStageData.image;
+            img.onload = async () => {
+                drawImageWithCorrectLayout(bgCtx, img, currentStageData);
+                await drawHeadlineText();
+                // --- MINIMAP LOGIC REMOVED HERE ---
+                setupStageContent();
+                resolve();
+            };
+            img.onerror = async () => {
+                console.error("Failed to load stage image:", currentStageData.image);
+                await drawHeadlineText();
+                setupStageContent();
+                resolve();
+            };
+        } else {
+            await drawHeadlineText();
+            setupStageContent();
+            resolve();
+        }
+    });
+}
 	  function transitionToStage(newIndex) {
-    if (isTransitioning || isLessonLoading || !lessonStages.length) return;
+    if (isTransitioning || isLessonLoading || !lessonStages.length) return;
+    
     isMcqAnsweredCorrectly = false;
     // All feedback is now hidden either by the 'A' key or by advancing a stage.
     hideOnCanvasFeedback();
 
     selectedMcqIndex = null;
     if (isReplayActive) closeReplayPlayer();
-    if (isThelobookActive) closeThelobook(true);
-    if (isPageGridVisible) closePageGridView();
+    if (isThelobookActive) closeThelobook(true);
+    if (isPageGridVisible) closePageGridView();
 
-    if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-    if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
-    isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
-    if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
-    if (stageProgressFill) stageProgressFill.style.width = '0%';
+    if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
+    if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); currentStageAudio.onloadedmetadata = null; currentStageAudio.onended = null; }
+    isMediaScrubbingActive = false; currentStageDrawingData = null; currentStageTotalDuration = 0; internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0;
+    if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+    if (stageProgressFill) stageProgressFill.style.width = '0%';
 
-    if (newIndex < 0 || newIndex >= lessonStages.length) {
-        if (newIndex >= lessonStages.length) {
-            displayLessonComplete();
-        }
-        return;
-    }
-    isTransitioning = true;
-    backgroundCanvas.classList.add('fade-out');
-    if (replayCanvas) replayCanvas.classList.add('fade-out');
-    if (mcqOptionsContainer) mcqOptionsContainer.style.opacity = 0;
+    if (newIndex < 0 || newIndex >= lessonStages.length) {
+        if (newIndex >= lessonStages.length) {
+            displayLessonComplete();
+        }
+        return;
+    }
+    isTransitioning = true;
+    backgroundCanvas.classList.add('fade-out');
+    if (replayCanvas) replayCanvas.classList.add('fade-out');
+    if (mcqOptionsContainer) mcqOptionsContainer.style.opacity = 0;
 
-    const fadeDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000;
-    
-    setTimeout(() => {
-        currentStageIndex = newIndex;
-        renderStageUI(currentStageIndex, false).then(() => {
-            backgroundCanvas.classList.remove('fade-out');
-            if (replayCanvas) replayCanvas.classList.remove('fade-out');
-            isTransitioning = false;
-        });
-    }, fadeDuration);
+    const fadeDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-duration') || '0.3') * 1000;
+    
+    setTimeout(() => {
+        currentStageIndex = newIndex;
+        renderStageUI(currentStageIndex, false).then(() => {
+            backgroundCanvas.classList.remove('fade-out');
+            if (replayCanvas) replayCanvas.classList.remove('fade-out');
+            isTransitioning = false;
+            
+            // --- NEW FIX: FORCE FOCUS BACK TO CORE APP ---
+            // This ensures that immediately after the slide changes, 
+            // the main window grabs keyboard control.
+            window.focus();
+            if (document.activeElement && document.activeElement !== document.body) {
+                document.activeElement.blur();
+            }
+            // ---------------------------------------------
+        });
+    }, fadeDuration);
 }
     function nextStage() { transitionToStage(currentStageIndex + 1); }
     function previousStage() { if (currentStageIndex > 0 && !isThelobookActive && !isPageGridVisible) transitionToStage(currentStageIndex - 1); }
@@ -3576,108 +3574,102 @@ function showToast(rawMsg, duration = 4000) {
  * @param {string} rawMsg  –  HTML-allowed message (e.g. "🎉 <strong>Correct!</strong>")
  * @param {number} duration – how long to stay visible (ms)
  */
-
 function showOnCanvasFeedback(message, type = 'info') {
     if (!feedbackCtx) return;
-	// --- Configuration ---
-    const FADE_TIME = 400;
-    const MAX_WIDTH_PERCENTAGE = 0.70;
-    const TEXT_COLOR = '#111827';
-    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-    const LINE_HEIGHT_MULTIPLIER = 1.2;
-    const minFontSize = 20; // The absolute smallest font size
 
-    let EMOJI = '';
-    let baseFontSize = 48; // Default non-success size
+    // --- NEW: Dim the background image so text pops ---
+    if (backgroundCanvas) backgroundCanvas.classList.add('dimmed-for-feedback');
+    // -------------------------------------------------
 
-    if (type === 'success') {
-        baseFontSize = 72; // Default success size
-        EMOJI = '🎉 ';
-    }
+    const FADE_TIME = 400;
+    const MAX_WIDTH_PERCENTAGE = 0.70;
+    const TEXT_COLOR = '#111827';
+    const FONT_FAMILY = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+    const LINE_HEIGHT_MULTIPLIER = 1.2;
+    const minFontSize = 20;
 
-    const finalMessage = EMOJI + message;
-    const len = finalMessage.length; // Use the length of the *full* message
+    let EMOJI = '';
+    let baseFontSize = 48;
 
-    // 1. Dynamically set the STARTING font size based on message length (Less aggressive)
-    // 1. Dynamically set the STARTING font size based on message length (Even larger)
-    let currentFontSize;
-    if (len <= 15) {
-        currentFontSize = baseFontSize * 3; // Unchanged (100%)
-    } else if (len <= 40) {
-        currentFontSize = baseFontSize * 2; // Was 0.9
-    } else if (len <= 80) {
-        currentFontSize = baseFontSize * 1.3; // Was 0.75
-    } else {
-        currentFontSize = baseFontSize; // Was 0.6
-    }
+    if (type === 'success') {
+        baseFontSize = 72;
+        EMOJI = '🎉 ';
+    }
 
-    // Ensure we don't go below the minimum font size yet
-    currentFontSize = Math.max(minFontSize, Math.floor(currentFontSize));
+    const finalMessage = EMOJI + message;
+    const len = finalMessage.length;
 
-    const canvasWidth = feedbackCanvas.width / devicePixelRatio;
-    const canvasHeight = feedbackCanvas.height / devicePixelRatio;
-    const maxWidth = canvasWidth * MAX_WIDTH_PERCENTAGE;
-    const maxHeight = canvasHeight * 0.6; // Don't allow text to take more than 60% of the screen height
+    let currentFontSize;
+    if (len <= 15) {
+        currentFontSize = baseFontSize * 3;
+    } else if (len <= 40) {
+        currentFontSize = baseFontSize * 2;
+    } else if (len <= 80) {
+        currentFontSize = baseFontSize * 1.3;
+    } else {
+        currentFontSize = baseFontSize;
+    }
 
-    const wrapText = (ctx, text, maxWidth) => {
-        const words = text.split(' ');
-        let lines = [];
-        let currentLine = words[0] || '';
-        for (let i = 1; i < words.length; i++) {
-            const word = words[i];
-            const width = ctx.measureText(currentLine + " " + word).width;
-            if (width < maxWidth) {
-                currentLine += " " + word;
-            } else {
-                lines.push(currentLine);
-                currentLine = word;
-            }
-        }
-        lines.push(currentLine);
-        return lines;
-    };
+    currentFontSize = Math.max(minFontSize, Math.floor(currentFontSize));
 
-    let lines = [];
-    let lineHeight, totalTextHeight;
+    const canvasWidth = feedbackCanvas.width / devicePixelRatio;
+    const canvasHeight = feedbackCanvas.height / devicePixelRatio;
+    const maxWidth = canvasWidth * MAX_WIDTH_PERCENTAGE;
+    const maxHeight = canvasHeight * 0.6;
 
-    // 2. Iteratively shrink font size until it fits BOTH width and height constraints
-    while (currentFontSize >= minFontSize) {
-        feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
-        lines = wrapText(feedbackCtx, finalMessage, maxWidth);
-        
-        lineHeight = currentFontSize * LINE_HEIGHT_MULTIPLIER;
-        totalTextHeight = lines.length * lineHeight;
+    const wrapText = (ctx, text, maxWidth) => {
+        const words = text.split(' ');
+        let lines = [];
+        let currentLine = words[0] || '';
+        for (let i = 1; i < words.length; i++) {
+            const word = words[i];
+            const width = ctx.measureText(currentLine + " " + word).width;
+            if (width < maxWidth) {
+                currentLine += " " + word;
+            } else {
+                lines.push(currentLine);
+                currentLine = word;
+            }
+        }
+        lines.push(currentLine);
+        return lines;
+    };
 
-        // Check if any single word is too wide
-        const longestWord = finalMessage.split(' ').reduce((a, b) => a.length > b.length ? a : b, '');
-        const longestWordWidth = feedbackCtx.measureText(longestWord).width;
+    let lines = [];
+    let lineHeight, totalTextHeight;
 
-        // Check if constraints are violated
-        const tooWide = longestWordWidth > maxWidth;
-        const tooTall = totalTextHeight > maxHeight;
+    while (currentFontSize >= minFontSize) {
+        feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
+        lines = wrapText(feedbackCtx, finalMessage, maxWidth);
+        
+        lineHeight = currentFontSize * LINE_HEIGHT_MULTIPLIER;
+        totalTextHeight = lines.length * lineHeight;
 
-        if (tooWide || tooTall) {
-            currentFontSize = Math.floor(currentFontSize * 0.95); // Shrink by 5% (was 10%)
-            if (currentFontSize < minFontSize) {
-                currentFontSize = minFontSize;
-                break; // We've hit the minimum
-            }
-        } else {
-            break; // It fits!
-        }
-    }
+        const longestWord = finalMessage.split(' ').reduce((a, b) => a.length > b.length ? a : b, '');
+        const longestWordWidth = feedbackCtx.measureText(longestWord).width;
 
-    // 3. Final calculation with the determined font size
-    // If the loop ended by hitting the minimum, we need one last calculation
-    if (currentFontSize === minFontSize) {
-         feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
-         lines = wrapText(feedbackCtx, finalMessage, maxWidth);
-         lineHeight = currentFontSize * LINE_HEIGHT_MULTIPLIER;
-         totalTextHeight = lines.length * lineHeight;
-    }
+        const tooWide = longestWordWidth > maxWidth;
+        const tooTall = totalTextHeight > maxHeight;
 
-    let startY = (canvasHeight / 2) - (totalTextHeight / 2);
-    // FIX: Store the font family along with other details
+        if (tooWide || tooTall) {
+            currentFontSize = Math.floor(currentFontSize * 0.95);
+            if (currentFontSize < minFontSize) {
+                currentFontSize = minFontSize;
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    if (currentFontSize === minFontSize) {
+         feedbackCtx.font = `900 ${currentFontSize}px ${FONT_FAMILY}`;
+         lines = wrapText(feedbackCtx, finalMessage, maxWidth);
+         lineHeight = currentFontSize * LINE_HEIGHT_MULTIPLIER;
+         totalTextHeight = lines.length * lineHeight;
+    }
+
+    let startY = (canvasHeight / 2) - (totalTextHeight / 2);
     lastFeedbackDetails = { lines, lineHeight, startY, fontSize: currentFontSize, fontFamily: FONT_FAMILY };
 
     if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
@@ -3707,15 +3699,18 @@ function showOnCanvasFeedback(message, type = 'info') {
     
     feedbackAnimationId = requestAnimationFrame(animate);
 }
-function hideOnCanvasFeedback() {
+	  function hideOnCanvasFeedback() {
     if (!feedbackCtx || !lastFeedbackDetails) return;
+
+    // --- NEW: Restore the background image ---
+    if (backgroundCanvas) backgroundCanvas.classList.remove('dimmed-for-feedback');
+    // -----------------------------------------
 
     const FADE_TIME = 400;
     const canvasWidth = feedbackCanvas.width / devicePixelRatio;
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
     const TEXT_COLOR = '#111827';
     
-    // FIX: Retrieve the exact font family that was used to show the message
     const { lines, lineHeight, startY, fontSize, fontFamily } = lastFeedbackDetails;
 
     if (feedbackAnimationId) cancelAnimationFrame(feedbackAnimationId);
@@ -3738,7 +3733,7 @@ function hideOnCanvasFeedback() {
         }
 
         feedbackCtx.globalAlpha = currentOpacity;
-        feedbackCtx.font = `900 ${fontSize}px ${fontFamily}`; // Use the stored font family
+        feedbackCtx.font = `900 ${fontSize}px ${fontFamily}`;
         feedbackCtx.fillStyle = TEXT_COLOR;
         feedbackCtx.textAlign = 'center';
         feedbackCtx.textBaseline = 'top';
@@ -3965,110 +3960,91 @@ function logHandwritingAttempt(result) {
     }
 }
 async function checkMathDrawing(isMcqContext = false) {
-    if (!auth.currentUser) {
-        console.error("User is not authenticated.");
-        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
-        throw new Error("User not authenticated.");
-    }
-    try {
-        await auth.currentUser.getIdToken(true);
-    } catch (error) {
-        console.error("Token refresh failed:", error);
-        addChatMessage('AI', '⚠️ Your session has expired. Please refresh and log in again.');
-        throw new Error("Token refresh failed.");
-    }
+    if (!auth.currentUser) {
+        console.error("User is not authenticated.");
+        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
+        throw new Error("User not authenticated.");
+    }
 
-    try {
-        const blankCanvasCheck = document.createElement('canvas');
-        blankCanvasCheck.width = canvas.width;
-        blankCanvasCheck.height = canvas.height;
-        if (canvas.toDataURL() === blankCanvasCheck.toDataURL()) {
-            addChatMessage('AI', "I can't check your work because nothing has been drawn yet. Please try solving the problem on the whiteboard first.");
-            throw new Error("No drawing found on canvas.");
-        }
-    } catch (e) {
-        console.error("Blank canvas check failed:", e.message);
-        throw e;
-    }
+    // Refresh token to ensure validity
+    try { await auth.currentUser.getIdToken(true); } 
+    catch (e) { console.error(e); return; }
 
-    const TXT = getCurrentUIText();
-    nextCheckBtn.disabled = true;
-    nextCheckBtn.textContent = TXT.checking;
-    
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    try {
-        let imageBase64;
-        if (isMcqContext) {
-            imageBase64 = canvas.toDataURL("image/png");
-        } else {
-            const compositeCanvas = document.createElement('canvas');
-            compositeCanvas.width = canvas.width;
-            compositeCanvas.height = canvas.height;
-            const compositeCtx = compositeCanvas.getContext('2d');
-            compositeCtx.drawImage(backgroundCanvas, 0, 0);
-            compositeCtx.drawImage(canvas, 0, 0);
-            imageBase64 = compositeCanvas.toDataURL("image/png");
-        }
+    const TXT = getCurrentUIText();
+    nextCheckBtn.disabled = true;
+    nextCheckBtn.textContent = TXT.checking;
+    
+    // Give UI time to update
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    try {
+        // --- IMAGE 1: THE SOLUTION (Foreground) ---
+        // This captures ONLY the blue ink on a transparent background
+        const userInkBase64 = canvas.toDataURL("image/png");
 
-        const payload = {
-            imageBase64: imageBase64,
-            problemText: currentStageData.problemText || "No problem text provided.",
-            correctAnswer: currentStageData.correctAnswer || "No correct answer provided.",
-            solutionSteps: currentStageData.solutionSteps || "",
-            customInstructions: currentStageData.customInstructions || "",
-            language: currentLang
-        };
+        // --- IMAGE 2: THE CONTEXT (Background) ---
+        // This captures the graph/geometry image exactly as the user sees it
+        let questionContextBase64 = null;
+        if (currentStageData.image && backgroundCanvas) {
+            questionContextBase64 = backgroundCanvas.toDataURL("image/png");
+        }
 
-        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-        const result = await analyzeMathDrawing(payload);
-        const { status, feedback } = result.data;
-	
-        if (status === 'correct') {
-            showOnCanvasFeedback(feedback, undefined, 'success');
-        } else {
-            showOnCanvasFeedback(feedback);
-        }
+        const payload = {
+            // Send distinct images
+            userImage: userInkBase64,
+            questionImage: questionContextBase64, 
+            
+            // Send text context
+            problemText: currentStageData.problemText || "",
+            correctAnswer: currentStageData.correctAnswer || "",
+            solutionSteps: currentStageData.solutionSteps || "",
+            customInstructions: currentStageData.customInstructions || "",
+            language: currentLang
+        };
 
-        if (status === 'correct') {
-            playRandomFeedback('approve');
-            nextCheckBtn.classList.add('correct');
-            
-            const pointsGained = 15;
-            userPoints += pointsGained;
-            sessionPoints += pointsGained;
-            updatePointsDisplay();
-            updateUserPointsInFirestore(pointsGained);
+        const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
+        const result = await analyzeMathDrawing(payload);
+        const { status, feedback } = result.data;
+    
+        // --- Success/Failure Logic (Same as before) ---
+        if (status === 'correct') {
+            showOnCanvasFeedback(feedback, undefined, 'success');
+            playRandomFeedback('approve');
+            nextCheckBtn.classList.add('correct');
+            
+            // Add Points
+            const pointsGained = 15;
+            userPoints += pointsGained;
+            sessionPoints += pointsGained;
+            updatePointsDisplay();
+            updateUserPointsInFirestore(pointsGained);
 
-            if (currentStageData.type === 'question_math_solution') {
-                nextCheckBtn.textContent = TXT.gotIt;
-            }
-            nextCheckBtn.disabled = false;
+            if (currentStageData.type === 'question_math_solution') {
+                nextCheckBtn.textContent = TXT.gotIt;
+            }
+            nextCheckBtn.disabled = false;
+        } else {
+             showOnCanvasFeedback(feedback);
+             playRandomFeedback('disapprove');
+             nextCheckBtn.classList.add('incorrect');
+             
+             setTimeout(() => {
+                clearUserCanvas(); 
+                nextCheckBtn.disabled = false;
+                nextCheckBtn.textContent = TXT.check;
+                nextCheckBtn.classList.remove('incorrect');
+            }, 2500); // Give them time to read the feedback
+        }
 
-        } else {
-            playRandomFeedback('disapprove');
-            nextCheckBtn.classList.add('incorrect');
-            
-            // After showing feedback, clear the canvas and reset the button
-            setTimeout(() => {
-                clearUserCanvas(); // <-- THIS IS THE NEW LINE
-                nextCheckBtn.disabled = false;
-                nextCheckBtn.textContent = TXT.check;
-                nextCheckBtn.classList.remove('incorrect');
-            }, 2000);
-        }
-
-    } catch (error) {
-        console.error("Math analysis failed:", error);
-        addChatMessage('AI', `⚠️ An error occurred during analysis: ${error.message}`);
-        playRandomFeedback('disapprove');
-        
-        nextCheckBtn.disabled = false;
-        nextCheckBtn.textContent = TXT.check;
-        nextCheckBtn.classList.remove('incorrect');
-    }
-}
-/* ========== THELOBOOK FUNCTIONALITY ========== */
+    } catch (error) {
+        console.error("Math analysis failed:", error);
+        addChatMessage('AI', `⚠️ Analysis error: ${error.message}`);
+        playRandomFeedback('disapprove');
+        nextCheckBtn.disabled = false;
+        nextCheckBtn.textContent = TXT.check;
+        nextCheckBtn.classList.remove('incorrect');
+    }
+}/* ========== THELOBOOK FUNCTIONALITY ========== */
         function updateThelobookPageControls() {
         const TXT = getCurrentUIText();
         const totalPages = Math.max(1, thelobookPages.length); // Ensure at least 1 for display
@@ -4314,45 +4290,40 @@ function closeThelobook(savePage = true) {
        
         wasMediaPlayingBeforeThelobook = false; 
     }
-   // REPLACE your existing open/close calculator functions with these
-
-// REPLACE your functions with these corrected versions
-
-function openCalculator() {
+ function openCalculator() {
     if (isCalculatorActive || isThelobookActive || isPageGridVisible) return;
     isCalculatorActive = true;
 
-    // The line that hid the terminal has been REMOVED from here.
-
-    // Pause lesson and capture state
+    // Capture state before opening
     captureMediaState();
 
-    // Set the src only when opening to load it
+    // Load Desmos if empty
     if(calculatorFrame.src === 'about:blank') {
        calculatorFrame.src = 'https://www.desmos.com/calculator';
     }
     
-    // Show the overlay
+    // Show overlay
     calculatorOverlay.classList.remove('calculator-hidden');
     
-    // Blur MCQs if they are visible
+    // Blur MCQs
     if (mcqOptionsContainer && mcqOptionsContainer.style.display !== 'none') {
         mcqOptionsContainer.classList.add('blurred-mcq');
     }
 
-    // Disable main controls
+    // Disable buttons
     if (clearBtn)  clearBtn.disabled  = true;
     if (prevBtn)   prevBtn.disabled   = true;
     if (nextCheckBtn) nextCheckBtn.disabled = true;
+
+    // === NEW: Show the cursor ===
+    document.body.classList.add('cursor-visible');
 }
 
 function closeCalculator() {
     if (!isCalculatorActive) return;
     isCalculatorActive = false;
     
-    // The line that showed the terminal has been REMOVED from here.
-    
-    // Hide the overlay
+    // Hide overlay
     calculatorOverlay.classList.add('calculator-hidden');
     
     // Un-blur MCQs
@@ -4360,34 +4331,76 @@ function closeCalculator() {
         mcqOptionsContainer.classList.remove('blurred-mcq');
     }
     
-    // Resume lesson state
+    // Resume lesson
     resumeMediaState();
+
+    // === NEW: Hide the cursor again ===
+    document.body.classList.remove('cursor-visible');
 }
 function handleKeyDown(event) {
     // 1. Universal Replay Seeking (Highest Priority)
-    if (currentStageTotalDuration > 0 && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    // FIX: Allow seeking if duration exists OR if we are in active replay mode (even with 0 duration)
+    if ((currentStageTotalDuration > 0 || isReplayActive) && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        
         const isReplayActiveStage = currentStageData?.type === 'explanation_with_media' || currentStageData?.type === 'calculator_replay';
+        
         if (isReplayActiveStage || isMediaScrubbingActive) {
-            event.preventDefault(); isMediaScrubbingActive = true;
-            if (currentReplayAnimationId) { cancelAnimationFrame(currentReplayAnimationId); currentReplayAnimationId = null; }
-            const step = 5; const diff = event.key === 'ArrowLeft' ? -step : step;
-            let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, currentStageTotalDuration));
+            event.preventDefault(); 
+            isMediaScrubbingActive = true;
+            
+            if (currentReplayAnimationId) { 
+                cancelAnimationFrame(currentReplayAnimationId); 
+                currentReplayAnimationId = null; 
+            }
+            
+            const step = 5; 
+            const diff = event.key === 'ArrowLeft' ? -step : step;
+            
+            // FIX: If duration is 0 (just a website embed), treat limit as Infinite so we don't get stuck at 0
+            const maxTime = currentStageTotalDuration > 0 ? currentStageTotalDuration : Infinity;
+            
+            let newTime = Math.max(0, Math.min(internalPlaybackTime + diff, maxTime));
             internalPlaybackTime = newTime;
+            
+            // Sync Audio (if it exists)
             if (currentStageAudio) {
                 const audioTargetTime = Math.min(newTime, currentStageAudio.duration > 0.01 ? currentStageAudio.duration - 0.01 : 0);
-                currentStageAudio.currentTime = audioTargetTime;
-                if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) { currentStageAudio.play().catch(() => {}); }
+                if (isFinite(audioTargetTime)) { // Safety check
+                     currentStageAudio.currentTime = audioTargetTime;
+                     if (window.userInteracted && currentStageAudio.paused && audioTargetTime < (currentStageAudio.duration - 0.01)) { 
+                         currentStageAudio.play().catch(() => {}); 
+                     }
+                }
             }
-            if (isReplayActive && replayFrame && replayFrame.contentWindow) { replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*'); }
-            if (currentStageDrawingData && replayCtx) { renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx); }
+            
+            // Send Command to Iframe
+            if (isReplayActive && replayFrame && replayFrame.contentWindow) { 
+                replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: newTime * 1000 }, '*'); 
+            }
+            
+            // Sync Drawing (if it exists)
+            if (currentStageDrawingData && replayCtx) { 
+                renderDrawingAtTime(newTime, currentStageDrawingData, replayCtx); 
+            }
+            
+            // Update UI
             updateMediaProgressBar(newTime, currentStageTotalDuration);
-            lastFrameTimestampForManualAdvance = 0; currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+            lastFrameTimestampForManualAdvance = 0; 
+            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
             return;
         }
     }
 
     // 2. Ignore inputs with modifiers or in text fields
     if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA'].includes(event.target.tagName.toUpperCase())) { return; }
+
+    // --- DEV FEATURE: Force Next Stage ---
+    if (event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        console.log("DEV: Force advancing to next stage via 'S' key.");
+        nextStage();
+        return; // Skip all other key handling
+    }
 
     // 3. Handle overlay key presses
     if (isPageGridVisible) {
@@ -4412,14 +4425,18 @@ function handleKeyDown(event) {
     const isMcqActive = !!(currentStageData && currentStageData.type === "explanation_with_mcq" && mcqDetails && mcqDetails.choices);
 
     if (isMcqActive && !isMcqAnsweredCorrectly) {
-        event.preventDefault();
-        const optionCount = mcqDetails.choices.length;
-        let newIndex = selectedMcqIndex;
+        // Only prevent default if we are actually using the arrows for MCQ
+        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+             event.preventDefault();
+             const optionCount = mcqDetails.choices.length;
+             let newIndex = selectedMcqIndex;
 
-        if (event.key === 'ArrowRight') { newIndex = (selectedMcqIndex + 1) % optionCount; } 
-        else if (event.key === 'ArrowLeft') { newIndex = (selectedMcqIndex - 1 + optionCount) % optionCount; }
-        
-        updateMcqSelectionVisuals(newIndex);
+             if (event.key === 'ArrowRight') { newIndex = (selectedMcqIndex + 1) % optionCount; } 
+             else if (event.key === 'ArrowLeft') { newIndex = (selectedMcqIndex - 1 + optionCount) % optionCount; }
+             
+             updateMcqSelectionVisuals(newIndex);
+             return;
+        }
         
         if (event.key !== ' ' && event.key !== 'Enter') { return; }
     }
@@ -4444,7 +4461,7 @@ function handleKeyDown(event) {
                 break;
         }
     }
-}	  
+}
 	  window.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
     e.preventDefault();
@@ -4456,8 +4473,7 @@ window.addEventListener('wheel', function(e) {
     e.preventDefault();
   }
 }, { passive: false });
-	 // REPLACE the old clearUserCanvas function with this one
-function clearUserCanvas() {
+	function clearUserCanvas() {
     if (isPageGridVisible) return;
 
     if (isThelobookActive) {
@@ -4473,18 +4489,31 @@ function clearUserCanvas() {
     if (ctx) {
         ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
     }
+    
+    // Also clear the capture canvas used for AI
+    if (captureCtx && captureCanvas) {
+         captureCtx.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+    }
 
     userDrawingOccurred = false;
-
-    // --- ADD THIS ---
-    // Also clear the minimap canvas
-    if (minimapCtx) {
-        minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
-    }
 }
     // REPLACE your existing initApp function with this entire block
 
 function initApp() {
+	// Listen for Spacebar signal from the Iframe
+    window.addEventListener('message', (event) => {
+        if (event.data === 'TRIGGER_SPACE_ACTION') {
+            // 1. Steal focus back to the main window
+            window.focus(); 
+            
+            // 2. Trigger the main action button
+            if (dashboardBtn && dashboardBtn.classList.contains('visible')) {
+                dashboardBtn.click();
+            } else if (nextCheckBtn && !nextCheckBtn.disabled) {
+                handleNextCheckClick();
+            }
+        }
+    });
     // NEW: Add this check at the very top of the function
    
     // --- The rest of your original initApp function continues below ---
