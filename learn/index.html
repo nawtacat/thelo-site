@@ -2417,15 +2417,17 @@ const safetyBuffer = 2; // Fixed small buffer instead of percentage
   // ---- build lines ----
   const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
   const maxWidth = canvasW * widthFraction;
-  const lineGap = 8;
+  
+  // FIX: Enforce a standard line height (1.5x font size is a good standard)
+  const fixedLineHeight = fontSize * 1.5;
 
   const lines = [];
-  let line = { tokens: [], width: 0, height: fontSize };
+  // Initialize line with the fixed height immediately
+  let line = { tokens: [], width: 0, height: fixedLineHeight }; 
 
   for (const t of tokens) {
     let width = t.width, height = t.height, drawW = t.drawW ?? t.width, drawH = t.drawH ?? t.height;
 
-    // Scale down if a single math element is wider than the whole screen
     if (t.type === 'math' && width > maxWidth) {
       const s = maxWidth / width;
       width = Math.floor(width * s);
@@ -2437,13 +2439,14 @@ const safetyBuffer = 2; // Fixed small buffer instead of percentage
 
     if (line.tokens.length && line.width + width > maxWidth) {
       lines.push(line);
-      line = { tokens: [], width: 0, height: fontSize };
+      // Reset new line to fixed height
+      line = { tokens: [], width: 0, height: fixedLineHeight };
     }
-    // Don't start a line with a space
+    
     if (!(line.tokens.length === 0 && tok.isSpace)) {
       line.tokens.push(tok);
       line.width += width;
-      if (height > line.height) line.height = height;
+      // FIX: Removed the logic that expanded line.height based on content
     }
   }
   if (line.tokens.length) lines.push(line);
@@ -2461,8 +2464,9 @@ const safetyBuffer = 2; // Fixed small buffer instead of percentage
   for (const L of lines) {
     let x = (canvasW - L.width) / 2;
     for (const t of L.tokens) {
-      // Vertically center tokens in the line
-      const topY = curY + (L.height - t.height) / 2;
+      // FIX: Center items based on the fixed line height
+      const topY = curY + (fixedLineHeight - t.height) / 2;
+      
       if (t.type === 'text') {
         bgCtx.fillText(t.content, x, topY);
       } else {
@@ -2470,14 +2474,14 @@ const safetyBuffer = 2; // Fixed small buffer instead of percentage
       }
       x += t.width;
     }
-    curY += L.height + lineGap;
+    // FIX: Advance Y by fixed height only (removed lineGap as it is built into the 1.5 multiplier)
+    curY += fixedLineHeight; 
   }
 
   bgCtx.textAlign = prevAlign || 'center';
   bgCtx.textBaseline = prevBase || 'top';
   bgCtx.fillStyle = prevFill || fontColor;
 }
-
 
 	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
 
