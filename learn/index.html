@@ -2295,11 +2295,10 @@ async function ensureHeadlineFontsLoaded() {
     }
 }
 // Updated: Robust Mixed text + KaTeX renderer
-// Updated: Robust Mixed text + KaTeX renderer with Font Enforcement
 async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   if (!headline || !bgCtx) return;
 
-  // Ensure fonts are ready
+  // Ensure fonts are ready before we start measuring anything
   await ensureHeadlineFontsLoaded();
 
   // ---- config ----
@@ -2307,11 +2306,11 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   const yNudge = opts.yNudge ?? -14;
   const fontSize = 20;
   const mathFontSize = 22;
-  
-  // NEW: Accept an explicit font string, or fallback to the context's current font
-  const activeFont = opts.font || bgCtx.font;
 
-  const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim() || '#111827';
+  const fontColor =
+    getComputedStyle(document.documentElement)
+      .getPropertyValue('--thelo-text')
+      .trim() || '#111827';
 
   // KaTeX CSS with embedded fonts
   const katexCSS = await getKatexCSSWithEmbeddedFonts();
@@ -2338,6 +2337,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   measureHost.style.visibility = 'hidden';
   measureHost.style.left = '-9999px';
   measureHost.style.top = '-9999px';
+  // CRITICAL: Force the measure host to be wide enough
   measureHost.style.whiteSpace = 'nowrap'; 
   measureHost.style.width = 'max-content';
   document.body.appendChild(measureHost);
@@ -2347,10 +2347,6 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   for (const seg of segments) {
     if (seg.type === 'text') {
       const parts = seg.content.match(/(\s+|[^\s]+)/g) || [];
-      
-      // CRITICAL FIX: Ensure context uses the correct font before measuring
-      bgCtx.font = activeFont;
-
       for (const p of parts) {
         tokens.push({
           type: 'text',
@@ -2367,6 +2363,7 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
     try {
       const html = katex.renderToString(seg.content, { throwOnError: false, output: 'html' });
 
+      // Clean host for this token
       while (measureHost.firstChild) measureHost.removeChild(measureHost.firstChild);
 
       const style = document.createElement('style');
@@ -2376,18 +2373,22 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       const tmp = document.createElement('div');
       tmp.style.color = fontColor;
       tmp.style.fontSize = `${mathFontSize}px`;
-      tmp.style.display = 'inline-block'; 
+      tmp.style.display = 'inline-block'; // Ensure tight wrap
       tmp.innerHTML = html;
       measureHost.appendChild(tmp);
 
       const katexEl = tmp.querySelector('.katex') || tmp;
       const rect = katexEl.getBoundingClientRect();
 
-      const basePad = 4;  
-      const safetyBuffer = 2; 
+      // CRITICAL FIX: Robust Padding
+      // If font loads late, rect might be narrow. We add a base padding PLUS 
+      // a percentage safety buffer.
+		const basePad = 4;  // Reduced from 15 to 4
+const safetyBuffer = 2; // Fixed small buffer instead of percentage
       const w = Math.ceil(rect.width) + basePad + safetyBuffer;
       const h = Math.ceil(rect.height) + basePad;
 
+      // Generate SVG with the calculated safer dimensions
       const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
           <style>${katexCSS}\n${extraRules}</style>
@@ -2402,11 +2403,10 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
       const image = new Image();
       image.src = dataUrl;
-      await image.decode(); 
+      await image.decode(); // Wait for image to be paint-ready
 
       tokens.push({ type: 'math', image, width: w, height: h, drawW: w, drawH: h });
     } catch (e) {
-      bgCtx.font = activeFont; // Ensure fallback uses correct font
       const w = bgCtx.measureText(seg.content).width;
       tokens.push({ type: 'text', content: seg.content, width: w, height: fontSize, isSpace: false });
     }
@@ -2417,9 +2417,12 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   // ---- build lines ----
   const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
   const maxWidth = canvasW * widthFraction;
+  
+  // FIX: Enforce a standard line height (1.5x font size is a good standard)
   const fixedLineHeight = fontSize * 1.5;
 
   const lines = [];
+  // Initialize line with the fixed height immediately
   let line = { tokens: [], width: 0, height: fixedLineHeight }; 
 
   for (const t of tokens) {
@@ -2436,12 +2439,14 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
 
     if (line.tokens.length && line.width + width > maxWidth) {
       lines.push(line);
+      // Reset new line to fixed height
       line = { tokens: [], width: 0, height: fixedLineHeight };
     }
     
     if (!(line.tokens.length === 0 && tok.isSpace)) {
       line.tokens.push(tok);
       line.width += width;
+      // FIX: Removed the logic that expanded line.height based on content
     }
   }
   if (line.tokens.length) lines.push(line);
@@ -2450,19 +2455,16 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
   const prevAlign = bgCtx.textAlign;
   const prevBase = bgCtx.textBaseline;
   const prevFill = bgCtx.fillStyle;
-  const prevFont = bgCtx.font; // Save previous font
 
   bgCtx.fillStyle = fontColor;
   bgCtx.textAlign = 'left';
   bgCtx.textBaseline = 'top';
-  
-  // CRITICAL: Set font one last time before drawing
-  bgCtx.font = activeFont;
 
   let curY = y + yNudge;
   for (const L of lines) {
     let x = (canvasW - L.width) / 2;
     for (const t of L.tokens) {
+      // FIX: Center items based on the fixed line height
       const topY = curY + (fixedLineHeight - t.height) / 2;
       
       if (t.type === 'text') {
@@ -2472,14 +2474,13 @@ async function renderComplexHeadline(bgCtx, headline, y, opts = {}) {
       }
       x += t.width;
     }
+    // FIX: Advance Y by fixed height only (removed lineGap as it is built into the 1.5 multiplier)
     curY += fixedLineHeight; 
   }
 
-  // Restore state
   bgCtx.textAlign = prevAlign || 'center';
   bgCtx.textBaseline = prevBase || 'top';
   bgCtx.fillStyle = prevFill || fontColor;
-  bgCtx.font = prevFont; 
 }
 
 	  function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
@@ -2820,35 +2821,45 @@ function renderStageUI(index, isResize = false) {
             if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
         }
 
-        // --- Helper: Draw Headline (Safety Version) ---
+        // --- Helper: Draw Headline (FIXED) ---
+        // --- Helper: Draw Headline (FIXED WITH WARM-UP) ---
         async function drawHeadlineText() {
             const padding = 27;
             let headlineCurrentY = padding * 2;
             const headlineText = currentStageData.headline || '';
 
             if (headlineText && bgCtx) {
-                const fontFamily = currentLang === 'en' ? "'Manrope'" : "'Montserrat Arm'";
-                // Explicit font string to prevent fallback issues
-                const fontString = `400 20px ${fontFamily}, system-ui, sans-serif`;
-
-                // 1. Pre-load check
+                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+                
+                // 1. Re-apply the font setting immediately 
+                bgCtx.font = `20px ${fontFamily}`;
+                
+                // 2. Wait for the browser to confirm this specific text can be rendered
                 if (document.fonts && document.fonts.load) {
-                    try { await document.fonts.load(fontString, headlineText); } 
-                    catch (e) {}
+                    try {
+                        await document.fonts.load(`20px ${fontFamily}`, headlineText);
+                    } catch (e) {
+                        console.warn("Font load wait skipped", e);
+                    }
                 }
 
-                // 2. Set font explicitly on context
-                bgCtx.font = fontString;
+                // === THE FIX: CANVAS WARM-UP ===
+                // We draw the text invisibly off-screen. This forces the browser 
+                // to calculate metrics and rasterize the glyphs immediately, 
+                // preventing the 'stupid spacing' on the first render.
+                bgCtx.save();
+                bgCtx.globalAlpha = 0; // Completely invisible
+                bgCtx.fillText(headlineText, 0, -100); // Draw off-screen
+                bgCtx.restore();
+                // ==============================
                 
+                // 3. Force a single frame delay to let the warm-up settle
+                await new Promise(r => requestAnimationFrame(r));
+
                 await ensureHeadlineFontsLoaded();
-                
-                // 3. Render with explicit font option
-                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10, {
-                    font: fontString
-                });
+                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
             }
         }
-
         // --- Helper: Draw Image ---
         function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
             const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
@@ -2994,6 +3005,7 @@ function renderStageUI(index, isResize = false) {
         }
 
         // --- MAIN RENDERING LOGIC ---
+        // Double RAF + special pre-warm for math question stages
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
                 forceSyncCanvasSize();
@@ -3007,15 +3019,6 @@ function renderStageUI(index, isResize = false) {
                         forceSyncCanvasSize(); 
                         drawImageWithCorrectLayout(bgCtx, img, currentStageData);
                         await drawHeadlineText();
-                        
-                        // === THE FIX: SAFETY REDRAW ===
-                        // Wait 100ms and force a headline redraw. This catches cases where
-                        // the font wasn't fully ready during the first pass.
-                        setTimeout(() => {
-                             drawHeadlineText();
-                        }, 100);
-                        // ===============================
-
                         setupStageContent();
                         resolve();
                     };
@@ -3027,12 +3030,6 @@ function renderStageUI(index, isResize = false) {
                     };
                 } else {
                     await drawHeadlineText();
-                    
-                    // Same safety redraw for non-image stages, just in case
-                    setTimeout(() => {
-                         drawHeadlineText();
-                    }, 100);
-                    
                     setupStageContent();
                     resolve();
                 }
