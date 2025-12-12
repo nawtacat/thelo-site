@@ -2820,72 +2820,35 @@ function renderStageUI(index, isResize = false) {
             if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
         }
 
-        // --- Helper: Draw Headline (FIXED) ---
-        // --- Helper: Draw Headline (FIXED WITH METRIC CHECK) ---
+        // --- Helper: Draw Headline (Safety Version) ---
         async function drawHeadlineText() {
             const padding = 27;
             let headlineCurrentY = padding * 2;
             const headlineText = currentStageData.headline || '';
 
             if (headlineText && bgCtx) {
-                // Determine the correct font string
-                const family = currentLang === 'en' ? "'Manrope'" : "'Montserrat Arm'";
-                const targetFont = `400 20px ${family}, system-ui, sans-serif`;
+                const fontFamily = currentLang === 'en' ? "'Manrope'" : "'Montserrat Arm'";
+                // Explicit font string to prevent fallback issues
+                const fontString = `400 20px ${fontFamily}, system-ui, sans-serif`;
 
-                // --- 1. THE METRIC CHECKER ---
-                // We compare the width of the headline in 'serif' (default) vs our target font.
-                // We loop until they are different, proving the custom font is active.
-                const checkFontIsReady = async () => {
-                    const testText = headlineText.substring(0, 10); // Check first few chars
-                    let attempts = 0;
-                    
-                    while (attempts < 25) { // Try for approx 500ms max
-                        bgCtx.save();
-                        
-                        // Measure in Serif (Basline)
-                        bgCtx.font = "20px serif";
-                        const w1 = bgCtx.measureText(testText).width;
-                        
-                        // Measure in Target Font
-                        bgCtx.font = targetFont;
-                        const w2 = bgCtx.measureText(testText).width;
-                        
-                        bgCtx.restore();
-
-                        // If widths differ significantly, the custom font is rendering!
-                        if (Math.abs(w1 - w2) > 0.5) {
-                            return true;
-                        }
-                        
-                        // Wait 20ms and try again
-                        await new Promise(r => setTimeout(r, 20));
-                        attempts++;
-                    }
-                    console.warn("Font metric check timed out - rendering anyway");
-                    return false;
-                };
-
-                // --- 2. EXECUTE WARMUP ---
-                // Force browser to acknowledge the font
+                // 1. Pre-load check
                 if (document.fonts && document.fonts.load) {
-                    try { await document.fonts.load(targetFont, headlineText); } catch(e){}
+                    try { await document.fonts.load(fontString, headlineText); } 
+                    catch (e) {}
                 }
-                
-                // Wait for the metrics to physically change on the canvas
-                await checkFontIsReady();
 
-                // --- 3. FINAL RENDER ---
-                // Explicitly set the font on the context one last time
-                bgCtx.font = targetFont; 
+                // 2. Set font explicitly on context
+                bgCtx.font = fontString;
                 
                 await ensureHeadlineFontsLoaded();
                 
-                // Pass the verified font string to the renderer
+                // 3. Render with explicit font option
                 await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10, {
-                    font: targetFont
+                    font: fontString
                 });
             }
         }
+
         // --- Helper: Draw Image ---
         function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
             const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
@@ -3031,7 +2994,6 @@ function renderStageUI(index, isResize = false) {
         }
 
         // --- MAIN RENDERING LOGIC ---
-        // Double RAF + special pre-warm for math question stages
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
                 forceSyncCanvasSize();
@@ -3045,6 +3007,15 @@ function renderStageUI(index, isResize = false) {
                         forceSyncCanvasSize(); 
                         drawImageWithCorrectLayout(bgCtx, img, currentStageData);
                         await drawHeadlineText();
+                        
+                        // === THE FIX: SAFETY REDRAW ===
+                        // Wait 100ms and force a headline redraw. This catches cases where
+                        // the font wasn't fully ready during the first pass.
+                        setTimeout(() => {
+                             drawHeadlineText();
+                        }, 100);
+                        // ===============================
+
                         setupStageContent();
                         resolve();
                     };
@@ -3056,6 +3027,12 @@ function renderStageUI(index, isResize = false) {
                     };
                 } else {
                     await drawHeadlineText();
+                    
+                    // Same safety redraw for non-image stages, just in case
+                    setTimeout(() => {
+                         drawHeadlineText();
+                    }, 100);
+                    
                     setupStageContent();
                     resolve();
                 }
