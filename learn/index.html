@@ -2822,6 +2822,7 @@ function renderStageUI(index, isResize = false) {
         }
 
         // --- Helper: Draw Headline (FIXED) ---
+        // --- Helper: Draw Headline (FIXED WITH WARM-UP) ---
         async function drawHeadlineText() {
             const padding = 27;
             let headlineCurrentY = padding * 2;
@@ -2830,12 +2831,10 @@ function renderStageUI(index, isResize = false) {
             if (headlineText && bgCtx) {
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
                 
-                // === FIX START: FONT METRIC SYNC ===
-                // 1. Re-apply the font setting immediately (it might have been lost on canvas resize)
+                // 1. Re-apply the font setting immediately 
                 bgCtx.font = `20px ${fontFamily}`;
                 
-                // 2. Explicitly wait for the browser to confirm this specific text can be rendered
-                // This ensures 'measureText' will use the correct width calculations.
+                // 2. Wait for the browser to confirm this specific text can be rendered
                 if (document.fonts && document.fonts.load) {
                     try {
                         await document.fonts.load(`20px ${fontFamily}`, headlineText);
@@ -2843,16 +2842,24 @@ function renderStageUI(index, isResize = false) {
                         console.warn("Font load wait skipped", e);
                     }
                 }
+
+                // === THE FIX: CANVAS WARM-UP ===
+                // We draw the text invisibly off-screen. This forces the browser 
+                // to calculate metrics and rasterize the glyphs immediately, 
+                // preventing the 'stupid spacing' on the first render.
+                bgCtx.save();
+                bgCtx.globalAlpha = 0; // Completely invisible
+                bgCtx.fillText(headlineText, 0, -100); // Draw off-screen
+                bgCtx.restore();
+                // ==============================
                 
-                // 3. Force a single frame delay to let the layout engine catch up
+                // 3. Force a single frame delay to let the warm-up settle
                 await new Promise(r => requestAnimationFrame(r));
-                // === FIX END ===
 
                 await ensureHeadlineFontsLoaded();
                 await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
             }
         }
-
         // --- Helper: Draw Image ---
         function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
             const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
