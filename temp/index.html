@@ -2783,6 +2783,7 @@ function openReplayPlayer() {
 
 function renderStageUI(index, isResize = false) {
     return new Promise(async (resolve, reject) => {
+        // 1. Basic Validation & Cleanup
         if (isLessonLoading || index < 0 || index >= lessonStages.length) {
             if (index < 0) {
                 if (nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = getCurrentUIText().start; }
@@ -2851,36 +2852,19 @@ function renderStageUI(index, isResize = false) {
             }
         }
 
+        // --- Updated Draw Headline Helper ---
         async function drawHeadlineText() {
             const padding = 27;
             let headlineCurrentY = padding * 2;
             const headlineText = currentStageData.headline || '';
 
             if (headlineText && bgCtx && bgCtx.canvas.width > 0) {
-                const fontFamily = currentLang === 'en' ? "'Manrope'" : "'Montserrat Arm'";
-                const fullFontString = `20px ${fontFamily}`;
+                // FORCE: Reset font on context to ensure it hasn't been lost
+                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+                bgCtx.font = `20px ${fontFamily}`;
                 
-                // 1. Set the font on the context
-                bgCtx.font = fullFontString;
-
-                // 2. FORCE the browser to load this specific font string before proceeding
-                // This fixes the issue where it falls back to Arial after an iframe close
-                try {
-                    await document.fonts.load(fullFontString);
-                } catch(e) {
-                    console.warn("Font load pre-check failed, continuing anyway", e);
-                }
-
-                // 3. Double-check generic fonts via your existing helper
+                // Double check fonts are loaded
                 await ensureHeadlineFontsLoaded();
-
-                // 4. "Warm up" the canvas (Hack: Draw invisible text to force GPU font texture upload)
-                bgCtx.save();
-                bgCtx.globalAlpha = 0;
-                bgCtx.fillText(".", 0, 0);
-                bgCtx.restore();
-
-                // 5. Now render the actual headline
                 await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
             }
         }
@@ -3014,21 +2998,43 @@ function renderStageUI(index, isResize = false) {
             if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
 
+        // --- START OF FIX: Image / Headline Drawing Logic ---
+        
+        // Check if there is an image to load
         if (currentStageData.image && bgCtx) {
             const img = new Image();
             img.crossOrigin = "Anonymous";
             img.src = currentStageData.image;
+            
             img.onload = async () => {
-    drawImageWithCorrectLayout(bgCtx, img, currentStageData);
-    
-    // Give the layout engine a moment to settle after drawing the image
-    requestAnimationFrame(async () => {
-         await new Promise(r => setTimeout(r, 50));
-         await drawHeadlineText();
-         setupStageContent();
-         resolve();
-    });
-};
+                // FORCE: Ensure canvas size is locked in before drawing image
+                const rect = boardWrapper.getBoundingClientRect();
+                const cssWidth = Math.max(1, Math.floor(rect.width));
+                const cssHeight = Math.max(1, Math.floor(rect.height));
+                
+                // Only reset if they differ significantly to avoid flicker
+                if (Math.abs(backgroundCanvas.width - cssWidth * devicePixelRatio) > 2) {
+                     [backgroundCanvas, replayCanvas, canvas].forEach(c => {
+                        if (c) {
+                            c.width = Math.floor(cssWidth * devicePixelRatio);
+                            c.height = Math.floor(cssHeight * devicePixelRatio);
+                            c.style.width = `${cssWidth}px`;
+                            c.style.height = `${cssHeight}px`;
+                        }
+                    });
+                    setupContexts(); 
+                }
+
+                drawImageWithCorrectLayout(bgCtx, img, currentStageData);
+                
+                // Small delay to let image render before text logic
+                await new Promise(r => requestAnimationFrame(r));
+                
+                await drawHeadlineText();
+                setupStageContent();
+                resolve();
+            };
+            
             img.onerror = async () => {
                 console.error("Failed to load stage image:", currentStageData.image);
                 await drawHeadlineText();
@@ -3036,16 +3042,37 @@ function renderStageUI(index, isResize = false) {
                 resolve();
             };
         } else {
-    // Force a browser repaint frame before measuring text
-    requestAnimationFrame(async () => {
-        // Optional: extra safety 50ms delay for slower tablets
-        await new Promise(r => setTimeout(r, 50)); 
-        
-        await drawHeadlineText();
-        setupStageContent();
-        resolve();
-    });
-}
+            // === NO IMAGE PATH: FORCE RESIZE/REFLOW HERE ===
+            
+            // 1. Force Browser Layout Calculation
+            const forceReflow = boardWrapper.offsetHeight; 
+
+            // 2. Wait for next frame
+            await new Promise(r => requestAnimationFrame(r));
+
+            // 3. Manually Sync Canvas to CSS Dimensions
+            // This replicates the logic of 'resizeCanvases' instantly
+            const rect = boardWrapper.getBoundingClientRect();
+            const cssWidth = Math.max(1, Math.floor(rect.width));
+            const cssHeight = Math.max(1, Math.floor(rect.height));
+            
+            [backgroundCanvas, replayCanvas, canvas].forEach(c => {
+                if (c) {
+                    c.width = Math.floor(cssWidth * devicePixelRatio);
+                    c.height = Math.floor(cssHeight * devicePixelRatio);
+                    c.style.width = `${cssWidth}px`;
+                    c.style.height = `${cssHeight}px`;
+                }
+            });
+            
+            // 4. Reset Contexts (Font, Scale, Color)
+            setupContexts();
+
+            // 5. Draw
+            await drawHeadlineText();
+            setupStageContent();
+            resolve();
+        }
     });
 }
 	  function transitionToStage(newIndex) {
