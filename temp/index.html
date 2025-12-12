@@ -2814,6 +2814,8 @@ function renderStageUI(index, isResize = false) {
         isStudentInputAllowed = currentStageData.studentInput === true;
 
         if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
+        
+        // Don't clear immediately if we want a smooth cross-fade, but for now standard clear
         if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
         
         if (!isResize) {
@@ -2821,22 +2823,27 @@ function renderStageUI(index, isResize = false) {
             if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
         }
 
-        // --- Helper: Draw Headline ---
-        async function drawHeadlineText() {
+        // --- Helper: Draw Headline (Seamless Version) ---
+        async function drawHeadlineText(isVisible = true) {
             const padding = 27;
             let headlineCurrentY = padding * 2;
             const headlineText = currentStageData.headline || '';
 
             if (headlineText && bgCtx) {
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-                const fullFont = `20px ${fontFamily}`;
-                bgCtx.font = fullFont;
+                bgCtx.font = `20px ${fontFamily}`;
                 
-                // Explicitly wait for this specific font to be ready
-                try { await document.fonts.load(fullFont); } catch(e) {}
-
-                await ensureHeadlineFontsLoaded();
-                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
+                if (!isVisible) {
+                    // WARM UP MODE: Draw invisible text to force layout/font load
+                    bgCtx.save();
+                    bgCtx.globalAlpha = 0; 
+                    await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
+                    bgCtx.restore();
+                } else {
+                    // VISIBLE MODE: Draw for real
+                    await ensureHeadlineFontsLoaded();
+                    await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
+                }
             }
         }
 
@@ -2881,28 +2888,6 @@ function renderStageUI(index, isResize = false) {
                 });
                 setupContexts();
             }
-        }
-
-        // --- Helper: The "Safety Re-render" ---
-        // This function clears the background canvas and redraws everything.
-        // It fixes FOUT (Flash of Unstyled Text) by running after the font is guaranteed to be stable.
-        async function performSafetyRedraw() {
-            // Ensure we are still on the same stage!
-            if (currentStageIndex !== index) return;
-
-            // Clear Background Canvas Only (Preserves student drawing on 'board' canvas)
-            bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
-            
-            // Redraw Image
-            if (currentStageData.image) {
-                 const img = new Image();
-                 img.crossOrigin = "Anonymous";
-                 img.src = currentStageData.image;
-                 await new Promise(r => { img.onload = r; img.onerror = r; }); // Wait for load (likely cached)
-                 drawImageWithCorrectLayout(bgCtx, img, currentStageData);
-            }
-            // Redraw Headline
-            await drawHeadlineText();
         }
 
         // --- Helper: Setup UI Buttons ---
@@ -3006,41 +2991,50 @@ function renderStageUI(index, isResize = false) {
             if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
 
-        // --- MAIN RENDERING LOGIC ---
+        // --- MAIN RENDERING LOGIC (Seamless) ---
+        // 1. Wait for double frame to ensure DOM is settled
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
                 forceSyncCanvasSize();
 
-                if (currentStageData.image && bgCtx) {
-                    const img = new Image();
+                // 2. WARM UP (Invisible Draw)
+                // This forces font loading and layout calc without the user seeing the "wrong" font
+                if (currentStageData.type === 'question_math_solution') {
+                     const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+                     bgCtx.font = `20px ${fontFamily}`;
+                     // Draw invisible punctuation to trigger font texture upload
+                     bgCtx.fillStyle = 'rgba(0,0,0,0)'; 
+                     bgCtx.fillText('.:,;', -50, -50); 
+                }
+
+                // 3. Prepare Image (if any)
+                let img = null;
+                if (currentStageData.image) {
+                    img = new Image();
                     img.crossOrigin = "Anonymous";
                     img.src = currentStageData.image;
-                    
-                    img.onload = async () => {
-                        forceSyncCanvasSize(); 
-                        drawImageWithCorrectLayout(bgCtx, img, currentStageData);
-                        await drawHeadlineText();
-                        setupStageContent();
-                        resolve();
-
-                        // === THE FIX: Safety Redraw after 100ms ===
-                        setTimeout(() => performSafetyRedraw(), 100);
-                    };
-                    img.onerror = async () => {
-                        console.error("Failed to load stage image:", currentStageData.image);
-                        await drawHeadlineText();
-                        setupStageContent();
-                        resolve();
-                        // === THE FIX: Safety Redraw after 100ms ===
-                        setTimeout(() => performSafetyRedraw(), 100);
-                    };
-                } else {
-                    await drawHeadlineText();
-                    setupStageContent();
-                    resolve();
-                    // === THE FIX: Safety Redraw after 100ms ===
-                    setTimeout(() => performSafetyRedraw(), 100);
+                    // Wait for load, but don't draw yet
+                    try { await new Promise((r, j) => { img.onload = r; img.onerror = r; }); } catch(e){}
                 }
+
+                // 4. Force a tiny wait (50ms) to let the font subsystem catch up to the "Invisible Draw" above
+                await new Promise(r => setTimeout(r, 50));
+
+                // 5. FINAL VISIBLE DRAW
+                // Now we clear the canvas one last time and draw everything visible in one go.
+                // This eliminates the "flash" of incorrect text.
+                bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+                
+                if (img) {
+                    forceSyncCanvasSize(); 
+                    drawImageWithCorrectLayout(bgCtx, img, currentStageData);
+                }
+                
+                // Draw the headline visible now
+                await drawHeadlineText(true);
+                
+                setupStageContent();
+                resolve();
             });
         });
     });
