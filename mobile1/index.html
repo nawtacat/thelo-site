@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Thelo Mobile</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+
+    <style>
+        :root {
+            --thelo-blue: #2563eb;
+            --bg-color: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Manrope', sans-serif;
+            /* Critical for mobile gestures */
+            touch-action: none; 
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        /* Fullscreen Canvas */
+        #mobileCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: crosshair;
+        }
+
+        /* --- Grid Background Pattern (Infinite Feel) --- */
+        #backgroundLayer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: -1;
+            /* Simple dot pattern to show movement */
+            background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* --- The Blur Menu (Hidden by default) --- */
+        #blurMenu {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: 1000;
+            
+            /* The Glassmorphism Effect */
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        #blurMenu.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .menu-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+            text-align: center;
+            transform: scale(0.95);
+            transition: transform 0.2s;
+        }
+
+        #blurMenu.visible .menu-container {
+            transform: scale(1);
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .menu-btn {
+            width: 100px;
+            height: 100px;
+            border-radius: 24px;
+            border: none;
+            background: #f3f4f6;
+            color: #1f2937;
+            font-family: inherit;
+            font-weight: 700;
+            font-size: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+
+        .menu-btn:active {
+            transform: scale(0.95);
+        }
+
+        .menu-btn.check { background: var(--thelo-blue); color: white; }
+        .menu-btn.clear { background: #fee2e2; color: #ef4444; }
+
+        .menu-btn span { font-size: 2rem; }
+
+        .menu-hint {
+            color: #9ca3af;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+        
+        /* Debug / Status Indicator (Optional, remove for production) */
+        #debug {
+            position: absolute; bottom: 10px; left: 10px;
+            font-size: 10px; color: #ccc; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="backgroundLayer"></div>
+
+    <canvas id="mobileCanvas"></canvas>
+
+    <div id="blurMenu">
+        <div class="menu-container">
+            <div class="menu-grid">
+                <button class="menu-btn clear" onclick="clearCanvas()">
+                    <span>🗑️</span> Clear
+                </button>
+                <button class="menu-btn check" onclick="handleCheck()">
+                    <span>✅</span> Check
+                </button>
+                <button class="menu-btn" onclick="prevStage()">
+                    <span>↩️</span> Back
+                </button>
+                <button class="menu-btn" onclick="nextStage()">
+                    <span>➡️</span> Skip
+                </button>
+            </div>
+            <div class="menu-hint">Tap outside to resume</div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. CONFIG & SETUP ---
+        const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const functions = firebase.functions();
+
+        const canvas = document.getElementById('mobileCanvas');
+        const ctx = canvas.getContext('2d');
+        const menu = document.getElementById('blurMenu');
+        
+        // --- 2. STATE MANAGEMENT ---
+        
+        // The Virtual Camera (World Space)
+        const Camera = { x: 0, y: 0, zoom: 1.0 };
+        
+        // The Vector Store (Stores paths, not pixels)
+        let strokes = []; 
+        let currentStroke = null;
+        
+        // Gesture State
+        let activeTouches = 0;
+        let lastTapTime = 0;
+        let isMenuOpen = false;
+        let isPanning = false;
+        let hasMovedSignificantly = false;
+        
+        // Panning/Zooming helpers
+        let lastPanPoint = { x: 0, y: 0 };
+        let lastPinchDist = 0;
+
+        // --- 3. CANVAS & RESIZING ---
+        
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            ctx.scale(dpr, dpr);
+            // Re-render immediately
+            requestAnimationFrame(renderScene);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- 4. COORDINATE MATH ---
+
+        function screenToWorld(sx, sy) {
+            return {
+                x: (sx - Camera.x) / Camera.zoom,
+                y: (sy - Camera.y) / Camera.zoom
+            };
+        }
+
+        // --- 5. GESTURE CONTROLLER ---
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (isMenuOpen) return;
+            e.preventDefault();
+
+            activeTouches = e.touches.length;
+            hasMovedSignificantly = false;
+
+            if (activeTouches === 1) {
+                // Potential Drawing
+                const t = e.touches[0];
+                const worldPos = screenToWorld(t.clientX, t.clientY);
+                
+                // Start a stroke (but wait for move to confirm)
+                currentStroke = {
+                    points: [worldPos],
+                    color: '#2563eb', // Thelo Blue
+                    width: 4 / Camera.zoom // Consistent visual width regardless of zoom
+                };
+                strokes.push(currentStroke);
+
+            } else if (activeTouches === 2) {
+                // Panning Mode
+                // If we started a stroke with 1 finger, delete it now
+                if (currentStroke) {
+                    strokes.pop();
+                    currentStroke = null;
+                }
+                
+                isPanning = true;
+                lastPanPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                
+                // Initial Pinch Distance
+                lastPinchDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (isMenuOpen) return;
+            e.preventDefault();
+            hasMovedSignificantly = true;
+
+            if (activeTouches === 1 && currentStroke) {
+                // Drawing
+                const t = e.touches[0];
+                const worldPos = screenToWorld(t.clientX, t.clientY);
+                
+                // Add point to vector path
+                currentStroke.points.push(worldPos);
+                
+                // Optimization: In a real app, render only the segment. 
+                // Here we redraw scene for simplicity and camera correctness.
+                requestAnimationFrame(renderScene);
+
+            } else if (activeTouches === 2 && isPanning) {
+                // Panning logic
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+
+                // 1. Pan
+                const currentPanX = (t1.clientX + t2.clientX) / 2; // Midpoint
+                const currentPanY = (t1.clientY + t2.clientY) / 2; // Midpoint
+                // (Using T1 for simple delta calculation)
+                const dx = t1.clientX - lastPanPoint.x;
+                const dy = t1.clientY - lastPanPoint.y;
+                
+                Camera.x += dx;
+                Camera.y += dy;
+                lastPanPoint = { x: t1.clientX, y: t1.clientY };
+
+                // 2. Pinch Zoom
+                const currDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                if (lastPinchDist > 0) {
+                    const zoomFactor = currDist / lastPinchDist;
+                    // Clamp zoom
+                    const newZoom = Math.min(Math.max(Camera.zoom * zoomFactor, 0.5), 3.0);
+                    Camera.zoom = newZoom;
+                }
+                lastPinchDist = currDist;
+
+                requestAnimationFrame(renderScene);
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            if (isMenuOpen) return;
+            e.preventDefault();
+
+            const now = Date.now();
+
+            // --- DOUBLE TAP DETECTION ---
+            // 1 finger, ended quickly, didn't drag much
+            if (activeTouches === 1 && !hasMovedSignificantly && (now - lastTapTime < 300)) {
+                // Remove the accidental dots from the two taps
+                strokes.pop(); // Tap 2
+                strokes.pop(); // Tap 1
+                toggleMenu(true);
+            } else if (activeTouches === 1) {
+                // Smooth out the stroke (simple optimization)
+                currentStroke = null;
+            }
+
+            lastTapTime = now;
+            activeTouches = e.touches.length;
+            if (activeTouches === 0) isPanning = false;
+            
+            requestAnimationFrame(renderScene);
+        }, { passive: false });
+
+        // --- 6. RENDERING ENGINE ---
+
+        function renderScene() {
+            // Clear Screen (Physical pixels)
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.width / dpr;
+            const h = canvas.height / dpr;
+
+            // Reset Transform to clear physical screen
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, w, h);
+
+            // Apply Camera Transform
+            ctx.translate(Camera.x, Camera.y);
+            ctx.scale(Camera.zoom, Camera.zoom);
+
+            // 1. Draw "Fixed" World Content (The Question)
+            drawWorldReference();
+
+            // 2. Draw Vector Strokes
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            for (const stroke of strokes) {
+                if (stroke.points.length < 2) continue;
+                
+                ctx.lineWidth = stroke.width; 
+                ctx.strokeStyle = stroke.color;
+                
+                ctx.beginPath();
+                ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                
+                // Draw path
+                for (let i = 1; i < stroke.points.length; i++) {
+                    ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+                }
+                ctx.stroke();
+            }
+        }
+
+        // Draws the "Lesson" content at 0,0 in the infinite world
+        function drawWorldReference() {
+            ctx.save();
+            // A visual box representing the "Question Paper"
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "rgba(0,0,0,0.1)";
+            ctx.shadowBlur = 20;
+            ctx.fillRect(50, 100, 300, 100); 
+            
+            // Placeholder Text (This would be your Lesson Image)
+            ctx.fillStyle = "#111827";
+            ctx.font = "24px Manrope";
+            ctx.fillText("Solve for x:", 70, 140);
+            ctx.font = "bold 32px Manrope";
+            ctx.fillText("2x + 5 = 15", 70, 180);
+            
+            // Origin marker (helpful for debugging)
+            ctx.fillStyle = "#e5e7eb";
+            ctx.fillRect(-10, -10, 20, 20);
+            ctx.restore();
+        }
+
+        // --- 7. MENU & ACTIONS ---
+
+        function toggleMenu(show) {
+            isMenuOpen = show;
+            if (show) {
+                menu.classList.add('visible');
+            } else {
+                menu.classList.remove('visible');
+            }
+        }
+
+        // Close menu when tapping outside buttons
+        menu.addEventListener('click', (e) => {
+            if (e.target === menu) toggleMenu(false);
+        });
+
+        function clearCanvas() {
+            strokes = [];
+            requestAnimationFrame(renderScene);
+            toggleMenu(false);
+        }
+
+        async function handleCheck() {
+            toggleMenu(false);
+            console.log("Preparing data for AI...");
+
+            // 1. Calculate Bounding Box of all strokes
+            let minX = 0, minY = 0, maxX = 400, maxY = 300; // Default to question area
+            
+            strokes.forEach(s => {
+                s.points.forEach(p => {
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                });
+            });
+
+            // Add padding
+            const padding = 50;
+            minX -= padding; minY -= padding;
+            maxX += padding; maxY += padding;
+            const w = maxX - minX;
+            const h = maxY - minY;
+
+            // 2. Render to temporary canvas
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = w;
+            tempCanvas.height = h;
+            const tCtx = tempCanvas.getContext('2d');
+
+            // White background (for AI legibility)
+            tCtx.fillStyle = '#ffffff';
+            tCtx.fillRect(0, 0, w, h);
+
+            // Shift coordinate system so minX, minY is at 0,0
+            tCtx.translate(-minX, -minY);
+
+            // Draw Reference Info (Question)
+            // Note: In production, you might draw the actual question image here
+            tCtx.fillStyle = "#000000";
+            tCtx.font = "30px sans-serif";
+            tCtx.fillText("2x + 5 = 15", 70, 180);
+
+            // Draw Strokes
+            tCtx.lineCap = 'round';
+            tCtx.lineJoin = 'round';
+            strokes.forEach(s => {
+                tCtx.lineWidth = s.width * 1.5; // Make it slightly bolder for AI
+                tCtx.strokeStyle = s.color;
+                tCtx.beginPath();
+                if(s.points.length > 0) tCtx.moveTo(s.points[0].x, s.points[0].y);
+                for (let i = 1; i < s.points.length; i++) {
+                    tCtx.lineTo(s.points[i].x, s.points[i].y);
+                }
+                tCtx.stroke();
+            });
+
+            // 3. Convert to Base64
+            const base64Image = tempCanvas.toDataURL('image/png');
+            
+            // 4. Send to Backend (Mocked here)
+            // await callFirebaseFunction(base64Image);
+            alert("Snapshot captured! \nBoundaries: " + Math.round(w) + "x" + Math.round(h) + "\nReady to send to AnalyzeMathDrawing.");
+        }
+
+        function nextStage() { toggleMenu(false); alert("Next Stage logic here"); }
+        function prevStage() { toggleMenu(false); alert("Prev Stage logic here"); }
+
+        // Start Loop
+        renderScene();
+
+    </script>
+</body>
+</html>
