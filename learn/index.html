@@ -55,6 +55,7 @@
     --animation-duration: 0.3s;
     --thelobook-page-transition-duration: 0.05s;
  }
+
  #loading-overlay {
     position: fixed;
     top: 0;
@@ -252,7 +253,7 @@ body.lang-en {
     opacity: 0;
  }
  #board {
-	 opacity: 0 !important;          /* invisible */
+	 opacity: 1;
     pointer-events: auto;           /* keep drawing events working */
     z-index: 3;
     cursor: none;
@@ -1102,6 +1103,7 @@ body.lang-en {
     padding-top: 70px;
     box-sizing: border-box;
     opacity: 0;
+    pointer-events: none;
     visibility: hidden;
     transform: scale(0.95);
     transition: opacity 0.3s ease, visibility 0s linear 0.3s, transform 0.3s ease;
@@ -1122,6 +1124,7 @@ body.lang-en {
     border-radius: 1rem;
     box-shadow: none;              /* Removed shadow */
     background-color: transparent; /* Made transparent */
+    pointer-events: auto;
 }
 	/* Add near your other .mcq-option-btn rules */
 .mcq-option-btn.selected {
@@ -1266,6 +1269,60 @@ body.cursor-visible {
     filter: grayscale(100%);   /* Optional: removes color distraction */
     transition: opacity 0.4s ease, filter 0.4s ease;
 }
+
+/* ===== NEW: Mobile Mode Styles ===== */
+body.mobile-mode #bottomBar,
+body.mobile-mode #pointsDisplay,
+body.mobile-mode #colorIndicator,
+body.mobile-mode #openCalculatorBtn,
+body.mobile-mode #bottom-logo-container {
+    display: none !important;
+}
+
+body.mobile-mode #boardWrap {
+    /* Ensure full screen touch area */
+    touch-action: none;
+}
+
+#mobileMenu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+#mobileMenu.visible {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+}
+
+.mobile-menu-btn {
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    padding: 1rem 3rem;
+    border-radius: 1rem;
+    border: none;
+    background-color: var(--thelo-bg);
+    box-shadow: var(--shadow-lg);
+    color: var(--thelo-text);
+    width: 80%;
+    max-width: 300px;
+}
 </style>
 </head>
 <body>
@@ -1321,6 +1378,13 @@ body.cursor-visible {
     <button id="nextCheckBtn" class="control-btn"></button>
     <button id="dashboardBtn" class="control-btn" style="display: none;"></button>
 </div>
+            </div>
+
+            <div id="mobileMenu">
+                <button id="mobileCheckBtn" class="mobile-menu-btn" style="color: var(--success-green);">Check</button>
+                <button id="mobileNextBtn" class="mobile-menu-btn" style="color: var(--thelo-blue);">Next Stage</button>
+                <button id="mobileEraseBtn" class="mobile-menu-btn" style="color: var(--error-red);">Erase</button>
+                <button id="mobilePrevBtn" class="mobile-menu-btn" style="color: var(--thelo-text-light);">Previous Stage</button>
             </div>
         </div>
         
@@ -1486,6 +1550,12 @@ ensureHeadlineFontsLoaded().catch(()=>{});
     let currentLang = 'en';
     /* ========================================================================= */
 /* ===== ADD THIS BLOCK: For Weekly Streak Calculation ===================== */
+
+    let isMobileMode = false;
+    let mobileCameraOffset = { x: 0, y: 0 };
+    let mobileStrokes = [];
+    let cachedStaticCanvas = null;
+
 /* ========================================================================= */
 
 /**
@@ -1580,6 +1650,11 @@ nextCheckBtn.addEventListener(
     const colorIndicator = document.getElementById('colorIndicator');
     if (colorIndicator){ colorIndicator.addEventListener('click', () => { toggleColor(); }); }
     const pointsDisplayElement = document.getElementById('pointsDisplay');
+    const mobileMenu = document.getElementById('mobileMenu');
+    const mobileCheckBtn = document.getElementById('mobileCheckBtn');
+    const mobileNextBtn = document.getElementById('mobileNextBtn');
+    const mobileEraseBtn = document.getElementById('mobileEraseBtn');
+    const mobilePrevBtn = document.getElementById('mobilePrevBtn');
 const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     const thelobookControlsEl = document.getElementById('thelobookControls');
@@ -1792,6 +1867,7 @@ let lastIframeUpdateTime = 0;
 function resizeCanvases() {
     clearTimeout(window.resizeTimeout);
     window.resizeTimeout = setTimeout(() => {
+        checkMobileMode();
         checkTabletMode();
         if (!boardWrapper) return;
 
@@ -1835,6 +1911,10 @@ function resizeCanvases() {
         }
         
         if(isPageGridVisible) renderPageGridBatch(currentPageGridBatch, false);
+
+        if (isMobileMode) {
+            redrawMobileBoard();
+        }
 
         setupContexts();
     }, 150);
@@ -2073,6 +2153,11 @@ function playStrokesAbsoluteTiming(strokeData, targetCtx, onFinished){
 // THIS IS THE NEW, UPDATED FUNCTION
 // THIS IS THE NEW, UPDATED FUNCTION
 function handleDrawingStart(e) {
+    if (isMobileMode) {
+        handleMobileTouchStart(e);
+        return;
+    }
+
 	
     if (isTabletMode && e.type.startsWith('touch')) {
         const isStylusPresent = Array.from(e.touches).some(t => t.touchType === 'stylus');
@@ -2111,6 +2196,11 @@ function handleDrawingStart(e) {
     activeCtx.moveTo(pos.x, pos.y);
 }
 	function handleDrawingMove(e) {
+    if (isMobileMode) {
+        handleMobileTouchMove(e);
+        return;
+    }
+
     if (!drawing) return;
 
     if (isTabletMode) {
@@ -2143,6 +2233,11 @@ function handleDrawingStart(e) {
     lastPos = pos;
 }
 function handleDrawingEnd(e) {
+    if (isMobileMode) {
+        handleMobileTouchEnd(e);
+        return;
+    }
+
 	canvas.classList.remove('no-cursor');
     if (isTabletMode) {
         if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
@@ -2161,6 +2256,152 @@ function handleDrawingEnd(e) {
     activeCtx.stroke();
     activeCtx.closePath();
 }
+
+/* ===== NEW: Mobile Interaction Logic ===== */
+let lastTapTime = 0;
+let isMobilePanning = false;
+let mobilePanStart = { x: 0, y: 0 };
+let mobileCameraStart = { x: 0, y: 0 };
+
+function handleMobileTouchStart(e) {
+    const now = Date.now();
+    if (e.touches.length === 1) {
+        if (now - lastTapTime < 300) {
+            // Double tap detected
+            toggleMobileMenu();
+            e.preventDefault();
+            return;
+        }
+        lastTapTime = now;
+
+        // Start Drawing
+        if (!isStudentInputAllowed) return;
+        drawing = true;
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        
+        // Adjust for camera offset to get virtual coordinates
+        const virtualX = x - mobileCameraOffset.x;
+        const virtualY = y - mobileCameraOffset.y;
+
+        lastPos = { x, y }; // Screen coords for immediate drawing
+        
+        // Start a new stroke record
+        mobileStrokes.push({
+            color: '#2563eb',
+            points: [{ x: virtualX, y: virtualY }]
+        });
+
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+    } else if (e.touches.length === 2) {
+        // Start Panning
+        isMobilePanning = true;
+        drawing = false;
+        mobilePanStart = {
+            x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+            y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+        mobileCameraStart = { ...mobileCameraOffset };
+    }
+}
+
+function handleMobileTouchMove(e) {
+    if (isMobilePanning && e.touches.length === 2) {
+        e.preventDefault();
+        const currentX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        
+        const deltaX = currentX - mobilePanStart.x;
+        const deltaY = currentY - mobilePanStart.y;
+
+        mobileCameraOffset.x = mobileCameraStart.x + deltaX;
+        mobileCameraOffset.y = mobileCameraStart.y + deltaY;
+
+        requestAnimationFrame(redrawMobileBoard);
+    } else if (drawing && e.touches.length === 1) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+
+        // Draw visually (screen coords)
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        // Record virtual coords
+        const virtualX = x - mobileCameraOffset.x;
+        const virtualY = y - mobileCameraOffset.y;
+        if (mobileStrokes.length > 0) {
+            mobileStrokes[mobileStrokes.length - 1].points.push({ x: virtualX, y: virtualY });
+        }
+        
+        // Also draw to capture canvas (shifted)
+        // Note: captureCanvas is usually 1:1 with board. 
+        // If we want AI to see the drawing, we might need to redraw everything there too.
+        // For now, let's rely on the visual canvas being correct.
+    }
+}
+
+function handleMobileTouchEnd(e) {
+    drawing = false;
+    isMobilePanning = false;
+    ctx.closePath();
+}
+
+function redrawMobileBoard() {
+    if (!isMobileMode) return;
+    
+    // Clear visible canvases
+    bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+    ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+
+    // Draw static content (cached) with offset
+    if (cachedStaticCanvas) {
+        bgCtx.drawImage(cachedStaticCanvas, mobileCameraOffset.x, mobileCameraOffset.y);
+    }
+
+    // Draw user strokes with offset
+    ctx.save();
+    ctx.translate(mobileCameraOffset.x, mobileCameraOffset.y);
+    mobileStrokes.forEach(stroke => {
+        ctx.beginPath();
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        if (stroke.points.length > 0) {
+            ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+            for (let i = 1; i < stroke.points.length; i++) {
+                ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+            }
+        }
+        ctx.stroke();
+    });
+    ctx.restore();
+}
+
+function toggleMobileMenu() {
+    const isVisible = mobileMenu.classList.contains('visible');
+    if (isVisible) {
+        mobileMenu.classList.remove('visible');
+        // Unblur
+        if (boardWrapper) boardWrapper.style.filter = 'none';
+    } else {
+        mobileMenu.classList.add('visible');
+        // Blur
+        if (boardWrapper) boardWrapper.style.filter = 'blur(5px)';
+    }
+}
+
     // REPLACE your old drawing functions with these three new versions
 function addBoardDrawListeners() {
         canvas.addEventListener('mousedown', handleDrawingStart);
@@ -2819,6 +3060,7 @@ function renderStageUI(index, isResize = false) {
         if (!isResize) {
             clearUserCanvas();
             if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
+            mobileStrokes = []; // Clear mobile strokes on new stage
         }
 
         // --- Helper: Draw Headline (FIXED) ---
@@ -3000,7 +3242,7 @@ function renderStageUI(index, isResize = false) {
                 if (nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
             }
             updateColorIndicator();
-            canvas.style.pointerEvents = (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible && !isReplayActive) ? 'auto' : 'none';
+            canvas.style.pointerEvents = (isMobileMode || (isStudentInputAllowed && !isThelobookActive && !isPageGridVisible && !isReplayActive)) ? 'auto' : 'none';
             if (nextCheckBtn) { nextCheckBtn.classList.remove('correct', 'incorrect'); nextCheckBtn.style.backgroundColor = ''; }
             if (!isResize) userDrawingOccurred = false;
             if (prevBtn) prevBtn.disabled = (index === 0 || isThelobookActive || isPageGridVisible || isReplayActive);
@@ -3028,6 +3270,16 @@ function renderStageUI(index, isResize = false) {
                         forceSyncCanvasSize(); 
                         drawImageWithCorrectLayout(bgCtx, img, currentStageData);
                         await drawHeadlineText();
+                        
+                        // Cache static content for mobile panning
+                        if (isMobileMode) {
+                            cachedStaticCanvas = document.createElement('canvas');
+                            cachedStaticCanvas.width = backgroundCanvas.width;
+                            cachedStaticCanvas.height = backgroundCanvas.height;
+                            const cCtx = cachedStaticCanvas.getContext('2d');
+                            cCtx.drawImage(backgroundCanvas, 0, 0);
+                        }
+
                         setupStageContent();
                         resolve();
                     };
@@ -3035,10 +3287,27 @@ function renderStageUI(index, isResize = false) {
                         console.error("Failed to load stage image:", currentStageData.image);
                         await drawHeadlineText();
                         setupStageContent();
+                        
+                        if (isMobileMode) {
+                             // Cache even if image fails (headline only)
+                             cachedStaticCanvas = document.createElement('canvas');
+                             cachedStaticCanvas.width = backgroundCanvas.width;
+                             cachedStaticCanvas.height = backgroundCanvas.height;
+                             const cCtx = cachedStaticCanvas.getContext('2d');
+                             cCtx.drawImage(backgroundCanvas, 0, 0);
+                        }
                         resolve();
                     };
                 } else {
                     await drawHeadlineText();
+                    // No caching needed here if no image? Or yes for headline.
+                    if (isMobileMode) {
+                         cachedStaticCanvas = document.createElement('canvas');
+                         cachedStaticCanvas.width = backgroundCanvas.width;
+                         cachedStaticCanvas.height = backgroundCanvas.height;
+                         const cCtx = cachedStaticCanvas.getContext('2d');
+                         cCtx.drawImage(backgroundCanvas, 0, 0);
+                    }
                     setupStageContent();
                     resolve();
                 }
@@ -3051,6 +3320,7 @@ function renderStageUI(index, isResize = false) {
     
     isMcqAnsweredCorrectly = false;
     // All feedback is now hidden either by the 'A' key or by advancing a stage.
+    mobileCameraOffset = { x: 0, y: 0 }; // Reset camera
     hideOnCanvasFeedback();
 
     selectedMcqIndex = null;
@@ -3614,6 +3884,14 @@ function showOnCanvasFeedback(message, type = 'info') {
     if (backgroundCanvas) backgroundCanvas.classList.add('dimmed-for-feedback');
     // -------------------------------------------------
 
+    // --- NEW: Hide strokes and enable interaction ---
+    if (canvas) canvas.style.opacity = '0';
+    if (feedbackCanvas) {
+        feedbackCanvas.style.pointerEvents = 'auto';
+        feedbackCanvas.onclick = () => hideOnCanvasFeedback();
+    }
+    // -------------------------------------------------
+
     const FADE_TIME = 400;
     const MAX_WIDTH_PERCENTAGE = 0.70;
     const TEXT_COLOR = '#111827';
@@ -3739,6 +4017,14 @@ function showOnCanvasFeedback(message, type = 'info') {
     if (backgroundCanvas) backgroundCanvas.classList.remove('dimmed-for-feedback');
     // -----------------------------------------
 
+    // --- NEW: Restore strokes and disable interaction ---
+    if (canvas) canvas.style.opacity = '1';
+    if (feedbackCanvas) {
+        feedbackCanvas.style.pointerEvents = 'none';
+        feedbackCanvas.onclick = null;
+    }
+    // -------------------------------------------------
+
     const FADE_TIME = 400;
     const canvasWidth = feedbackCanvas.width / devicePixelRatio;
     const canvasHeight = feedbackCanvas.height / devicePixelRatio;
@@ -3788,7 +4074,13 @@ function showOnCanvasFeedback(message, type = 'info') {
     const landscapeQuery = window.matchMedia('(min-width: 769px) and (max-width: 1200px) and (min-height: 500px)');
 
     isTabletMode = tabletQuery.matches || landscapeQuery.matches;
-    console.log("Tablet Mode:", isTabletMode);
+}
+
+function checkMobileMode() {
+    // Detect phones: small width + touch
+    isMobileMode = window.matchMedia("(max-width: 768px)").matches && navigator.maxTouchPoints > 0;
+    document.body.classList.toggle('mobile-mode', isMobileMode);
+    console.log("Mobile Mode:", isMobileMode);
 }
 	function updateUserPointsInFirestore(pointsToAdd) {
         const user = auth.currentUser;
@@ -4318,7 +4610,7 @@ function closeThelobook(savePage = true) {
             // renderStageUI is called by resumeMediaState
         } else {
             updateColorIndicator();
-            canvas.style.pointerEvents = 'none';
+            canvas.style.pointerEvents = isMobileMode ? 'auto' : 'none';
         }
        
         wasMediaPlayingBeforeThelobook = false; 
@@ -4526,6 +4818,7 @@ window.addEventListener('wheel', function(e) {
     if (ctx) {
         ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
     }
+    mobileStrokes = []; // Clear mobile history
     
     // Also clear the capture canvas used for AI
     if (captureCtx && captureCanvas) {
@@ -4557,6 +4850,7 @@ function initApp() {
     
     console.log("KaTeX is ready. Initializing app.");
     checkTabletMode();
+    checkMobileMode();
     const audioIdsToLoad = [
         'audio_approve1_hy', 'audio_approve2_hy', 'audio_dis1_hy', 'audio_dis2_hy',
         'audio_approve1_en', 'audio_approve2_en', 'audio_dis1_en', 'audio_dis2_en', 'gotItSound'
@@ -4618,6 +4912,17 @@ function initApp() {
     if (thelobookAddPageBtn) thelobookAddPageBtn.onclick = addThelobookNewPage;
     if (calculatorCloseBtn) calculatorCloseBtn.onclick = closeCalculator;
     if (openCalculatorBtn) openCalculatorBtn.onclick = openCalculator;
+    
+    // Mobile Menu Listeners
+    if (mobileCheckBtn) mobileCheckBtn.onclick = () => { toggleMobileMenu(); handleNextCheckClick(); };
+    if (mobileNextBtn) mobileNextBtn.onclick = () => { toggleMobileMenu(); nextStage(); };
+    if (mobileEraseBtn) mobileEraseBtn.onclick = () => { toggleMobileMenu(); clearUserCanvas(); };
+    if (mobilePrevBtn) mobilePrevBtn.onclick = () => { 
+        toggleMobileMenu(); 
+        if (currentStageIndex > 0) transitionToStage(currentStageIndex - 1); 
+    };
+
+
     if (dashboardBtn) {
         dashboardBtn.onclick = () => {
             window.location.href = 'https://thelo.space/sdashboard';
