@@ -2857,9 +2857,30 @@ function renderStageUI(index, isResize = false) {
             const headlineText = currentStageData.headline || '';
 
             if (headlineText && bgCtx && bgCtx.canvas.width > 0) {
-                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-                bgCtx.font = `20px ${fontFamily}`;
+                const fontFamily = currentLang === 'en' ? "'Manrope'" : "'Montserrat Arm'";
+                const fullFontString = `20px ${fontFamily}`;
+                
+                // 1. Set the font on the context
+                bgCtx.font = fullFontString;
+
+                // 2. FORCE the browser to load this specific font string before proceeding
+                // This fixes the issue where it falls back to Arial after an iframe close
+                try {
+                    await document.fonts.load(fullFontString);
+                } catch(e) {
+                    console.warn("Font load pre-check failed, continuing anyway", e);
+                }
+
+                // 3. Double-check generic fonts via your existing helper
                 await ensureHeadlineFontsLoaded();
+
+                // 4. "Warm up" the canvas (Hack: Draw invisible text to force GPU font texture upload)
+                bgCtx.save();
+                bgCtx.globalAlpha = 0;
+                bgCtx.fillText(".", 0, 0);
+                bgCtx.restore();
+
+                // 5. Now render the actual headline
                 await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
             }
         }
