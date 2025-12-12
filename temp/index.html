@@ -2780,7 +2780,6 @@ function openReplayPlayer() {
     replayFrame.src = 'about:blank';
 }
 // In your main HTML file, REPLACE your entire renderStageUI function with this one.
-
 function renderStageUI(index, isResize = false) {
     return new Promise(async (resolve, reject) => {
         // 1. Basic Validation
@@ -2830,16 +2829,11 @@ function renderStageUI(index, isResize = false) {
 
             if (headlineText && bgCtx) {
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+                const fullFont = `20px ${fontFamily}`;
+                bgCtx.font = fullFont;
                 
-                // === FIX START: FONT WARM-UP ===
-                // We force the context to use the font and draw invisible text.
-                // This forces the browser to load the font texture into GPU memory immediately.
-                bgCtx.font = `20px ${fontFamily}`;
-                bgCtx.save();
-                bgCtx.fillStyle = 'rgba(0,0,0,0.01)'; // Almost invisible
-                bgCtx.fillText('.', 0, 0);          // Draw dummy text
-                bgCtx.restore();
-                // === FIX END ===
+                // Explicitly wait for this specific font to be ready
+                try { await document.fonts.load(fullFont); } catch(e) {}
 
                 await ensureHeadlineFontsLoaded();
                 await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
@@ -2867,6 +2861,7 @@ function renderStageUI(index, isResize = false) {
             }
         }
 
+        // --- Helper: Sync DOM to Canvas ---
         function forceSyncCanvasSize() {
             if (!boardWrapper) return;
             const rect = boardWrapper.getBoundingClientRect();
@@ -2888,6 +2883,29 @@ function renderStageUI(index, isResize = false) {
             }
         }
 
+        // --- Helper: The "Safety Re-render" ---
+        // This function clears the background canvas and redraws everything.
+        // It fixes FOUT (Flash of Unstyled Text) by running after the font is guaranteed to be stable.
+        async function performSafetyRedraw() {
+            // Ensure we are still on the same stage!
+            if (currentStageIndex !== index) return;
+
+            // Clear Background Canvas Only (Preserves student drawing on 'board' canvas)
+            bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+            
+            // Redraw Image
+            if (currentStageData.image) {
+                 const img = new Image();
+                 img.crossOrigin = "Anonymous";
+                 img.src = currentStageData.image;
+                 await new Promise(r => { img.onload = r; img.onerror = r; }); // Wait for load (likely cached)
+                 drawImageWithCorrectLayout(bgCtx, img, currentStageData);
+            }
+            // Redraw Headline
+            await drawHeadlineText();
+        }
+
+        // --- Helper: Setup UI Buttons ---
         function setupStageContent() {
             const mcqDetails = currentStageData.optionsQuiz;
             const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
@@ -2950,14 +2968,12 @@ function renderStageUI(index, isResize = false) {
                         if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize); }
                         else { resolveAudio(0); }
                     });
-                    
                     let drawingDataPromise;
                     if (currentStageData.drawingRecord) {
                         if (!isResize || !currentStageDrawingData) {
                             drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
                         } else { drawingDataPromise = Promise.resolve(currentStageDrawingData); }
                     } else { currentStageDrawingData = null; drawingDataPromise = Promise.resolve(null); }
-                    
                     Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
                         if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
                         const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
@@ -2991,20 +3007,9 @@ function renderStageUI(index, isResize = false) {
         }
 
         // --- MAIN RENDERING LOGIC ---
-        // Double RAF + special pre-warm for math question stages
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
                 forceSyncCanvasSize();
-
-                // === PRE-WARM FIX for Math Questions ===
-                // If this is the FIRST of this type of stage, the font might be cold.
-                // We force a dummy draw to wake up the font engine.
-                if (currentStageData.type === 'question_math_solution') {
-                     const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-                     bgCtx.font = `20px ${fontFamily}`;
-                     bgCtx.fillText('.', -100, -100); 
-                }
-                // ======================================
 
                 if (currentStageData.image && bgCtx) {
                     const img = new Image();
@@ -3017,17 +3022,24 @@ function renderStageUI(index, isResize = false) {
                         await drawHeadlineText();
                         setupStageContent();
                         resolve();
+
+                        // === THE FIX: Safety Redraw after 100ms ===
+                        setTimeout(() => performSafetyRedraw(), 100);
                     };
                     img.onerror = async () => {
                         console.error("Failed to load stage image:", currentStageData.image);
                         await drawHeadlineText();
                         setupStageContent();
                         resolve();
+                        // === THE FIX: Safety Redraw after 100ms ===
+                        setTimeout(() => performSafetyRedraw(), 100);
                     };
                 } else {
                     await drawHeadlineText();
                     setupStageContent();
                     resolve();
+                    // === THE FIX: Safety Redraw after 100ms ===
+                    setTimeout(() => performSafetyRedraw(), 100);
                 }
             });
         });
