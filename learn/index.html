@@ -2823,6 +2823,7 @@ function renderStageUI(index, isResize = false) {
 
         // --- Helper: Draw Headline (FIXED) ---
         // --- Helper: Draw Headline (FIXED WITH WARM-UP) ---
+        // --- Helper: Draw Headline (FIXED WITH GHOST RENDER) ---
         async function drawHeadlineText() {
             const padding = 27;
             let headlineCurrentY = padding * 2;
@@ -2831,32 +2832,40 @@ function renderStageUI(index, isResize = false) {
             if (headlineText && bgCtx) {
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
                 
-                // 1. Re-apply the font setting immediately 
+                // 1. Re-apply the font setting
                 bgCtx.font = `20px ${fontFamily}`;
                 
-                // 2. Wait for the browser to confirm this specific text can be rendered
+                // 2. Wait for UI fonts
                 if (document.fonts && document.fonts.load) {
-                    try {
-                        await document.fonts.load(`20px ${fontFamily}`, headlineText);
-                    } catch (e) {
-                        console.warn("Font load wait skipped", e);
-                    }
+                    try { await document.fonts.load(`20px ${fontFamily}`, headlineText); } 
+                    catch (e) { console.warn("Font load wait skipped", e); }
                 }
 
-                // === THE FIX: CANVAS WARM-UP ===
-                // We draw the text invisibly off-screen. This forces the browser 
-                // to calculate metrics and rasterize the glyphs immediately, 
-                // preventing the 'stupid spacing' on the first render.
-                bgCtx.save();
-                bgCtx.globalAlpha = 0; // Completely invisible
-                bgCtx.fillText(headlineText, 0, -100); // Draw off-screen
-                bgCtx.restore();
-                // ==============================
-                
-                // 3. Force a single frame delay to let the warm-up settle
-                await new Promise(r => requestAnimationFrame(r));
-
+                // 3. Ensure global fonts (KaTeX) are ready
                 await ensureHeadlineFontsLoaded();
+
+                // === THE FIX: GHOST RENDER STRATEGY ===
+                // If the headline contains Math (/K), we render it INVISIBLY first.
+                // This forces the DOM element created inside renderComplexHeadline 
+                // to calculate its true width with the KaTeX CSS applied.
+                const hasMath = headlineText.includes('/K');
+
+                if (hasMath) {
+                    // Pass 1: Invisible "Ghost" Render to prime the layout engine
+                    bgCtx.save();
+                    bgCtx.globalAlpha = 0; // Invisible
+                    await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
+                    bgCtx.restore();
+
+                    // Wait 50ms to let the browser apply CSS to the invisible elements we just measured
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                } else {
+                    // Small delay for standard text to ensure crispness
+                    await new Promise(r => requestAnimationFrame(r));
+                }
+
+                // Pass 2: Final Visible Render
+                // Now the metrics will be correct because the font cache is hot
                 await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
             }
         }
