@@ -4217,20 +4217,15 @@ function logHandwritingAttempt(result) {
     
     let base64ImageData;
     try {
-        if (isMobileMode) {
-            base64ImageData = getMobileFullCanvasData();
-            if (!base64ImageData || mobileStrokes.length === 0) throw new Error("BLANK_ANSWER");
-        } else {
-            const blankCanvas = document.createElement('canvas');
-            blankCanvas.width = canvas.width;
-            blankCanvas.height = canvas.height;
-            const imageDataUrl = captureCanvas.toDataURL('image/png');
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = canvas.width;
+        blankCanvas.height = canvas.height;
+        const imageDataUrl = captureCanvas.toDataURL('image/png');
 
-            if (imageDataUrl === blankCanvas.toDataURL()) {
-                throw new Error("BLANK_ANSWER");
-            }
-            base64ImageData = imageDataUrl;
-        }
+        if (imageDataUrl === blankCanvas.toDataURL()) {
+            throw new Error("BLANK_ANSWER");
+        }
+        base64ImageData = imageDataUrl;
     } catch (error) {
         addChatMessage('AI', formatAIMessage('drawActivityWarning'));
         playRandomFeedback('disapprove');
@@ -4311,21 +4306,14 @@ async function checkMathDrawing(isMcqContext = false) {
     
     try {
         // --- IMAGE 1: THE SOLUTION (Foreground) ---
-        let userInkBase64;
-        let questionContextBase64 = null;
+        // This captures ONLY the blue ink on a transparent background
+        const userInkBase64 = canvas.toDataURL("image/png");
 
-        if (isMobileMode) {
-            userInkBase64 = getMobileFullCanvasData();
-            if (currentStageData.image && cachedStaticCanvas) {
-                questionContextBase64 = cachedStaticCanvas.toDataURL("image/png");
-            }
-        } else {
-            // This captures ONLY the blue ink on a transparent background
-            userInkBase64 = canvas.toDataURL("image/png");
-            // This captures the graph/geometry image exactly as the user sees it
-            if (currentStageData.image && backgroundCanvas) {
-                questionContextBase64 = backgroundCanvas.toDataURL("image/png");
-            }
+        // --- IMAGE 2: THE CONTEXT (Background) ---
+        // This captures the graph/geometry image exactly as the user sees it
+        let questionContextBase64 = null;
+        if (currentStageData.image && backgroundCanvas) {
+            questionContextBase64 = backgroundCanvas.toDataURL("image/png");
         }
 
         const payload = {
@@ -5068,11 +5056,7 @@ async function logDigitForTraining(recognizedValue, feedbackType) {
     let base64ImageData;
     try {
         // Capture the content of the main canvas (which contains the blue ink)
-        if (isMobileMode) {
-            base64ImageData = getMobileFullCanvasData();
-        } else {
-            base64ImageData = canvas.toDataURL('image/png');
-        }
+        base64ImageData = canvas.toDataURL('image/png');
     } catch (e) {
         console.error("Failed to get image data from canvas for logging:", e);
         return;
