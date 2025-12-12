@@ -2780,7 +2780,6 @@ function openReplayPlayer() {
     replayFrame.src = 'about:blank';
 }
 // In your main HTML file, REPLACE your entire renderStageUI function with this one.
-
 function renderStageUI(index, isResize = false) {
     return new Promise(async (resolve, reject) => {
         // 1. Basic Validation
@@ -2822,7 +2821,7 @@ function renderStageUI(index, isResize = false) {
             if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
         }
 
-        // --- Helper: Draw Headline ---
+        // --- Helper: Draw Headline (FIXED) ---
         async function drawHeadlineText() {
             const padding = 27;
             let headlineCurrentY = padding * 2;
@@ -2831,14 +2830,22 @@ function renderStageUI(index, isResize = false) {
             if (headlineText && bgCtx) {
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
                 
-                // === FIX START: FONT WARM-UP ===
-                // We force the context to use the font and draw invisible text.
-                // This forces the browser to load the font texture into GPU memory immediately.
+                // === FIX START: FONT METRIC SYNC ===
+                // 1. Re-apply the font setting immediately (it might have been lost on canvas resize)
                 bgCtx.font = `20px ${fontFamily}`;
-                bgCtx.save();
-                bgCtx.fillStyle = 'rgba(0,0,0,0.01)'; // Almost invisible
-                bgCtx.fillText('.', 0, 0);          // Draw dummy text
-                bgCtx.restore();
+                
+                // 2. Explicitly wait for the browser to confirm this specific text can be rendered
+                // This ensures 'measureText' will use the correct width calculations.
+                if (document.fonts && document.fonts.load) {
+                    try {
+                        await document.fonts.load(`20px ${fontFamily}`, headlineText);
+                    } catch (e) {
+                        console.warn("Font load wait skipped", e);
+                    }
+                }
+                
+                // 3. Force a single frame delay to let the layout engine catch up
+                await new Promise(r => requestAnimationFrame(r));
                 // === FIX END ===
 
                 await ensureHeadlineFontsLoaded();
@@ -2995,16 +3002,6 @@ function renderStageUI(index, isResize = false) {
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
                 forceSyncCanvasSize();
-
-                // === PRE-WARM FIX for Math Questions ===
-                // If this is the FIRST of this type of stage, the font might be cold.
-                // We force a dummy draw to wake up the font engine.
-                if (currentStageData.type === 'question_math_solution') {
-                     const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-                     bgCtx.font = `20px ${fontFamily}`;
-                     bgCtx.fillText('.', -100, -100); 
-                }
-                // ======================================
 
                 if (currentStageData.image && bgCtx) {
                     const img = new Image();
