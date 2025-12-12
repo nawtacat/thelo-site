@@ -4192,15 +4192,66 @@ function logHandwritingAttempt(result) {
         });
     }
 }
-function getMobileInkData() {
-    if (!cachedStaticCanvas) return canvas.toDataURL("image/png");
+function getMobileInkData(withBackground = false) {
+    // Fallback if no strokes and no background request
+    if (mobileStrokes.length === 0 && !withBackground) return canvas.toDataURL("image/png");
     
+    // 1. Calculate Bounds (CSS pixels)
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    if (mobileStrokes.length > 0) {
+        mobileStrokes.forEach(s => s.points.forEach(p => {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+        }));
+    }
+
+    // If no strokes found, reset bounds
+    if (minX === Infinity) {
+        minX = 0; minY = 0; maxX = 0; maxY = 0;
+    }
+
+    let bgCssW = 0, bgCssH = 0;
+    if (cachedStaticCanvas) {
+        bgCssW = cachedStaticCanvas.width / devicePixelRatio;
+        bgCssH = cachedStaticCanvas.height / devicePixelRatio;
+    }
+
+    if (withBackground && cachedStaticCanvas) {
+        // Expand to include background at (0,0)
+        minX = Math.min(minX, 0);
+        minY = Math.min(minY, 0);
+        maxX = Math.max(maxX, bgCssW);
+        maxY = Math.max(maxY, bgCssH);
+    } else {
+        // Padding for strokes only
+        const padding = 20;
+        minX -= padding; minY -= padding;
+        maxX += padding; maxY += padding;
+    }
+
+    // Ensure valid dimensions
+    const width = Math.max(1, Math.ceil(maxX - minX));
+    const height = Math.max(1, Math.ceil(maxY - minY));
+
+    // Create High-DPI canvas
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = cachedStaticCanvas.width;
-    tempCanvas.height = cachedStaticCanvas.height;
+    tempCanvas.width = width * devicePixelRatio;
+    tempCanvas.height = height * devicePixelRatio;
     const tCtx = tempCanvas.getContext('2d');
-    
+
+    // Scale and Translate
     tCtx.scale(devicePixelRatio, devicePixelRatio);
+    tCtx.translate(-minX, -minY);
+
+    // Draw Background
+    if (withBackground && cachedStaticCanvas) {
+        tCtx.drawImage(cachedStaticCanvas, 0, 0, bgCssW, bgCssH);
+    }
+
+    // Draw Strokes
     tCtx.lineCap = 'round';
     tCtx.lineJoin = 'round';
     
@@ -4247,7 +4298,7 @@ function getMobileInkData() {
         let imageDataUrl;
         if (isMobileMode) {
             if (mobileStrokes.length === 0) throw new Error("BLANK_ANSWER");
-            imageDataUrl = getMobileInkData();
+            imageDataUrl = getMobileInkData(false);
         } else {
             const blankCanvas = document.createElement('canvas');
             blankCanvas.width = canvas.width;
@@ -4338,7 +4389,7 @@ async function checkMathDrawing(isMcqContext = false) {
         // --- IMAGE 1: THE SOLUTION (Foreground) ---
         let userInkBase64;
         if (isMobileMode) {
-            userInkBase64 = getMobileInkData();
+            userInkBase64 = getMobileInkData(true);
         } else {
             userInkBase64 = canvas.toDataURL("image/png");
         }
@@ -5094,7 +5145,7 @@ async function logDigitForTraining(recognizedValue, feedbackType) {
     try {
         // Capture the content of the main canvas (which contains the blue ink)
         if (isMobileMode) {
-            base64ImageData = getMobileInkData();
+            base64ImageData = getMobileInkData(false);
         } else {
             base64ImageData = canvas.toDataURL('image/png');
         }
