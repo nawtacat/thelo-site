@@ -2782,9 +2782,7 @@ function openReplayPlayer() {
 // In your main HTML file, REPLACE your entire renderStageUI function with this one.
 function renderStageUI(index, isResize = false) {
     return new Promise(async (resolve, reject) => {
-        // ===========================================
-        // 1. INITIAL CHECKS & CLEANUP
-        // ===========================================
+        // 1. Basic Validation
         if (isLessonLoading || index < 0 || index >= lessonStages.length) {
             if (index < 0) {
                 if (nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = getCurrentUIText().start; }
@@ -2797,7 +2795,8 @@ function renderStageUI(index, isResize = false) {
         }
 
         const TXT = getCurrentUIText();
-
+        
+        // 2. Immediate Cleanup
         if (!isResize && isThelobookActive) closeThelobook(true);
         if (!isResize && isPageGridVisible) closePageGridView();
         if (!isResize) closeReplayPlayer();
@@ -2815,8 +2814,6 @@ function renderStageUI(index, isResize = false) {
         isStudentInputAllowed = currentStageData.studentInput === true;
 
         if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
-        
-        // Clear background immediately so we don't see the old stage while waiting
         if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
         
         if (!isResize) {
@@ -2824,70 +2821,35 @@ function renderStageUI(index, isResize = false) {
             if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
         }
 
-        // ===========================================
-        // 2. ROBUST FONT & HEADLINE RENDERER
-        // ===========================================
-        async function drawHeadlineTextSeamlessly() {
-            const headlineText = currentStageData.headline || '';
-            if (!headlineText || !bgCtx) return;
-
+        // --- Helper: Draw Headline (FIXED) ---
+        async function drawHeadlineText() {
             const padding = 27;
-            const headlineCurrentY = padding * 2;
-            
-            // 1. Determine the exact font family name (stripped of fallbacks for loading check)
-            const rawFontFamily = currentLang === 'en' ? 'Manrope' : 'Montserrat Arm';
-            // The string we use for Context
-            const ctxFontString = `20px '${rawFontFamily}', system-ui, sans-serif`;
-            // The string we use to Check Loading (must match CSS @font-face name exactly)
-            const checkFontString = `20px "${rawFontFamily}"`;
+            let headlineCurrentY = padding * 2;
+            const headlineText = currentStageData.headline || '';
 
-            // 2. Set the context font immediately
-            bgCtx.font = ctxFontString;
-
-            // 3. CRITICAL: Wait for the browser to confirm the font is ready.
-            // This prevents "measureText" from using the width of Arial.
-            try {
-                await document.fonts.load(checkFontString);
-            } catch (e) {
-                console.warn("Font loading check failed, attempting to render anyway.");
-            }
-
-            // 4. "GHOST" DRAW (Warm-up)
-            // Draw invisible text to force the GPU to rasterize the glyphs.
-            bgCtx.save();
-            bgCtx.fillStyle = 'rgba(0,0,0,0.01)'; // 1% opacity (technically visible to engine, invisible to eye)
-            bgCtx.fillText('.', 0, 0); 
-            bgCtx.restore();
-
-            // 5. Layout Settle Delay
-            // Even after load(), the layout engine needs a tick to update metrics.
-            await new Promise(r => setTimeout(r, 50));
-
-            // 6. FINAL VISIBLE DRAW
-            // Now that we waited, measureText inside renderComplexHeadline will be accurate.
-            await ensureHeadlineFontsLoaded(); // Double check
-            await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
-        }
-
-        // --- Helper: Sync DOM to Canvas ---
-        function forceSyncCanvasSize() {
-            if (!boardWrapper) return;
-            const rect = boardWrapper.getBoundingClientRect();
-            const cssWidth = Math.max(1, Math.floor(rect.width));
-            const cssHeight = Math.max(1, Math.floor(rect.height));
-            
-            if (Math.abs(backgroundCanvas.width - cssWidth * devicePixelRatio) > 2 || 
-                Math.abs(backgroundCanvas.height - cssHeight * devicePixelRatio) > 2) {
+            if (headlineText && bgCtx) {
+                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
                 
-                [backgroundCanvas, replayCanvas, canvas].forEach(c => {
-                    if (c) {
-                        c.width = Math.floor(cssWidth * devicePixelRatio);
-                        c.height = Math.floor(cssHeight * devicePixelRatio);
-                        c.style.width = `${cssWidth}px`;
-                        c.style.height = `${cssHeight}px`;
+                // === FIX START: FONT METRIC SYNC ===
+                // 1. Re-apply the font setting immediately (it might have been lost on canvas resize)
+                bgCtx.font = `20px ${fontFamily}`;
+                
+                // 2. Explicitly wait for the browser to confirm this specific text can be rendered
+                // This ensures 'measureText' will use the correct width calculations.
+                if (document.fonts && document.fonts.load) {
+                    try {
+                        await document.fonts.load(`20px ${fontFamily}`, headlineText);
+                    } catch (e) {
+                        console.warn("Font load wait skipped", e);
                     }
-                });
-                setupContexts();
+                }
+                
+                // 3. Force a single frame delay to let the layout engine catch up
+                await new Promise(r => requestAnimationFrame(r));
+                // === FIX END ===
+
+                await ensureHeadlineFontsLoaded();
+                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
             }
         }
 
@@ -2912,7 +2874,27 @@ function renderStageUI(index, isResize = false) {
             }
         }
 
-        // --- Helper: Setup UI ---
+        function forceSyncCanvasSize() {
+            if (!boardWrapper) return;
+            const rect = boardWrapper.getBoundingClientRect();
+            const cssWidth = Math.max(1, Math.floor(rect.width));
+            const cssHeight = Math.max(1, Math.floor(rect.height));
+            
+            if (Math.abs(backgroundCanvas.width - cssWidth * devicePixelRatio) > 2 || 
+                Math.abs(backgroundCanvas.height - cssHeight * devicePixelRatio) > 2) {
+                
+                [backgroundCanvas, replayCanvas, canvas].forEach(c => {
+                    if (c) {
+                        c.width = Math.floor(cssWidth * devicePixelRatio);
+                        c.height = Math.floor(cssHeight * devicePixelRatio);
+                        c.style.width = `${cssWidth}px`;
+                        c.style.height = `${cssHeight}px`;
+                    }
+                });
+                setupContexts();
+            }
+        }
+
         function setupStageContent() {
             const mcqDetails = currentStageData.optionsQuiz;
             const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
@@ -2925,11 +2907,13 @@ function renderStageUI(index, isResize = false) {
             if (currentStageData.type === 'calculator_replay') {
                 openReplayPlayer();
                 if (!isResize) { internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0; isMediaScrubbingActive = false; }
+                
                 const audioMetaPromise = new Promise((resolveAudio) => {
                     if (currentStageData.audioFile) {
                         playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
                     } else { resolveAudio(0); }
                 });
+
                 audioMetaPromise.then((audioDuration) => {
                     currentStageTotalDuration = audioDuration;
                     if (currentStageTotalDuration > 0) {
@@ -2941,12 +2925,14 @@ function renderStageUI(index, isResize = false) {
                         if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                     }
                 }).catch(e => console.error("Error setting up embed stage:", e));
+
                 if (nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
                 if (clearBtn) clearBtn.style.display = 'none';
 
             } else if (isQuestionStage) {
                 if (!isResize) isMediaScrubbingActive = false;
                 if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
+                
                 if (isMCQDisplayStage && mcqDetails) {
                     if (bottomBar) bottomBar.style.display = 'flex';
                     displayMcq(mcqDetails);
@@ -2971,12 +2957,14 @@ function renderStageUI(index, isResize = false) {
                         if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize); }
                         else { resolveAudio(0); }
                     });
+                    
                     let drawingDataPromise;
                     if (currentStageData.drawingRecord) {
                         if (!isResize || !currentStageDrawingData) {
                             drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
                         } else { drawingDataPromise = Promise.resolve(currentStageDrawingData); }
                     } else { currentStageDrawingData = null; drawingDataPromise = Promise.resolve(null); }
+                    
                     Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
                         if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
                         const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
@@ -3009,40 +2997,35 @@ function renderStageUI(index, isResize = false) {
             if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
 
-        // ===========================================
-        // 3. MAIN EXECUTION (SEAMLESS SEQUENCE)
-        // ===========================================
-        // Step A: Wait 2 frames for iframe cleanup
+        // --- MAIN RENDERING LOGIC ---
+        // Double RAF + special pre-warm for math question stages
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
                 forceSyncCanvasSize();
 
-                // Step B: Load Image (if any)
-                let img = null;
-                if (currentStageData.image) {
-                    img = new Image();
+                if (currentStageData.image && bgCtx) {
+                    const img = new Image();
                     img.crossOrigin = "Anonymous";
                     img.src = currentStageData.image;
-                    try { await new Promise((r) => { img.onload = r; img.onerror = r; }); } catch(e){}
+                    
+                    img.onload = async () => {
+                        forceSyncCanvasSize(); 
+                        drawImageWithCorrectLayout(bgCtx, img, currentStageData);
+                        await drawHeadlineText();
+                        setupStageContent();
+                        resolve();
+                    };
+                    img.onerror = async () => {
+                        console.error("Failed to load stage image:", currentStageData.image);
+                        await drawHeadlineText();
+                        setupStageContent();
+                        resolve();
+                    };
+                } else {
+                    await drawHeadlineText();
+                    setupStageContent();
+                    resolve();
                 }
-
-                // Step C: Execute "Seamless Headline Draw"
-                // This function internally waits for the font and "ghost draws" first
-                // NOTE: We do not clear rect here because we want to preserve the image if it drew first.
-                // Actually, let's draw image -> then text.
-                
-                if (img) {
-                    forceSyncCanvasSize(); 
-                    drawImageWithCorrectLayout(bgCtx, img, currentStageData);
-                }
-
-                // This is the magic part: it will pause here for ~50ms
-                // The user sees the blank canvas (or image) during this tiny gap.
-                // No "wrong font" is ever drawn to the screen.
-                await drawHeadlineTextSeamlessly();
-                
-                setupStageContent();
-                resolve();
             });
         });
     });
