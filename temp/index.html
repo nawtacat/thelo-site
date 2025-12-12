@@ -2797,7 +2797,7 @@ function renderStageUI(index, isResize = false) {
 
         const TXT = getCurrentUIText();
         
-        // 2. Immediate Cleanup (Hide overlaps)
+        // 2. Immediate Cleanup
         if (!isResize && isThelobookActive) closeThelobook(true);
         if (!isResize && isPageGridVisible) closePageGridView();
         if (!isResize) closeReplayPlayer();
@@ -2829,10 +2829,18 @@ function renderStageUI(index, isResize = false) {
             const headlineText = currentStageData.headline || '';
 
             if (headlineText && bgCtx) {
-                // Safety: Re-apply font just in case context was lost
                 const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-                bgCtx.font = `20px ${fontFamily}`;
                 
+                // === FIX START: FONT WARM-UP ===
+                // We force the context to use the font and draw invisible text.
+                // This forces the browser to load the font texture into GPU memory immediately.
+                bgCtx.font = `20px ${fontFamily}`;
+                bgCtx.save();
+                bgCtx.fillStyle = 'rgba(0,0,0,0.01)'; // Almost invisible
+                bgCtx.fillText('.', 0, 0);          // Draw dummy text
+                bgCtx.restore();
+                // === FIX END ===
+
                 await ensureHeadlineFontsLoaded();
                 await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
             }
@@ -2859,15 +2867,12 @@ function renderStageUI(index, isResize = false) {
             }
         }
 
-        // --- Helper: Sync DOM to Canvas ---
         function forceSyncCanvasSize() {
             if (!boardWrapper) return;
             const rect = boardWrapper.getBoundingClientRect();
-            // Prevent 0-size issues
             const cssWidth = Math.max(1, Math.floor(rect.width));
             const cssHeight = Math.max(1, Math.floor(rect.height));
             
-            // Only resize if actually different to prevent flickering
             if (Math.abs(backgroundCanvas.width - cssWidth * devicePixelRatio) > 2 || 
                 Math.abs(backgroundCanvas.height - cssHeight * devicePixelRatio) > 2) {
                 
@@ -2879,11 +2884,10 @@ function renderStageUI(index, isResize = false) {
                         c.style.height = `${cssHeight}px`;
                     }
                 });
-                setupContexts(); // Vital: Resets scale and font after resize
+                setupContexts();
             }
         }
 
-        // --- Helper: Setup UI Buttons ---
         function setupStageContent() {
             const mcqDetails = currentStageData.optionsQuiz;
             const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
@@ -2987,23 +2991,27 @@ function renderStageUI(index, isResize = false) {
         }
 
         // --- MAIN RENDERING LOGIC ---
-        
-        // Strategy: Wait 2 frames to ensure the previous stage's iframe/DOM is totally gone.
-        // This prevents reading "0" height or "stale" contexts.
+        // Double RAF + special pre-warm for math question stages
         requestAnimationFrame(() => {
             requestAnimationFrame(async () => {
-                
-                // 1. Force the canvas to match the container's true size
                 forceSyncCanvasSize();
 
-                // 2. Handle Image Loading (if exists)
+                // === PRE-WARM FIX for Math Questions ===
+                // If this is the FIRST of this type of stage, the font might be cold.
+                // We force a dummy draw to wake up the font engine.
+                if (currentStageData.type === 'question_math_solution') {
+                     const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+                     bgCtx.font = `20px ${fontFamily}`;
+                     bgCtx.fillText('.', -100, -100); 
+                }
+                // ======================================
+
                 if (currentStageData.image && bgCtx) {
                     const img = new Image();
                     img.crossOrigin = "Anonymous";
                     img.src = currentStageData.image;
                     
                     img.onload = async () => {
-                        // Re-check size in case image load took time
                         forceSyncCanvasSize(); 
                         drawImageWithCorrectLayout(bgCtx, img, currentStageData);
                         await drawHeadlineText();
@@ -3017,7 +3025,6 @@ function renderStageUI(index, isResize = false) {
                         resolve();
                     };
                 } else {
-                    // 3. No Image: Just text and buttons
                     await drawHeadlineText();
                     setupStageContent();
                     resolve();
