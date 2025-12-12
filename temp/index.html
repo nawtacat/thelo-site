@@ -2821,44 +2821,68 @@ function renderStageUI(index, isResize = false) {
         }
 
         // --- Helper: Draw Headline (FIXED) ---
-        // --- Helper: Draw Headline (UPDATED FIX) ---
+        // --- Helper: Draw Headline (FIXED WITH METRIC CHECK) ---
         async function drawHeadlineText() {
             const padding = 27;
             let headlineCurrentY = padding * 2;
             const headlineText = currentStageData.headline || '';
 
             if (headlineText && bgCtx) {
-                // 1. Define the font string explicitly with weight (400 = Regular)
-                // This prevents the browser from guessing or using "faux bold" which breaks spacing.
-                const fontFamily = currentLang === 'en' ? "'Manrope'" : "'Montserrat Arm'";
-                const fontString = `400 20px ${fontFamily}, system-ui, sans-serif`;
+                // Determine the correct font string
+                const family = currentLang === 'en' ? "'Manrope'" : "'Montserrat Arm'";
+                const targetFont = `400 20px ${family}, system-ui, sans-serif`;
 
-                // 2. Pre-load check
+                // --- 1. THE METRIC CHECKER ---
+                // We compare the width of the headline in 'serif' (default) vs our target font.
+                // We loop until they are different, proving the custom font is active.
+                const checkFontIsReady = async () => {
+                    const testText = headlineText.substring(0, 10); // Check first few chars
+                    let attempts = 0;
+                    
+                    while (attempts < 25) { // Try for approx 500ms max
+                        bgCtx.save();
+                        
+                        // Measure in Serif (Basline)
+                        bgCtx.font = "20px serif";
+                        const w1 = bgCtx.measureText(testText).width;
+                        
+                        // Measure in Target Font
+                        bgCtx.font = targetFont;
+                        const w2 = bgCtx.measureText(testText).width;
+                        
+                        bgCtx.restore();
+
+                        // If widths differ significantly, the custom font is rendering!
+                        if (Math.abs(w1 - w2) > 0.5) {
+                            return true;
+                        }
+                        
+                        // Wait 20ms and try again
+                        await new Promise(r => setTimeout(r, 20));
+                        attempts++;
+                    }
+                    console.warn("Font metric check timed out - rendering anyway");
+                    return false;
+                };
+
+                // --- 2. EXECUTE WARMUP ---
+                // Force browser to acknowledge the font
                 if (document.fonts && document.fonts.load) {
-                    try { await document.fonts.load(fontString, headlineText); } 
-                    catch (e) { console.warn("Font load wait skipped", e); }
+                    try { await document.fonts.load(targetFont, headlineText); } catch(e){}
                 }
+                
+                // Wait for the metrics to physically change on the canvas
+                await checkFontIsReady();
 
-                // 3. AGGRESSIVE WARM-UP
-                // We set the font, draw invisible text, and then wait a real 50ms.
-                // requestAnimationFrame (16ms) is sometimes too fast for the font cache on first load.
-                bgCtx.font = fontString;
-                bgCtx.save();
-                bgCtx.globalAlpha = 0; 
-                bgCtx.fillText(headlineText, 0, -100); 
-                bgCtx.restore();
-
-                // 4. Force a delay to let the layout engine settle
-                await new Promise(resolve => setTimeout(resolve, 50));
-
-                // 5. Re-apply font immediately before rendering
-                bgCtx.font = fontString; 
+                // --- 3. FINAL RENDER ---
+                // Explicitly set the font on the context one last time
+                bgCtx.font = targetFont; 
                 
                 await ensureHeadlineFontsLoaded();
                 
-                // Pass the font string into the complex renderer options to force it there too
-                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10, { 
-                    font: fontString 
+                // Pass the verified font string to the renderer
+                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10, {
+                    font: targetFont
                 });
             }
         }
