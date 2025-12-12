@@ -2783,7 +2783,7 @@ function openReplayPlayer() {
 
 function renderStageUI(index, isResize = false) {
     return new Promise(async (resolve, reject) => {
-        // 1. Basic Validation & Cleanup
+        // 1. Basic Validation
         if (isLessonLoading || index < 0 || index >= lessonStages.length) {
             if (index < 0) {
                 if (nextCheckBtn) { nextCheckBtn.disabled = true; nextCheckBtn.textContent = getCurrentUIText().start; }
@@ -2796,6 +2796,8 @@ function renderStageUI(index, isResize = false) {
         }
 
         const TXT = getCurrentUIText();
+        
+        // 2. Immediate Cleanup (Hide overlaps)
         if (!isResize && isThelobookActive) closeThelobook(true);
         if (!isResize && isPageGridVisible) closePageGridView();
         if (!isResize) closeReplayPlayer();
@@ -2813,18 +2815,33 @@ function renderStageUI(index, isResize = false) {
         isStudentInputAllowed = currentStageData.studentInput === true;
 
         if (mcqOptionsContainer) { mcqOptionsContainer.innerHTML = ''; mcqOptionsContainer.style.display = 'none'; }
-
         if (bgCtx) bgCtx.clearRect(0, 0, backgroundCanvas.width / devicePixelRatio, backgroundCanvas.height / devicePixelRatio);
+        
         if (!isResize) {
             clearUserCanvas();
             if (replayCtx) replayCtx.clearRect(0, 0, replayCanvas.width / devicePixelRatio, replayCanvas.height / devicePixelRatio);
         }
 
-        // --- Helper to draw image correctly ---
+        // --- Helper: Draw Headline ---
+        async function drawHeadlineText() {
+            const padding = 27;
+            let headlineCurrentY = padding * 2;
+            const headlineText = currentStageData.headline || '';
+
+            if (headlineText && bgCtx) {
+                // Safety: Re-apply font just in case context was lost
+                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
+                bgCtx.font = `20px ${fontFamily}`;
+                
+                await ensureHeadlineFontsLoaded();
+                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
+            }
+        }
+
+        // --- Helper: Draw Image ---
         function drawImageWithCorrectLayout(bgCtx, img, currentStageData) {
             const canvasWidth = bgCtx.canvas.width / devicePixelRatio;
             const canvasHeight = bgCtx.canvas.height / devicePixelRatio;
-            
             const hasMcq = currentStageData.optionsQuiz && Array.isArray(currentStageData.optionsQuiz.choices);
 
             if (hasMcq) {
@@ -2832,43 +2849,41 @@ function renderStageUI(index, isResize = false) {
                 const maxImgWidth = canvasWidth * 0.48;
                 const maxImgHeight = canvasHeight * 0.85;
                 const scale = Math.min(maxImgWidth / img.width, maxImgHeight / img.height);
-                
-                const scaledWidth = img.width * scale;
-                const scaledHeight = img.height * scale;
-                const x = sidePad;
-                const y = (canvasHeight - scaledHeight) / 2;
-                bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
+                bgCtx.drawImage(img, sidePad, (canvasHeight - (img.height * scale)) / 2, img.width * scale, img.height * scale);
             } else {
                 const maxSizePercentage = 0.50;
                 const maxContainerWidth = canvasWidth * maxSizePercentage;
                 const maxContainerHeight = canvasHeight * maxSizePercentage;
                 const scale = Math.min(maxContainerWidth / img.width, maxContainerHeight / img.height);
-                
-                const scaledWidth = img.width * scale;
-                const scaledHeight = img.height * scale;
-                const x = (canvasWidth - scaledWidth) / 2;
-                const y = (canvasHeight - scaledHeight) / 2;
-                bgCtx.drawImage(img, x, y, scaledWidth, scaledHeight);
+                bgCtx.drawImage(img, (canvasWidth - (img.width * scale)) / 2, (canvasHeight - (img.height * scale)) / 2, img.width * scale, img.height * scale);
             }
         }
 
-        // --- Updated Draw Headline Helper ---
-        async function drawHeadlineText() {
-            const padding = 27;
-            let headlineCurrentY = padding * 2;
-            const headlineText = currentStageData.headline || '';
-
-            if (headlineText && bgCtx && bgCtx.canvas.width > 0) {
-                // FORCE: Reset font on context to ensure it hasn't been lost
-                const fontFamily = currentLang === 'en' ? "'Manrope', system-ui, sans-serif" : "'Montserrat Arm', system-ui, sans-serif";
-                bgCtx.font = `20px ${fontFamily}`;
+        // --- Helper: Sync DOM to Canvas ---
+        function forceSyncCanvasSize() {
+            if (!boardWrapper) return;
+            const rect = boardWrapper.getBoundingClientRect();
+            // Prevent 0-size issues
+            const cssWidth = Math.max(1, Math.floor(rect.width));
+            const cssHeight = Math.max(1, Math.floor(rect.height));
+            
+            // Only resize if actually different to prevent flickering
+            if (Math.abs(backgroundCanvas.width - cssWidth * devicePixelRatio) > 2 || 
+                Math.abs(backgroundCanvas.height - cssHeight * devicePixelRatio) > 2) {
                 
-                // Double check fonts are loaded
-                await ensureHeadlineFontsLoaded();
-                await renderComplexHeadline(bgCtx, headlineText, headlineCurrentY + 10);
+                [backgroundCanvas, replayCanvas, canvas].forEach(c => {
+                    if (c) {
+                        c.width = Math.floor(cssWidth * devicePixelRatio);
+                        c.height = Math.floor(cssHeight * devicePixelRatio);
+                        c.style.width = `${cssWidth}px`;
+                        c.style.height = `${cssHeight}px`;
+                    }
+                });
+                setupContexts(); // Vital: Resets scale and font after resize
             }
         }
 
+        // --- Helper: Setup UI Buttons ---
         function setupStageContent() {
             const mcqDetails = currentStageData.optionsQuiz;
             const isMCQDisplayStage = currentStageData.type === "explanation_with_mcq" && mcqDetails && Array.isArray(mcqDetails.choices) && mcqDetails.choices.length > 0;
@@ -2880,40 +2895,27 @@ function renderStageUI(index, isResize = false) {
 
             if (currentStageData.type === 'calculator_replay') {
                 openReplayPlayer();
-
-                if (!isResize) {
-                    internalPlaybackTime = 0;
-                    lastFrameTimestampForManualAdvance = 0;
-                    isMediaScrubbingActive = false; 
-                }
-
+                if (!isResize) { internalPlaybackTime = 0; lastFrameTimestampForManualAdvance = 0; isMediaScrubbingActive = false; }
+                
                 const audioMetaPromise = new Promise((resolveAudio) => {
                     if (currentStageData.audioFile) {
                         playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
-                    } else {
-                        resolveAudio(0);
-                    }
+                    } else { resolveAudio(0); }
                 });
 
                 audioMetaPromise.then((audioDuration) => {
                     currentStageTotalDuration = audioDuration;
-                    
                     if (currentStageTotalDuration > 0) {
                         isMediaScrubbingActive = true;
                         updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
                         if (stageProgressBarContainer) stageProgressBarContainer.classList.add('visible');
-                        if (!currentReplayAnimationId) {
-                            currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
-                        }
+                        if (!currentReplayAnimationId) currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
                     } else {
                         if (stageProgressBarContainer) stageProgressBarContainer.classList.remove('visible');
                     }
                 }).catch(e => console.error("Error setting up embed stage:", e));
 
-                if (nextCheckBtn) {
-                    nextCheckBtn.textContent = TXT.gotIt;
-                    nextCheckBtn.disabled = false;
-                }
+                if (nextCheckBtn) { nextCheckBtn.textContent = TXT.gotIt; nextCheckBtn.disabled = false; }
                 if (clearBtn) clearBtn.style.display = 'none';
 
             } else if (isQuestionStage) {
@@ -2924,12 +2926,7 @@ function renderStageUI(index, isResize = false) {
                     if (bottomBar) bottomBar.style.display = 'flex';
                     displayMcq(mcqDetails);
                     if (clearBtn) clearBtn.style.display = 'none';
-
-                    if (nextCheckBtn) {
-                        nextCheckBtn.style.display = 'inline-flex';
-                        nextCheckBtn.disabled = false;
-                        nextCheckBtn.textContent = TXT.check;
-                    }
+                    if (nextCheckBtn) { nextCheckBtn.style.display = 'inline-flex'; nextCheckBtn.disabled = false; nextCheckBtn.textContent = TXT.check; }
                 } else if (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution') {
                     if (bottomBar) bottomBar.style.display = 'flex';
                     if (nextCheckBtn) { nextCheckBtn.textContent = TXT.check; nextCheckBtn.disabled = false; }
@@ -2941,31 +2938,22 @@ function renderStageUI(index, isResize = false) {
                 if (mcqOptionsContainer) mcqOptionsContainer.style.display = 'none';
                 const isDrawingInputStage = currentStageData.studentInput === true;
                 if (clearBtn) clearBtn.style.display = isDrawingInputStage ? 'inline-flex' : 'none';
+                
                 if (currentStageData.audioFile || currentStageData.drawingRecord) {
-                    if (!isResize) {
-                        isMediaScrubbingActive = true;
-                        lastFrameTimestampForManualAdvance = 0;
-                        internalPlaybackTime = 0;
-                    }
+                    if (!isResize) { isMediaScrubbingActive = true; lastFrameTimestampForManualAdvance = 0; internalPlaybackTime = 0; }
                     updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration > 0 ? currentStageTotalDuration : 1);
                     const audioMetaPromise = new Promise((resolveAudio) => {
-                        if (currentStageData.audioFile) {
-                            playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize);
-                        } else {
-                            resolveAudio(0);
-                        }
+                        if (currentStageData.audioFile) { playStageAudio(currentStageData.audioFile, (duration) => resolveAudio(duration || 0), () => { }, isResize); }
+                        else { resolveAudio(0); }
                     });
+                    
                     let drawingDataPromise;
                     if (currentStageData.drawingRecord) {
                         if (!isResize || !currentStageDrawingData) {
                             drawingDataPromise = fetch(currentStageData.drawingRecord).then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)).then(json => { if (!json || !json.strokes) throw "Bad drawing JSON"; currentStageDrawingData = json; return json; }).catch(e => { console.error("Failed to load drawing data:", e); currentStageDrawingData = null; return null; });
-                        } else {
-                            drawingDataPromise = Promise.resolve(currentStageDrawingData);
-                        }
-                    } else {
-                        currentStageDrawingData = null;
-                        drawingDataPromise = Promise.resolve(null);
-                    }
+                        } else { drawingDataPromise = Promise.resolve(currentStageDrawingData); }
+                    } else { currentStageDrawingData = null; drawingDataPromise = Promise.resolve(null); }
+                    
                     Promise.all([audioMetaPromise, drawingDataPromise]).then(([audioDuration, loadedDrawingData]) => {
                         if (loadedDrawingData) currentStageDrawingData = loadedDrawingData;
                         const drawingAnimDuration = currentStageDrawingData ? calculateDrawingDuration(currentStageDrawingData) : 0;
@@ -2998,81 +2986,44 @@ function renderStageUI(index, isResize = false) {
             if (clearBtn) clearBtn.disabled = (isThelobookActive || isPageGridVisible || isReplayActive);
         }
 
-        // --- START OF FIX: Image / Headline Drawing Logic ---
+        // --- MAIN RENDERING LOGIC ---
         
-        // Check if there is an image to load
-        if (currentStageData.image && bgCtx) {
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.src = currentStageData.image;
-            
-            img.onload = async () => {
-                // FORCE: Ensure canvas size is locked in before drawing image
-                const rect = boardWrapper.getBoundingClientRect();
-                const cssWidth = Math.max(1, Math.floor(rect.width));
-                const cssHeight = Math.max(1, Math.floor(rect.height));
+        // Strategy: Wait 2 frames to ensure the previous stage's iframe/DOM is totally gone.
+        // This prevents reading "0" height or "stale" contexts.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(async () => {
                 
-                // Only reset if they differ significantly to avoid flicker
-                if (Math.abs(backgroundCanvas.width - cssWidth * devicePixelRatio) > 2) {
-                     [backgroundCanvas, replayCanvas, canvas].forEach(c => {
-                        if (c) {
-                            c.width = Math.floor(cssWidth * devicePixelRatio);
-                            c.height = Math.floor(cssHeight * devicePixelRatio);
-                            c.style.width = `${cssWidth}px`;
-                            c.style.height = `${cssHeight}px`;
-                        }
-                    });
-                    setupContexts(); 
-                }
+                // 1. Force the canvas to match the container's true size
+                forceSyncCanvasSize();
 
-                drawImageWithCorrectLayout(bgCtx, img, currentStageData);
-                
-                // Small delay to let image render before text logic
-                await new Promise(r => requestAnimationFrame(r));
-                
-                await drawHeadlineText();
-                setupStageContent();
-                resolve();
-            };
-            
-            img.onerror = async () => {
-                console.error("Failed to load stage image:", currentStageData.image);
-                await drawHeadlineText();
-                setupStageContent();
-                resolve();
-            };
-        } else {
-            // === NO IMAGE PATH: FORCE RESIZE/REFLOW HERE ===
-            
-            // 1. Force Browser Layout Calculation
-            const forceReflow = boardWrapper.offsetHeight; 
-
-            // 2. Wait for next frame
-            await new Promise(r => requestAnimationFrame(r));
-
-            // 3. Manually Sync Canvas to CSS Dimensions
-            // This replicates the logic of 'resizeCanvases' instantly
-            const rect = boardWrapper.getBoundingClientRect();
-            const cssWidth = Math.max(1, Math.floor(rect.width));
-            const cssHeight = Math.max(1, Math.floor(rect.height));
-            
-            [backgroundCanvas, replayCanvas, canvas].forEach(c => {
-                if (c) {
-                    c.width = Math.floor(cssWidth * devicePixelRatio);
-                    c.height = Math.floor(cssHeight * devicePixelRatio);
-                    c.style.width = `${cssWidth}px`;
-                    c.style.height = `${cssHeight}px`;
+                // 2. Handle Image Loading (if exists)
+                if (currentStageData.image && bgCtx) {
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous";
+                    img.src = currentStageData.image;
+                    
+                    img.onload = async () => {
+                        // Re-check size in case image load took time
+                        forceSyncCanvasSize(); 
+                        drawImageWithCorrectLayout(bgCtx, img, currentStageData);
+                        await drawHeadlineText();
+                        setupStageContent();
+                        resolve();
+                    };
+                    img.onerror = async () => {
+                        console.error("Failed to load stage image:", currentStageData.image);
+                        await drawHeadlineText();
+                        setupStageContent();
+                        resolve();
+                    };
+                } else {
+                    // 3. No Image: Just text and buttons
+                    await drawHeadlineText();
+                    setupStageContent();
+                    resolve();
                 }
             });
-            
-            // 4. Reset Contexts (Font, Scale, Color)
-            setupContexts();
-
-            // 5. Draw
-            await drawHeadlineText();
-            setupStageContent();
-            resolve();
-        }
+        });
     });
 }
 	  function transitionToStage(newIndex) {
