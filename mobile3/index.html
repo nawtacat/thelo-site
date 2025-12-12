@@ -4192,6 +4192,33 @@ function logHandwritingAttempt(result) {
         });
     }
 }
+function getMobileInkData() {
+    if (!cachedStaticCanvas) return canvas.toDataURL("image/png");
+    
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = cachedStaticCanvas.width;
+    tempCanvas.height = cachedStaticCanvas.height;
+    const tCtx = tempCanvas.getContext('2d');
+    
+    tCtx.scale(devicePixelRatio, devicePixelRatio);
+    tCtx.lineCap = 'round';
+    tCtx.lineJoin = 'round';
+    
+    mobileStrokes.forEach(stroke => {
+        tCtx.beginPath();
+        tCtx.strokeStyle = stroke.color;
+        tCtx.lineWidth = 3;
+        if (stroke.points.length > 0) {
+            tCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
+            for (let i = 1; i < stroke.points.length; i++) {
+                tCtx.lineTo(stroke.points[i].x, stroke.points[i].y);
+            }
+        }
+        tCtx.stroke();
+    });
+    
+    return tempCanvas.toDataURL("image/png");
+}
 	async function checkHandwritingAnswer() {
     console.log("Auth state at time of call:", isAuthReady);
     if (!isAuthReady || !auth.currentUser) {
@@ -4217,20 +4244,18 @@ function logHandwritingAttempt(result) {
     
     let base64ImageData;
     try {
+        let imageDataUrl;
         if (isMobileMode) {
-            base64ImageData = getMobileFullCanvasData();
-            if (!base64ImageData || mobileStrokes.length === 0) throw new Error("BLANK_ANSWER");
+            if (mobileStrokes.length === 0) throw new Error("BLANK_ANSWER");
+            imageDataUrl = getMobileInkData();
         } else {
-            const blankCanvas = document.createElement('canvas');
-            blankCanvas.width = canvas.width;
-            blankCanvas.height = canvas.height;
-            const imageDataUrl = captureCanvas.toDataURL('image/png');
-
-            if (imageDataUrl === blankCanvas.toDataURL()) {
-                throw new Error("BLANK_ANSWER");
-            }
-            base64ImageData = imageDataUrl;
+            const blankCanvas = document.createElement('canvas');
+            blankCanvas.width = canvas.width;
+            blankCanvas.height = canvas.height;
+            imageDataUrl = captureCanvas.toDataURL('image/png');
+            if (imageDataUrl === blankCanvas.toDataURL()) throw new Error("BLANK_ANSWER");
         }
+        base64ImageData = imageDataUrl;
     } catch (error) {
         addChatMessage('AI', formatAIMessage('drawActivityWarning'));
         playRandomFeedback('disapprove');
@@ -4312,20 +4337,18 @@ async function checkMathDrawing(isMcqContext = false) {
     try {
         // --- IMAGE 1: THE SOLUTION (Foreground) ---
         let userInkBase64;
-        let questionContextBase64 = null;
-
         if (isMobileMode) {
-            if (mobileStrokes.length === 0) throw new Error("Please draw something first.");
-            userInkBase64 = getMobileFullCanvasData();
-            if (!userInkBase64) throw new Error("Failed to capture drawing.");
-            // On mobile, userInkBase64 is a composite of background + strokes.
-            // We send null for questionImage to prevent misalignment issues.
-            questionContextBase64 = null;
+            userInkBase64 = getMobileInkData();
         } else {
-            // This captures ONLY the blue ink on a transparent background
             userInkBase64 = canvas.toDataURL("image/png");
-            // This captures the graph/geometry image exactly as the user sees it
-            if (currentStageData.image && backgroundCanvas) {
+        }
+
+        // --- IMAGE 2: THE CONTEXT (Background) ---
+        let questionContextBase64 = null;
+        if (currentStageData.image) {
+            if (isMobileMode && cachedStaticCanvas) {
+                questionContextBase64 = cachedStaticCanvas.toDataURL("image/png");
+            } else if (backgroundCanvas) {
                 questionContextBase64 = backgroundCanvas.toDataURL("image/png");
             }
         }
@@ -5071,9 +5094,9 @@ async function logDigitForTraining(recognizedValue, feedbackType) {
     try {
         // Capture the content of the main canvas (which contains the blue ink)
         if (isMobileMode) {
-            base64ImageData = getMobileFullCanvasData();
+            base64ImageData = getMobileInkData();
         } else {
-            base64ImageData = canvas.toDataURL('image/png');
+            base64ImageData = canvas.toDataURL('image/png');
         }
     } catch (e) {
         console.error("Failed to get image data from canvas for logging:", e);
