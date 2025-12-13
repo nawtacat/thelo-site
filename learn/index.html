@@ -1298,7 +1298,7 @@ body.mobile-mode #boardWrap {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2rem;
+    gap: 1rem;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.3s ease, visibility 0s linear 0.3s;
@@ -1312,9 +1312,9 @@ body.mobile-mode #boardWrap {
 
 .mobile-menu-btn {
     font-family: 'Manrope', sans-serif;
-    font-size: 1.5rem;
+    font-size: 1.1rem;
     font-weight: 600;
-    padding: 1rem 3rem;
+    padding: 0.75rem 1.5rem;
     border-radius: 1rem;
     border: none;
     background-color: var(--thelo-bg);
@@ -1385,6 +1385,7 @@ body.mobile-mode #boardWrap {
                 <button id="mobileNextBtn" class="mobile-menu-btn" style="color: var(--thelo-blue);">Next Stage</button>
                 <button id="mobileEraseBtn" class="mobile-menu-btn" style="color: var(--error-red);">Erase</button>
                 <button id="mobilePrevBtn" class="mobile-menu-btn" style="color: var(--thelo-text-light);">Previous Stage</button>
+                <button id="mobileCloseBtn" class="mobile-menu-btn" style="color: var(--thelo-text);">Close Menu</button>
             </div>
         </div>
         
@@ -1655,6 +1656,7 @@ nextCheckBtn.addEventListener(
     const mobileNextBtn = document.getElementById('mobileNextBtn');
     const mobileEraseBtn = document.getElementById('mobileEraseBtn');
     const mobilePrevBtn = document.getElementById('mobilePrevBtn');
+    const mobileCloseBtn = document.getElementById('mobileCloseBtn');
 const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
 
     const thelobookControlsEl = document.getElementById('thelobookControls');
@@ -2259,6 +2261,7 @@ function handleDrawingEnd(e) {
 
 /* ===== NEW: Mobile Interaction Logic ===== */
 let lastTapTime = 0;
+let lastTapPos = { x: 0, y: 0 };
 let isMobilePanning = false;
 let mobilePanStart = { x: 0, y: 0 };
 let mobileCameraStart = { x: 0, y: 0 };
@@ -2266,18 +2269,22 @@ let mobileCameraStart = { x: 0, y: 0 };
 function handleMobileTouchStart(e) {
     const now = Date.now();
     if (e.touches.length === 1) {
-        if (now - lastTapTime < 300) {
+        const touch = e.touches[0];
+        const dist = Math.hypot(touch.clientX - lastTapPos.x, touch.clientY - lastTapPos.y);
+
+        if (now - lastTapTime < 300 && dist < 50) {
             // Double tap detected
             toggleMobileMenu();
             e.preventDefault();
+            lastTapTime = 0;
             return;
         }
         lastTapTime = now;
+        lastTapPos = { x: touch.clientX, y: touch.clientY };
 
         // Start Drawing
         if (!isStudentInputAllowed) return;
         drawing = true;
-        const touch = e.touches[0];
         const rect = canvas.getBoundingClientRect();
         const x = touch.clientX - rect.left;
         const y = touch.clientY - rect.top;
@@ -2310,6 +2317,7 @@ function handleMobileTouchStart(e) {
             y: (e.touches[0].clientY + e.touches[1].clientY) / 2
         };
         mobileCameraStart = { ...mobileCameraOffset };
+        lastTapTime = 0;
     }
 }
 
@@ -2332,6 +2340,11 @@ function handleMobileTouchMove(e) {
         const rect = canvas.getBoundingClientRect();
         const x = touch.clientX - rect.left;
         const y = touch.clientY - rect.top;
+
+        // Invalidate double-tap if drawing stroke exceeds threshold
+        if (Math.hypot(touch.clientX - lastTapPos.x, touch.clientY - lastTapPos.y) > 10) {
+            lastTapTime = 0;
+        }
 
         // Draw visually (screen coords)
         ctx.lineTo(x, y);
@@ -2366,7 +2379,9 @@ function redrawMobileBoard() {
 
     // Draw static content (cached) with offset
     if (cachedStaticCanvas) {
-        bgCtx.drawImage(cachedStaticCanvas, mobileCameraOffset.x, mobileCameraOffset.y);
+        const cssWidth = backgroundCanvas.width / devicePixelRatio;
+        const cssHeight = backgroundCanvas.height / devicePixelRatio;
+        bgCtx.drawImage(cachedStaticCanvas, mobileCameraOffset.x, mobileCameraOffset.y, cssWidth, cssHeight);
     }
 
     // Draw user strokes with offset
@@ -4190,6 +4205,84 @@ function logHandwritingAttempt(result) {
         });
     }
 }
+function getMobileInkData(withBackground = false) {
+    // Fallback if no strokes and no background request
+    if (mobileStrokes.length === 0 && !withBackground) return canvas.toDataURL("image/png");
+    
+    // 1. Calculate Bounds (CSS pixels)
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    if (mobileStrokes.length > 0) {
+        mobileStrokes.forEach(s => s.points.forEach(p => {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+        }));
+    }
+
+    // If no strokes found, reset bounds
+    if (minX === Infinity) {
+        minX = 0; minY = 0; maxX = 0; maxY = 0;
+    }
+
+    let bgCssW = 0, bgCssH = 0;
+    if (cachedStaticCanvas) {
+        bgCssW = cachedStaticCanvas.width / devicePixelRatio;
+        bgCssH = cachedStaticCanvas.height / devicePixelRatio;
+    }
+
+    if (withBackground && cachedStaticCanvas) {
+        // Expand to include background at (0,0)
+        minX = Math.min(minX, 0);
+        minY = Math.min(minY, 0);
+        maxX = Math.max(maxX, bgCssW);
+        maxY = Math.max(maxY, bgCssH);
+    } else {
+        // Padding for strokes only
+        const padding = 20;
+        minX -= padding; minY -= padding;
+        maxX += padding; maxY += padding;
+    }
+
+    // Ensure valid dimensions
+    const width = Math.max(1, Math.ceil(maxX - minX));
+    const height = Math.max(1, Math.ceil(maxY - minY));
+
+    // Create High-DPI canvas
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width * devicePixelRatio;
+    tempCanvas.height = height * devicePixelRatio;
+    const tCtx = tempCanvas.getContext('2d');
+
+    // Scale and Translate
+    tCtx.scale(devicePixelRatio, devicePixelRatio);
+    tCtx.translate(-minX, -minY);
+
+    // Draw Background
+    if (withBackground && cachedStaticCanvas) {
+        tCtx.drawImage(cachedStaticCanvas, 0, 0, bgCssW, bgCssH);
+    }
+
+    // Draw Strokes
+    tCtx.lineCap = 'round';
+    tCtx.lineJoin = 'round';
+    
+    mobileStrokes.forEach(stroke => {
+        tCtx.beginPath();
+        tCtx.strokeStyle = stroke.color;
+        tCtx.lineWidth = 3;
+        if (stroke.points.length > 0) {
+            tCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
+            for (let i = 1; i < stroke.points.length; i++) {
+                tCtx.lineTo(stroke.points[i].x, stroke.points[i].y);
+            }
+        }
+        tCtx.stroke();
+    });
+    
+    return tempCanvas.toDataURL("image/png");
+}
 	async function checkHandwritingAnswer() {
     console.log("Auth state at time of call:", isAuthReady);
     if (!isAuthReady || !auth.currentUser) {
@@ -4215,15 +4308,18 @@ function logHandwritingAttempt(result) {
     
     let base64ImageData;
     try {
-        const blankCanvas = document.createElement('canvas');
-        blankCanvas.width = canvas.width;
-        blankCanvas.height = canvas.height;
-        const imageDataUrl = captureCanvas.toDataURL('image/png');
-
-        if (imageDataUrl === blankCanvas.toDataURL()) {
-            throw new Error("BLANK_ANSWER");
-        }
-        base64ImageData = imageDataUrl;
+        let imageDataUrl;
+        if (isMobileMode) {
+            if (mobileStrokes.length === 0) throw new Error("BLANK_ANSWER");
+            imageDataUrl = getMobileInkData(false);
+        } else {
+            const blankCanvas = document.createElement('canvas');
+            blankCanvas.width = canvas.width;
+            blankCanvas.height = canvas.height;
+            imageDataUrl = captureCanvas.toDataURL('image/png');
+            if (imageDataUrl === blankCanvas.toDataURL()) throw new Error("BLANK_ANSWER");
+        }
+        base64ImageData = imageDataUrl;
     } catch (error) {
         addChatMessage('AI', formatAIMessage('drawActivityWarning'));
         playRandomFeedback('disapprove');
@@ -4304,14 +4400,21 @@ async function checkMathDrawing(isMcqContext = false) {
     
     try {
         // --- IMAGE 1: THE SOLUTION (Foreground) ---
-        // This captures ONLY the blue ink on a transparent background
-        const userInkBase64 = canvas.toDataURL("image/png");
+        let userInkBase64;
+        if (isMobileMode) {
+            userInkBase64 = getMobileInkData(true);
+        } else {
+            userInkBase64 = canvas.toDataURL("image/png");
+        }
 
         // --- IMAGE 2: THE CONTEXT (Background) ---
-        // This captures the graph/geometry image exactly as the user sees it
         let questionContextBase64 = null;
-        if (currentStageData.image && backgroundCanvas) {
-            questionContextBase64 = backgroundCanvas.toDataURL("image/png");
+        if (currentStageData.image) {
+            if (isMobileMode && cachedStaticCanvas) {
+                questionContextBase64 = cachedStaticCanvas.toDataURL("image/png");
+            } else if (backgroundCanvas) {
+                questionContextBase64 = backgroundCanvas.toDataURL("image/png");
+            }
         }
 
         const payload = {
@@ -4921,6 +5024,7 @@ function initApp() {
         toggleMobileMenu(); 
         if (currentStageIndex > 0) transitionToStage(currentStageIndex - 1); 
     };
+    if (mobileCloseBtn) mobileCloseBtn.onclick = toggleMobileMenu;
 
 
     if (dashboardBtn) {
@@ -5054,7 +5158,11 @@ async function logDigitForTraining(recognizedValue, feedbackType) {
     let base64ImageData;
     try {
         // Capture the content of the main canvas (which contains the blue ink)
-        base64ImageData = canvas.toDataURL('image/png');
+        if (isMobileMode) {
+            base64ImageData = getMobileInkData(false);
+        } else {
+            base64ImageData = canvas.toDataURL('image/png');
+        }
     } catch (e) {
         console.error("Failed to get image data from canvas for logging:", e);
         return;
