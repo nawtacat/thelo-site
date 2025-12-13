@@ -2261,6 +2261,7 @@ function handleDrawingEnd(e) {
 
 /* ===== NEW: Mobile Interaction Logic ===== */
 let lastTapTime = 0;
+let lastTapPos = { x: 0, y: 0 };
 let isMobilePanning = false;
 let mobilePanStart = { x: 0, y: 0 };
 let mobileCameraStart = { x: 0, y: 0 };
@@ -2268,18 +2269,22 @@ let mobileCameraStart = { x: 0, y: 0 };
 function handleMobileTouchStart(e) {
     const now = Date.now();
     if (e.touches.length === 1) {
-        if (now - lastTapTime < 300) {
+        const touch = e.touches[0];
+        const dist = Math.hypot(touch.clientX - lastTapPos.x, touch.clientY - lastTapPos.y);
+
+        if (now - lastTapTime < 300 && dist < 50) {
             // Double tap detected
             toggleMobileMenu();
             e.preventDefault();
+            lastTapTime = 0;
             return;
         }
         lastTapTime = now;
+        lastTapPos = { x: touch.clientX, y: touch.clientY };
 
         // Start Drawing
         if (!isStudentInputAllowed) return;
         drawing = true;
-        const touch = e.touches[0];
         const rect = canvas.getBoundingClientRect();
         const x = touch.clientX - rect.left;
         const y = touch.clientY - rect.top;
