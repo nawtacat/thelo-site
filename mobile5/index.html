@@ -1774,21 +1774,22 @@ let lastIframeUpdateTime = 0;
         }
     }
     function setLanguage(lang) {
-        if (UI_TEXT[lang]) {
-            if (currentLang !== lang) { currentLang = lang; console.log(`Language set to: ${currentLang} by lesson file.`); }
-            else { console.log(`Language already set to: ${currentLang}. Forcing UI text update.`); }
-        } else {
-            console.warn(`Language ${lang} from lesson file not supported. Defaulting to 'hy'.`);
-            currentLang = 'hy';
-        }
-		// Add or remove the language-specific class on the body
-		if (currentLang === 'en') {
-			document.body.classList.add('lang-en');
-		} else {
-			document.body.classList.remove('lang-en');
-		}
-		updateAllUITexts();
-    }
+        const normalizedLang = (lang || '').trim().toLowerCase();
+        if (UI_TEXT[normalizedLang]) {
+            if (currentLang !== normalizedLang) { currentLang = normalizedLang; console.log(`Language set to: ${currentLang} by lesson file.`); }
+            else { console.log(`Language already set to: ${currentLang}. Forcing UI text update.`); }
+        } else {
+            console.warn(`Language '${lang}' from lesson file not supported. Defaulting to 'hy'.`);
+            currentLang = 'hy';
+        }
+        // Add or remove the language-specific class on the body
+        if (currentLang === 'en') {
+            document.body.classList.add('lang-en');
+        } else {
+            document.body.classList.remove('lang-en');
+        }
+        updateAllUITexts();
+    }
 
     /* ========== Core App Functions ========== */
     function updatePointsDisplay() {
@@ -1809,8 +1810,9 @@ let lastIframeUpdateTime = 0;
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status} fetching ${lessonJsonPath}`);
         lessonStagesRoot = await response.json();
         if (!lessonStagesRoot || !Array.isArray(lessonStagesRoot.stages)) throw new Error("Invalid lesson format.");
-        const lessonLang = lessonStagesRoot.lessonLanguage || 'hy';
-        setLanguage(lessonLang);
+        let lessonLang = lessonStagesRoot.lessonLanguage;
+        if (typeof lessonLang === 'string') lessonLang = lessonLang.trim().toLowerCase();
+        setLanguage(lessonLang || 'hy');
         let TXT = getCurrentUIText();
         lessonStages = lessonStagesRoot.stages;
 
