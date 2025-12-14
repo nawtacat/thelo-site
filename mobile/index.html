@@ -2314,19 +2314,27 @@ function handleMobileTouchStart(e) {
 
         // Start Drawing
         if (!isStudentInputAllowed) {
-            // Enable scrubbing if media is present
-            if (currentStageTotalDuration > 0) {
-                isMobileScrubbing = true;
-                mobileScrubStartX = e.touches[0].clientX;
-                mobileScrubStartTime = internalPlaybackTime;
+            // Enable scrubbing if media is present AND user touches the progress handle
+            if (currentStageTotalDuration > 0 && stageProgressBarContainer) {
+                const rect = stageProgressBarContainer.getBoundingClientRect();
+                const ratio = Math.min(1, Math.max(0, internalPlaybackTime / currentStageTotalDuration));
+                const handleX = rect.left + (rect.width * ratio);
+                const handleY = rect.top + (rect.height / 2);
                 
-                isMediaScrubbingActive = false;
-                if (currentReplayAnimationId) {
-                    cancelAnimationFrame(currentReplayAnimationId);
-                    currentReplayAnimationId = null;
-                }
-                if (currentStageAudio && !currentStageAudio.paused) {
-                    currentStageAudio.pause();
+                // Hit test: 40px radius around the current playback head
+                if (Math.abs(touch.clientX - handleX) <= 40 && Math.abs(touch.clientY - handleY) <= 40) {
+                    isMobileScrubbing = true;
+                    mobileScrubStartX = touch.clientX;
+                    mobileScrubStartTime = internalPlaybackTime;
+                    
+                    isMediaScrubbingActive = false;
+                    if (currentReplayAnimationId) {
+                        cancelAnimationFrame(currentReplayAnimationId);
+                        currentReplayAnimationId = null;
+                    }
+                    if (currentStageAudio && !currentStageAudio.paused) {
+                        currentStageAudio.pause();
+                    }
                 }
             }
             return;
