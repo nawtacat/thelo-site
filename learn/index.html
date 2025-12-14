@@ -1480,7 +1480,7 @@ ensureHeadlineFontsLoaded().catch(()=>{});
             pointsGained: "+{points} միավոր ձեռք բերվեց։", error: "Սխալ", titleDefaultHy: "Thelo AI Գրատախտակ",
             thelobookOpen: "Թելոգիրք", thelobookClose: "Փակել", thelobookInk: "Գույն՝ Սև (Նշումներ)",
             thelobookEraser: "Ջնջիչ", thelobookPen: "Գրիչ",
-            closeMenu: "Շարունակել",
+            closeMenu: "Փակել մենյուն",
             nextStage: "Հաջորդ փուլ",
             prevStage: "Նախորդ փուլ",
             thelobookDisabledMCQ: "Թելոգիրքը հասանելի չէ հարցաշարի ժամանակ։",
@@ -1569,6 +1569,9 @@ ensureHeadlineFontsLoaded().catch(()=>{});
     let mobileCameraOffset = { x: 0, y: 0 };
     let mobileStrokes = [];
     let cachedStaticCanvas = null;
+    let isMobileScrubbing = false;
+    let mobileScrubStartX = 0;
+    let mobileScrubStartTime = 0;
 
 /* ========================================================================= */
 
@@ -2310,7 +2313,32 @@ function handleMobileTouchStart(e) {
         lastTapPos = { x: touch.clientX, y: touch.clientY };
 
         // Start Drawing
-        if (!isStudentInputAllowed) return;
+        if (!isStudentInputAllowed) {
+            // Enable scrubbing if media is present AND user touches the progress handle
+            if (currentStageTotalDuration > 0 && stageProgressBarContainer) {
+                const rect = stageProgressBarContainer.getBoundingClientRect();
+                const ratio = Math.min(1, Math.max(0, internalPlaybackTime / currentStageTotalDuration));
+                const handleX = rect.left + (rect.width * ratio);
+                const handleY = rect.top + (rect.height / 2);
+                
+                // Hit test: 40px radius around the current playback head
+                if (Math.abs(touch.clientX - handleX) <= 40 && Math.abs(touch.clientY - handleY) <= 40) {
+                    isMobileScrubbing = true;
+                    mobileScrubStartX = touch.clientX;
+                    mobileScrubStartTime = internalPlaybackTime;
+                    
+                    isMediaScrubbingActive = false;
+                    if (currentReplayAnimationId) {
+                        cancelAnimationFrame(currentReplayAnimationId);
+                        currentReplayAnimationId = null;
+                    }
+                    if (currentStageAudio && !currentStageAudio.paused) {
+                        currentStageAudio.pause();
+                    }
+                }
+            }
+            return;
+        }
         drawing = true;
         const rect = canvas.getBoundingClientRect();
         const x = touch.clientX - rect.left;
@@ -2361,6 +2389,22 @@ function handleMobileTouchMove(e) {
         mobileCameraOffset.y = mobileCameraStart.y + deltaY;
 
         requestAnimationFrame(redrawMobileBoard);
+    } else if (isMobileScrubbing && e.touches.length === 1) {
+        e.preventDefault();
+        const deltaX = e.touches[0].clientX - mobileScrubStartX;
+        const screenWidth = window.innerWidth;
+        let newTime = mobileScrubStartTime + (deltaX / screenWidth) * currentStageTotalDuration;
+        newTime = Math.max(0, Math.min(newTime, currentStageTotalDuration));
+        internalPlaybackTime = newTime;
+
+        if (currentStageDrawingData && replayCtx) {
+            renderDrawingAtTime(internalPlaybackTime, currentStageDrawingData, replayCtx);
+        }
+        updateMediaProgressBar(internalPlaybackTime, currentStageTotalDuration);
+
+        if (isReplayActive && replayFrame && replayFrame.contentWindow) {
+            replayFrame.contentWindow.postMessage({ command: 'seekToTime', timeMs: internalPlaybackTime * 1000 }, '*');
+        }
     } else if (drawing && e.touches.length === 1) {
         e.preventDefault();
         const touch = e.touches[0];
@@ -2392,6 +2436,19 @@ function handleMobileTouchMove(e) {
 }
 
 function handleMobileTouchEnd(e) {
+    if (isMobileScrubbing) {
+        isMobileScrubbing = false;
+        if (currentStageAudio) {
+            currentStageAudio.currentTime = internalPlaybackTime;
+            if (internalPlaybackTime < currentStageTotalDuration - 0.1) {
+                currentStageAudio.play().catch(()=>{});
+            }
+        }
+        isMediaScrubbingActive = true;
+        lastFrameTimestampForManualAdvance = 0;
+        if (!currentReplayAnimationId) currentReplayAnimationId = requestAnimationFrame(mediaPlaybackLoop);
+        return;
+    }
     drawing = false;
     isMobilePanning = false;
     ctx.closePath();
