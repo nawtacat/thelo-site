@@ -1452,7 +1452,7 @@ ensureHeadlineFontsLoaded().catch(()=>{});
 
     const UI_TEXT = {
         hy: {
-            next: "Հաջորդը", gotIt: "Հասկացա!", check: "Ստուգել", checking: "Ստուգվում է...",
+            next: "Հաջորդը", gotIt: "Գնալ", check: "Ստուգել", checking: "Ստուգվում է...",
             correct: "Ճիշտ է։", incorrect: "Սխալ է", apiKeyInvalid: "API բանալին անվավեր է",
             inkBlack: "Գույն՝ Սև", inkBlue: "Գույն՝ Կապույտ", loading: "Բեռնվում է...",
             clear: "Մաքրել", start: "Գնալ", prev: "Նախորդ",
@@ -4412,7 +4412,17 @@ function getMobileInkData(withBackground = false) {
         return;
     }
     
-    const payload = {
+   
+    if (!isAuthReady || !auth.currentUser) {
+            // Try one last attempt to auto-login if they aren't logged in
+            try {
+                await auth.signInAnonymously();
+            } catch (e) {
+                console.error(e);
+                addChatMessage('AI', "⚠️ Connection error: Unable to verify guest session for AI check.");
+                return;
+            }
+        }const payload = {
         imageBase64: base64ImageData,
         problemText: "The user is writing a number to answer a question.",
         correctAnswer: String(currentStageData.correctAnswerOcr),
@@ -4467,8 +4477,16 @@ function getMobileInkData(withBackground = false) {
 async function checkMathDrawing(isMcqContext = false) {
     if (!auth.currentUser) {
         console.error("User is not authenticated.");
-        addChatMessage('AI', '⚠️ You must be logged in to use this feature.');
-        throw new Error("User not authenticated.");
+        // Attempt auto-login
+        try {
+            await auth.signInAnonymously();
+        } catch (e) {
+            addChatMessage('AI', '⚠️ Network error: Cannot start secure AI session.');
+            return;
+        }
+
+       
+        
     }
 
     // Refresh token to ensure validity
@@ -5222,7 +5240,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
     } catch (error) {
-        console.error('Styles or fonts failed to load, app initialization aborted:', error);
+        console.error('Styles or fonts failed to load, app initialization attempted:', error);
     }
 });
 // Add this function somewhere logical, e.g., near updateUserPointsInFirestore
