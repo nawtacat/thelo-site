@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <link rel="manifest" href="/manifest.json">
 
@@ -21,9 +22,9 @@
             --grid-color: #E5E7EB;
             --slate-500: #64748b;
             --white: #ffffff;
+            --error-red: #DC2626;
         }
 
-        /* Armenian Font */
         @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-Regular.otf'); font-weight: 400; }
         @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf'); font-weight: 600; }
         @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf'); font-weight: 800; }
@@ -47,10 +48,23 @@
         body.lang-hy { font-family: 'Montserrat Arm', sans-serif; }
 
         /* --- LAYOUT --- */
+        .app-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            width: 100%;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
         .top-bar {
             padding: 1.5rem;
             display: flex;
             justify-content: flex-end;
+            position: absolute;
+            top: 0; right: 0; width: 100%;
+            z-index: 10;
         }
 
         .hero-section {
@@ -61,38 +75,19 @@
             align-items: center;
             text-align: center;
             padding: 0 2rem;
-            margin-bottom: 2rem;
+            transition: opacity 0.3s, transform 0.3s;
         }
-
-        .action-section {
-            padding: 2rem 1.5rem 3rem 1.5rem; /* Extra bottom pad for iOS */
-            background: linear-gradient(to top, var(--thelo-bg) 80%, rgba(248, 249, 250, 0));
-            width: 100%;
-            max-width: 480px;
-            margin: 0 auto;
-        }
-
-        /* --- ELEMENTS --- */
         
-        .lang-btn {
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: var(--slate-500);
-            background: var(--white);
-            border: 1px solid var(--grid-color);
-            padding: 0.4rem 1rem;
-            border-radius: 999px;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            transition: transform 0.1s;
+        .hero-section.dimmed {
+            opacity: 0.3;
+            transform: scale(0.95);
+            pointer-events: none;
         }
-        .lang-btn:active { transform: scale(0.95); }
 
         .logo-img {
             width: 120px;
             height: auto;
             margin-bottom: 1.5rem;
-            /* Gentle float animation */
             animation: float 6s ease-in-out infinite;
         }
 
@@ -117,148 +112,445 @@
             max-width: 300px;
         }
 
-        /* --- BUTTONS --- */
-        .btn {
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        /* --- BOTTOM ACTION SHEET (Wizard Container) --- */
+        .bottom-sheet-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
             width: 100%;
-            padding: 1rem;
+            min-height: 250px;
+            background: transparent;
+            z-index: 20;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Initial State: Only buttons visible */
+        .initial-actions {
+            padding: 2rem 1.5rem 3rem 1.5rem;
+            background: linear-gradient(to top, var(--thelo-bg) 90%, rgba(248, 249, 250, 0));
+            transition: opacity 0.3s;
+        }
+        .initial-actions.hidden {
+            display: none;
+        }
+
+        /* Wizard Card State */
+        .wizard-card {
+            background: var(--white);
+            border-top-left-radius: 1.5rem;
+            border-top-right-radius: 1.5rem;
+            padding: 2rem 1.5rem 2rem 1.5rem; /* Extra padding bottom handles safely by flex */
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.1);
+            height: auto;
+            max-height: 85vh;
+            overflow-y: auto;
+            display: none; /* Hidden initially */
+            flex-direction: column;
+        }
+        .wizard-card.active { display: flex; animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        /* --- WIZARD STEPS --- */
+        .step-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .step-content.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        h2.step-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+        p.step-desc { color: var(--slate-500); margin-bottom: 1.5rem; font-size: 0.95rem; }
+
+        /* Grid Options */
+        .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+        
+        .option-card {
+            background: #F3F4F6;
+            border: 2px solid transparent;
             border-radius: 1rem;
-            font-size: 1.1rem;
-            font-weight: 700;
-            text-decoration: none;
-            margin-bottom: 1rem;
-            transition: transform 0.1s, background-color 0.2s;
+            padding: 1.5rem 1rem;
+            text-align: center;
             cursor: pointer;
-            border: none;
+            transition: all 0.2s;
+        }
+        .option-card:hover { transform: translateY(-2px); }
+        .option-card.selected {
+            background: #EFF6FF;
+            border-color: var(--thelo-blue);
+            color: var(--thelo-blue);
+        }
+        
+        .option-icon { font-size: 2rem; margin-bottom: 0.5rem; display: block; }
+        .option-label { font-weight: 700; font-size: 1rem; }
+
+        /* Form Inputs */
+        .input-group { margin-bottom: 1rem; }
+        .input-label { display: block; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--slate-500); }
+        .input-field {
+            width: 100%; padding: 0.9rem 1rem;
+            border: 2px solid #e2e8f0; border-radius: 0.75rem;
+            font-size: 1rem; outline: none; background: #fafafa;
+            font-family: inherit;
+        }
+        .input-field:focus { border-color: var(--thelo-blue); background: var(--white); }
+
+        /* Buttons */
+        .btn {
+            display: flex; justify-content: center; align-items: center;
+            width: 100%; padding: 1rem; border-radius: 1rem;
+            font-size: 1.1rem; font-weight: 700; text-decoration: none;
+            margin-bottom: 1rem; cursor: pointer; border: none;
+            transition: transform 0.1s, background-color 0.2s;
         }
         .btn:active { transform: scale(0.98); }
+        .btn-primary { background-color: var(--thelo-blue); color: var(--white); box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.3); }
+        .btn-primary:disabled { background-color: #cbd5e1; cursor: not-allowed; box-shadow: none; }
+        .btn-secondary { background-color: var(--white); color: var(--thelo-text); border: 1px solid var(--grid-color); }
+        .btn-text { background: none; color: var(--slate-500); font-size: 0.9rem; margin-bottom: 0; padding: 0.5rem; }
 
-        .btn-primary {
-            background-color: var(--thelo-blue);
-            color: var(--white);
-            box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.3);
-        }
-        .btn-primary:hover { background-color: var(--thelo-blue-dark); }
+        /* Progress Dots */
+        .progress-dots { display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 1.5rem; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #e2e8f0; transition: 0.3s; }
+        .dot.active { width: 24px; background: var(--thelo-blue); border-radius: 4px; }
 
-        .btn-secondary {
-            background-color: var(--white);
-            color: var(--thelo-text);
-            border: 1px solid var(--grid-color);
+        /* Toast */
+        #toast {
+            position: absolute; top: 1rem; left: 50%; transform: translateX(-50%);
+            padding: 0.75rem 1.5rem; border-radius: 2rem;
+            font-size: 0.9rem; font-weight: 600;
+            display: none; z-index: 100; white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
-        .btn-secondary:hover { background-color: #f1f5f9; }
-
-        /* --- ANIMATION UTILS --- */
-        .fade-in-up {
-            opacity: 0;
-            transform: translateY(20px);
-            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .delay-1 { animation-delay: 0.1s; }
-        .delay-2 { animation-delay: 0.2s; }
-        .delay-3 { animation-delay: 0.3s; }
-
-        @keyframes fadeInUp {
-            to { opacity: 1; transform: translateY(0); }
-        }
+        .toast-error { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
 
     </style>
 </head>
 <body>
 
-    <div class="top-bar fade-in-up">
-        <button id="lang-toggle" class="lang-btn">🇦🇲 Հայ</button>
+    <div class="app-container">
+        
+        <div class="top-bar">
+            <button class="btn-text" id="top-login-btn" style="width: auto;">Log In</button>
+        </div>
+
+        <div class="hero-section" id="hero">
+            <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo Logo" class="logo-img">
+            <h1 id="hero-title">Math made for you.</h1>
+            <p id="hero-sub" class="sub-text">Your personal AI tutor for step-by-step learning.</p>
+        </div>
+
+        <div class="bottom-sheet-container">
+            
+            <div class="initial-actions" id="initial-actions">
+                <button class="btn btn-primary" id="btn-start">Get Started</button>
+                <div style="text-align: center; margin-top: 0.5rem;">
+                    <span style="font-size: 0.8rem; color: #94a3b8;">Already have an account? </span>
+                    <button id="btn-login-link" style="background:none; border:none; color:var(--thelo-blue); font-weight:700; font-size:0.8rem; cursor:pointer;">Sign In</button>
+                </div>
+            </div>
+
+            <div class="wizard-card" id="wizard-card">
+                
+                <div class="progress-dots" id="progress-bar">
+                    <div class="dot active"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+
+                <div class="step-content active" id="step-1">
+                    <h2 class="step-title">Choose Language</h2>
+                    <p class="step-desc">Which language do you learn in?</p>
+                    
+                    <div class="option-grid">
+                        <div class="option-card" onclick="selectLang('en', this)">
+                            <span class="option-icon">🇺🇸</span>
+                            <span class="option-label">English</span>
+                        </div>
+                        <div class="option-card" onclick="selectLang('hy', this)">
+                            <span class="option-icon">🇦🇲</span>
+                            <span class="option-label">Հայերեն</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-content" id="step-2">
+                    <h2 class="step-title" id="txt-grade-title">What Grade?</h2>
+                    <p class="step-desc" id="txt-grade-desc">We'll show you the right lessons.</p>
+                    
+                    <div class="option-grid">
+                        <div class="option-card" onclick="selectGrade('9', this)"><span class="option-label">9th</span></div>
+                        <div class="option-card" onclick="selectGrade('10', this)"><span class="option-label">10th</span></div>
+                        <div class="option-card" onclick="selectGrade('11', this)"><span class="option-label">11th</span></div>
+                        <div class="option-card" onclick="selectGrade('12', this)"><span class="option-label">12th</span></div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="prevStep(1)" style="margin-top:1rem;">Back</button>
+                </div>
+
+                <div class="step-content" id="step-3">
+                    <h2 class="step-title" id="txt-create-title">Create Account</h2>
+                    <p class="step-desc" id="txt-create-desc">Save your progress forever.</p>
+                    
+                    <form id="signup-form">
+                        <div class="input-group">
+                            <label class="input-label">Full Name</label>
+                            <input type="text" id="su-name" class="input-field" required>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Email</label>
+                            <input type="email" id="su-email" class="input-field" required>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Password</label>
+                            <input type="password" id="su-pass" class="input-field" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="btn-signup-submit">Start Learning</button>
+                    </form>
+                    <button class="btn-text" onclick="prevStep(2)">Back</button>
+                </div>
+
+                <div class="step-content" id="step-signin">
+                    <h2 class="step-title">Welcome Back</h2>
+                    <p class="step-desc">Sign in to continue your streak.</p>
+                    
+                    <form id="signin-form">
+                        <div class="input-group">
+                            <label class="input-label">Email</label>
+                            <input type="email" id="si-email" class="input-field" required>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Password</label>
+                            <input type="password" id="si-pass" class="input-field" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="btn-signin-submit">Log In</button>
+                    </form>
+                    <button class="btn-text" onclick="closeWizard()">Cancel</button>
+                </div>
+
+            </div>
+        </div>
+
+        <div id="toast"></div>
     </div>
 
-    <div class="hero-section">
-        <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo Logo" class="logo-img fade-in-up delay-1">
-        
-        <h1 id="hero-title" class="fade-in-up delay-2">
-            Math made for you.
-        </h1>
-        
-        <p id="hero-sub" class="sub-text fade-in-up delay-2">
-            Your personal AI tutor for step-by-step learning.
-        </p>
-    </div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    <div class="action-section">
-        <a href="setup.html" class="btn btn-primary fade-in-up delay-3" id="btn-start">
-            Get Started
-        </a>
-        
-        <a href="auth.html" class="btn btn-secondary fade-in-up delay-3" id="btn-login">
-            I have an account
-        </a>
-    </div>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain: "physmathacademy-722b3.firebaseapp.com",
+            projectId: "physmathacademy-722b3",
+            storageBucket: "physmathacademy-722b3.appspot.com",
+            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+        };
 
-    <script>
-        const strings = {
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- STATE & TEXT ---
+        const state = {
+            lang: 'en',
+            grade: null
+        };
+
+        const TXT = {
             en: {
-                title: "Math made for you.",
-                sub: "Your personal AI tutor for step-by-step learning.",
-                start: "Get Started",
-                login: "I have an account",
-                toggle: "🇦🇲 Հայ"
+                title: "Math made for you.", sub: "Your personal AI tutor.",
+                gradeT: "What Grade?", gradeD: "We'll show you the right lessons.",
+                createT: "Create Account", createD: "Save your progress forever.",
+                start: "Start Learning"
             },
             hy: {
-                title: "Մաթեմատիկան՝ քեզ համար։",
-                sub: "Քո անձնական ԱԲ ուսուցիչը՝ քայլ առ քայլ սովորելու համար։",
-                start: "Սկսել",
-                login: "Արդեն ունեմ հաշիվ",
-                toggle: "🇺🇸 Eng"
+                title: "Մաթեմատիկան՝ քեզ համար։", sub: "Քո անձնական ԱԲ ուսուցիչը։",
+                gradeT: "Ո՞ր դասարանում եք", gradeD: "Մենք ցույց կտանք համապատասխան դասերը",
+                createT: "Ստեղծել Հաշիվ", createD: "Պահպանեք ձեր արդյունքները",
+                start: "Սկսել"
             }
         };
 
-        // Check local storage for previous language preference
-        let currentLang = localStorage.getItem('thelo-lang') || 'en';
-
-        // DOM Elements
-        const el = {
-            title: document.getElementById('hero-title'),
-            sub: document.getElementById('hero-sub'),
-            start: document.getElementById('btn-start'),
-            login: document.getElementById('btn-login'),
-            toggle: document.getElementById('lang-toggle')
+        // --- DOM ---
+        const ui = {
+            hero: document.getElementById('hero'),
+            initActions: document.getElementById('initial-actions'),
+            wizard: document.getElementById('wizard-card'),
+            progressBar: document.getElementById('progress-bar'),
+            toast: document.getElementById('toast'),
+            heroTitle: document.getElementById('hero-title'),
+            heroSub: document.getElementById('hero-sub')
         };
 
-        function updateUI() {
-            const t = strings[currentLang];
-            el.title.textContent = t.title;
-            el.sub.textContent = t.sub;
-            el.start.textContent = t.start;
-            el.login.textContent = t.login;
-            el.toggle.textContent = t.toggle;
+        // --- ACTIONS ---
 
-            if (currentLang === 'hy') document.body.classList.add('lang-hy');
-            else document.body.classList.remove('lang-hy');
+        // 1. Open Wizard
+        document.getElementById('btn-start').onclick = () => {
+            ui.initActions.style.display = 'none';
+            ui.hero.classList.add('dimmed');
+            ui.wizard.classList.add('active');
+            showStep(1);
+        };
+
+        // 2. Open Sign In Directly
+        const openSignIn = () => {
+            ui.initActions.style.display = 'none';
+            ui.hero.classList.add('dimmed');
+            ui.wizard.classList.add('active');
+            ui.progressBar.style.display = 'none'; // No steps for sign in
+            
+            // Hide all steps, show sign in
+            document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+            document.getElementById('step-signin').classList.add('active');
+        };
+        document.getElementById('btn-login-link').onclick = openSignIn;
+        document.getElementById('top-login-btn').onclick = openSignIn;
+
+        window.closeWizard = () => {
+            ui.wizard.classList.remove('active');
+            ui.hero.classList.remove('dimmed');
+            setTimeout(() => {
+                ui.initActions.style.display = 'block';
+                // Reset steps
+                showStep(1);
+                ui.progressBar.style.display = 'flex';
+            }, 300);
+        };
+
+        // --- WIZARD LOGIC ---
+
+        function showStep(num) {
+            document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(`step-${num}`).classList.add('active');
+            
+            // Update dots
+            document.querySelectorAll('.dot').forEach((d, i) => {
+                if (i + 1 === num) d.classList.add('active');
+                else d.classList.remove('active');
+            });
         }
 
-        // Toggle Logic
-        el.toggle.addEventListener('click', () => {
-            currentLang = currentLang === 'en' ? 'hy' : 'en';
-            localStorage.setItem('thelo-lang', currentLang);
-            updateUI();
+        window.prevStep = (num) => showStep(num);
+
+        window.selectLang = (lang, el) => {
+            state.lang = lang;
+            applyLangUI();
+            
+            // Highlight
+            el.parentElement.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+
+            // Auto advance
+            setTimeout(() => showStep(2), 250);
+        };
+
+        window.selectGrade = (grade, el) => {
+            state.grade = grade;
+            el.parentElement.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+            setTimeout(() => showStep(3), 250);
+        };
+
+        function applyLangUI() {
+            const t = TXT[state.lang];
+            if(state.lang === 'hy') document.body.classList.add('lang-hy');
+            else document.body.classList.remove('lang-hy');
+
+            // Update Wizard Texts
+            document.getElementById('txt-grade-title').textContent = t.gradeT;
+            document.getElementById('txt-grade-desc').textContent = t.gradeD;
+            document.getElementById('txt-create-title').textContent = t.createT;
+            document.getElementById('txt-create-desc').textContent = t.createD;
+            document.getElementById('btn-signup-submit').textContent = t.start;
+            
+            // Update Hero (Background)
+            ui.heroTitle.textContent = t.title;
+            ui.heroSub.textContent = t.sub;
+        }
+
+        function showToast(msg, isError) {
+            ui.toast.textContent = msg;
+            ui.toast.className = isError ? 'toast-error' : '';
+            ui.toast.style.display = 'block';
+            setTimeout(() => ui.toast.style.display = 'none', 3000);
+        }
+
+        // --- AUTH HANDLERS ---
+
+        // A. SIGN UP
+        document.getElementById('signup-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-signup-submit');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            const name = document.getElementById('su-name').value;
+            const email = document.getElementById('su-email').value;
+            const pass = document.getElementById('su-pass').value;
+
+            try {
+                // 1. Create Auth User
+                const cred = await createUserWithEmailAndPassword(auth, email, pass);
+                const user = cred.user;
+
+                // 2. Create Firestore Profile (with collected wizard data)
+                await setDoc(doc(db, "thelo-students", user.uid), {
+                    name: name,
+                    email: email,
+                    preferences: {
+                        language: state.lang,
+                        grade: state.grade
+                    },
+                    points: 0,
+                    lessonsCompleted: 0,
+                    createdAt: serverTimestamp(),
+                    streakData: { currentStreak: 0, longestStreak: 0 }
+                });
+
+                // 3. Update Profile Name
+                await updateProfile(user, { displayName: name });
+
+                window.location.href = "hangar.html";
+
+            } catch (err) {
+                console.error(err);
+                showToast(err.message, true);
+                btn.disabled = false;
+                btn.textContent = TXT[state.lang].start;
+            }
+        };
+
+        // B. SIGN IN
+        document.getElementById('signin-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-signin-submit');
+            btn.disabled = true;
+            btn.textContent = 'Verifying...';
+
+            const email = document.getElementById('si-email').value;
+            const pass = document.getElementById('si-pass').value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+                window.location.href = "hangar.html";
+            } catch (err) {
+                console.error(err);
+                showToast("Invalid email or password", true);
+                btn.disabled = false;
+                btn.textContent = 'Log In';
+            }
+        };
+
+        // --- CHECK AUTH ---
+        // If user is already logged in, skip splash
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // Optional: Check if they have a profile setup?
+                // For now, just redirect to hangar
+                window.location.href = "hangar.html";
+            }
         });
-
-        // Initialize
-        updateUI();
-
-        /* OPTIONAL: Auto-Redirect if user is already logged in (Firebase).
-           If you want this page to act as a Loading Splash, uncomment below.
-           Otherwise, keep it as a static welcome page.
-        */
-        /*
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        
-        // ... (Your Firebase Config) ...
-        // const auth = getAuth(app);
-        // onAuthStateChanged(auth, (user) => {
-        //     if (user) window.location.href = 'hangar.html';
-        // });
-        */
 
     </script>
 </body>
