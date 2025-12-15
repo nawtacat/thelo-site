@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Thelo Setup</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        /* --- THELO DESIGN SYSTEM --- */
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+            --slate-200: #e2e8f0;
+            --slate-500: #64748b;
+            --white: #ffffff;
+        }
+
+        @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-Regular.otf'); font-weight: 400; }
+        @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf'); font-weight: 600; }
+        @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf'); font-weight: 800; }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-image:
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        body.lang-hy { font-family: 'Montserrat Arm', sans-serif; }
+
+        #setup-frame {
+            flex: 1;
+            max-width: 480px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        /* --- PROGRESS INDICATOR --- */
+        .progress-dots {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+        }
+        .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background-color: var(--slate-200);
+            transition: all 0.3s;
+        }
+        .dot.active { background-color: var(--thelo-blue); width: 24px; border-radius: 4px; }
+
+        /* --- WIZARD CARDS --- */
+        .step-card {
+            background: var(--white);
+            border: 1px solid var(--grid-color);
+            border-radius: 1rem;
+            padding: 2rem 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);
+            display: none; /* Hidden by default */
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.4s, transform 0.4s;
+        }
+        .step-card.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        h2 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; text-align: center; }
+        p.subtitle { color: var(--slate-500); text-align: center; margin-bottom: 2rem; font-size: 0.9rem; }
+
+        /* --- SELECTION BUTTONS (Radio style) --- */
+        .selection-grid { display: flex; flex-direction: column; gap: 1rem; }
+        
+        .option-btn {
+            background: var(--white);
+            border: 2px solid var(--slate-200);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+        
+        .option-btn:hover { border-color: var(--thelo-blue); transform: translateY(-2px); }
+        .option-btn.selected { border-color: var(--thelo-blue); background-color: #EFF6FF; }
+        
+        .option-icon { 
+            width: 40px; height: 40px; 
+            background: #F3F4F6; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .option-text { font-weight: 700; font-size: 1rem; }
+
+        /* --- FORM INPUTS --- */
+        .input-group { margin-bottom: 1rem; }
+        .input-group label { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 0.4rem; color: var(--slate-500); }
+        .input-field {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            border: 2px solid var(--slate-200);
+            border-radius: 0.5rem;
+            font-family: inherit;
+            font-size: 1rem;
+            outline: none;
+        }
+        .input-field:focus { border-color: var(--thelo-blue); }
+
+        /* --- NAVIGATION BUTTONS --- */
+        .nav-actions { margin-top: 2rem; display: flex; justify-content: space-between; align-items: center; }
+        
+        .btn-next {
+            background-color: var(--thelo-blue);
+            color: white;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .btn-next:disabled { background-color: var(--slate-200); color: var(--slate-500); }
+
+        .btn-back {
+            color: var(--slate-500);
+            font-weight: 600;
+            cursor: pointer;
+            border: none; background: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="setup-frame">
+        
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+            <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo" style="height: 2.5rem;">
+        </div>
+
+        <div class="progress-dots">
+            <div class="dot active" id="dot-1"></div>
+            <div class="dot" id="dot-2"></div>
+            <div class="dot" id="dot-3"></div>
+        </div>
+
+        <div class="step-card active" id="step-1">
+            <h2 data-en="Choose Language" data-hy="Ընտրեք Լեզուն">Choose Language</h2>
+            <p class="subtitle" data-en="Which language do you learn in?" data-hy="Ո՞ր լեզվով եք սովորում">Which language do you learn in?</p>
+            
+            <div class="selection-grid">
+                <button class="option-btn" onclick="selectLang('en', this)">
+                    <div class="option-icon">🇺🇸</div>
+                    <div class="option-text">English</div>
+                </button>
+                <button class="option-btn" onclick="selectLang('hy', this)">
+                    <div class="option-icon">🇦🇲</div>
+                    <div class="option-text">Հայերեն</div>
+                </button>
+            </div>
+
+            <div class="nav-actions" style="justify-content: flex-end;">
+                <button class="btn-next" id="btn-next-1" disabled onclick="goToStep(2)">
+                    <span data-en="Next" data-hy="Հաջորդը">Next</span> <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="step-card" id="step-2">
+            <h2 data-en="What Grade are you in?" data-hy="Ո՞ր դասարանում եք">What Grade are you in?</h2>
+            <p class="subtitle" data-en="We will show you the right lessons." data-hy="Մենք ցույց կտանք համապատասխան դասերը">We will show you the right lessons.</p>
+            
+            <div class="selection-grid">
+                <button class="option-btn" onclick="selectGrade('8', this)">
+                    <div class="option-icon">8</div>
+                    <div class="option-text" data-en="8th Grade" data-hy="8-րդ Դասարան">8th Grade</div>
+                </button>
+                <button class="option-btn" onclick="selectGrade('9', this)">
+                    <div class="option-icon">9</div>
+                    <div class="option-text" data-en="9th Grade" data-hy="9-րդ Դասարան">9th Grade</div>
+                </button>
+                <button class="option-btn" onclick="selectGrade('10', this)">
+                    <div class="option-icon">10</div>
+                    <div class="option-text" data-en="10th Grade" data-hy="10-րդ Դասարան">10th Grade</div>
+                </button>
+                <button class="option-btn" onclick="selectGrade('11', this)">
+                    <div class="option-icon">11</div>
+                    <div class="option-text" data-en="11th Grade" data-hy="11-րդ Դասարան">11th Grade</div>
+                </button>
+            </div>
+
+            <div class="nav-actions">
+                <button class="btn-back" onclick="goToStep(1)" data-en="Back" data-hy="Հետ">Back</button>
+                <button class="btn-next" id="btn-next-2" disabled onclick="goToStep(3)">
+                    <span data-en="Next" data-hy="Հաջորդը">Next</span> <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="step-card" id="step-3">
+            <h2 data-en="Create Account" data-hy="Ստեղծել Հաշիվ">Create Account</h2>
+            <p class="subtitle" data-en="Save your progress and streaks." data-hy="Պահպանեք ձեր արդյունքները">Save your progress and streaks.</p>
+            
+            <form id="signup-form" onsubmit="handleSignup(event)">
+                <div class="input-group">
+                    <label data-en="First Name" data-hy="Անուն">First Name</label>
+                    <input type="text" id="inp-name" class="input-field" required>
+                </div>
+                <div class="input-group">
+                    <label data-en="Email" data-hy="Էլ․ հասցե">Email</label>
+                    <input type="email" id="inp-email" class="input-field" required>
+                </div>
+                <div class="input-group">
+                    <label data-en="Password" data-hy="Գաղտնաբառ">Password</label>
+                    <input type="password" id="inp-pass" class="input-field" required minlength="6">
+                </div>
+
+                <div class="nav-actions">
+                    <button type="button" class="btn-back" onclick="goToStep(2)" data-en="Back" data-hy="Հետ">Back</button>
+                    <button type="submit" class="btn-next" id="btn-finish">
+                        <span data-en="Start Learning" data-hy="Սկսել">Start Learning</span> <i class="fa-solid fa-check"></i>
+                    </button>
+                </div>
+            </form>
+            
+            <p style="text-align: center; margin-top: 1.5rem; font-size: 0.8rem; color: var(--slate-500);">
+                <span data-en="Already have an account?" data-hy="Արդեն ունե՞ք հաշիվ">Already have an account?</span> 
+                <a href="https://thelo.space/auth" style="color: var(--thelo-blue); font-weight: 700;">Log In</a>
+            </p>
+        </div>
+
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain: "physmathacademy-722b3.firebaseapp.com",
+            projectId: "physmathacademy-722b3",
+            storageBucket: "physmathacademy-722b3.appspot.com",
+            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- GLOBAL STATE ---
+        window.userState = {
+            language: null,
+            grade: null
+        };
+
+        // --- UI LOGIC ---
+
+        window.selectLang = function(lang, btnElement) {
+            window.userState.language = lang;
+            
+            // Visual Selection
+            document.querySelectorAll('#step-1 .option-btn').forEach(b => b.classList.remove('selected'));
+            btnElement.classList.add('selected');
+            
+            // Enable Next
+            document.getElementById('btn-next-1').disabled = false;
+
+            // Apply Language to UI immediately
+            applyLanguage(lang);
+        };
+
+        window.selectGrade = function(grade, btnElement) {
+            window.userState.grade = grade;
+            document.querySelectorAll('#step-2 .option-btn').forEach(b => b.classList.remove('selected'));
+            btnElement.classList.add('selected');
+            document.getElementById('btn-next-2').disabled = false;
+        };
+
+        window.goToStep = function(stepNum) {
+            // Hide all
+            document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
+            // Show target
+            document.getElementById(`step-${stepNum}`).classList.add('active');
+            
+            // Update dots
+            document.querySelectorAll('.dot').forEach((d, index) => {
+                if (index + 1 === stepNum) d.classList.add('active');
+                else d.classList.remove('active');
+            });
+        };
+
+        function applyLanguage(lang) {
+            if (lang === 'hy') document.body.classList.add('lang-hy');
+            else document.body.classList.remove('lang-hy');
+
+            document.querySelectorAll('[data-en]').forEach(el => {
+                el.textContent = el.getAttribute(`data-${lang}`);
+            });
+        }
+
+        // --- AUTH LOGIC ---
+
+        window.handleSignup = async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn-finish');
+            const originalText = btn.innerHTML;
+            
+            // Lock UI
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
+
+            const name = document.getElementById('inp-name').value;
+            const email = document.getElementById('inp-email').value;
+            const pass = document.getElementById('inp-pass').value;
+
+            try {
+                // 1. Create User
+                const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+                const user = userCredential.user;
+
+                // 2. Save Profile Data + Preferences
+                await setDoc(doc(db, "thelo-students", user.uid), {
+                    name: name,
+                    email: email,
+                    preferences: {
+                        language: window.userState.language,
+                        grade: window.userState.grade
+                    },
+                    points: 0,
+                    lessonsCompleted: 0,
+                    joinedAt: serverTimestamp(),
+                    streakData: { currentStreak: 0, longestStreak: 0 }
+                });
+
+                // 3. Update Auth Profile
+                await updateProfile(user, { displayName: name });
+
+                console.log("Account created. Redirecting...");
+                
+                // 4. Redirect to Hangar
+                window.location.href = "hangar.html"; // Ensure this matches your file name
+
+            } catch (error) {
+                console.error("Signup error", error);
+                alert("Error: " + error.message);
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        };
+
+    </script>
+</body>
+</html>
