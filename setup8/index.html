@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="settingsTitle">Settings</title>
+    <link rel="icon" href="https://thelo.space/img/thelofavicon.png" type="image/png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Noto+Serif+Armenian:wght@400;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            
+            background-image:
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        html[lang="en"] body { font-family: 'Manrope', sans-serif; }
+        html[lang="hy"] body { font-family: "Noto Serif Armenian", serif; }
+
+        h1, h2, h3, h4, h5, h6 { font-weight: 800; }
+        html[lang="hy"] h1, 
+        html[lang="hy"] h2, 
+        html[lang="hy"] h3, 
+        html[lang="hy"] h4, 
+        html[lang="hy"] h5, 
+        html[lang="hy"] h6 { font-weight: 700; }
+
+        header {
+            background-color: transparent; 
+            padding: 1.5rem 2.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            z-index: 10;
+        }
+
+        .settings-window {
+            background-color: white;
+            border: 1px solid var(--grid-color);
+            border-radius: 0.75rem; 
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); 
+            padding: 2.5rem; 
+            position: relative; 
+            max-width: 768px; 
+            width: 100%;
+            margin: auto; 
+            flex-grow: 1; 
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-window::before {
+            content: ' ';
+            position: absolute;
+            top: 1.5rem;
+            left: 1.5rem;
+            width: 52px;
+            height: 12px;
+            background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E%0A");
+            background-repeat: no-repeat;
+            z-index: 10;
+        }
+
+        /* Button Styles */
+        .thelo-btn, .thelo-btn-secondary, .thelo-btn-destructive {
+            font-weight: 700;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid transparent;
+        }
+        .thelo-btn {
+            background-color: var(--thelo-blue);
+            color: white;
+        }
+        .thelo-btn:hover {
+            background-color: #1a56d2; 
+            transform: translateY(-2px);
+        }
+        .thelo-btn-secondary {
+            background-color: transparent;
+            color: var(--thelo-blue);
+            border-color: var(--thelo-blue);
+        }
+        .thelo-btn-secondary:hover {
+            background-color: var(--thelo-blue);
+            color: white;
+        }
+        .thelo-btn-destructive {
+            background-color: #EF4444; 
+            color: white;
+        }
+        .thelo-btn-destructive:hover {
+            background-color: #DC2626; 
+            transform: translateY(-2px);
+        }
+
+        .settings-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem 0; 
+            border-bottom: 1px solid var(--grid-color); 
+            width: 100%; 
+        }
+        .settings-item:last-of-type { border-bottom: none; }
+        .settings-item-content { flex-grow: 1; text-align: left; }
+        .settings-item-title { font-weight: 600; font-size: 1.125rem; color: var(--thelo-text); }
+        .settings-item-description { font-size: 0.875rem; color: #6B7280; margin-top: 0.25rem; }
+        .settings-item-action { margin-left: 1.5rem; flex-shrink: 0; }
+
+        .settings-profile-photo {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--grid-color);
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            flex-shrink: 0;
+        }
+        .settings-profile-photo:hover { transform: scale(1.05); border-color: var(--thelo-blue); }
+
+        .profile-section-layout {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            width: 100%;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .profile-name-email-info { text-align: left; flex-grow: 1; }
+
+        /* NEW: Password Change Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+            position: relative;
+        }
+        .modal-input {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #D1D5DB;
+            border-radius: 0.375rem;
+            margin-top: 0.25rem;
+        }
+        .modal-label {
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        
+        /* === NEW NOTIFICATION STYLES === */
+        #notification-toast {
+            @apply fixed bottom-5 right-5 bg-green-600 text-white p-4 rounded-lg shadow-lg transition-all duration-300 transform translate-y-10 opacity-0 z-50;
+        }
+        #notification-toast.show {
+            @apply transform-none opacity-100;
+        }
+        #notification-toast.error {
+            @apply bg-red-600;
+        }
+        /* === END NOTIFICATION STYLES === */
+        
+        /* === AVATAR SELECTION STYLES === */
+        .char-option {
+            cursor: pointer;
+            border-radius: 9999px;
+            border: 3px solid transparent;
+            transition: transform 0.2s ease-in-out, border-color 0.2s ease-in-out;
+            background-color: #f0f0f0;
+            width: 80px; height: 80px; object-fit: cover;
+        }
+        .char-option:hover { transform: scale(1.08); }
+        .char-option.selected {
+            border-color: var(--thelo-blue);
+            transform: scale(1.08);
+            box-shadow: 0 0 10px rgba(37, 99, 235, 0.3);
+        }
+        #avatar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; justify-items: center; margin-bottom: 1.5rem; }
+        /* === END AVATAR STYLES === */
+
+
+        @media (max-width: 767px) {
+            main { padding-left: 1rem; padding-right: 1rem; }
+            header { padding-left: 1.5rem; padding-right: 1.5rem; }
+            h2 { font-size: 2rem; }
+            h3 { font-size: 1rem; }
+            .settings-window { padding: 2rem 1rem; border-radius: 1rem; }
+            .settings-window::before { top: 1rem; left: 1rem; transform: scale(0.8); transform-origin: top left; }
+            .settings-item { flex-direction: column; align-items: flex-start; padding: 1rem 0; }
+            .settings-item-action { margin-left: 0; margin-top: 0.75rem; width: 100%; }
+            .profile-section-layout { flex-direction: column; align-items: center; gap: 1rem; text-align: center; }
+            .profile-name-email-info { text-align: center; }
+            .modal-content { margin: 1rem; }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header>
+        <div class="flex items-center gap-4">
+            <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo logo" class="h-11 w-auto" /> </div>
+        <button id="back-to-dashboard-btn" class="thelo-btn-secondary text-sm px-4 py-2">
+            <i class="fas fa-arrow-left mr-2"></i> <span data-i18n="backToDashboardBtnText">Dashboard</span>
+        </button>
+    </header>
+
+    <main class="flex-grow container mx-auto px-6 lg:px-8 py-8 md:py-12 flex justify-center items-center">
+        <div class="settings-window">
+            <h2 class="text-3xl lg:text-4xl font-extrabold text-[var(--thelo-text)] mb-8 text-center" data-i18n="settingsMainTitle">Account Settings & Support</h2>
+            
+            <div class="space-y-4 w-full"> 
+                <div class="settings-item">
+                    <div class="settings-item-content profile-section-layout"> 
+                        <!-- FIX 2 (HTML): Replaced via.placeholder.com with placehold.co and set size to 100x100 -->
+                        <img id="settings-profile-photo" src="https://placehold.co/100x100/2563EB/FFFFFF?text=P" alt="Profile Photo" class="settings-profile-photo">
+                        
+                        <div class="profile-name-email-info"> 
+                            <p class="settings-item-title" id="user-full-name-display">Loading Name...</p>
+                            <p class="settings-item-description" id="user-email-main-display">Loading Email...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ### NEW: JOIN CLASSROOM SECTION ### -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title">Classroom</p>
+                        <p class="settings-item-description" id="join-class-description">Enter a code from your tutor to join their classroom.</p>
+                    </div>
+                    <div class="settings-item-action w-full md:w-auto">
+                        <div id="join-class-container" class="flex flex-col sm:flex-row gap-2">
+                            <input type="text" id="class-code-input" placeholder="ABC123" maxlength="6" class="flex-grow w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase tracking-widest text-center font-bold text-sm">
+                            <button id="join-class-btn" class="thelo-btn text-sm px-4 py-2">
+                                <i class="fas fa-users mr-2"></i>
+                                <span>Join</span>
+                            </button>
+                        </div>
+                        <!-- MODIFICATION: Removed the duplicate div. This is the only one now. -->
+                        <div id="in-class-container" class="hidden items-center justify-between gap-4 text-sm text-gray-700 md:flex"></div>
+                    </div>
+                </div>
+
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="passwordManagementTitle">Password</p>
+                        <p class="settings-item-description" data-i18n="passwordDesc">Update your password to keep your account secure.</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="change-password-btn" class="thelo-btn-secondary text-sm px-4 py-2">
+                            <i class="fas fa-key mr-2"></i> <span data-i18n="changePasswordBtnText">Change Password</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="languageSettingsTitle">Language</p>
+                        <p class="settings-item-description" data-i18n="languageDesc">Select your preferred language for the dashboard.</p>
+                        <p class="settings-item-description mt-1"><span data-i18n="currentLanguageLabel">Current:</span> <span class="font-bold" id="current-language-name">Loading...</span></p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="langToggle" class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--thelo-blue)]/50" data-i18n="langToggleBtnText">Հայ</button>
+                    </div>
+                </div>
+
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="supportTitle">Support & Feedback</p>
+                        <p class="settings-item-description" data-i18n="supportDesc">Need help or want to report an issue? We're here for you!</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="report-problem-btn" class="thelo-btn-secondary text-sm px-4 py-2">
+                            <i class="fas fa-bug mr-2"></i> <span data-i18n="reportProblemBtnText">Report Issue</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-item border-b-0 pt-6"> <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="logoutTitle">Logout</p>
+                        <p class="settings-item-description" data-i18n="logoutDesc">Sign out of your account.</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="logout-button" class="thelo-btn-destructive text-sm px-4 py-2" data-i18n="logoutBtnText">
+                            <i class="fas fa-sign-out-alt mr-2"></i> Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center text-sm text-slate-500 mt-12 w-full"> 
+                <p>Your User ID: <span id="user-id-display" class="font-mono text-slate-700">Loading...</span></p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Notification Toast Container -->
+    <div id="notification-toast" class="hidden">
+        <span id="notification-message"></span>
+    </div>
+
+    <div id="password-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold mb-4" data-i18n="modal_pw_title">Change Password</h3>
+            <form id="password-update-form">
+                <div class="space-y-4">
+                    <div>
+                        <label for="current-password" class="modal-label" data-i18n="modal_pw_current">Current Password</label>
+                        <input type="password" id="current-password" class="modal-input" required>
+                    </div>
+                    <div>
+                        <label for="new-password" class="modal-label" data-i18n="modal_pw_new">New Password</label>
+                        <input type="password" id="new-password" class="modal-input" required>
+                    </div>
+                    <div>
+                        <label for="confirm-password" class="modal-label" data-i18n="modal_pw_confirm">Confirm New Password</label>
+                        <input type="password" id="confirm-password" class="modal-input" required>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" id="cancel-password-change" class="thelo-btn-secondary" data-i18n="modal_pw_cancel_btn">Cancel</button>
+                    <button type="submit" id="save-password-change" class="thelo-btn" data-i18n="modal_pw_save_btn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Avatar Selection Modal -->
+    <div id="avatar-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold mb-4" data-i18n="avatarTitle">Choose Avatar</h3>
+            <div id="avatar-grid"></div>
+            <div class="flex justify-end gap-3 mt-4">
+                <button type="button" id="avatar-cancel" class="thelo-btn-secondary" data-i18n="cancelBtn">Cancel</button>
+                <button type="button" id="avatar-save" class="thelo-btn" data-i18n="saveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        // UPDATED: Imported more auth functions
+        import { getAuth, signOut, onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // MODIFICATION: Removed deleteField as it's no longer needed
+        import { getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain: "physmathacademy-722b3.firebaseapp.com",
+            projectId: "physmathacademy-722b3",
+            storageBucket: "physmathacademy-722b3.appspot.com",
+            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app); 
+
+        // DOM Elements
+        const backToDashboardBtn = document.getElementById('back-to-dashboard-btn');
+        const userEmailMainDisplay = document.getElementById('user-email-main-display');
+        const userFullNameDisplay = document.getElementById('user-full-name-display');
+        const changePasswordBtn = document.getElementById('change-password-btn');
+        const reportProblemBtn = document.getElementById('report-problem-btn');
+        const logoutButton = document.getElementById('logout-button');
+        const langToggle = document.getElementById('langToggle'); 
+        const userIdDisplay = document.getElementById('user-id-display');
+        const settingsProfilePhoto = document.getElementById('settings-profile-photo');
+        const currentLanguageNameSpan = document.getElementById('current-language-name');
+
+        // NEW: Avatar Modal Elements
+        const avatarModal = document.getElementById('avatar-modal');
+        const avatarGrid = document.getElementById('avatar-grid');
+        const avatarSaveBtn = document.getElementById('avatar-save');
+        const avatarCancelBtn = document.getElementById('avatar-cancel');
+
+        // NEW: Modal DOM Elements
+        const passwordModal = document.getElementById('password-modal');
+        const passwordUpdateForm = document.getElementById('password-update-form');
+        const cancelPasswordChangeBtn = document.getElementById('cancel-password-change');
+        const currentPasswordInput = document.getElementById('current-password');
+        const newPasswordInput = document.getElementById('new-password');
+        const confirmPasswordInput = document.getElementById('confirm-password');
+
+        // NEW: Join Class Elements
+        const joinClassContainer = document.getElementById('join-class-container');
+        const inClassContainer = document.getElementById('in-class-container');
+        const joinClassDescription = document.getElementById('join-class-description');
+        const classCodeInput = document.getElementById('class-code-input');
+        const joinClassBtn = document.getElementById('join-class-btn');
+
+        let isAuthReady = false; 
+        let currentLang = 'en'; 
+        let selectedAvatarUrl = '';
+
+        // --- Internationalization Strings ---
+        // UPDATED: Added strings for the password change modal
+        const strings = {
+            en: {
+                settingsTitle: 'Settings',
+                backToDashboardBtnText: 'Dashboard',
+                settingsMainTitle: 'Account Settings & Support',
+                passwordManagementTitle: 'Password',
+                passwordDesc: 'Update your password to keep your account secure.',
+                languageSettingsTitle: 'Language',
+                languageDesc: 'Select your preferred language for the dashboard.',
+                langToggleBtnText: 'Հայ', 
+                currentLanguageLabel: 'Current:', 
+                languageFullName_en: 'English', 
+                languageFullName_hy: 'Armenian', 
+                supportTitle: 'Support & Feedback',
+                supportDesc: 'Need help or want to report an issue? We\'re here for you!',
+                logoutTitle: 'Logout',
+                logoutDesc: 'Sign out of your account.',
+                changePasswordBtnText: 'Change Password', 
+                reportProblemBtnText: 'Report Issue', 
+                logoutBtnText: 'Logout',
+                // NEW MODAL STRINGS
+                modal_pw_title: 'Change Password',
+                modal_pw_current: 'Current Password',
+                modal_pw_new: 'New Password',
+                modal_pw_confirm: 'Confirm New Password',
+                modal_pw_cancel_btn: 'Cancel',
+                modal_pw_save_btn: 'Save Changes',
+                alert_pw_mismatch: 'New passwords do not match. Please try again.',
+                alert_pw_weak: 'Password is too weak. It must be at least 6 characters long.',
+                alert_pw_wrong: 'The current password you entered is incorrect.',
+                alert_pw_reauth_needed: 'For security, please log out and log back in before changing your password.',
+                alert_pw_success: 'Your password has been updated successfully!',
+                alert_pw_error: 'An unexpected error occurred. Please try again.',
+                alert_join_success: 'Successfully joined the group!',
+                alert_join_invalid_code: 'Invalid group code. Please check and try again.',
+                avatarTitle: 'Choose Avatar',
+                saveBtn: 'Save',
+                cancelBtn: 'Cancel',
+                avatarUpdated: 'Profile picture updated!'
+            },
+            hy: {
+                settingsTitle: 'Կարգավորումներ',
+                backToDashboardBtnText: 'Վահանակ', 
+                settingsMainTitle: 'Հաշվի Կարգավորումներ և Աջակցություն',
+                passwordManagementTitle: 'Գաղտնաբառ',
+                passwordDesc: 'Թարմացրեք ձեր գաղտնաբառը՝ ձեր հաշիվը պաշտպանելու համար։',
+                changePasswordBtnText: 'Փոխել գաղտնաբառը', 
+                languageSettingsTitle: 'Լեզու',
+                languageDesc: 'Ընտրեք ձեր նախընտրած լեզուն վահանակի համար։',
+                langToggleBtnText: 'EN', 
+                currentLanguageLabel: 'Ընթացիկ:', 
+                languageFullName_en: 'Անգլերեն', 
+                languageFullName_hy: 'Հայերեն', 
+                supportTitle: 'Աջակցություն և Հետադարձ Կապ',
+                supportDesc: 'Օգնությա՞ն կարիք ունեք կամ ցանկանում եք խնդիր հաղորդել: Մենք այստեղ ենք ձեզ համար:',
+                reportProblemBtnText: 'Հաղորդել խնդրի մասին', 
+                logoutTitle: 'Ելք',
+                logoutDesc: 'Դուրս գալ ձեր հաշվից։',
+                logoutBtnText: 'Ելք',
+                 // NEW MODAL STRINGS (Armenian)
+                modal_pw_title: 'Փոխել Գաղտնաբառը',
+                modal_pw_current: 'Ընթացիկ Գաղտնաբառ',
+                modal_pw_new: 'Նոր Գաղտնաբառ',
+                modal_pw_confirm: 'Հաստատել Նոր Գաղտնաբառը',
+                modal_pw_cancel_btn: 'Չեղարկել',
+                modal_pw_save_btn: 'Պահպանել',
+                alert_pw_mismatch: 'Նոր գաղտնաբառերը չեն համընկնում։ Խնդրում ենք փորձել կրկին։',
+                alert_pw_weak: 'Գաղտնաբառը չափազանց թույլ է։ Այն պետք է լինի առնվազն 6 նիշ։',
+                alert_pw_wrong: 'Ձեր մուտքագրած ընթացիկ գաղտնաբառը սխալ է։',
+                alert_pw_reauth_needed: 'Անվտանգության համար խնդրում ենք դուրս գալ և նորից մուտք գործել՝ նախքան գաղտնաբառը փոխելը։',
+                // FIX 1: Removed the stray 'g' character from this line
+                alert_pw_success: 'Ձեր գաղտնաբառը հաջողությամբ թարմացվել է։',
+                alert_pw_error: 'Տեղի ունեցավ անսպասելի սխալ։ Խնդրում ենք փորձել կրկին։',
+                alert_join_success: 'Դուք հաջողությամբ միացաք խմբին։',
+                alert_join_invalid_code: 'Խմբի կոդը սխալ է։ Խնդրում ենք ստուգել և փորձել կրկին։',
+                avatarTitle: 'Ընտրեք Նկար',
+                saveBtn: 'Պահպանել',
+                cancelBtn: 'Չեղարկել',
+                avatarUpdated: 'Պրոֆիլի նկարը թարմացվել է:'
+            }
+        };
+
+        function applyLang(lang) {
+            document.documentElement.lang = lang;
+            const t = strings[lang] || strings.en;
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const k = el.dataset.i18n;
+                el.textContent = t[k];
+            });
+            
+            if (langToggle) langToggle.textContent = (lang === 'hy') ? 'EN' : 'Հայ';
+            if (currentLanguageNameSpan) currentLanguageNameSpan.textContent = t[`languageFullName_${currentLang}`] || '';
+        }
+
+        /**
+         * Shows a non-blocking notification toast
+         */
+        function showNotification(message, isError = false) {
+            const toast = document.getElementById('notification-toast');
+            const msgEl = document.getElementById('notification-message');
+            if (!toast || !msgEl) return;
+
+            msgEl.textContent = message;
+            toast.classList.toggle('error', isError);
+            toast.classList.remove('hidden');
+            
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                    toast.classList.remove('error');
+                }, 300);
+            }, 3000);
+        }
+
+        async function updateSettingsPage(user) {
+            if (!db) { console.error("Firestore is not initialized."); return; }
+            if (userIdDisplay) userIdDisplay.textContent = user.uid; 
+            const studentDocRef = doc(db, 'thelo-students', user.uid);
+            try {
+                const docSnap = await getDoc(studentDocRef);
+                if (docSnap.exists()) {
+                    const studentData = docSnap.data();
+                    const studentFullName = `${studentData.name || ''} ${studentData.surname || ''}`.trim();
+                    if (userFullNameDisplay) userFullNameDisplay.textContent = studentFullName || 'User Name';
+                    if (userEmailMainDisplay) userEmailMainDisplay.textContent = user.email || 'N/A';
+                    if (settingsProfilePhoto && studentData.profilePicture && studentData.profilePicture.startsWith('http')) {
+                        settingsProfilePhoto.src = studentData.profilePicture;
+                    } else {
+                        // FIX 2 (JS): Replaced via.placeholder.com and removed duplicate line
+                        settingsProfilePhoto.src = "https://placehold.co/100x100/2563EB/FFFFFF?text=P";
+                    }
+                    if (studentData.language && typeof studentData.language === 'string') {
+                        currentLang = studentData.language; 
+                    }
+
+                    // NEW: Handle classroom UI
+                    if (studentData.groupId) {
+                        const groupDocRef = doc(db, 'groups', studentData.groupId);
+                        const groupSnap = await getDoc(groupDocRef);
+                        if (groupSnap.exists()) {
+                            const groupData = groupSnap.data();
+                            joinClassContainer.classList.add('hidden');
+                            inClassContainer.classList.remove('hidden');
+                            // MODIFICATION: Removed the "Leave" button from the innerHTML
+                            inClassContainer.innerHTML = `
+                                <div>
+                                    You are in <strong>${groupData.groupName}</strong>. <br>Your tutor can see your progress.
+                                </div>
+                            `;
+                            joinClassDescription.textContent = "You are currently in a classroom.";
+                            
+                            // MODIFICATION: Removed the 'leave-class-btn' event listener
+                        }
+                    } else {
+                        joinClassContainer.classList.remove('hidden');
+                        inClassContainer.classList.add('hidden');
+                        // MODIFICATION: Reset description if user is not in a group
+                        joinClassDescription.textContent = "Enter a code from your tutor to join their classroom.";
+                    }
+                } else {
+                    console.warn("No student profile found for UID:", user.uid);
+                    if (userFullNameDisplay) userFullNameDisplay.textContent = 'New User';
+                    if (userEmailMainDisplay) userEmailMainDisplay.textContent = user.email || 'N/A';
+                }
+            } catch (error) {
+                console.error("Error fetching user profile:", error);
+                if (userFullNameDisplay) userFullNameDisplay.textContent = 'Error Loading Name';
+                if (userEmailMainDisplay) userEmailMainDisplay.textContent = 'Error Loading Email';
+            }
+            applyLang(currentLang);
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // Add event listener for join class button, passing user details
+                if (joinClassBtn) {
+                    joinClassBtn.addEventListener('click', () => handleJoinGroup(user.uid, user.email));
+                }
+                await updateSettingsPage(user); 
+            } else {
+                if (isAuthReady) window.location.href = 'ind.html'; 
+            }
+            isAuthReady = true; 
+        });
+
+        /**
+         * Handles the logic for a student to join a group using a code.
+         */
+        async function handleJoinGroup(userId, userEmail) {
+            const joinCode = classCodeInput.value.trim().toUpperCase();
+            const t = strings[currentLang];
+
+            if (!joinCode) {
+                showNotification("Please enter a class code.", true);
+                return;
+            }
+
+            joinClassBtn.disabled = true;
+            joinClassBtn.querySelector('span').textContent = 'Joining...';
+
+            try {
+                const groupsRef = collection(db, 'groups');
+                const q = query(groupsRef, where("joinCode", "==", joinCode));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    throw new Error(t.alert_join_invalid_code);
+                }
+
+                const groupDoc = querySnapshot.docs[0];
+                const groupId = groupDoc.id;
+                const groupData = groupDoc.data();
+                const studentRef = doc(db, 'thelo-students', userId);
+
+                // Update student's doc
+                await updateDoc(studentRef, {
+                    groupId: groupId,
+                    email: userEmail // Also update email just in case
+                });
+
+                // Update group's member list
+                const oldMemberIds = groupData.memberIds || [];
+                const newMemberIds = [...new Set([...oldMemberIds, userId])];
+                await updateDoc(doc(db, 'groups', groupId), {
+                    memberIds: newMemberIds
+                });
+
+                // Create a "welcome" post on the bulletin board
+                const studentSnap = await getDoc(studentRef);
+                const studentName = studentSnap.data()?.name || 'A new member';
+                await addDoc(collection(db, "bulletin-posts"), {
+                    groupId: groupId, authorId: userId, type: "welcome",
+                    timestamp: serverTimestamp(),
+                    content: { newMemberName: studentName }
+                });
+
+                // MODIFICATION: Removed page reload.
+                // Show success notification
+                showNotification(`${t.alert_join_success} "${groupData.groupName}"!`, false); 
+                // Dynamically refresh the settings page UI
+                await updateSettingsPage(auth.currentUser); 
+
+                // Force a page refresh to show the updated state
+                window.location.reload(true);
+                showNotification(`${t.alert_join_success} "${groupData.groupName}"!`, false);
+                // Dynamically refresh the settings page UI (though a full reload will happen shortly)
+                await updateSettingsPage(auth.currentUser);
+            } catch (error) {
+                showNotification(error.message, true);
+            } finally {
+                joinClassBtn.disabled = false;
+                joinClassBtn.querySelector('span').textContent = 'Join';
+                // Force a page refresh to show the updated state regardless of success or failure
+                window.location.reload(true);
+            }
+        }
+
+        // MODIFICATION: Removed the entire 'handleLeaveGroup' function
+
+
+        // --- EVENT LISTENERS ---
+        // Avatar Selection Logic
+        function populateAvatars() {
+            avatarGrid.innerHTML = '';
+            for (let i = 1; i <= 6; i++) {
+                const imgUrl = `https://thelo.space/img/char${i}.png`;
+                const img = document.createElement('img');
+                img.src = imgUrl;
+                img.className = 'char-option';
+                // Pre-select if matches current
+                if (settingsProfilePhoto.src === imgUrl) {
+                    img.classList.add('selected');
+                    selectedAvatarUrl = imgUrl;
+                }
+                img.onclick = () => {
+                    document.querySelectorAll('.char-option').forEach(el => el.classList.remove('selected'));
+                    img.classList.add('selected');
+                    selectedAvatarUrl = imgUrl;
+                };
+                avatarGrid.appendChild(img);
+            }
+        }
+
+        if (settingsProfilePhoto) {
+            settingsProfilePhoto.addEventListener('click', () => {
+                populateAvatars();
+                avatarModal.style.display = 'flex';
+            });
+        }
+        if (avatarCancelBtn) avatarCancelBtn.addEventListener('click', () => avatarModal.style.display = 'none');
+        if (avatarSaveBtn) avatarSaveBtn.addEventListener('click', async () => {
+            if (!selectedAvatarUrl || !auth.currentUser) return;
+            try {
+                await updateDoc(doc(db, 'thelo-students', auth.currentUser.uid), { profilePicture: selectedAvatarUrl });
+                settingsProfilePhoto.src = selectedAvatarUrl;
+                showNotification(strings[currentLang].avatarUpdated);
+                avatarModal.style.display = 'none';
+            } catch (e) { console.error(e); showNotification("Error updating photo", true); }
+        });
+
+        if (backToDashboardBtn) backToDashboardBtn.addEventListener('click', () => window.location.href = 'ind.html');
+        if (reportProblemBtn) reportProblemBtn.addEventListener('click', () => window.open('https://forms.gle/dD38vYSHVcVWWz5KA', '_blank'));
+        if (logoutButton) {
+            logoutButton.addEventListener('click', async () => {
+                try {
+                    await signOut(auth);
+                    window.location.href = 'ind.html'; 
+                } catch (error) { console.error("Error logging out:", error); }
+            });
+        }
+        if (langToggle) {
+            langToggle.addEventListener('click', async () => { 
+                currentLang = (currentLang === 'en') ? 'hy' : 'en';
+                applyLang(currentLang); 
+                if (auth.currentUser) {
+                    try {
+                        const studentDocRef = doc(db, 'thelo-students', auth.currentUser.uid); 
+                        await updateDoc(studentDocRef, { language: currentLang });
+                    } catch (error) { console.error("Error updating language in Firestore:", error); }
+                }
+            });
+        }
+
+        // NEW: Password Modal Event Listeners
+        if (changePasswordBtn) {
+            changePasswordBtn.addEventListener('click', () => {
+                passwordModal.style.display = 'flex';
+            });
+        }
+        if (cancelPasswordChangeBtn) {
+            cancelPasswordChangeBtn.addEventListener('click', () => {
+                passwordModal.style.display = 'none';
+                passwordUpdateForm.reset();
+            });
+        }
+        if (passwordUpdateForm) {
+            passwordUpdateForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const user = auth.currentUser;
+                const t = strings[currentLang];
+                
+                const currentPassword = currentPasswordInput.value;
+                const newPassword = newPasswordInput.value;
+                const confirmPassword = confirmPasswordInput.value;
+
+                if (newPassword !== confirmPassword) {
+                    alert(t.alert_pw_mismatch);
+                    return;
+                }
+                if (newPassword.length < 6) {
+                    alert(t.alert_pw_weak);
+                    return;
+                }
+                
+                try {
+                    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+                    // Re-authenticate the user to prove they know the old password
+                    await reauthenticateWithCredential(user, credential);
+                    
+                    // If re-authentication is successful, update the password
+                    await updatePassword(user, newPassword);
+
+                    alert(t.alert_pw_success);
+                    passwordModal.style.display = 'none';
+                    passwordUpdateForm.reset();
+
+                } catch (error) {
+                    console.error("Password update error:", error.code);
+                    if (error.code === 'auth/wrong-password') {
+                        alert(t.alert_pw_wrong);
+                    } else if (error.code === 'auth/weak-password') {
+                        alert(t.alert_pw_weak);
+                    } else if (error.code === 'auth/requires-recent-login') {
+                        alert(t.alert_pw_reauth_needed);
+                    } else {
+                        alert(t.alert_pw_error);
+                    }
+                }
+            });
+        }
+
+
+        // Initial language application
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            currentLang = params.get('lang') || currentLang; 
+            applyLang(currentLang); 
+        });
+    </script>
+</body>
+</html>
