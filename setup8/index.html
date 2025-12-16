@@ -258,6 +258,7 @@
             border-radius: 50%; object-fit: cover;
             border: 2px solid var(--grid-color);
             flex-shrink: 0;
+            cursor: pointer; transition: transform 0.2s;
         }
 
         .thelo-btn, .thelo-btn-secondary, .thelo-btn-destructive {
@@ -335,6 +336,18 @@
         #loading-overlay.hidden { opacity: 0; pointer-events: none; }
         .loading-logo-anim { width: 80px; animation: pulse-logo 1.5s infinite ease-in-out; }
         @keyframes pulse-logo { 0% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.7; } }
+
+        /* Avatar Selection */
+        .char-option {
+            cursor: pointer; border-radius: 50%; border: 3px solid transparent;
+            transition: transform 0.2s, border-color 0.2s; background-color: #f0f0f0;
+            width: 64px; height: 64px; object-fit: cover;
+        }
+        .char-option:hover { transform: scale(1.1); }
+        .char-option.selected {
+            border-color: var(--thelo-blue); transform: scale(1.1); box-shadow: 0 0 10px rgba(37, 99, 235, 0.3);
+        }
+        #avatar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; justify-items: center; margin-bottom: 1.5rem; }
 
     </style>
 </head>
@@ -591,6 +604,17 @@
         </div>
     </div>
 
+    <div id="avatar-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold mb-4" data-i18n="avatarTitle">Choose Avatar</h3>
+            <div id="avatar-grid"></div>
+            <div class="flex justify-end gap-3 mt-4">
+                <button type="button" id="avatar-cancel" class="thelo-btn-secondary" data-i18n="cancelBtn">Cancel</button>
+                <button type="button" id="avatar-save" class="thelo-btn" data-i18n="saveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendEmailVerification } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -721,8 +745,8 @@
 
         function updateProfileText(lang) {
             const t = {
-                en: { settings: "Settings", classT: "Classroom", classD: "Enter a code to join a class.", pwT: "Password", pwD: "Update your password.", langT: "Language", curr: "Current:", log: "Logout", upNext: "Up Next", coursePlan: "Course Plan", welcome: "Welcome back,", navHangar: "Hangar", navCourses: "Courses", navProfile: "Profile" },
-                hy: { settings: "Կարգավորումներ", classT: "Դասարան", classD: "Մուտքագրեք կոդը՝ դասին միանալու համար:", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ,", navHangar: "Անգար", navCourses: "Դասընթացներ", navProfile: "Պրոֆիլ" }
+                en: { settings: "Settings", classT: "Classroom", classD: "Enter a code to join a class.", pwT: "Password", pwD: "Update your password.", langT: "Language", curr: "Current:", log: "Logout", upNext: "Up Next", coursePlan: "Course Plan", welcome: "Welcome back,", navHangar: "Hangar", navCourses: "Courses", navProfile: "Profile", avatarTitle: "Choose Avatar", cancelBtn: "Cancel", saveBtn: "Save" },
+                hy: { settings: "Կարգավորումներ", classT: "Դասարան", classD: "Մուտքագրեք կոդը՝ դասին միանալու համար:", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ,", navHangar: "Անգար", navCourses: "Դասընթացներ", navProfile: "Պրոֆիլ", avatarTitle: "Ընտրեք Նկար", cancelBtn: "Չեղարկել", saveBtn: "Պահպանել" }
             }[lang];
 
             document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -741,6 +765,9 @@
                 if(k === 'navHangar') el.textContent = t.navHangar;
                 if(k === 'navCourses') el.textContent = t.navCourses;
                 if(k === 'navProfile') el.textContent = t.navProfile;
+                if(k === 'avatarTitle') el.textContent = t.avatarTitle;
+                if(k === 'cancelBtn') el.textContent = t.cancelBtn;
+                if(k === 'saveBtn') el.textContent = t.saveBtn;
             });
 
             ui.pLangDisplay.textContent = lang === 'hy' ? 'Հայերեն' : 'English';
@@ -1131,6 +1158,44 @@
                 showToast(err.message, true);
             }
         };
+
+        // --- AVATAR LOGIC ---
+        let selectedAvatarUrl = '';
+        const avatarModal = document.getElementById('avatar-modal');
+        const avatarGrid = document.getElementById('avatar-grid');
+
+        function populateAvatars() {
+            avatarGrid.innerHTML = '';
+            for (let i = 1; i <= 6; i++) {
+                const imgUrl = `https://thelo.space/img/char${i}.png`;
+                const img = document.createElement('img');
+                img.src = imgUrl;
+                img.className = 'char-option';
+                if (ui.pPhoto.src === imgUrl) {
+                    img.classList.add('selected');
+                    selectedAvatarUrl = imgUrl;
+                }
+                img.onclick = () => {
+                    document.querySelectorAll('.char-option').forEach(el => el.classList.remove('selected'));
+                    img.classList.add('selected');
+                    selectedAvatarUrl = imgUrl;
+                };
+                avatarGrid.appendChild(img);
+            }
+        }
+
+        ui.pPhoto.onclick = () => { populateAvatars(); avatarModal.style.display = 'flex'; };
+        document.getElementById('avatar-cancel').onclick = () => avatarModal.style.display = 'none';
+        document.getElementById('avatar-save').onclick = async () => {
+            if (!selectedAvatarUrl || !auth.currentUser) return;
+            try {
+                await updateDoc(doc(db, 'thelo-students', auth.currentUser.uid), { profilePicture: selectedAvatarUrl });
+                ui.pPhoto.src = selectedAvatarUrl;
+                showToast("Avatar Updated!");
+                avatarModal.style.display = 'none';
+            } catch (e) { showToast("Error updating avatar", true); }
+        };
+
 
         // --- GLOBAL LISTENER ---
         onAuthStateChanged(auth, (user) => {
