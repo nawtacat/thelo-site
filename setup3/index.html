@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Thelo</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        /* --- THELO DESIGN SYSTEM --- */
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-blue-dark: #1d4ed8;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+            --slate-200: #e2e8f0;
+            --slate-400: #94a3b8;
+            --slate-500: #64748b;
+            --white: #ffffff;
+            --streak-fire: #F59E0B; 
+            --points-star: #FACC15;
+            --success-green: #22C55E;
+        }
+
+        /* Font Setup */
+        @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-Regular.otf'); font-weight: 400; }
+        @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-SemiBold.otf'); font-weight: 600; }
+        @font-face { font-family: 'Montserrat Arm'; src: url('https://thelo.space/fonts/Montserratarm-ExtraBold.otf'); font-weight: 800; }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            /* Thelo Grid Pattern */
+            background-image:
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        body.lang-hy { font-family: 'Montserrat Arm', sans-serif; }
+
+        /* --- VIEW MANAGEMENT --- */
+        .app-view {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            display: flex;
+            flex-direction: column;
+            transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app-view.active {
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 10;
+            transform: scale(1);
+        }
+
+        /* === VIEW 1: SPLASH & WIZARD STYLES === */
+        
+        #view-splash .top-bar {
+            padding: 1.5rem;
+            display: flex;
+            justify-content: flex-end;
+            position: absolute; top: 0; width: 100%;
+            z-index: 30;
+        }
+
+        #view-splash .hero-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 0 2rem 15vh;
+            transition: opacity 0.3s;
+        }
+        
+        #view-splash .hero-section.dimmed { opacity: 1; transform: scale(1); }
+
+        .logo-img { width: 150px; margin-bottom: 1.5rem; animation: float 6s ease-in-out infinite; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        .wizard-container {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            min-height: 200px;
+            z-index: 20;
+        }
+
+        .init-actions {
+            padding: 2rem 1.5rem 3rem;
+            background: linear-gradient(to top, var(--thelo-bg) 90%, transparent);
+            transition: opacity 0.3s;
+        }
+
+        .wizard-card {
+            background: var(--white);
+            border-radius: 1.5rem 1.5rem 0 0;
+            padding: 2.5rem 2rem 3rem;
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.1);
+            max-height: 85vh; overflow-y: auto;
+            transform: translateY(100%);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex; flex-direction: column;
+        }
+        .wizard-card.visible { transform: translateY(0); }
+
+        /* Wizard Components */
+        .step-content { display: none; animation: fadeIn 0.3s ease; }
+        .step-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .step-title { margin-bottom: 1rem; }
+
+        .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+        .option-card {
+            background: #F3F4F6; border: 2px solid transparent; border-radius: 1rem;
+            padding: 1.5rem 1rem; text-align: center; cursor: pointer; transition: 0.2s;
+        }
+        .option-card.selected { background: #EFF6FF; border-color: var(--thelo-blue); color: var(--thelo-blue); }
+        .option-icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
+        
+        .btn {
+            width: 100%; padding: 1rem; border-radius: 1rem; font-weight: 700; font-size: 1.1rem;
+            border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 0.5rem;
+            transition: 0.2s;
+        }
+        .btn-primary { background: var(--thelo-blue); color: var(--white); box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.3); }
+        .btn-primary:hover { background: var(--thelo-blue-dark); }
+        .btn-text { background: none; border: none; cursor: pointer; color: var(--slate-500); font-size: 0.9rem; margin-top: 0.5rem; }
+
+        .input-group { margin-bottom: 1.5rem; }
+        .input-label { display: block; font-size: 0.85rem; font-weight: 700; color: var(--slate-500); margin-bottom: 0.5rem; }
+        .input-field {
+            width: 100%; padding: 0.9rem; border: 2px solid var(--slate-200); border-radius: 0.75rem;
+            font-size: 1rem; background: #FAFAFA; outline: none;
+        }
+        .input-field:focus { border-color: var(--thelo-blue); background: var(--white); }
+
+        /* === VIEW 2: HANGAR STYLES === */
+
+        #view-hangar header {
+            padding: 3rem 1.5rem 1.5rem;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            background: linear-gradient(180deg, var(--thelo-bg) 80%, transparent);
+            z-index: 10;
+        }
+
+        .user-info h1 { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 1.75rem; line-height: 1.1; }
+        .user-info .sub-text { font-size: 0.875rem; color: var(--slate-600); font-weight: 600; margin-bottom: 0.25rem; }
+
+        .stats-row { display: flex; gap: 0.5rem; }
+        .stat-badge {
+            background: var(--white); border: 1px solid var(--slate-200); border-radius: 999px;
+            padding: 0.35rem 0.75rem; font-size: 0.875rem; font-weight: 700;
+            display: flex; align-items: center; gap: 0.4rem;
+        }
+
+        /* Unified Main Scroll Area */
+        .app-view main {
+            flex: 1; overflow-y: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; width: 100%;
+        }
+
+        #view-hangar main { padding: 0.5rem 1.5rem 1.5rem; }
+        #view-profile main { padding: 1.5rem 1.5rem 1.5rem; }
+        #view-courses main { padding: 1.5rem 1.5rem 1.5rem; }
+
+        .window-card-hero {
+            background: var(--white); border: 1px solid var(--grid-color); border-radius: 0.75rem;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06); padding: 2.5rem 2rem; margin-bottom: 3rem;
+            position: relative; display: flex; flex-direction: column; gap: 1rem;
+        }
+        /* Dots */
+        .window-card-hero::before {
+            content: ''; position: absolute; top: 1rem; left: 1rem; width: 52px; height: 12px;
+            background-image: url("data:image/svg+xml,%3Csvg width='52' height='12' viewBox='0 0 52 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='6' cy='6' r='6' fill='%23FF5F56'/%3E%3Ccircle cx='26' cy='6' r='6' fill='%23FFBD2E'/%3E%3Ccircle cx='46' cy='6' r='6' fill='%2327C93F'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+        }
+
+        .card-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--slate-500); font-weight: 700; margin-top: 0.5rem; }
+        .card-title { font-size: 1.75rem; font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; }
+
+        .curriculum-header { font-size: 1.25rem; font-weight: 800; margin-bottom: 1.5rem; margin-top: 1rem; border-left: 4px solid var(--thelo-blue); padding-left: 0.75rem; line-height: 1; }
+        
+        .lesson-item {
+            background: var(--white); border: 1px solid var(--grid-color); border-radius: 0.75rem;
+            padding: 1.25rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 1.25rem;
+        }
+        .lesson-item.active { border-color: var(--thelo-blue); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1); }
+        .lesson-item.locked { background: #FAFAFA; border-style: dashed; color: var(--slate-400); }
+        
+        .lesson-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+        .icon-active { background: #EFF6FF; color: var(--thelo-blue); }
+        .icon-locked { background: var(--slate-200); color: var(--slate-500); }
+        .icon-done { background: #DCFCE7; color: var(--success-green); }
+
+        .lesson-name { font-size: 1rem; font-weight: 700; line-height: 1.3; }
+        .lesson-sub { font-size: 0.75rem; font-weight: 600; color: var(--slate-500); margin-top: 2px; }
+
+        /* === VIEW 3: PROFILE STYLES === */
+        .settings-window {
+            background-color: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0; 
+            position: relative; 
+            width: 100%;
+            margin: 0 auto 1.5rem; 
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .settings-window::before { display: none; }
+
+        .settings-item {
+            background: var(--white);
+            border: 1px solid var(--grid-color);
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem; 
+            width: 100%; 
+        }
+        .settings-item:last-of-type { border-bottom: 1px solid var(--grid-color); }
+        .settings-item-content { flex-grow: 1; text-align: left; }
+        .settings-item-title { font-weight: 600; font-size: 1.125rem; color: var(--thelo-text); }
+        .settings-item-description { font-size: 0.875rem; color: #6B7280; margin-top: 0.25rem; }
+        .settings-item-action { margin-left: 1.5rem; flex-shrink: 0; }
+
+        .settings-profile-photo {
+            width: 80px; height: 80px;
+            border-radius: 50%; object-fit: cover;
+            border: 2px solid var(--grid-color);
+            flex-shrink: 0;
+        }
+
+        .thelo-btn, .thelo-btn-secondary, .thelo-btn-destructive {
+            font-weight: 700; padding: 0.5rem 1rem; border-radius: 0.5rem;
+            transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center;
+            border: 1px solid transparent; font-size: 0.9rem; cursor: pointer;
+        }
+        .thelo-btn { background-color: var(--thelo-blue); color: white; }
+        .thelo-btn:hover { background-color: #1a56d2; transform: translateY(-2px); }
+        .thelo-btn-secondary { background-color: transparent; color: var(--thelo-blue); border-color: var(--thelo-blue); }
+        .thelo-btn-secondary:hover { background-color: var(--thelo-blue); color: white; }
+        .thelo-btn-destructive { background-color: #EF4444; color: white; }
+        .thelo-btn-destructive:hover { background-color: #DC2626; transform: translateY(-2px); }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none; justify-content: center; align-items: center;
+            z-index: 1000; backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: white; padding: 2rem; border-radius: 0.75rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 90%; max-width: 400px;
+        }
+        .modal-input {
+            width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #D1D5DB;
+            border-radius: 0.375rem; margin-top: 0.25rem; display: block;
+        }
+
+        /* Toast */
+        #notification-toast {
+            position: fixed; bottom: 5rem; right: 1.5rem;
+            background: #16a34a; color: white; padding: 1rem; border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            transform: translateY(20px); opacity: 0; transition: 0.3s; z-index: 100;
+            pointer-events: none;
+        }
+        #notification-toast.show { transform: translateY(0); opacity: 1; }
+        #notification-toast.error { background: #dc2626; }
+
+        @media (max-width: 767px) {
+            .settings-item { flex-direction: column; align-items: flex-start; gap: 1rem; }
+            .settings-item-action { margin-left: 0; width: 100%; }
+            .settings-item-action button { width: 100%; }
+        }
+
+        /* Nav Bar */
+        .nav-bar {
+            position: relative; width: 100%;
+            background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
+            border-top: 1px solid var(--grid-color);
+            display: flex; justify-content: space-around; padding: 0.75rem 0 1.5rem;
+            z-index: 50;
+            flex-shrink: 0;
+        }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+            color: var(--slate-500); font-size: 0.7rem; font-weight: 600; text-decoration: none; width: 64px;
+        }
+        .nav-item.active { color: var(--thelo-blue); }
+        .nav-item i { font-size: 1.25rem; }
+
+        /* Skeleton */
+        .skeleton { background: #e5e7eb; border-radius: 4px; color: transparent !important; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+
+    </style>
+</head>
+<body>
+
+    <div id="view-splash" class="app-view active">
+        
+        <div class="top-bar">
+            <button class="btn-text" id="top-login-btn" style="width: auto;">Log In</button>
+        </div>
+
+        <div class="hero-section dimmed" id="splash-hero">
+            <img src="https://thelo.space/img/bluethelo.svg" alt="Thelo Logo" class="logo-img">
+        </div>
+
+        <div class="wizard-container">
+            <div class="wizard-card visible" id="wizard-drawer">
+                
+                <div class="step-content active" id="w-step-1">
+                    <h2 class="step-title">Choose Language</h2>
+                    <div class="option-grid">
+                        <div class="option-card" onclick="setLang('en', this)">
+                            <span class="option-icon">🇺🇸</span> English
+                        </div>
+                        <div class="option-card" onclick="setLang('hy', this)">
+                            <span class="option-icon">🇦🇲</span> Հայերեն
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-content" id="w-step-2">
+                    <h2 class="step-title" id="t-step-2">What Grade?</h2>
+                    <div class="option-grid">
+                        <div class="option-card" onclick="setGrade('3', this)"><span class="option-icon">3</span><span id="g-3">3rd</span></div>
+                        <div class="option-card" onclick="setGrade('4', this)"><span class="option-icon">4</span><span id="g-4">4th</span></div>
+                        <div class="option-card" onclick="setGrade('5', this)"><span class="option-icon">5</span><span id="g-5">5th</span></div>
+                        <div class="option-card" onclick="setGrade('6', this)"><span class="option-icon">6</span><span id="g-6">6th</span></div>
+                        <div class="option-card" onclick="setGrade('7', this)"><span class="option-icon">7</span><span id="g-7">7th</span></div>
+                        <div class="option-card" onclick="setGrade('8', this)"><span class="option-icon">8</span><span id="g-8">8th</span></div>
+                        <div class="option-card" onclick="setGrade('9', this)"><span class="option-icon">9</span><span id="g-9">9th</span></div>
+                    </div>
+                    <button class="btn-text" id="btn-step2-back" onclick="showStep(1)">Back</button>
+                </div>
+
+                <div class="step-content" id="w-step-3">
+                    <h2 class="step-title" id="t-step-3">Create Account</h2>
+                    <form id="signup-form">
+                        <div class="input-group">
+                            <label class="input-label" id="l-su-name">Full Name</label>
+                            <input type="text" id="su-name" class="input-field" required>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label" id="l-su-email">Email</label>
+                            <input type="email" id="su-email" class="input-field" required>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label" id="l-su-pass">Password</label>
+                            <input type="password" id="su-pass" class="input-field" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="btn-su-submit">Start Learning</button>
+                    </form>
+                    <button class="btn-text" id="btn-su-back" onclick="showStep(2)">Back</button>
+                </div>
+
+                <div class="step-content" id="w-step-signin">
+                    <h2 class="step-title" id="t-step-signin">Welcome Back</h2>
+                    <form id="signin-form">
+                        <div class="input-group">
+                            <label class="input-label" id="l-si-email">Email</label>
+                            <input type="email" id="si-email" class="input-field" required>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label" id="l-si-pass">Password</label>
+                            <input type="password" id="si-pass" class="input-field" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="btn-si-submit">Log In</button>
+                    </form>
+                    <button class="btn-text" id="btn-si-cancel" onclick="showStep(1)">Cancel</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div id="view-hangar" class="app-view">
+        <header>
+            <div class="user-info">
+                <span class="sub-text" data-i18n="welcomeBack">Welcome back,</span>
+                <h1 id="h-username" class="skeleton" style="min-width: 100px">&nbsp;</h1>
+            </div>
+            <div class="stats-row">
+                <div class="stat-badge"><i class="fa-solid fa-fire" style="color:var(--streak-fire)"></i> <span id="h-streak">0</span></div>
+                <div class="stat-badge"><i class="fa-solid fa-star" style="color:var(--points-star)"></i> <span id="h-points">0</span></div>
+            </div>
+        </header>
+
+        <main>
+            <div class="window-card-hero">
+                <span class="card-label" data-i18n="upNext">Up Next</span>
+                <h2 class="card-title" id="h-next-title">Loading...</h2>
+                <button class="btn btn-primary" id="h-action-btn" disabled>Continue</button>
+            </div>
+
+            <div class="curriculum-header" data-i18n="coursePlan">Course Plan</div>
+            <div id="h-lesson-list"></div>
+        </main>
+
+        <nav class="nav-bar">
+            <a href="#" class="nav-item active" onclick="switchToHangar(null); return false;"><i class="fa-solid fa-house"></i> Hangar</a>
+            <a href="#" class="nav-item" onclick="switchToCourses(); return false;"><i class="fa-solid fa-layer-group"></i> Courses</a>
+            <a href="#" class="nav-item" onclick="switchToProfile(); return false;"><i class="fa-solid fa-user"></i> Profile</a>
+        </nav>
+    </div>
+
+    <div id="view-courses" class="app-view">
+        <main>
+            <div class="settings-window">
+                <h2 class="step-title" data-i18n="langTitle">Language</h2>
+                <div class="option-grid" id="c-lang-grid">
+                    <div class="option-card" data-val="en" onclick="selectCourseLang('en', this)">
+                        <span class="option-icon">🇺🇸</span> English
+                    </div>
+                    <div class="option-card" data-val="hy" onclick="selectCourseLang('hy', this)">
+                        <span class="option-icon">🇦🇲</span> Հայերեն
+                    </div>
+                </div>
+
+                <h2 class="step-title" data-i18n="gradeTitle">Grade</h2>
+                <div class="option-grid" id="c-grade-grid">
+                    <div class="option-card" data-val="3" onclick="selectCourseGrade('3', this)"><span class="option-icon">3</span><span class="g-label" data-g="3">3rd</span></div>
+                    <div class="option-card" data-val="4" onclick="selectCourseGrade('4', this)"><span class="option-icon">4</span><span class="g-label" data-g="4">4th</span></div>
+                    <div class="option-card" data-val="5" onclick="selectCourseGrade('5', this)"><span class="option-icon">5</span><span class="g-label" data-g="5">5th</span></div>
+                    <div class="option-card" data-val="6" onclick="selectCourseGrade('6', this)"><span class="option-icon">6</span><span class="g-label" data-g="6">6th</span></div>
+                    <div class="option-card" data-val="7" onclick="selectCourseGrade('7', this)"><span class="option-icon">7</span><span class="g-label" data-g="7">7th</span></div>
+                    <div class="option-card" data-val="8" onclick="selectCourseGrade('8', this)"><span class="option-icon">8</span><span class="g-label" data-g="8">8th</span></div>
+                    <div class="option-card" data-val="9" onclick="selectCourseGrade('9', this)"><span class="option-icon">9</span><span class="g-label" data-g="9">9th</span></div>
+                </div>
+
+                <button class="btn btn-primary" id="btn-update-course" onclick="saveCourse()" data-i18n="updateBtn">Update Course</button>
+            </div>
+        </main>
+
+        <nav class="nav-bar">
+            <a href="#" class="nav-item" onclick="switchToHangar(null); return false;"><i class="fa-solid fa-house"></i> Hangar</a>
+            <a href="#" class="nav-item active" onclick="switchToCourses(); return false;"><i class="fa-solid fa-layer-group"></i> Courses</a>
+            <a href="#" class="nav-item" onclick="switchToProfile(); return false;"><i class="fa-solid fa-user"></i> Profile</a>
+        </nav>
+    </div>
+
+    <div id="view-profile" class="app-view">
+        <main>
+            <div class="settings-window">
+                
+                <!-- Profile Info -->
+                <div class="settings-item">
+                    <div class="settings-item-content flex items-center gap-4"> 
+                        <img id="p-photo" src="https://placehold.co/100x100/2563EB/FFFFFF?text=P" alt="Profile" class="settings-profile-photo">
+                        <div> 
+                            <p class="settings-item-title" id="p-name">Loading...</p>
+                            <p class="settings-item-description" id="p-email">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Classroom -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="classroomTitle">Classroom</p>
+                        <p class="settings-item-description" id="p-class-desc" data-i18n="classroomDesc">Enter a code to join a class.</p>
+                    </div>
+                    <div class="settings-item-action w-full md:w-auto">
+                        <div id="p-join-container" class="flex flex-col gap-2">
+                            <input type="text" id="p-class-code" placeholder="ABC123" maxlength="6" class="modal-input uppercase text-center font-bold" style="margin:0">
+                            <button id="p-join-btn" class="thelo-btn w-full">Join</button>
+                        </div>
+                        <div id="p-class-status" class="hidden text-sm text-green-600 font-bold"></div>
+                    </div>
+                </div>
+
+                <!-- Password -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="passwordTitle">Password</p>
+                        <p class="settings-item-description" data-i18n="passwordDesc">Update your password.</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="p-pw-btn" class="thelo-btn-secondary">Change</button>
+                    </div>
+                </div>
+
+                <!-- Language -->
+                <div class="settings-item">
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="languageTitle">Language</p>
+                        <p class="settings-item-description"><span data-i18n="currentLabel">Current:</span> <span class="font-bold" id="p-lang-display">English</span></p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="p-lang-toggle" class="thelo-btn-secondary">Հայ</button>
+                    </div>
+                </div>
+
+                <!-- Logout -->
+                <div class="settings-item border-b-0"> 
+                    <div class="settings-item-content">
+                        <p class="settings-item-title" data-i18n="logoutTitle">Logout</p>
+                    </div>
+                    <div class="settings-item-action">
+                        <button id="p-logout-btn" class="thelo-btn-destructive">Logout</button>
+                    </div>
+                </div>
+
+                <div class="text-center text-xs text-slate-400 mt-8">
+                    ID: <span id="p-uid" class="font-mono">...</span>
+                </div>
+            </div>
+        </main>
+
+        <nav class="nav-bar">
+            <a href="#" class="nav-item" onclick="switchToHangar(null); return false;"><i class="fa-solid fa-house"></i> Hangar</a>
+            <a href="#" class="nav-item" onclick="switchToCourses(); return false;"><i class="fa-solid fa-layer-group"></i> Courses</a>
+            <a href="#" class="nav-item active" onclick="switchToProfile(); return false;"><i class="fa-solid fa-user"></i> Profile</a>
+        </nav>
+    </div>
+
+    <!-- Modals & Toasts -->
+    <div id="notification-toast">
+        <span id="toast-msg"></span>
+    </div>
+
+    <div id="password-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold mb-4" data-i18n="changePwTitle">Change Password</h3>
+            <form id="pw-form">
+                <div class="mb-4">
+                    <label class="input-label" data-i18n="currPw">Current Password</label>
+                    <input type="password" id="pw-current" class="modal-input" required>
+                </div>
+                <div class="mb-4">
+                    <label class="input-label" data-i18n="newPw">New Password</label>
+                    <input type="password" id="pw-new" class="modal-input" required>
+                </div>
+                <div class="mb-6">
+                    <label class="input-label" data-i18n="confPw">Confirm New Password</label>
+                    <input type="password" id="pw-confirm" class="modal-input" required>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button type="button" id="pw-cancel" class="thelo-btn-secondary">Cancel</button>
+                    <button type="submit" class="thelo-btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, query, orderBy, where, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+            authDomain: "physmathacademy-722b3.firebaseapp.com",
+            projectId: "physmathacademy-722b3",
+            storageBucket: "physmathacademy-722b3.appspot.com",
+            appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- STATE ---
+        const state = { lang: 'en', grade: null };
+        const ui = {
+            splash: document.getElementById('view-splash'),
+            hangar: document.getElementById('view-hangar'),
+            courses: document.getElementById('view-courses'),
+            profile: document.getElementById('view-profile'),
+            drawer: document.getElementById('wizard-drawer'),
+            splashHero: document.getElementById('splash-hero'),
+            // Hangar Elements
+            hName: document.getElementById('h-username'),
+            hStreak: document.getElementById('h-streak'),
+            hPoints: document.getElementById('h-points'),
+            hTitle: document.getElementById('h-next-title'),
+            hBtn: document.getElementById('h-action-btn'),
+            hList: document.getElementById('h-lesson-list'),
+            // Profile Elements
+            pName: document.getElementById('p-name'),
+            pEmail: document.getElementById('p-email'),
+            pUid: document.getElementById('p-uid'),
+            pLangDisplay: document.getElementById('p-lang-display'),
+            pLangToggle: document.getElementById('p-lang-toggle'),
+            pJoinContainer: document.getElementById('p-join-container'),
+            pClassStatus: document.getElementById('p-class-status'),
+            pClassCode: document.getElementById('p-class-code'),
+            pJoinBtn: document.getElementById('p-join-btn')
+        };
+
+        // --- WIZARD LOGIC ---
+        window.openWizard = () => {
+            ui.splashHero.classList.add('dimmed');
+            ui.drawer.classList.add('visible');
+            showStep(1);
+        };
+
+        window.openSignIn = () => {
+            window.openWizard();
+            showStep('signin');
+        };
+        document.getElementById('top-login-btn').onclick = window.openSignIn;
+
+        window.showStep = (id) => {
+            document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(`w-step-${id}`).classList.add('active');
+        };
+
+        window.setLang = (lang, el) => {
+            state.lang = lang;
+            document.querySelectorAll('#w-step-1 .option-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+            
+            if(lang==='hy') {
+                document.body.classList.add('lang-hy');
+            } else {
+                document.body.classList.remove('lang-hy');
+            }
+            
+            updateWizardText(lang);
+            updateProfileText(lang);
+            updateCoursesText(lang);
+            setTimeout(() => window.showStep(2), 250);
+        };
+
+        function updateWizardText(lang) {
+            const txt = {
+                en: { t2: "What Grade?", t3: "Create Account", tSi: "Welcome Back", lName: "Full Name", lEmail: "Email", lPass: "Password", bStart: "Start Learning", bBack: "Back", bLog: "Log In", bCancel: "Cancel" },
+                hy: { t2: "Ո՞ր դասարան", t3: "Ստեղծել հաշիվ", tSi: "Բարի վերադարձ", lName: "Անուն Ազգանուն", lEmail: "Էլ․ հասցե", lPass: "Գաղտնաբառ", bStart: "Սկսել", bBack: "Հետ", bLog: "Մուտք", bCancel: "Չեղարկել" }
+            }[lang];
+
+            document.getElementById('t-step-2').textContent = txt.t2;
+            document.getElementById('t-step-3').textContent = txt.t3;
+            document.getElementById('t-step-signin').textContent = txt.tSi;
+            
+            document.getElementById('l-su-name').textContent = txt.lName;
+            document.getElementById('l-su-email').textContent = txt.lEmail;
+            document.getElementById('l-su-pass').textContent = txt.lPass;
+            document.getElementById('l-si-email').textContent = txt.lEmail;
+            document.getElementById('l-si-pass').textContent = txt.lPass;
+
+            document.getElementById('btn-su-submit').textContent = txt.bStart;
+            document.getElementById('btn-step2-back').textContent = txt.bBack;
+            document.getElementById('btn-su-back').textContent = txt.bBack;
+            document.getElementById('btn-si-submit').textContent = txt.bLog;
+            document.getElementById('btn-si-cancel').textContent = txt.bCancel;
+            document.getElementById('top-login-btn').textContent = txt.bLog;
+
+            const grades = {
+                '3': { en: '3rd', hy: '3-րդ' },
+                '4': { en: '4th', hy: '4-րդ' },
+                '5': { en: '5th', hy: '5-րդ' },
+                '6': { en: '6th', hy: '6-րդ' },
+                '7': { en: '7th', hy: '7-րդ' },
+                '8': { en: '8th', hy: '8-րդ' },
+                '9': { en: '9th', hy: '9-րդ' }
+            };
+            for (let i = 3; i <= 9; i++) {
+                const el = document.getElementById(`g-${i}`);
+                if (el) el.textContent = grades[i][lang];
+            }
+        }
+
+        function updateProfileText(lang) {
+            const t = {
+                en: { settings: "Settings", classT: "Classroom", classD: "Enter a code to join a class.", pwT: "Password", pwD: "Update your password.", langT: "Language", curr: "Current:", log: "Logout", upNext: "Up Next", coursePlan: "Course Plan", welcome: "Welcome back," },
+                hy: { settings: "Կարգավորումներ", classT: "Դասարան", classD: "Մուտքագրեք կոդը՝ դասին միանալու համար:", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ," }
+            }[lang];
+
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const k = el.dataset.i18n;
+                if(k === 'settingsTitle') el.textContent = t.settings;
+                if(k === 'classroomTitle') el.textContent = t.classT;
+                if(k === 'classroomDesc') el.textContent = t.classD;
+                if(k === 'passwordTitle') el.textContent = t.pwT;
+                if(k === 'passwordDesc') el.textContent = t.pwD;
+                if(k === 'languageTitle') el.textContent = t.langT;
+                if(k === 'currentLabel') el.textContent = t.curr;
+                if(k === 'logoutTitle') el.textContent = t.log;
+                if(k === 'upNext') el.textContent = t.upNext;
+                if(k === 'coursePlan') el.textContent = t.coursePlan;
+                if(k === 'welcomeBack') el.textContent = t.welcome;
+            });
+
+            ui.pLangDisplay.textContent = lang === 'hy' ? 'Հայերեն' : 'English';
+            ui.pLangToggle.textContent = lang === 'hy' ? 'EN' : 'Հայ';
+        }
+
+        function updateCoursesText(lang) {
+            const t = {
+                en: { title: "Courses", lang: "Language", grade: "Grade", update: "Update Course" },
+                hy: { title: "Դասընթացներ", lang: "Լեզու", grade: "Դասարան", update: "Թարմացնել" }
+            }[lang];
+            
+            const grades = {
+                '3': { en: '3rd', hy: '3-րդ' }, '4': { en: '4th', hy: '4-րդ' }, '5': { en: '5th', hy: '5-րդ' },
+                '6': { en: '6th', hy: '6-րդ' }, '7': { en: '7th', hy: '7-րդ' }, '8': { en: '8th', hy: '8-րդ' }, '9': { en: '9th', hy: '9-րդ' }
+            };
+
+            document.querySelectorAll('#view-courses [data-i18n]').forEach(el => {
+                const k = el.dataset.i18n;
+                if(k === 'coursesTitle') el.textContent = t.title;
+                if(k === 'langTitle') el.textContent = t.lang;
+                if(k === 'gradeTitle') el.textContent = t.grade;
+                if(k === 'updateBtn') el.textContent = t.update;
+            });
+            
+            document.querySelectorAll('.g-label').forEach(el => {
+                const g = el.dataset.g;
+                if(grades[g]) el.textContent = grades[g][lang];
+            });
+        }
+
+        window.setGrade = (grade, el) => {
+            state.grade = grade;
+            document.querySelectorAll('#w-step-2 .option-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+            setTimeout(() => window.showStep(3), 250);
+        };
+
+        // --- AUTH HANDLERS ---
+
+        // SIGN UP
+        document.getElementById('signup-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-su-submit');
+            btn.disabled = true; btn.textContent = "Creating...";
+            
+            try {
+                const cred = await createUserWithEmailAndPassword(auth, 
+                    document.getElementById('su-email').value, 
+                    document.getElementById('su-pass').value
+                );
+                
+                // Atomic Profile Creation
+                await setDoc(doc(db, "thelo-students", cred.user.uid), {
+                    name: document.getElementById('su-name').value,
+                    email: cred.user.email,
+                    preferences: { language: state.lang, grade: state.grade },
+                    points: 0, lessonsCompleted: 0,
+                    streakData: { currentStreak: 0, longestStreak: 0 },
+                    createdAt: serverTimestamp()
+                });
+                
+                await updateProfile(cred.user, { displayName: document.getElementById('su-name').value });
+                // Auth listener will handle transition
+            } catch (err) {
+                alert(err.message);
+                btn.disabled = false; btn.textContent = "Try Again";
+            }
+        };
+
+        // SIGN IN
+        document.getElementById('signin-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-si-submit');
+            btn.disabled = true; btn.textContent = "Loading...";
+            
+            try {
+                await signInWithEmailAndPassword(auth, 
+                    document.getElementById('si-email').value, 
+                    document.getElementById('si-pass').value
+                );
+                // Auth listener will handle transition
+            } catch (err) {
+                alert("Invalid Login");
+                btn.disabled = false; btn.textContent = "Log In";
+            }
+        };
+
+        // --- APP TRANSITION LOGIC ---
+
+        window.switchToHangar = (user) => {
+            const u = user || auth.currentUser;
+            if (!u) return;
+
+            ui.splash.classList.remove('active');
+            ui.profile.classList.remove('active');
+            ui.courses.classList.remove('active');
+            ui.hangar.classList.add('active');
+            loadHangarData(u);
+        };
+
+        window.switchToProfile = () => {
+            const u = auth.currentUser;
+            if (!u) return;
+
+            ui.hangar.classList.remove('active');
+            ui.courses.classList.remove('active');
+            ui.profile.classList.add('active');
+            loadProfileData(u);
+        };
+
+        window.switchToCourses = async () => {
+            const u = auth.currentUser;
+            if (!u) return;
+
+            ui.hangar.classList.remove('active');
+            ui.profile.classList.remove('active');
+            ui.courses.classList.add('active');
+            
+            // Load Prefs
+            try {
+                const snap = await getDoc(doc(db, 'thelo-students', u.uid));
+                if (snap.exists()) {
+                    const p = snap.data().preferences || {};
+                    courseState.lang = p.language || 'en';
+                    courseState.grade = p.grade || '9';
+                    updateCoursesUI();
+                }
+            } catch(e) { console.error(e); }
+        };
+
+        // --- COURSES LOGIC ---
+        let courseState = { lang: 'en', grade: '9' };
+
+        function updateCoursesUI() {
+            document.querySelectorAll('#c-lang-grid .option-card').forEach(c => {
+                c.classList.toggle('selected', c.dataset.val === courseState.lang);
+            });
+            document.querySelectorAll('#c-grade-grid .option-card').forEach(c => {
+                c.classList.toggle('selected', c.dataset.val === courseState.grade);
+            });
+            updateCoursesText(courseState.lang);
+        }
+
+        window.selectCourseLang = (lang, el) => {
+            courseState.lang = lang;
+            updateCoursesUI();
+        };
+
+        window.selectCourseGrade = (grade, el) => {
+            courseState.grade = grade;
+            updateCoursesUI();
+        };
+
+        window.saveCourse = async () => {
+            const btn = document.getElementById('btn-update-course');
+            btn.disabled = true; btn.textContent = "...";
+            try {
+                await updateDoc(doc(db, 'thelo-students', auth.currentUser.uid), {
+                    'preferences.language': courseState.lang,
+                    'preferences.grade': courseState.grade
+                });
+                
+                if (courseState.lang === 'hy') document.body.classList.add('lang-hy');
+                else document.body.classList.remove('lang-hy');
+                
+                // Update other views text
+                updateProfileText(courseState.lang);
+                
+                switchToHangar();
+                showToast("Course Updated!");
+            } catch (e) {
+                showToast("Error", true);
+            } finally {
+                btn.disabled = false; btn.textContent = "Update Course";
+            }
+        };
+
+        function showToast(msg, isError = false) {
+            const t = document.getElementById('notification-toast');
+            document.getElementById('toast-msg').textContent = msg;
+            t.className = isError ? 'error' : '';
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        async function loadHangarData(user) {
+            try {
+                // Profile
+                const profileSnap = await getDoc(doc(db, 'thelo-students', user.uid));
+                if (profileSnap.exists()) {
+                    const data = profileSnap.data();
+                    ui.hName.textContent = data.name || "Student";
+                    ui.hName.classList.remove('skeleton');
+                    ui.hStreak.textContent = data.streakData?.currentStreak || 0;
+                    ui.hPoints.textContent = data.points || 0;
+                    
+                    if (data.preferences?.language) {
+                        window.setLang(data.preferences.language, document.createElement('div')); // Hacky update
+                    }
+                }
+
+                // Curriculum (Smart Fetch)
+                // Note: Reusing logic from previous Hangar design
+                const courseId = 'sat-math-prep';
+                const progressRef = collection(db, 'thelo-students', user.uid, 'progress');
+                const [progSnap, unitsSnap] = await Promise.all([
+                    getDocs(progressRef),
+                    getDocs(query(collection(db, 'courses', courseId, 'units'), orderBy('order')))
+                ]);
+
+                const completedIds = new Set();
+                progSnap.forEach(d => { if(d.data().status === 'completed') completedIds.add(d.id); });
+
+                let listHTML = '';
+                let nextFound = false;
+
+                for (const uDoc of unitsSnap.docs) {
+                    const uData = uDoc.data();
+                    listHTML += `<div style="margin-bottom:1.5rem"><div class="card-label" style="margin-bottom:0.5rem">${uData.unitTitle}</div>`;
+                    
+                    const tSnap = await getDocs(query(collection(uDoc.ref, 'topics'), orderBy('order')));
+                    
+                    tSnap.forEach(tDoc => {
+                        const tData = tDoc.data();
+                        const isDone = completedIds.has(tDoc.id);
+                        let status = isDone ? 'active' : 'locked'; // Use active style for done to look nice
+                        let iconClass = isDone ? 'icon-done' : 'icon-locked';
+                        let icon = isDone ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-lock"></i>';
+                        let sub = isDone ? 'Completed' : 'Locked';
+
+                        if (!isDone && !nextFound) {
+                            nextFound = true;
+                            status = 'active';
+                            iconClass = 'icon-active';
+                            icon = '<i class="fa-solid fa-play"></i>';
+                            sub = 'Up Next';
+                            
+                            // Update Hero
+                            ui.hTitle.textContent = tData.topicName;
+                            ui.hBtn.disabled = false;
+                            ui.hBtn.onclick = () => window.location.href = `board.html?lessonFile=${tData.lessonFileUrl}`;
+                        }
+
+                        // Allow clicking completed or active
+                        const click = (isDone || status === 'active') ? `onclick="window.location.href='board.html?lessonFile=${tData.lessonFileUrl}'"` : '';
+
+                        listHTML += `
+                            <div class="lesson-item ${status}" ${click}>
+                                <div class="lesson-icon ${iconClass}">${icon}</div>
+                                <div>
+                                    <div class="lesson-name">${tData.topicName}</div>
+                                    <div class="lesson-sub">${sub}</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    listHTML += `</div>`;
+                }
+                ui.hList.innerHTML = listHTML;
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function loadProfileData(user) {
+            ui.pUid.textContent = user.uid;
+            ui.pEmail.textContent = user.email;
+            
+            const docSnap = await getDoc(doc(db, 'thelo-students', user.uid));
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                ui.pName.textContent = data.name || "Student";
+                
+                // Class Status
+                if (data.groupId) {
+                    const gSnap = await getDoc(doc(db, 'groups', data.groupId));
+                    if (gSnap.exists()) {
+                        ui.pJoinContainer.classList.add('hidden');
+                        ui.pClassStatus.classList.remove('hidden');
+                        ui.pClassStatus.textContent = `Active in: ${gSnap.data().groupName}`;
+                    }
+                } else {
+                    ui.pJoinContainer.classList.remove('hidden');
+                    ui.pClassStatus.classList.add('hidden');
+                }
+            }
+        }
+
+        // --- PROFILE ACTIONS ---
+        
+        // Logout
+        document.getElementById('p-logout-btn').onclick = async () => {
+            await signOut(auth);
+            window.location.reload();
+        };
+
+        // Language Toggle
+        ui.pLangToggle.onclick = async () => {
+            const newLang = state.lang === 'en' ? 'hy' : 'en';
+            window.setLang(newLang, document.createElement('div'));
+            if (auth.currentUser) {
+                await updateDoc(doc(db, 'thelo-students', auth.currentUser.uid), { 'preferences.language': newLang });
+            }
+        };
+
+        // Join Class
+        ui.pJoinBtn.onclick = async () => {
+            const code = ui.pClassCode.value.trim().toUpperCase();
+            if (!code) return;
+            
+            ui.pJoinBtn.disabled = true; ui.pJoinBtn.textContent = "...";
+            try {
+                const q = query(collection(db, 'groups'), where("joinCode", "==", code));
+                const snap = await getDocs(q);
+                if (snap.empty) throw new Error("Invalid Code");
+                
+                const gDoc = snap.docs[0];
+                const uid = auth.currentUser.uid;
+                
+                await updateDoc(doc(db, 'thelo-students', uid), { groupId: gDoc.id });
+                const newMembers = [...(gDoc.data().memberIds || []), uid];
+                await updateDoc(doc(db, 'groups', gDoc.id), { memberIds: newMembers });
+                
+                showToast("Joined Class!");
+                loadProfileData(auth.currentUser);
+            } catch (e) {
+                showToast(e.message, true);
+            } finally {
+                ui.pJoinBtn.disabled = false; ui.pJoinBtn.textContent = "Join";
+            }
+        };
+
+        // Password Modal
+        const pwModal = document.getElementById('password-modal');
+        document.getElementById('p-pw-btn').onclick = () => pwModal.style.display = 'flex';
+        document.getElementById('pw-cancel').onclick = () => { pwModal.style.display = 'none'; document.getElementById('pw-form').reset(); };
+        
+        document.getElementById('pw-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const curr = document.getElementById('pw-current').value;
+            const newP = document.getElementById('pw-new').value;
+            const conf = document.getElementById('pw-confirm').value;
+
+            if (newP !== conf) return showToast("Passwords don't match", true);
+            
+            try {
+                const cred = EmailAuthProvider.credential(auth.currentUser.email, curr);
+                await reauthenticateWithCredential(auth.currentUser, cred);
+                await updatePassword(auth.currentUser, newP);
+                showToast("Password Updated");
+                pwModal.style.display = 'none';
+            } catch (err) {
+                showToast(err.message, true);
+            }
+        };
+
+        // --- GLOBAL LISTENER ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // If we are already on profile, reload profile data, else go to hangar
+                if (ui.profile.classList.contains('active')) loadProfileData(user);
+                else switchToHangar(user);
+            } else {
+                console.log("No Auth -> Staying on Splash");
+            }
+        });
+
+    </script>
+</body>
+</html>
