@@ -311,7 +311,7 @@ body.lang-en {
   transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 /* ===== NEW: Phone pairing panel ===== */
-#whiteboardPanel {
+ #whiteboardPanel {
   position: absolute;
   right: 1rem;
   bottom: 6.5rem;
@@ -322,10 +322,22 @@ body.lang-en {
   backdrop-filter: blur(18px);
   border: 1px solid rgba(229, 231, 235, 0.9);
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 0.5rem;
   z-index: 30;
+}
+#whiteboardPanel.visible {
+  display: flex;
+}
+.whiteboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.whiteboard-header button {
+  font-size: 0.7rem;
+  padding: 0.3rem 0.75rem;
 }
 .whiteboard-label {
   font-size: 0.75rem;
@@ -1384,7 +1396,10 @@ body.cursor-visible {
 </div>
             </div>
             <div id="whiteboardPanel">
-                <div class="whiteboard-label">Phone whiteboard</div>
+                <div class="whiteboard-header">
+                    <div class="whiteboard-label">Phone whiteboard</div>
+                    <button id="whiteboard-hide-btn" class="control-btn">Hide</button>
+                </div>
                 <div class="whiteboard-code" id="whiteboard-code">╌╌╌╌╌╌</div>
                 <div class="whiteboard-status" id="whiteboard-status">Generating pairing code…</div>
                 <div class="whiteboard-actions">
@@ -1620,6 +1635,8 @@ function getPreviousWeekIdentifier(weekId) {
     const whiteboardStatusEl = document.getElementById('whiteboard-status');
     const whiteboardPreviewImg = document.getElementById('whiteboard-preview');
     const whiteboardRegenerateBtn = document.getElementById('whiteboard-regenerate');
+    const whiteboardPanel = document.getElementById('whiteboardPanel');
+    const whiteboardHideBtn = document.getElementById('whiteboard-hide-btn');
 	  
 	  const feedbackCanvas = document.getElementById('feedbackCanvas');
 let feedbackCtx = null; // Will be initialized in setupContexts
@@ -1689,7 +1706,6 @@ const dashboardBtn = document.getElementById('dashboardBtn'); // ADD THIS LINE
         let whiteboardDocRef = null;
         let whiteboardUnsub = null;
         let lastWhiteboardSnapshotId = null;
-        let whiteboardSessionInitialized = false;
 const IFRAME_UPDATE_INTERVAL = 40; // ms, throttles updates to 25 FPS (1000 / 40 = 25)
 let lastIframeUpdateTime = 0;
 	let isPageGridVisible = false; 
@@ -1782,6 +1798,34 @@ let lastIframeUpdateTime = 0;
             updateWhiteboardStatus('Failed to create session. Retry.');
         }
     }
+
+    let whiteboardVisible = false;
+
+    function showWhiteboardPanel() {
+        if (!whiteboardPanel) return;
+        whiteboardPanel.classList.add('visible');
+        whiteboardVisible = true;
+        startWhiteboardPairing();
+    }
+
+    function hideWhiteboardPanel() {
+        if (!whiteboardPanel) return;
+        whiteboardPanel.classList.remove('visible');
+        whiteboardVisible = false;
+    }
+
+    function handleWhiteboardHotkey(event) {
+        if (event.key?.toLowerCase() !== 'p') return;
+        const targetTag = event.target?.tagName?.toUpperCase();
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(targetTag) || event.target?.isContentEditable) return;
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+        event.preventDefault();
+        if (whiteboardVisible) hideWhiteboardPanel();
+        else showWhiteboardPanel();
+    }
+
+    whiteboardHideBtn?.addEventListener('click', hideWhiteboardPanel);
+    document.addEventListener('keydown', handleWhiteboardHotkey);
 
     /* ========== Language Functions ========== */
     function getCurrentUIText() { return UI_TEXT[currentLang] || UI_TEXT['hy']; }
@@ -4851,10 +4895,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 isAuthReady = true;
                 console.log("Authentication is now ready.");
-                if (!whiteboardSessionInitialized) {
-                    whiteboardSessionInitialized = true;
-                    startWhiteboardPairing();
-                }
             };
 
             if (user) {
