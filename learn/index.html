@@ -2299,7 +2299,6 @@ function handleDrawingStart(e) {
 
     drawing = true;
 	canvas.classList.add('no-cursor'); // <-- THIS LINE IS NOW UPDATED
-    if (!isThelobookActive) userDrawingOccurred = true;
 
     if (isThelobookActive) {
         activeCtx.lineWidth = isThelobookEraserActive ? THELOBOOK_ERASER_LINEWIDTH : THELOBOOK_PEN_LINEWIDTH;
@@ -2322,13 +2321,15 @@ function handleDrawingStart(e) {
     if (!drawing) return;
 
     if (isTabletMode) {
-        if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
-        if (bottomBar && !bottomBar.classList.contains('bar-hidden-by-stylus')) {
-            bottomBar.classList.add('bar-hidden-by-stylus');
-        }
+      if (buttonVanishTimer) clearTimeout(buttonVanishTimer);
+      if (bottomBar && !bottomBar.classList.contains('bar-hidden-by-stylus')) {
+          bottomBar.classList.add('bar-hidden-by-stylus');
+      }
     }
 
     const currentTargetCanvas = e.currentTarget;
+    // This is the key change: only set drawing occurred on a move event.
+    if (!isThelobookActive) userDrawingOccurred = true;
     const activeCtx = isThelobookActive ? thelobookCtx : ctx;
     if (!activeCtx) return;
 
@@ -2378,7 +2379,9 @@ function handleDrawingEnd(e) {
 
     // Enable check button if there's ink on a question stage
     const isQuestionStage = currentStageData && (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution');
-    if (!isThelobookActive && isQuestionStage && userHasInkForCheck()) {
+    // The userDrawingOccurred flag is now critical. It's only true if a "move" event happened.
+    // This prevents a single click (start/end with no move) from enabling the button.
+    if (!isThelobookActive && isQuestionStage && userDrawingOccurred && userHasInkForCheck()) {
         if (nextCheckBtn) nextCheckBtn.disabled = false;
     }
 }
