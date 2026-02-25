@@ -2063,6 +2063,16 @@ function resizeCanvases() {
     ctx.lineCap = 'round'; 
     ctx.lineJoin = 'round'; 
     ctx.strokeStyle = INK_COLORS.blue; // Hardcoded to blue
+
+    if (captureCtx) {
+        captureCtx.resetTransform();
+        captureCtx.scale(devicePixelRatio, devicePixelRatio);
+        captureCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        captureCtx.lineCap = 'round';
+        captureCtx.lineJoin = 'round';
+        captureCtx.strokeStyle = INK_COLORS.blue;
+        captureCtx.globalCompositeOperation = 'source-over';
+    }
     
     if (thelobookCtx) {
         thelobookCtx.lineCap = 'round'; 
@@ -2302,6 +2312,11 @@ function handleDrawingStart(e) {
     lastPos = pos;
     activeCtx.beginPath();
     activeCtx.moveTo(pos.x, pos.y);
+
+    if (!isThelobookActive && captureCtx) {
+        captureCtx.beginPath();
+        captureCtx.moveTo(pos.x, pos.y);
+    }
 }
 	function handleDrawingMove(e) {
     if (!drawing) return;
@@ -2328,9 +2343,10 @@ function handleDrawingStart(e) {
     activeCtx.moveTo(midPoint.x, midPoint.y);
     
     // Also draw to the capture canvas for AI processing
-    if (captureCtx) {
+    if (!isThelobookActive && captureCtx) {
         captureCtx.quadraticCurveTo(lastPos.x, lastPos.y, midPoint.x, midPoint.y);
         captureCtx.stroke();
+        captureCtx.moveTo(midPoint.x, midPoint.y);
     }
 
     lastPos = pos;
@@ -2354,9 +2370,15 @@ function handleDrawingEnd(e) {
     activeCtx.stroke();
     activeCtx.closePath();
 
+    if (!isThelobookActive && captureCtx) {
+        captureCtx.lineTo(lastPos.x, lastPos.y);
+        captureCtx.stroke();
+        captureCtx.closePath();
+    }
+
     // Enable check button if there's ink on a question stage
     const isQuestionStage = currentStageData && (currentStageData.type === 'question_handwriting' || currentStageData.type === 'question_math_solution');
-    if (!isThelobookActive && isQuestionStage && userDrawingOccurred) {
+    if (!isThelobookActive && isQuestionStage && userHasInkForCheck()) {
         if (nextCheckBtn) nextCheckBtn.disabled = false;
     }
 }
