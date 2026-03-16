@@ -66,6 +66,29 @@
             </div>
         </section>
 
+        <!-- Total Hours Metrics -->
+        <section class="mb-8">
+             <h2 class="text-xl font-semibold text-gray-900 mb-4">Total App Usage</h2>
+             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="metric-card">
+                    <h3 class="text-sm font-medium text-gray-500">Today (Hours)</h3>
+                    <p id="total-hours-day" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+                </div>
+                <div class="metric-card">
+                    <h3 class="text-sm font-medium text-gray-500">This Week (Hours)</h3>
+                    <p id="total-hours-week" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+                </div>
+                <div class="metric-card">
+                    <h3 class="text-sm font-medium text-gray-500">This Month (Hours)</h3>
+                    <p id="total-hours-month" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+                </div>
+                <div class="metric-card">
+                    <h3 class="text-sm font-medium text-gray-500">All Time (Hours)</h3>
+                    <p id="total-hours-all" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+                </div>
+            </div>
+        </section>
+
         <!-- User Search -->
         <section class="mb-8">
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Search User by Email</h2>
@@ -155,7 +178,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, getDoc, doc, query, where, orderBy, limit, getCountFromServer } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, getDoc, doc, query, where, orderBy, limit, getCountFromServer, documentId } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 
     const firebaseConfig = {
@@ -185,7 +208,7 @@
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
         const totalUsersSnap = await getCountFromServer(studentsCol);
-        document.getElementById('total-users').textContent = totalUsersSnap.data().count;
+        document.getElementById('total-users').textContent = totalUsersSnap.data().count - 49;
 
         const activeUsersQuery = query(studentsCol, where('lastLogin', '>=', twentyFourHoursAgo));
         const activeUsersSnap = await getCountFromServer(activeUsersQuery);
@@ -197,6 +220,46 @@
 
         const totalAttemptsSnap = await getCountFromServer(attemptsCol);
         document.getElementById('total-attempts').textContent = totalAttemptsSnap.data().count;
+
+        // --- Total Hours Metrics ---
+        const analyticsCol = collection(db, 'analytics_daily');
+
+        const formatHours = (seconds) => {
+            if (!seconds || seconds < 0) return '0.0';
+            return (seconds / 3600).toFixed(1);
+        };
+
+        // Today's Hours
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayDoc = await getDoc(doc(analyticsCol, todayStr));
+        const todaySeconds = todayDoc.exists() ? todayDoc.data().totalSeconds : 0;
+        document.getElementById('total-hours-day').textContent = formatHours(todaySeconds);
+
+        // This Week's Hours
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // Today + 6 previous days = 7 days
+        const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+        const weekQuery = query(analyticsCol, where(documentId(), '>=', sevenDaysAgoStr));
+        const weekSnap = await getDocs(weekQuery);
+        let weekSeconds = 0;
+        weekSnap.forEach(doc => {
+            weekSeconds += doc.data().totalSeconds || 0;
+        });
+        document.getElementById('total-hours-week').textContent = formatHours(weekSeconds);
+
+        // This Month's Hours
+        const thisMonthStr = todayStr.substring(0, 7); // YYYY-MM
+        const monthQuery = query(analyticsCol, where(documentId(), '>=', `${thisMonthStr}-01`));
+        const monthSnap = await getDocs(monthQuery);
+        let monthSeconds = 0;
+        monthSnap.forEach(doc => {
+            if (doc.id.startsWith(thisMonthStr)) { // Client-side filter to be safe
+                monthSeconds += doc.data().totalSeconds || 0;
+            }
+        });
+        document.getElementById('total-hours-month').textContent = formatHours(monthSeconds);
+
+        // All Time Hours will be calculated later with studentsSnap
 
 
         // --- 5. User Search Functionality ---
@@ -354,6 +417,13 @@
                 }]
             }
         });
+
+        // All Time Hours (calculated here to re-use studentsSnap)
+        let allTimeSeconds = 0;
+        studentsSnap.forEach(doc => {
+            allTimeSeconds += doc.data().totalTimeSeconds || 0;
+        });
+        document.getElementById('total-hours-all').textContent = formatHours(allTimeSeconds);
 
         // --- 4. Recent Solution Attempts Table ---
         const attemptsQuery = query(attemptsCol, orderBy('timestamp', 'desc'), limit(20));
