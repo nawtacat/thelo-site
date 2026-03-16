@@ -113,6 +113,40 @@
             </div>
         </section>
 
+        <!-- Leaderboards -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="chart-container">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Leaderboard: Most Time Spent</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-time-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Leaderboard: Most Solution Checks</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Checks</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-checks-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- Solution Attempts -->
         <section>
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Recent Solution Attempts</h2>
@@ -424,6 +458,56 @@
             allTimeSeconds += doc.data().totalTimeSeconds || 0;
         });
         document.getElementById('total-hours-all').textContent = formatHours(allTimeSeconds);
+
+        // --- Leaderboards ---
+        const leaderboardLimit = 10; // Show top 10
+
+        // 1. Time Spent Leaderboard
+        const timeLeaderboardBody = document.getElementById('leaderboard-time-body');
+        timeLeaderboardBody.innerHTML = '';
+        const usersByTime = studentsSnap.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(user => user.totalTimeSeconds > 0)
+            .sort((a, b) => (b.totalTimeSeconds || 0) - (a.totalTimeSeconds || 0));
+
+        usersByTime.slice(0, leaderboardLimit).forEach((user, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatHours(user.totalTimeSeconds)}</td>
+            `;
+            timeLeaderboardBody.appendChild(row);
+        });
+
+        // 2. Solution Checks Leaderboard
+        const checksLeaderboardBody = document.getElementById('leaderboard-checks-body');
+        checksLeaderboardBody.innerHTML = '';
+        const allAttemptsSnap = await getDocs(attemptsCol);
+        const attemptsByUser = allAttemptsSnap.docs.reduce((acc, doc) => {
+            const userId = doc.data().userId;
+            if (userId) acc[userId] = (acc[userId] || 0) + 1;
+            return acc;
+        }, {});
+
+        const studentDataMap = new Map();
+        studentsSnap.forEach(doc => studentDataMap.set(doc.id, doc.data()));
+
+        const usersByChecks = Object.entries(attemptsByUser)
+            .map(([userId, count]) => ({ userId, count }))
+            .sort((a, b) => b.count - a.count);
+
+        usersByChecks.slice(0, leaderboardLimit).forEach((entry, index) => {
+            const userData = studentDataMap.get(entry.userId);
+            const userEmail = userData ? userData.email : 'Unknown User';
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${userEmail}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${entry.count}</td>
+            `;
+            checksLeaderboardBody.appendChild(row);
+        });
 
         // --- 4. Recent Solution Attempts Table ---
         const attemptsQuery = query(attemptsCol, orderBy('timestamp', 'desc'), limit(20));
