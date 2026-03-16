@@ -38,29 +38,10 @@
 </head>
 <body class="antialiased">
 
-<div id="auth-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-sm">
-        <h2 class="text-2xl font-bold mb-4 text-center">Admin Login</h2>
-        <form id="login-form">
-            <div class="mb-4">
-                <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
-                <input type="email" id="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-            </div>
-            <div class="mb-6">
-                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
-                <input type="password" id="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-            </div>
-            <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-semibold">Log In</button>
-            <p id="login-error" class="text-red-500 text-sm mt-2 text-center"></p>
-        </form>
-    </div>
-</div>
-
-<div id="admin-panel" class="hidden">
+<div id="admin-panel">
     <header class="bg-white shadow-sm">
         <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
             <h1 class="text-2xl font-bold text-gray-900">Thelo Admin Dashboard</h1>
-            <button id="logout-btn" class="text-sm font-medium text-blue-600 hover:text-blue-500">Logout</button>
         </div>
     </header>
 
@@ -162,7 +143,6 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, getDocs, getDoc, doc, query, where, orderBy, limit, getCountFromServer } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -174,53 +154,10 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const authOverlay = document.getElementById('auth-overlay');
-    const adminPanel = document.getElementById('admin-panel');
-    const loginForm = document.getElementById('login-form');
-    const loginError = document.getElementById('login-error');
-    const logoutBtn = document.getElementById('logout-btn');
-
-    // --- AUTHENTICATION ---
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        loginError.textContent = '';
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
-        try {
-            await signInWithEmailAndPassword(auth, email, password);
-            // onAuthStateChanged will handle the rest
-        } catch (error) {
-            loginError.textContent = 'Invalid credentials or not an admin.';
-            console.error('Login failed:', error);
-        }
-    });
-
-    logoutBtn.addEventListener('click', async () => {
-        await signOut(auth);
-        window.location.reload();
-    });
-
-    onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            // Check if user is an admin/tutor
-            const tutorDocRef = doc(db, 'tutors', user.email);
-            const tutorDoc = await getDoc(tutorDocRef);
-            if (tutorDoc.exists()) {
-                authOverlay.classList.add('hidden');
-                adminPanel.classList.remove('hidden');
-                loadDashboardData();
-            } else {
-                await signOut(auth);
-                loginError.textContent = 'You are not authorized to view this page.';
-            }
-        } else {
-            authOverlay.classList.remove('hidden');
-            adminPanel.classList.add('hidden');
-        }
-    });
+    // Load data immediately without auth check
+    loadDashboardData();
 
     // --- DATA LOADING AND RENDERING ---
     async function loadDashboardData() {
