@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thelo Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+        }
+        body {
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            font-family: 'Manrope', sans-serif;
+        }
+        .metric-card {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .chart-container {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            position: relative;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+<div id="auth-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-sm">
+        <h2 class="text-2xl font-bold mb-4 text-center">Admin Login</h2>
+        <form id="login-form">
+            <div class="mb-4">
+                <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                <input type="email" id="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <div class="mb-6">
+                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                <input type="password" id="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-semibold">Log In</button>
+            <p id="login-error" class="text-red-500 text-sm mt-2 text-center"></p>
+        </form>
+    </div>
+</div>
+
+<div id="admin-panel" class="hidden">
+    <header class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-gray-900">Thelo Admin Dashboard</h1>
+            <button id="logout-btn" class="text-sm font-medium text-blue-600 hover:text-blue-500">Logout</button>
+        </div>
+    </header>
+
+    <main class="p-4 sm:p-6 lg:p-8">
+        <!-- Overview Metrics -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">Total Users</h3>
+                <p id="total-users" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">Active Users (24h)</h3>
+                <p id="active-users" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">New Users (24h)</h3>
+                <p id="new-users" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">Total Solution Checks</h3>
+                <p id="total-attempts" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+        </section>
+
+        <!-- Charts -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="chart-container">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">User Registrations (Last 30 Days)</h3>
+                <canvas id="registrations-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Assistive Panning Preference</h3>
+                <canvas id="panning-chart" style="max-height: 300px; margin: auto;"></canvas>
+            </div>
+        </section>
+
+        <!-- Solution Attempts -->
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Recent Solution Attempts</h2>
+            <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lesson</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" class="relative px-6 py-3"><span class="sr-only">View</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="attempts-table-body" class="bg-white divide-y divide-gray-200">
+                            <!-- Rows will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- Modal for viewing solution attempt -->
+<div id="solution-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 relative">
+        <button id="close-modal-btn" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>
+        <h3 class="text-xl font-bold mb-4">Solution Details</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h4 class="font-semibold mb-2">User's Drawing</h4>
+                <div class="border rounded-lg p-2 bg-gray-100">
+                    <img id="solution-image" src="" alt="User Solution" class="w-full h-auto object-contain">
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold mb-2">Analysis</h4>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Status</dt>
+                        <dd id="solution-status" class="mt-1 text-lg font-semibold"></dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Feedback</dt>
+                        <dd id="solution-feedback" class="mt-1 text-gray-900 bg-gray-50 p-3 rounded-md"></dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Detected Answer</dt>
+                        <dd id="solution-detected" class="mt-1 text-gray-900"></dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Correct Answer</dt>
+                        <dd id="solution-correct" class="mt-1 text-gray-900"></dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, getDocs, getDoc, doc, query, where, orderBy, limit, getCountFromServer } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+        authDomain: "physmathacademy-722b3.firebaseapp.com",
+        projectId: "physmathacademy-722b3",
+        storageBucket: "physmathacademy-722b3.appspot.com",
+        appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const authOverlay = document.getElementById('auth-overlay');
+    const adminPanel = document.getElementById('admin-panel');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    // --- AUTHENTICATION ---
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginError.textContent = '';
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            // onAuthStateChanged will handle the rest
+        } catch (error) {
+            loginError.textContent = 'Invalid credentials or not an admin.';
+            console.error('Login failed:', error);
+        }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+        await signOut(auth);
+        window.location.reload();
+    });
+
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // Check if user is an admin/tutor
+            const tutorDocRef = doc(db, 'tutors', user.email);
+            const tutorDoc = await getDoc(tutorDocRef);
+            if (tutorDoc.exists()) {
+                authOverlay.classList.add('hidden');
+                adminPanel.classList.remove('hidden');
+                loadDashboardData();
+            } else {
+                await signOut(auth);
+                loginError.textContent = 'You are not authorized to view this page.';
+            }
+        } else {
+            authOverlay.classList.remove('hidden');
+            adminPanel.classList.add('hidden');
+        }
+    });
+
+    // --- DATA LOADING AND RENDERING ---
+    async function loadDashboardData() {
+        // References
+        const studentsCol = collection(db, 'thelo-students');
+        const attemptsCol = collection(db, 'solution_attempts');
+
+        // --- 1. Overview Metrics ---
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        const totalUsersSnap = await getCountFromServer(studentsCol);
+        document.getElementById('total-users').textContent = totalUsersSnap.data().count;
+
+        const activeUsersQuery = query(studentsCol, where('lastLogin', '>=', twentyFourHoursAgo));
+        const activeUsersSnap = await getCountFromServer(activeUsersQuery);
+        document.getElementById('active-users').textContent = activeUsersSnap.data().count;
+
+        const newUsersQuery = query(studentsCol, where('createdAt', '>=', twentyFourHoursAgo));
+        const newUsersSnap = await getCountFromServer(newUsersQuery);
+        document.getElementById('new-users').textContent = newUsersSnap.data().count;
+
+        const totalAttemptsSnap = await getCountFromServer(attemptsCol);
+        document.getElementById('total-attempts').textContent = totalAttemptsSnap.data().count;
+
+        // --- 2. Registrations Chart ---
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const regsQuery = query(studentsCol, where('createdAt', '>=', thirtyDaysAgo));
+        const regsSnap = await getDocs(regsQuery);
+        const registrationsByDay = regsSnap.docs.reduce((acc, doc) => {
+            if (!doc.data().createdAt) return acc;
+            const date = doc.data().createdAt.toDate().toISOString().split('T')[0];
+            acc[date] = (acc[date] || 0) + 1;
+            return acc;
+        }, {});
+
+        const regLabels = Object.keys(registrationsByDay).sort();
+        const regData = regLabels.map(label => registrationsByDay[label]);
+
+        new Chart(document.getElementById('registrations-chart'), {
+            type: 'line',
+            data: {
+                labels: regLabels,
+                datasets: [{
+                    label: 'New Users',
+                    data: regData,
+                    borderColor: 'rgb(37, 99, 235)',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                scales: {
+                    x: { type: 'time', time: { unit: 'day' } }
+                }
+            }
+        });
+
+        // --- 3. Panning Preference Chart ---
+        const studentsSnap = await getDocs(studentsCol);
+        let panOn = 0, panOff = 0, panUndefined = 0;
+        studentsSnap.forEach(doc => {
+            const panPref = doc.data().preferences?.assistivePanning;
+            if (panPref === true) panOn++;
+            else if (panPref === false) panOff++;
+            else panUndefined++;
+        });
+
+        new Chart(document.getElementById('panning-chart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['On (Default)', 'Off', 'Not Set'],
+                datasets: [{
+                    label: 'Assistive Panning',
+                    data: [panOn, panOff, panUndefined],
+                    backgroundColor: ['#22C55E', '#EF4444', '#9CA3AF']
+                }]
+            }
+        });
+
+        // --- 4. Recent Solution Attempts Table ---
+        const attemptsQuery = query(attemptsCol, orderBy('timestamp', 'desc'), limit(20));
+        const attemptsSnap = await getDocs(attemptsQuery);
+        const tableBody = document.getElementById('attempts-table-body');
+        tableBody.innerHTML = ''; // Clear existing
+
+        for (const attemptDoc of attemptsSnap.docs) {
+            const data = attemptDoc.data();
+            const userDoc = await getDoc(doc(db, 'thelo-students', data.userId));
+            const userName = userDoc.exists() ? userDoc.data().name : 'Unknown User';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${data.timestamp.toDate().toLocaleString()}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${userName}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${data.lessonId} (Stage ${data.stageIndex})</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${data.status === 'correct' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                        ${data.status}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button class="text-indigo-600 hover:text-indigo-900 view-btn" data-id="${attemptDoc.id}">View</button>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        }
+        
+        // Add event listeners for view buttons
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            btn.addEventListener('click', () => showSolutionModal(btn.dataset.id));
+        });
+    }
+
+    // --- MODAL LOGIC ---
+    const solutionModal = document.getElementById('solution-modal');
+    document.getElementById('close-modal-btn').addEventListener('click', () => solutionModal.classList.add('hidden'));
+
+    async function showSolutionModal(attemptId) {
+        const attemptDoc = await getDoc(doc(db, 'solution_attempts', attemptId));
+        if (!attemptDoc.exists()) return;
+
+        const data = attemptDoc.data();
+        document.getElementById('solution-image').src = data.userInputImage;
+        document.getElementById('solution-status').textContent = data.status;
+        document.getElementById('solution-feedback').textContent = data.feedback;
+        document.getElementById('solution-detected').textContent = data.detectedAnswer || 'N/A';
+        document.getElementById('solution-correct').textContent = data.correctAnswer;
+
+        if (data.status === 'correct') {
+            document.getElementById('solution-status').className = 'mt-1 text-lg font-semibold text-green-600';
+        } else {
+            document.getElementById('solution-status').className = 'mt-1 text-lg font-semibold text-red-600';
+        }
+
+        solutionModal.classList.remove('hidden');
+    }
+
+</script>
+
+</body>
+</html>
