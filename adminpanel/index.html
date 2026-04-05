@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Thelo Admin Panel</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -214,7 +212,7 @@
             searchResultsDiv.appendChild(userInfoDiv);
 
             // Fetch and Display Solution Attempts
-            const attemptsQuery = query(attemptsCol, where('userId', '==', userDoc.id), orderBy('timestamp', 'desc'));
+            const attemptsQuery = query(attemptsCol, where('userId', '==', userDoc.id));
             const attemptsSnap = await getDocs(attemptsQuery);
 
             if (attemptsSnap.empty) {
@@ -268,132 +266,8 @@
             }
         });
 
-
-
-
-
-
-
-
-
-
-
-
-        // --- 2. Registrations Chart ---
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        const regsQuery = query(studentsCol, where('createdAt', '>=', thirtyDaysAgo));
-        const regsSnap = await getDocs(regsQuery);
-        const registrationsByDay = regsSnap.docs.reduce((acc, doc) => {
-            if (!doc.data().createdAt) return acc;
-            const date = doc.data().createdAt.toDate().toISOString().split('T')[0];
-            acc[date] = (acc[date] || 0) + 1;
-            return acc;
-        }, {});
-
-        const regLabels = Object.keys(registrationsByDay).sort();
-        const regData = regLabels.map(label => registrationsByDay[label]);
-
-        new Chart(document.getElementById('registrations-chart'), {
-            type: 'line',
-            data: {
-                labels: regLabels,
-                datasets: [{
-                    label: 'New Users',
-                    data: regData,
-                    borderColor: 'rgb(37, 99, 235)',
-                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                scales: {
-                    x: { type: 'time', time: { unit: 'day' } }
-                }
-            }
-        });
-
-        // --- 3. Panning Preference Chart ---
-        const studentsSnap = await getDocs(studentsCol);
-        let panOn = 0, panOff = 0, panUndefined = 0;
-        studentsSnap.forEach(doc => {
-            const panPref = doc.data().preferences?.assistivePanning;
-            if (panPref === true) panOn++;
-            else if (panPref === false) panOff++;
-            else panUndefined++;
-        });
-
-        new Chart(document.getElementById('panning-chart'), {
-            type: 'doughnut',
-            data: {
-                labels: ['On (Default)', 'Off', 'Not Set'],
-                datasets: [{
-                    label: 'Assistive Panning',
-                    data: [panOn, panOff, panUndefined],
-                    backgroundColor: ['#22C55E', '#EF4444', '#9CA3AF']
-                }]
-            }
-        });
-
-        // All Time Hours (calculated here to re-use studentsSnap)
-        let allTimeSeconds = 0;
-        studentsSnap.forEach(doc => {
-            allTimeSeconds += doc.data().totalTimeSeconds || 0;
-        });
-        document.getElementById('total-hours-all').textContent = formatHours(allTimeSeconds);
-
-        // --- Leaderboards ---
-        const leaderboardLimit = 10; // Show top 10
-
-        // 1. Time Spent Leaderboard
-        const timeLeaderboardBody = document.getElementById('leaderboard-time-body');
-        timeLeaderboardBody.innerHTML = '';
-        const usersByTime = studentsSnap.docs
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(user => user.totalTimeSeconds > 0)
-            .sort((a, b) => (b.totalTimeSeconds || 0) - (a.totalTimeSeconds || 0));
-
-        usersByTime.slice(0, leaderboardLimit).forEach((user, index) => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.email}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatHours(user.totalTimeSeconds)}</td>
-            `;
-            timeLeaderboardBody.appendChild(row);
-        });
-
-        // 2. Solution Checks Leaderboard
-        const checksLeaderboardBody = document.getElementById('leaderboard-checks-body');
-        checksLeaderboardBody.innerHTML = '';
-        const allAttemptsSnap = await getDocs(attemptsCol);
-        const attemptsByUser = allAttemptsSnap.docs.reduce((acc, doc) => {
-            const userId = doc.data().userId;
-            if (userId) acc[userId] = (acc[userId] || 0) + 1;
-            return acc;
-        }, {});
-
-        const studentDataMap = new Map();
-        studentsSnap.forEach(doc => studentDataMap.set(doc.id, doc.data()));
-
-        const usersByChecks = Object.entries(attemptsByUser)
-            .map(([userId, count]) => ({ userId, count }))
-            .sort((a, b) => b.count - a.count);
-
-        usersByChecks.slice(0, leaderboardLimit).forEach((entry, index) => {
-            const userData = studentDataMap.get(entry.userId);
-            const userEmail = userData ? userData.email : 'Unknown User';
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${userEmail}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${entry.count}</td>
-            `;
-            checksLeaderboardBody.appendChild(row);
-        });
-
         // --- 4. Recent Solution Attempts Table ---
-        const attemptsQuery = query(attemptsCol, orderBy('timestamp', 'desc'), limit(20));
+        const attemptsQuery = query(attemptsCol, limit(20));
         const attemptsSnap = await getDocs(attemptsQuery);
         const tableBody = document.getElementById('attempts-table-body');
         tableBody.innerHTML = ''; // Clear existing
