@@ -172,60 +172,11 @@
         try {
             const totalUsersSnap = await getCountFromServer(studentsCol);
             document.getElementById('total-users').textContent = totalUsersSnap.data().count - 49;
-
-            const activeUsersQuery = query(studentsCol, where('lastLogin', '>=', twentyFourHoursAgo));
-            const activeUsersSnap = await getCountFromServer(activeUsersQuery);
-            document.getElementById('active-users').textContent = activeUsersSnap.data().count;
-
-            const newUsersQuery = query(studentsCol, where('createdAt', '>=', twentyFourHoursAgo));
-            const newUsersSnap = await getCountFromServer(newUsersQuery);
-            document.getElementById('new-users').textContent = newUsersSnap.data().count;
         } catch (e) {
             console.error("Error loading user counts:", e);
         }
-
         const totalAttemptsSnap = await getCountFromServer(attemptsCol);
         document.getElementById('total-attempts').textContent = totalAttemptsSnap.data().count;
-
-        // --- Total Hours Metrics ---
-        const analyticsCol = collection(db, 'analytics_daily');
-
-        const formatHours = (seconds) => {
-            if (!seconds || seconds < 0) return '0.0';
-            return (seconds / 3600).toFixed(1);
-        };
-
-        // Today's Hours
-        const todayStr = new Date().toISOString().split('T')[0];
-        const todayDoc = await getDoc(doc(analyticsCol, todayStr));
-        const todaySeconds = todayDoc.exists() ? todayDoc.data().totalSeconds : 0;
-        document.getElementById('total-hours-day').textContent = formatHours(todaySeconds);
-
-        // This Week's Hours
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // Today + 6 previous days = 7 days
-        const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
-        const weekQuery = query(analyticsCol, where(documentId(), '>=', sevenDaysAgoStr));
-        const weekSnap = await getDocs(weekQuery);
-        let weekSeconds = 0;
-        weekSnap.forEach(doc => {
-            weekSeconds += doc.data().totalSeconds || 0;
-        });
-        document.getElementById('total-hours-week').textContent = formatHours(weekSeconds);
-
-        // This Month's Hours
-        const thisMonthStr = todayStr.substring(0, 7); // YYYY-MM
-        const monthQuery = query(analyticsCol, where(documentId(), '>=', `${thisMonthStr}-01`));
-        const monthSnap = await getDocs(monthQuery);
-        let monthSeconds = 0;
-        monthSnap.forEach(doc => {
-            if (doc.id.startsWith(thisMonthStr)) { // Client-side filter to be safe
-                monthSeconds += doc.data().totalSeconds || 0;
-            }
-        });
-        document.getElementById('total-hours-month').textContent = formatHours(monthSeconds);
-
-        // All Time Hours will be calculated later with studentsSnap
 
 
         // --- 5. User Search Functionality ---
