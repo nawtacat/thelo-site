@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaTeX Autoscroll Reader</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            },
+            startup: {
+                typeset: false // We will manually trigger the first render
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #212529;
+        }
+
+        /* Fixed control panel at the top */
+        #controls {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            padding: 15px 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            z-index: 1000;
+            flex-wrap: wrap;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #495057;
+            text-transform: uppercase;
+        }
+
+        #text-input {
+            width: 100%;
+            height: 60px;
+            margin-top: 10px;
+            padding: 10px;
+            font-family: monospace;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            resize: vertical;
+        }
+
+        button {
+            padding: 12px 24px;
+            cursor: pointer;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover { background: #0b5ed7; }
+        button.stop { background: #dc3545; }
+        button.stop:hover { background: #bb2d3b; }
+
+        /* Reading area */
+        #reader-container {
+            /* Push content down so it's not hidden behind the fixed header */
+            margin-top: 200px; 
+            padding-bottom: 100vh; /* Adds empty space at the bottom so you can scroll to the very end */
+            display: flex;
+            justify-content: center;
+        }
+
+        #content {
+            font-size: 28px;
+            line-height: 1.8;
+            width: 800px; /* Default width */
+            transition: width 0.3s ease;
+        }
+
+        /* Utility class to format line breaks correctly */
+        .text-paragraph {
+            margin-bottom: 1em;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <div class="control-group">
+            <button id="toggle-btn">Start Scrolling</button>
+        </div>
+        <div class="control-group">
+            <label for="speed">Scroll Speed</label>
+            <input type="range" id="speed" min="0.5" max="10" step="0.5" value="2">
+        </div>
+        <div class="control-group">
+            <label for="width">Line Width</label>
+            <input type="range" id="width" min="400" max="1400" step="50" value="800">
+        </div>
+        <textarea id="text-input" placeholder="Paste your text here..."></textarea>
+    </div>
+
+    <div id="reader-container">
+        <div id="content"></div>
+    </div>
+
+    <script>
+        const contentDiv = document.getElementById('content');
+        const textInput = document.getElementById('text-input');
+        const speedInput = document.getElementById('speed');
+        const widthInput = document.getElementById('width');
+        const toggleBtn = document.getElementById('toggle-btn');
+
+        let isScrolling = false;
+        let animationFrameId;
+
+        // Your provided text as the default
+        const defaultText = `$(3x + 7y)^2$, or $(3x + 7y)(3x + 7y)$. Therefore, $3x + 7y$ is a factor. The answer is B.
+
+Conclusion
+Factoring is all about pattern recognition. Once you can spot a GCF or a Difference of Squares, you can break down almost any expression the SAT throws at you. In the next video, we’ll take these skills even further with Advanced Factoring. See you there.`;
+
+        textInput.value = defaultText;
+
+        // Function to update the reading area and trigger LaTeX rendering
+        function updateContent() {
+            // Split by double line breaks to create paragraphs, preserving single line breaks
+            const paragraphs = textInput.value.split('\\n\\n').map(p => p.replace(/\\n/g, '<br>'));
+            contentDiv.innerHTML = paragraphs.map(p => \`<div class="text-paragraph">\${p}</div>\`).join('');
+            
+            // Tell MathJax to re-scan the content div and render formulas
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                MathJax.typesetPromise([contentDiv]).catch((err) => console.log('MathJax error:', err));
+            }
+        }
+
+        // Wait for MathJax to initialize, then render the default text
+        window.onload = () => {
+            if (window.MathJax && window.MathJax.startup) {
+                MathJax.startup.promise.then(() => {
+                    updateContent();
+                });
+            } else {
+                updateContent(); // Fallback if MathJax loads incredibly fast
+            }
+        };
+
+        // Event Listeners
+        textInput.addEventListener('input', updateContent);
+
+        widthInput.addEventListener('input', (e) => {
+            contentDiv.style.width = e.target.value + 'px';
+        });
+
+        // The auto-scroll animation loop
+        function autoScroll() {
+            if (isScrolling) {
+                window.scrollBy(0, parseFloat(speedInput.value));
+                animationFrameId = requestAnimationFrame(autoScroll);
+            }
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            isScrolling = !isScrolling;
+            
+            if (isScrolling) {
+                toggleBtn.textContent = 'Pause Scrolling';
+                toggleBtn.classList.add('stop');
+                autoScroll();
+            } else {
+                toggleBtn.textContent = 'Start Scrolling';
+                toggleBtn.classList.remove('stop');
+                cancelAnimationFrame(animationFrameId);
+            }
+        });
+    </script>
+</body>
+</html>
