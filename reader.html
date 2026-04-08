@@ -11,7 +11,7 @@
                 inlineMath: [['$', '$'], ['\\(', '\\)']]
             },
             startup: {
-                typeset: false // We will manually trigger the first render
+                typeset: false
             }
         };
     </script>
@@ -26,7 +26,6 @@
             color: #212529;
         }
 
-        /* Fixed control panel at the top */
         #controls {
             position: fixed;
             top: 0;
@@ -83,11 +82,9 @@
         button.stop { background: #dc3545; }
         button.stop:hover { background: #bb2d3b; }
 
-        /* Reading area */
         #reader-container {
-            /* Push content down so it's not hidden behind the fixed header */
             margin-top: 200px; 
-            padding-bottom: 100vh; /* Adds empty space at the bottom so you can scroll to the very end */
+            padding-bottom: 100vh;
             display: flex;
             justify-content: center;
         }
@@ -95,11 +92,10 @@
         #content {
             font-size: 28px;
             line-height: 1.8;
-            width: 800px; /* Default width */
+            width: 800px;
             transition: width 0.3s ease;
         }
 
-        /* Utility class to format line breaks correctly */
         .text-paragraph {
             margin-bottom: 1em;
         }
@@ -136,7 +132,6 @@
         let isScrolling = false;
         let animationFrameId;
 
-        // Your provided text as the default
         const defaultText = `$(3x + 7y)^2$, or $(3x + 7y)(3x + 7y)$. Therefore, $3x + 7y$ is a factor. The answer is B.
 
 Conclusion
@@ -144,37 +139,35 @@ Factoring is all about pattern recognition. Once you can spot a GCF or a Differe
 
         textInput.value = defaultText;
 
-        // Function to update the reading area and trigger LaTeX rendering
         function updateContent() {
-            // Split by double line breaks to create paragraphs, preserving single line breaks
-            const paragraphs = textInput.value.split('\\n\\n').map(p => p.replace(/\\n/g, '<br>'));
-            contentDiv.innerHTML = paragraphs.map(p => \`<div class="text-paragraph">\${p}</div>\`).join('');
+            // Split by double line breaks to create paragraphs
+            const paragraphs = textInput.value.split('\n\n').map(p => p.replace(/\n/g, '<br>'));
             
-            // Tell MathJax to re-scan the content div and render formulas
+            // Generate HTML using standard template literals (Backslashes removed here!)
+            contentDiv.innerHTML = paragraphs.map(p => `<div class="text-paragraph">${p}</div>`).join('');
+            
+            // Render MathJax
             if (window.MathJax && window.MathJax.typesetPromise) {
                 MathJax.typesetPromise([contentDiv]).catch((err) => console.log('MathJax error:', err));
             }
         }
 
-        // Wait for MathJax to initialize, then render the default text
         window.onload = () => {
             if (window.MathJax && window.MathJax.startup) {
                 MathJax.startup.promise.then(() => {
                     updateContent();
                 });
             } else {
-                updateContent(); // Fallback if MathJax loads incredibly fast
+                updateContent(); 
             }
         };
 
-        // Event Listeners
         textInput.addEventListener('input', updateContent);
 
         widthInput.addEventListener('input', (e) => {
             contentDiv.style.width = e.target.value + 'px';
         });
 
-        // The auto-scroll animation loop
         function autoScroll() {
             if (isScrolling) {
                 window.scrollBy(0, parseFloat(speedInput.value));
