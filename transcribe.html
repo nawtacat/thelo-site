@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Word Zebra Transcriber</title>
+    <style>
+        body { font-family: sans-serif; margin: 40px; background: #f4f4f9; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        
+        #status { font-weight: bold; color: #007bff; margin: 10px 0; }
+        .controls { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+        
+        /* ZEBRA STRIPE STYLING */
+        #output { border: 1px solid #ddd; border-radius: 4px; overflow: hidden; margin-top: 20px; }
+        .row { display: flex; padding: 8px 15px; font-size: 17px; line-height: 1.5; border-bottom: 1px solid #eee; }
+        .row:nth-child(odd) { background-color: #f2f2f2; } /* Light Gray */
+        .row:nth-child(even) { background-color: #ffffff; } /* White */
+        
+        .timestamp { font-family: monospace; color: #888; margin-right: 20px; min-width: 70px; flex-shrink: 0; }
+        .text { flex-grow: 1; }
+        
+        audio { width: 100%; margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Zebra Audio Transcriber</h2>
+    <p>Upload an audio file. The app will "listen" and transcribe every 3 words.</p>
+
+    <div class="controls">
+        <input type="file" id="audioUpload" accept="audio/*">
+        <audio id="audioPlayer" controls></audio>
+        <div id="status">Waiting for file...</div>
+        <button id="startBtn" disabled style="padding: 10px 20px; cursor:pointer;">Start Transcription</button>
+    </div>
+
+    <div id="output">
+        </div>
+</div>
+
+<script>
+    const audioUpload = document.getElementById('audioUpload');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const startBtn = document.getElementById('startBtn');
+    const status = document.getElementById('status');
+    const output = document.getElementById('output');
+
+    let recognition;
+    let wordBuffer = [];
+    let startTime = 0;
+
+    // Check for browser support
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        status.innerText = "Error: Your browser does not support Speech Recognition. Please use Chrome.";
+    } else {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+    }
+
+    audioUpload.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            audioPlayer.src = URL.createObjectURL(file);
+            startBtn.disabled = false;
+            status.innerText = "File ready. Click start.";
+        }
+    };
+
+    startBtn.onclick = () => {
+        output.innerHTML = ''; // Clear previous
+        wordBuffer = [];
+        status.innerText = "Transcribing... (Stay on this tab)";
+        
+        audioPlayer.currentTime = 0;
+        audioPlayer.play();
+        startTime = Date.now();
+        recognition.start();
+    };
+
+    recognition.onresult = (event) => {
+        const lastResultIndex = event.results.length - 1;
+        const transcript = event.results[lastResultIndex][0].transcript.trim();
+        const words = transcript.split(/\s+/);
+
+        words.forEach(word => {
+            wordBuffer.push(word);
+            
+            // Trigger every 3 words
+            if (wordBuffer.length === 3) {
+                const currentTime = audioPlayer.currentTime;
+                addZebraRow(currentTime, wordBuffer.join(' '));
+                wordBuffer = []; // Reset buffer
+            }
+        });
+    };
+
+    function formatTime(seconds) {
+        const date = new Date(null);
+        date.setSeconds(seconds);
+        return date.toISOString().substr(14, 5); // Returns MM:SS
+    }
+
+    function addZebraRow(time, text) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        
+        row.innerHTML = `
+            <div class="timestamp">[${formatTime(time)}]</div>
+            <div class="text">${text}</div>
+        `;
+        
+        output.appendChild(row);
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    recognition.onend = () => {
+        status.innerText = "Transcription Complete.";
+        audioPlayer.pause();
+    };
+
+    audioPlayer.onended = () => {
+        recognition.stop();
+    };
+</script>
+
+</body>
+</html>
