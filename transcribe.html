@@ -3,129 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3-Word Zebra Transcriber</title>
+    <title>AI Zebra Transcriber</title>
     <style>
-        body { font-family: sans-serif; margin: 40px; background: #f4f4f9; color: #333; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        body { font-family: -apple-system, sans-serif; margin: 40px; background: #f0f2f5; color: #1c1e21; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         
-        #status { font-weight: bold; color: #007bff; margin: 10px 0; }
-        .controls { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+        /* UI Elements */
+        .controls { display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        #status { font-size: 14px; color: #606770; font-style: italic; }
+        .progress-container { width: 100%; background: #eee; height: 8px; border-radius: 4px; display: none; }
+        #progressBar { width: 0%; height: 100%; background: #007bff; border-radius: 4px; transition: width 0.3s; }
         
+        button { padding: 12px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        button.download-btn { background: #28a745; margin-top: 15px; display: none; }
+
         /* ZEBRA STRIPE STYLING */
-        #output { border: 1px solid #ddd; border-radius: 4px; overflow: hidden; margin-top: 20px; }
-        .row { display: flex; padding: 8px 15px; font-size: 17px; line-height: 1.5; border-bottom: 1px solid #eee; }
+        #output { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; margin-top: 20px; }
+        .row { display: flex; padding: 10px 15px; font-size: 16px; align-items: center; }
         .row:nth-child(odd) { background-color: #f2f2f2; } /* Light Gray */
         .row:nth-child(even) { background-color: #ffffff; } /* White */
         
-        .timestamp { font-family: monospace; color: #888; margin-right: 20px; min-width: 70px; flex-shrink: 0; }
-        .text { flex-grow: 1; }
-        
-        audio { width: 100%; margin: 10px 0; }
+        .timestamp { font-family: 'Courier New', monospace; color: #d63384; font-weight: bold; margin-right: 20px; min-width: 75px; }
+        .text { line-height: 1.5; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Zebra Audio Transcriber</h2>
-    <p>Upload an audio file. The app will "listen" and transcribe every 3 words.</p>
+    <h2>AI Line Transcriber</h2>
+    <p>Processes audio locally. No playback required.</p>
 
     <div class="controls">
-        <input type="file" id="audioUpload" accept="audio/*">
-        <audio id="audioPlayer" controls></audio>
-        <div id="status">Waiting for file...</div>
-        <button id="startBtn" disabled style="padding: 10px 20px; cursor:pointer;">Start Transcription</button>
+        <input type="file" id="fileInput" accept="audio/*">
+        <div class="progress-container" id="progressWrap">
+            <div id="progressBar"></div>
+        </div>
+        <div id="status">Upload a file to begin...</div>
+        <button id="transcribeBtn" disabled>Start Transcription</button>
     </div>
 
-    <div id="output">
-        </div>
+    <div id="output"></div>
+    <button id="downloadBtn" class="download-btn">Download Transcript (.txt)</button>
 </div>
 
-<script>
-    const audioUpload = document.getElementById('audioUpload');
-    const audioPlayer = document.getElementById('audioPlayer');
-    const startBtn = document.getElementById('startBtn');
+<script type="module">
+    import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
+
+    const fileInput = document.getElementById('fileInput');
+    const transcribeBtn = document.getElementById('transcribeBtn');
     const status = document.getElementById('status');
     const output = document.getElementById('output');
+    const progressBar = document.getElementById('progressBar');
+    const progressWrap = document.getElementById('progressWrap');
+    const downloadBtn = document.getElementById('downloadBtn');
 
-    let recognition;
-    let wordBuffer = [];
-    let startTime = 0;
+    let transcriber;
 
-    // Check for browser support
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-        status.innerText = "Error: Your browser does not support Speech Recognition. Please use Chrome.";
-    } else {
-        recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
+    // 1. Initialize the Model
+    async function initModel() {
+        status.innerText = "Loading AI Model (first time may take a minute)...";
+        transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+        status.innerText = "Model ready. Select a file.";
+        fileInput.disabled = false;
     }
+    initModel();
 
-    audioUpload.onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            audioPlayer.src = URL.createObjectURL(file);
-            startBtn.disabled = false;
-            status.innerText = "File ready. Click start.";
-        }
-    };
+    fileInput.onchange = () => { if(fileInput.files[0]) transcribeBtn.disabled = false; };
 
-    startBtn.onclick = () => {
-        output.innerHTML = ''; // Clear previous
-        wordBuffer = [];
-        status.innerText = "Transcribing... (Stay on this tab)";
-        
-        audioPlayer.currentTime = 0;
-        audioPlayer.play();
-        startTime = Date.now();
-        recognition.start();
-    };
+    transcribeBtn.onclick = async () => {
+        const file = fileInput.files[0];
+        if (!file) return;
 
-    recognition.onresult = (event) => {
-        const lastResultIndex = event.results.length - 1;
-        const transcript = event.results[lastResultIndex][0].transcript.trim();
-        const words = transcript.split(/\s+/);
+        transcribeBtn.disabled = true;
+        status.innerText = "Processing audio... this happens 'offline' (no playback)";
+        progressWrap.style.display = 'block';
+        output.innerHTML = '';
+        downloadBtn.style.display = 'none';
 
-        words.forEach(word => {
-            wordBuffer.push(word);
-            
-            // Trigger every 3 words
-            if (wordBuffer.length === 3) {
-                const currentTime = audioPlayer.currentTime;
-                addZebraRow(currentTime, wordBuffer.join(' '));
-                wordBuffer = []; // Reset buffer
-            }
+        // Read and decode audio
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        const arrayBuffer = await file.arrayBuffer();
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+        const audioData = decoded.getChannelData(0);
+
+        // 2. Run Transcription with word-level timestamps
+        const result = await transcriber(audioData, { 
+            return_timestamps: 'word',
+            chunk_length_s: 30,
+            stride_length_s: 5
         });
+
+        // 3. Process into 3-word chunks
+        renderZebra(result.chunks);
+        status.innerText = "Done!";
+        downloadBtn.style.display = 'block';
     };
+
+    function renderZebra(chunks) {
+        let transcriptText = "";
+        for (let i = 0; i < chunks.length; i += 3) {
+            const triplet = chunks.slice(i, i + 3);
+            const startTime = triplet[0].timestamp[0];
+            const words = triplet.map(c => c.text.trim()).join(' ');
+            const timestampStr = formatTime(startTime);
+
+            // Add to UI
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.innerHTML = `<span class="timestamp">[${timestampStr}]</span><span class="text">${words}</span>`;
+            output.appendChild(row);
+
+            // Add to text file string
+            transcriptText += `[${timestampStr}] ${words}\n`;
+        }
+
+        // Setup download button
+        downloadBtn.onclick = () => {
+            const blob = new Blob([transcriptText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "transcript.txt";
+            a.click();
+        };
+    }
 
     function formatTime(seconds) {
-        const date = new Date(null);
-        date.setSeconds(seconds);
-        return date.toISOString().substr(14, 5); // Returns MM:SS
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
-
-    function addZebraRow(time, text) {
-        const row = document.createElement('div');
-        row.className = 'row';
-        
-        row.innerHTML = `
-            <div class="timestamp">[${formatTime(time)}]</div>
-            <div class="text">${text}</div>
-        `;
-        
-        output.appendChild(row);
-        window.scrollTo(0, document.body.scrollHeight);
-    }
-
-    recognition.onend = () => {
-        status.innerText = "Transcription Complete.";
-        audioPlayer.pause();
-    };
-
-    audioPlayer.onended = () => {
-        recognition.stop();
-    };
 </script>
 
 </body>
