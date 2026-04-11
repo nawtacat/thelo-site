@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thelo Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+        }
+        body {
+            background-color: var(--thelo-bg);
+            color: var(--thelo-text);
+            font-family: 'Manrope', sans-serif;
+        }
+        .metric-card {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .chart-container {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            position: relative;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+<div id="auth-overlay" class="fixed inset-0 bg-white z-[100] flex items-center justify-center hidden">
+    <div class="text-center">
+        <h2 class="text-2xl font-bold mb-4">Admin Authentication Required</h2>
+        <p class="text-gray-600 mb-6">Please log in with a tutor account to continue.</p>
+        <button id="admin-login-btn" class="bg-blue-600 text-white py-2 px-6 rounded-md font-bold">Log In</button>
+    </div>
+</div>
+
+<div id="admin-panel">
+    <header class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-gray-900">Thelo Admin Dashboard</h1>
+        </div>
+    </header>
+
+    <main class="p-4 sm:p-6 lg:p-8">
+        <!-- Overview Metrics -->
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Engagement (DAU/WAU/MAU)</h2>
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">Total Users</h3>
+                <p id="total-users" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">DAU (24h)</h3>
+                <p id="active-users" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">WAU (7d)</h3>
+                <p id="wau-users" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">MAU (30d)</h3>
+                <p id="mau-users" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+        </section>
+
+        <!-- Growth & Activation -->
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Growth & Activation</h2>
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">Activation Rate (%)</h3>
+                <p id="activation-rate" class="mt-1 text-3xl font-semibold text-blue-600">...</p>
+                <p class="text-xs text-gray-400 mt-1">% started first lesson</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">Activation Completion</h3>
+                <p id="activation-completion" class="mt-1 text-3xl font-semibold text-green-600">...</p>
+                <p class="text-xs text-gray-400 mt-1">% finished first lesson</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">Class Join Rate</h3>
+                <p id="class-join-rate" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+            <div class="metric-card">
+                <h3 class="text-sm font-medium text-gray-500">Avg Session Length</h3>
+                <p id="avg-session-length" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+            </div>
+        </section>
+
+        <!-- Total Hours Metrics -->
+        <section class="mb-8">
+             <h2 class="text-xl font-semibold text-gray-900 mb-4">Total App Usage</h2>
+             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="metric-card">
+                    <h3 class="text-sm font-medium text-gray-500">Today (Hours)</h3>
+                    <p id="total-hours-day" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+                </div>
+                <div class="metric-card">
+                    <h3 class="text-sm font-medium text-gray-500">This Week (Hours)</h3>
+                    <p id="total-hours-week" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+                </div>
+                <div class="metric-card">
+                    <h3 class="text-sm font-medium text-gray-500">This Month (Hours)</h3>
+                    <p id="total-hours-month" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+                </div>
+                <div class="metric-card">
+                    <h3 class="text-sm font-medium text-gray-500">All Time (Hours)</h3>
+                    <p id="total-hours-all" class="mt-1 text-3xl font-semibold text-gray-900">...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- User Search -->
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Search User by Email</h2>
+            <div class="flex">
+                <input type="email" id="user-email-search" class="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md" placeholder="Enter user email">
+                <button id="search-user-btn" class="ml-3 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-semibold">Search</button>
+            </div>
+            <div id="user-search-results" class="mt-4">
+                <!-- User details and attempts will be displayed here -->
+            </div>
+        </section>
+
+        <!-- Charts -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="chart-container">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">User Registrations (Last 30 Days)</h3>
+                <canvas id="registrations-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Assistive Panning Preference</h3>
+                <canvas id="panning-chart" style="max-height: 300px; margin: auto;"></canvas>
+            </div>
+        </section>
+
+        <!-- Learning Funnel -->
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Learning Funnel (By Lesson)</h2>
+            <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lesson ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Completed</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Comp. Rate</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg Retries</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Accuracy</th>
+                            </tr>
+                        </thead>
+                        <tbody id="funnel-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Leaderboards -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="chart-container">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Leaderboard: Most Time Spent</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-time-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Leaderboard: Most Solution Checks</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Checks</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-checks-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Solution Attempts -->
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Recent Solution Attempts</h2>
+            <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lesson</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" class="relative px-6 py-3"><span class="sr-only">View</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="attempts-table-body" class="bg-white divide-y divide-gray-200">
+                            <!-- Rows will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- Modal for viewing solution attempt -->
+<div id="solution-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 relative">
+        <button id="close-modal-btn" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>
+        <h3 class="text-xl font-bold mb-4">Solution Details</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h4 class="font-semibold mb-2">User's Drawing</h4>
+                <div class="border rounded-lg p-2 bg-gray-100">
+                    <img id="solution-image" src="" alt="User Solution" class="w-full h-auto object-contain">
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold mb-2">Analysis</h4>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Status</dt>
+                        <dd id="solution-status" class="mt-1 text-lg font-semibold"></dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Feedback</dt>
+                        <dd id="solution-feedback" class="mt-1 text-gray-900 bg-gray-50 p-3 rounded-md"></dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Detected Answer</dt>
+                        <dd id="solution-detected" class="mt-1 text-gray-900"></dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Correct Answer</dt>
+                        <dd id="solution-correct" class="mt-1 text-gray-900"></dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, getDocs, getDoc, doc, query, where, orderBy, limit, getCountFromServer, documentId } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+        authDomain: "physmathacademy-722b3.firebaseapp.com",
+        projectId: "physmathacademy-722b3",
+        storageBucket: "physmathacademy-722b3.appspot.com",
+        appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Load data immediately without auth check
+    loadDashboardData();
+
+
+
+    // --- DATA LOADING AND RENDERING ---
+    async function loadDashboardData() {
+        // References
+        const studentsCol = collection(db, 'thelo-students');
+        const attemptsCol = collection(db, 'solution_attempts');
+        const eventsCol = collection(db, 'analytics_events');
+
+        // --- 1. Overview Metrics ---
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+        const totalUsersSnap = await getCountFromServer(studentsCol);
+        const totalUsersCount = totalUsersSnap.data().count;
+        document.getElementById('total-users').textContent = totalUsersCount;
+
+        const activeUsersQuery = query(studentsCol, where('lastLogin', '>=', twentyFourHoursAgo));
+        const activeUsersSnap = await getCountFromServer(activeUsersQuery);
+        document.getElementById('active-users').textContent = activeUsersSnap.data().count;
+
+        const wauQuery = query(studentsCol, where('lastLogin', '>=', sevenDaysAgo));
+        const wauSnap = await getCountFromServer(wauQuery);
+        document.getElementById('wau-users').textContent = wauSnap.data().count;
+
+        const mauQuery = query(studentsCol, where('lastLogin', '>=', thirtyDaysAgo));
+        const mauSnap = await getCountFromServer(mauQuery);
+        document.getElementById('mau-users').textContent = mauSnap.data().count;
+
+        const totalAttemptsSnap = await getCountFromServer(attemptsCol);
+        document.getElementById('total-attempts').textContent = totalAttemptsSnap.data().count;
+
+        // --- Growth & Activation ---
+        const studentsSnap = await getDocs(studentsCol);
+        let usersWithClass = 0;
+        let totalSessionSeconds = 0;
+        let userSessionCounts = 0;
+
+        studentsSnap.forEach(doc => {
+            const d = doc.data();
+            if (d.groupId) usersWithClass++;
+            totalSessionSeconds += (d.totalTimeSeconds || 0);
+            userSessionCounts++; 
+        });
+
+        document.getElementById('class-join-rate').textContent = ((usersWithClass / totalUsersCount) * 100).toFixed(1) + '%';
+        document.getElementById('avg-session-length').textContent = (totalSessionSeconds / (userSessionCounts || 1) / 60).toFixed(1) + 'm';
+
+        // Activation Rate (Users who started at least one lesson)
+        const startedEventsQuery = query(eventsCol, where('type', '==', 'lesson_started'));
+        const startedEventsSnap = await getDocs(startedEventsQuery);
+        const uniqueUsersStarted = new Set();
+        startedEventsSnap.forEach(ev => uniqueUsersStarted.add(ev.data().userId));
+        document.getElementById('activation-rate').textContent = ((uniqueUsersStarted.size / totalUsersCount) * 100).toFixed(1) + '%';
+
+        const completedEventsQuery = query(eventsCol, where('type', '==', 'lesson_completed'));
+        const completedEventsSnap = await getDocs(completedEventsQuery);
+        const uniqueUsersCompleted = new Set();
+        completedEventsSnap.forEach(ev => uniqueUsersCompleted.add(ev.data().userId));
+        document.getElementById('activation-completion').textContent = ((uniqueUsersCompleted.size / totalUsersCount) * 100).toFixed(1) + '%';
+
+        // --- Total Hours Metrics ---
+        const analyticsCol = collection(db, 'analytics_daily');
+
+        const formatHours = (seconds) => {
+            if (!seconds || seconds < 0) return '0.0';
+            return (seconds / 3600).toFixed(1);
+        };
+
+        // Today's Hours
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayDoc = await getDoc(doc(analyticsCol, todayStr));
+        const todaySeconds = todayDoc.exists() ? todayDoc.data().totalSeconds : 0;
+        document.getElementById('total-hours-day').textContent = formatHours(todaySeconds);
+
+        // This Week's Hours
+        const sevenDaysAgoDate = new Date();
+        sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 6);
+        const sevenDaysAgoStr = sevenDaysAgoDate.toISOString().split('T')[0];
+        const weekQuery = query(analyticsCol, where(documentId(), '>=', sevenDaysAgoStr));
+        const weekSnap = await getDocs(weekQuery);
+        let weekSeconds = 0;
+        weekSnap.forEach(doc => {
+            weekSeconds += doc.data().totalSeconds || 0;
+        });
+        document.getElementById('total-hours-week').textContent = formatHours(weekSeconds);
+
+        // This Month's Hours
+        const thisMonthStr = todayStr.substring(0, 7); // YYYY-MM
+        const monthQuery = query(analyticsCol, where(documentId(), '>=', `${thisMonthStr}-01`));
+        const monthSnap = await getDocs(monthQuery);
+        let monthSeconds = 0;
+        monthSnap.forEach(doc => {
+            if (doc.id.startsWith(thisMonthStr)) { // Client-side filter to be safe
+                monthSeconds += doc.data().totalSeconds || 0;
+            }
+        });
+        document.getElementById('total-hours-month').textContent = formatHours(monthSeconds);
+
+        // All Time Hours will be calculated later with studentsSnap
+
+
+        // --- 5. User Search Functionality ---
+        document.getElementById('search-user-btn').addEventListener('click', async () => {
+            const email = document.getElementById('user-email-search').value;
+            if (!email) {
+                alert('Please enter an email to search.');
+                return;
+            }
+
+            const userQuery = query(studentsCol, where('email', '==', email));
+            const userSnap = await getDocs(userQuery);
+
+            const searchResultsDiv = document.getElementById('user-search-results');
+            searchResultsDiv.innerHTML = ''; // Clear previous results
+
+            if (userSnap.empty) {
+                searchResultsDiv.textContent = 'No user found with that email.';
+                return;
+            }
+
+            const userDoc = userSnap.docs[0];
+            const userData = userDoc.data();
+
+            // Display User Info
+            const userInfoDiv = document.createElement('div');
+            userInfoDiv.innerHTML = `
+                <h3 class="text-lg font-medium text-gray-900 mb-2">User Details</h3>
+                <p>Name: ${userData.name || 'N/A'}</p>
+                <p>Email: ${userData.email}</p>
+                <p>Grade: ${userData.preferences?.grade || 'N/A'}</p>
+                <p>Last Login: ${userData.lastLogin ? userData.lastLogin.toDate().toLocaleString() : 'N/A'}</p>
+                <h4 class="text-md font-semibold text-gray-900 mt-4">Solution Attempts</h4>
+            `;
+            searchResultsDiv.appendChild(userInfoDiv);
+
+            // Fetch and Display Solution Attempts
+            const attemptsQuery = query(attemptsCol, where('userId', '==', userDoc.id), orderBy('timestamp', 'desc'));
+            const attemptsSnap = await getDocs(attemptsQuery);
+
+            if (attemptsSnap.empty) {
+                userInfoDiv.innerHTML += '<p>No solution attempts found for this user.</p>';
+            } else {
+                const attemptsTable = document.createElement('table');
+                attemptsTable.className = 'min-w-full divide-y divide-gray-200';
+                attemptsTable.innerHTML = `
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lesson</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Taken (seconds)</th>
+                            <th scope="col" class="relative px-6 py-3"><span class="sr-only">View</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-attempts-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                `;
+                searchResultsDiv.appendChild(attemptsTable);
+
+                const attemptsTableBody = attemptsTable.querySelector('#user-attempts-table-body');
+
+                for (const attemptDoc of attemptsSnap.docs) {
+                    const attemptData = attemptDoc.data();
+
+                    // Calculate time taken (example, you might need to adjust based on your data)
+                    const timeTaken = 30; // Replace with actual calculation if available
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${attemptData.timestamp.toDate().toLocaleString()}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${attemptData.lessonId} (Stage ${attemptData.stageIndex})</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${attemptData.status === 'correct' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                                ${attemptData.status}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${timeTaken}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button class="text-indigo-600 hover:text-indigo-900 view-btn" data-id="${attemptDoc.id}">View</button>
+                        </td>
+                    `;
+                    attemptsTableBody.appendChild(row);
+                }
+
+                // Add event listeners for view buttons
+                attemptsTable.querySelectorAll('.view-btn').forEach(btn => {
+                    btn.addEventListener('click', () => showSolutionModal(btn.dataset.id));
+                });
+            }
+        });
+
+
+
+
+
+
+
+
+
+
+
+
+        // --- 2. Registrations Chart ---
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const regsQuery = query(studentsCol, where('createdAt', '>=', thirtyDaysAgo));
+        const regsSnap = await getDocs(regsQuery);
+        const registrationsByDay = regsSnap.docs.reduce((acc, doc) => {
+            if (!doc.data().createdAt) return acc;
+            const date = doc.data().createdAt.toDate().toISOString().split('T')[0];
+            acc[date] = (acc[date] || 0) + 1;
+            return acc;
+        }, {});
+
+        const regLabels = Object.keys(registrationsByDay).sort();
+        const regData = regLabels.map(label => registrationsByDay[label]);
+
+        new Chart(document.getElementById('registrations-chart'), {
+            type: 'line',
+            data: {
+                labels: regLabels,
+                datasets: [{
+                    label: 'New Users',
+                    data: regData,
+                    borderColor: 'rgb(37, 99, 235)',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                scales: {
+                    x: { type: 'time', time: { unit: 'day' } }
+                }
+            }
+        });
+
+        // --- 3. Panning Preference Chart ---
+        let panOn = 0, panOff = 0, panUndefined = 0;
+        studentsSnap.forEach(doc => {
+            const panPref = doc.data().preferences?.assistivePanning;
+            if (panPref === true) panOn++;
+            else if (panPref === false) panOff++;
+            else panUndefined++;
+        });
+
+        new Chart(document.getElementById('panning-chart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['On (Default)', 'Off', 'Not Set'],
+                datasets: [{
+                    label: 'Assistive Panning',
+                    data: [panOn, panOff, panUndefined],
+                    backgroundColor: ['#22C55E', '#EF4444', '#9CA3AF']
+                }]
+            }
+        });
+
+        // All Time Hours (calculated here to re-use studentsSnap)
+        let allTimeSeconds = 0;
+        studentsSnap.forEach(doc => {
+            allTimeSeconds += doc.data().totalTimeSeconds || 0;
+        });
+        document.getElementById('total-hours-all').textContent = formatHours(allTimeSeconds);
+
+        // --- Leaderboards ---
+        const leaderboardLimit = 10; // Show top 10
+
+        // 1. Time Spent Leaderboard
+        const timeLeaderboardBody = document.getElementById('leaderboard-time-body');
+        timeLeaderboardBody.innerHTML = '';
+        const usersByTime = studentsSnap.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(user => user.totalTimeSeconds > 0)
+            .sort((a, b) => (b.totalTimeSeconds || 0) - (a.totalTimeSeconds || 0));
+
+        usersByTime.slice(0, leaderboardLimit).forEach((user, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatHours(user.totalTimeSeconds)}</td>
+            `;
+            timeLeaderboardBody.appendChild(row);
+        });
+
+        // 2. Solution Checks Leaderboard
+        const checksLeaderboardBody = document.getElementById('leaderboard-checks-body');
+        checksLeaderboardBody.innerHTML = '';
+        const studentDataMap = new Map();
+        studentsSnap.forEach(doc => studentDataMap.set(doc.id, doc.data()));
+
+        const usersByChecks = Object.entries(attemptsByUser)
+            .map(([userId, count]) => ({ userId, count }))
+            .sort((a, b) => b.count - a.count);
+
+        usersByChecks.slice(0, leaderboardLimit).forEach((entry, index) => {
+            const userData = studentDataMap.get(entry.userId);
+            const userEmail = userData ? userData.email : 'Unknown User';
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${userEmail}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${entry.count}</td>
+            `;
+            checksLeaderboardBody.appendChild(row);
+        });
+
+        // --- 4. Recent Solution Attempts Table ---
+        const attemptsQuery = query(attemptsCol, orderBy('timestamp', 'desc'), limit(20));
+        const attemptsSnap = await getDocs(attemptsQuery);
+        const tableBody = document.getElementById('attempts-table-body');
+        tableBody.innerHTML = ''; // Clear existing
+
+        for (const attemptDoc of attemptsSnap.docs) {
+            const data = attemptDoc.data();
+            const userDoc = await getDoc(doc(db, 'thelo-students', data.userId));
+            const userName = userDoc.exists() ? userDoc.data().name : 'Unknown User';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${data.timestamp.toDate().toLocaleString()}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${userName}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${data.lessonId} (Stage ${data.stageIndex})</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${data.status === 'correct' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                        ${data.status}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button class="text-indigo-600 hover:text-indigo-900 view-btn" data-id="${attemptDoc.id}">View</button>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        }
+        
+        // Add event listeners for view buttons
+
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            btn.addEventListener('click', () => showSolutionModal(btn.dataset.id));
+        });
+    }
+
+    // --- MODAL LOGIC ---
+    const solutionModal = document.getElementById('solution-modal');
+    document.getElementById('close-modal-btn').addEventListener('click', () => solutionModal.classList.add('hidden'));
+
+    async function showSolutionModal(attemptId) {
+        const attemptDoc = await getDoc(doc(db, 'solution_attempts', attemptId));
+        if (!attemptDoc.exists()) return;
+
+        const data = attemptDoc.data();
+        document.getElementById('solution-image').src = data.userInputImage;
+        document.getElementById('solution-status').textContent = data.status;
+        document.getElementById('solution-feedback').textContent = data.feedback;
+        document.getElementById('solution-detected').textContent = data.detectedAnswer || 'N/A';
+        document.getElementById('solution-correct').textContent = data.correctAnswer;
+
+        if (data.status === 'correct') {
+            document.getElementById('solution-status').className = 'mt-1 text-lg font-semibold text-green-600';
+        } else {
+            document.getElementById('solution-status').className = 'mt-1 text-lg font-semibold text-red-600';
+        }
+
+        solutionModal.classList.remove('hidden');
+    }
+
+</script>
+
+
+</body>
+</html>
