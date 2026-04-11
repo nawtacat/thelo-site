@@ -291,7 +291,7 @@
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
         const totalUsersSnap = await getCountFromServer(studentsCol);
-        document.getElementById('total-users').textContent = totalUsersSnap.data().count - 49;
+        document.getElementById('total-users').textContent = totalUsersSnap.data().count;
 
         const activeUsersQuery = query(studentsCol, where('lastLogin', '>=', twentyFourHoursAgo));
         const activeUsersSnap = await getCountFromServer(activeUsersQuery);
@@ -303,6 +303,16 @@
 
         const totalAttemptsSnap = await getCountFromServer(attemptsCol);
         document.getElementById('total-attempts').textContent = totalAttemptsSnap.data().count;
+
+        // --- Login Rate (Stickiness) ---
+        const sevenDaysAgoLogin = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const thirtyDaysAgoLogin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const wauSnap = await getCountFromServer(query(studentsCol, where('lastLogin', '>=', sevenDaysAgoLogin)));
+        const mauSnap = await getCountFromServer(query(studentsCol, where('lastLogin', '>=', thirtyDaysAgoLogin)));
+        const wau = wauSnap.data().count || 0;
+        const mau = mauSnap.data().count || 0;
+        const stickiness = mau > 0 ? (wau / mau) * 100 : 0;
+        document.getElementById('retention-stickiness').textContent = `${stickiness.toFixed(0)}%`;
 
         // --- Total Hours Metrics ---
         const analyticsCol = collection(db, 'analytics_daily');
@@ -507,6 +517,66 @@
             allTimeSeconds += doc.data().totalTimeSeconds || 0;
         });
         document.getElementById('total-hours-all').textContent = formatHours(allTimeSeconds);
+
+        // --- Funnel KPIs (computed from per-student KPIs) ---
+        const formatPercent = (value) => {
+            if (!isFinite(value) || value < 0) return '0%';
+            return `${value.toFixed(1)}%`;
+        };
+        const formatStageTime = (seconds) => {
+            const s = Math.round(Number(seconds || 0));
+            if (!isFinite(s) || s <= 0) return '0s';
+            if (s < 60) return `${s}s`;
+            const m = Math.floor(s / 60);
+            const r = s % 60;
+            return `${m}m ${r}s`;
+        };
+
+        let usersWithLessonStart = 0;
+        let usersWithLessonComplete = 0;
+        let lessonsStarted = 0;
+        let lessonsCompleted = 0;
+        let stagesCompleted = 0;
+        let stageAttemptsSum = 0;
+        let stageTimeSumSeconds = 0;
+
+        studentsSnap.forEach((snap) => {
+            const d = snap.data() || {};
+            const kpi = d.kpi || {};
+
+            const hasStarted = !!kpi.firstLessonStartedAt || Number(kpi.lessonsStartedCount || 0) > 0;
+            const hasCompleted =
+                !!kpi.firstLessonCompletedAt ||
+                Number(kpi.lessonsCompletedCount || 0) > 0 ||
+                Number(d.lessonsCompleted || 0) > 0;
+
+            if (hasStarted) usersWithLessonStart++;
+            if (hasCompleted) usersWithLessonComplete++;
+
+            lessonsStarted += Number(kpi.lessonsStartedCount || 0);
+            lessonsCompleted += Number(
+                (kpi.lessonsCompletedCount != null ? kpi.lessonsCompletedCount : d.lessonsCompleted) || 0
+            );
+            stagesCompleted += Number(kpi.stagesCompletedCount || 0);
+            stageAttemptsSum += Number(kpi.stageAttemptsSum || 0);
+            stageTimeSumSeconds += Number(kpi.stageTimeSumSeconds || 0);
+        });
+
+        const denomUsers = Math.max(studentsSnap.size || 0, 1);
+        document.getElementById('activation-rate').textContent =
+            formatPercent((usersWithLessonStart / denomUsers) * 100);
+        document.getElementById('activation-completion').textContent =
+            formatPercent((usersWithLessonComplete / denomUsers) * 100);
+
+        const denomStages = Math.max(stagesCompleted, 1);
+        document.getElementById('avg-retries').textContent =
+            (stageAttemptsSum / denomStages).toFixed(2);
+        document.getElementById('avg-stage-time').textContent =
+            formatStageTime(stageTimeSumSeconds / denomStages);
+
+        const denomLessons = Math.max(lessonsStarted, 1);
+        document.getElementById('lesson-completion-rate').textContent =
+            formatPercent((lessonsCompleted / denomLessons) * 100);
 
         // --- Leaderboards ---
         const leaderboardLimit = 10; // Show top 10
