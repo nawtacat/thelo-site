@@ -345,6 +345,90 @@
         // All Time Hours will be calculated later with studentsSnap
 
 
+        // --- 6. Growth & Funnel Analytics ---
+        const eventsCol = collection(db, 'analytics_events');
+        const eventsSnap = await getDocs(eventsCol);
+        
+        const stats = {
+            signups: new Set(),
+            lessonStarts: new Set(),
+            lessonCompletions: new Set(),
+            totalStarts: 0,
+            totalCompletions: 0,
+            wau: new Set(),
+            mau: new Set(),
+            totalAttempts: 0,
+            totalStageCompletions: 0,
+            totalStageTime: 0
+        };
+
+        const now = new Date();
+        const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+        const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+        eventsSnap.forEach(doc => {
+            const data = doc.data();
+            const ts = data.timestamp ? data.timestamp.toDate() : null;
+            
+            if (data.type === 'new_signup') {
+                stats.signups.add(data.userId);
+            }
+            if (data.type === 'lesson_started') {
+                stats.lessonStarts.add(data.userId);
+                stats.totalStarts++;
+            }
+            if (data.type === 'lesson_completed') {
+                stats.lessonCompletions.add(data.userId);
+                stats.totalCompletions++;
+            }
+            if (data.type === 'login' && ts) {
+                if (ts >= thirtyDaysAgo) stats.mau.add(data.userId);
+                if (ts >= sevenDaysAgo) stats.wau.add(data.userId);
+            }
+            if (data.type === 'stage_completed') {
+                stats.totalStageCompletions++;
+                stats.totalAttempts += (data.attempts || 1);
+                stats.totalStageTime += (data.timeSpentSeconds || 0);
+            }
+        });
+
+        // Activation Rate: % of signups who started at least one lesson
+        const activationRate = stats.signups.size > 0 
+            ? (stats.lessonStarts.size / stats.signups.size * 100).toFixed(1) 
+            : '0.0';
+        document.getElementById('activation-rate').textContent = `${activationRate}%`;
+
+        // Activation Completion: % of users who started a lesson and also finished one
+        const activationCompletion = stats.lessonStarts.size > 0 
+            ? (stats.lessonCompletions.size / stats.lessonStarts.size * 100).toFixed(1) 
+            : '0.0';
+        document.getElementById('activation-completion').textContent = `${activationCompletion}%`;
+
+        // Login Rate (Stickiness: WAU / MAU)
+        const loginRate = stats.mau.size > 0 
+            ? (stats.wau.size / stats.mau.size * 100).toFixed(1) 
+            : '0.0';
+        document.getElementById('retention-stickiness').textContent = `${loginRate}%`;
+
+        // Avg Attempts per Stage
+        const avgAttempts = stats.totalStageCompletions > 0 
+            ? (stats.totalAttempts / stats.totalStageCompletions).toFixed(2) 
+            : '0.00';
+        document.getElementById('avg-retries').textContent = avgAttempts;
+
+        // Overall Lesson Completion Rate (Started vs Completed)
+        const lessonCompRate = stats.totalStarts > 0 
+            ? (stats.totalCompletions / stats.totalStarts * 100).toFixed(1) 
+            : '0.0';
+        document.getElementById('lesson-completion-rate').textContent = `${lessonCompRate}%`;
+
+        // Avg. Time per Stage
+        const avgStageTime = stats.totalStageCompletions > 0 
+            ? (stats.totalStageTime / stats.totalStageCompletions).toFixed(1) 
+            : '0.0';
+        document.getElementById('avg-stage-time').textContent = `${avgStageTime}s`;
+
+
         // --- 5. User Search Functionality ---
         document.getElementById('search-user-btn').addEventListener('click', async () => {
             const email = document.getElementById('user-email-search').value;
