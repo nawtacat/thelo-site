@@ -526,6 +526,9 @@
         return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
+    let currentFirestoreTestId = null;
+    let currentTestName = "Unnamed Test";
+
     async function loadTestFromFirestore(testId) {
         isTransitioning = true;
         try {
@@ -533,6 +536,9 @@
             if (!testSnap.exists) throw new Error("Test not found");
             const testFirestoreData = testSnap.data();
             
+            currentFirestoreTestId = testId;
+            currentTestName = testFirestoreData.testName || "Test";
+
             const stages = [];
             for (const item of (testFirestoreData.items || [])) {
                 if (item.url && item.url.startsWith('custom:')) {
@@ -768,7 +774,11 @@
             console.error("Error fetching student doc:", err);
         }
 
-        const testId = new URLSearchParams(window.location.search).get('testFile')?.replace('.json', '') || 'unknown_test';
+        const urlParams = new URLSearchParams(window.location.search);
+        const testId = currentFirestoreTestId || 
+                       urlParams.get('testId') || 
+                       urlParams.get('testFile')?.replace('.json', '') || 
+                       currentTestName;
 
         // --- *** SAVING LOGIC (Saves to Subcollection) *** ---
 
