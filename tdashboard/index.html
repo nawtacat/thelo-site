@@ -410,23 +410,22 @@
 <div id="create-test-modal-overlay" class="modal-overlay hidden">
     <div class="modal-content max-w-md">
         <button id="create-test-modal-close-btn" class="modal-close-btn">&times;</button>
-        <h2 class="text-2xl font-bold">Create New Test</h2>
+        <h2 class="text-2xl font-bold">Assign Predefined Test</h2>
         <form id="create-test-form" class="mt-6 space-y-4">
             <div>
                 <label class="modal-label">Test Name</label>
-                <input type="text" id="test-name-input" class="input-field mt-1" placeholder="e.g. Weekly Quiz #1" required>
+                <input type="text" id="test-name-input" class="input-field mt-1" placeholder="e.g. Math Diagnostic" required>
             </div>
             <div>
-                <label class="modal-label">Add Lessons/Problems</label>
+                <label class="modal-label">Select Test Template</label>
                 <div class="flex gap-2 mt-1">
-                    <select id="test-item-select" class="input-field flex-1">
-                        <option value="">-- Select Item --</option>
+                    <select id="test-template-select" class="input-field flex-1" required>
+                        <option value="">-- Choose a test --</option>
+                        <option value="https://thelo.space/tests/math-diagnostic.json">Math Diagnostic Test</option>
+                        <option value="https://thelo.space/tests/algebra-fundamentals.json">Algebra Fundamentals</option>
+                        <option value="https://thelo.space/tests/geometry-quiz.json">Geometry Quiz</option>
                     </select>
-                    <button type="button" id="add-test-item-btn" class="thelo-btn-secondary px-4">+</button>
                 </div>
-            </div>
-            <div id="selected-items-list" class="space-y-2 border-t pt-4 max-h-48 overflow-y-auto">
-                <!-- JS populated -->
             </div>
             <div class="pt-4">
                 <button type="submit" id="create-test-submit-btn" class="thelo-btn w-full">Generate Code</button>
@@ -495,9 +494,7 @@
     const createTestModalCloseBtn = document.getElementById('create-test-modal-close-btn');
     const createTestForm = document.getElementById('create-test-form');
     const testNameInput = document.getElementById('test-name-input');
-    const testItemSelect = document.getElementById('test-item-select');
-    const addTestItemBtn = document.getElementById('add-test-item-btn');
-    const selectedItemsList = document.getElementById('selected-items-list');
+    const testTemplateSelect = document.getElementById('test-template-select');
     const createTestSubmitBtn = document.getElementById('create-test-submit-btn');
 
     // App State...
@@ -508,7 +505,6 @@
     let selectedTestId = null;
     let allGroups = []; 
     let studentNameMap = new Map(); // NEW: To store student names for easy lookup
-    let selectedTestItems = [];
 
     // UI Strings (i18n)...
     const strings = {
@@ -617,7 +613,6 @@
         navCreateTestBtn.addEventListener('click', showCreateTestModal);
         navCreateTestBtnMobile.addEventListener('click', showCreateTestModal);
         createTestModalCloseBtn.addEventListener('click', hideCreateTestModal);
-        addTestItemBtn.addEventListener('click', handleAddTestItem);
         createTestForm.addEventListener('submit', handleCreateTest);
     }
    
@@ -736,98 +731,45 @@
         } catch (err) { console.error("Error loading groups:", err); noGroupsMsg.textContent = "Error loading groups."; noGroupsMsg.classList.remove('hidden'); }
     }
 
-    /** Generates join code */
-    function generateJoinCode() { const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'; let r = ''; for (let i = 0; i < 6; i++) r += chars.charAt(Math.floor(Math.random() * chars.length)); return r; }
+    /** Generates numeric join code to match Android App input */
+    function generateJoinCode() { return Math.floor(100000 + Math.random() * 900000).toString(); }
     /** Shows create group modal */
     function showCreateGroupModal() { createGroupModalOverlay.classList.remove('hidden'); setTimeout(() => createGroupModalOverlay.classList.add('show'), 10); }
     /** Hides create group modal */
     function hideCreateGroupModal() { createGroupModalOverlay.classList.remove('show'); setTimeout(() => createGroupModalOverlay.classList.add('hidden'), 300); }
 
-    /** Shows create test modal */
-    async function showCreateTestModal() {
-        selectedTestItems = [];
-        renderSelectedTestItems();
+    function showCreateTestModal() {
         testNameInput.value = '';
         createTestModalOverlay.classList.remove('hidden');
         setTimeout(() => createTestModalOverlay.classList.add('show'), 10);
-        await populateTestItemSelect();
     }
 
     /** Hides create test modal */
     function hideCreateTestModal() { createTestModalOverlay.classList.remove('show'); setTimeout(() => createTestModalOverlay.classList.add('hidden'), 300); }
 
-    /** Populates the lesson/problem dropdown */
-    async function populateTestItemSelect() {
-        testItemSelect.innerHTML = '<option value="">-- Loading... --</option>';
-        try {
-            const items = [];
-            // Custom Problems
-            const probsSnap = await getDocs(query(collection(db, 'custom_problems'), where('tutorId', '==', currentUser.uid)));
-            probsSnap.forEach(doc => {
-                const d = doc.data();
-                items.push({ id: `custom:${doc.id}`, name: d.headline.substring(0, 40), type: 'Problem' });
-            });
-            // System Lessons
-            const coursesSnap = await getDocs(collection(db, 'courses'));
-            for (const cDoc of coursesSnap.docs) {
-                const unitsSnap = await getDocs(collection(db, 'courses', cDoc.id, 'units'));
-                for (const uDoc of unitsSnap.docs) {
-                    const topicsSnap = await getDocs(collection(uDoc.ref, 'topics'));
-                    topicsSnap.forEach(tDoc => {
-                        const t = tDoc.data();
-                        items.push({ id: t.lessonFileUrl, name: t.topicName, type: 'Lesson' });
-                    });
-                }
-            }
-            testItemSelect.innerHTML = '<option value="">-- Select Item --</option>';
-            items.forEach(item => {
-                const opt = document.createElement('option');
-                opt.value = item.id;
-                opt.textContent = `[${item.type}] ${item.name}`;
-                opt.dataset.name = item.name;
-                testItemSelect.appendChild(opt);
-            });
-        } catch (e) { console.error(e); testItemSelect.innerHTML = '<option value="">Error loading</option>'; }
-    }
-
-    function handleAddTestItem() {
-        const val = testItemSelect.value;
-        if (!val) return;
-        const name = testItemSelect.options[testItemSelect.selectedIndex].dataset.name;
-        if (selectedTestItems.find(i => i.url === val)) return;
-        selectedTestItems.push({ url: val, name: name });
-        renderSelectedTestItems();
-    }
-
-    function renderSelectedTestItems() {
-        selectedItemsList.innerHTML = selectedTestItems.length ? '' : '<p class="text-xs text-slate-400 italic">No items added.</p>';
-        selectedTestItems.forEach((item, idx) => {
-            const div = document.createElement('div');
-            div.className = 'flex justify-between items-center bg-slate-50 p-2 rounded text-sm';
-            div.innerHTML = `<span class="truncate pr-2">${item.name}</span><button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeTestItem(${idx})"><i class="fa-solid fa-circle-xmark"></i></button>`;
-            selectedItemsList.appendChild(div);
-        });
-    }
-    window.removeTestItem = (idx) => { selectedTestItems.splice(idx, 1); renderSelectedTestItems(); };
-
     /** Handles test creation */
     async function handleCreateTest(e) {
         e.preventDefault();
-        if (!selectedTestItems.length) return showNotification("Add at least one item", true);
+        const templateId = testTemplateSelect.value;
+        if (!templateId) return showNotification("Please select a test", true);
+        
         const testName = testNameInput.value.trim();
+        const templateName = testTemplateSelect.options[testTemplateSelect.selectedIndex].textContent;
+        
         createTestSubmitBtn.disabled = true;
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const code = generateJoinCode();
+        
         try {
             await addDoc(collection(db, 'tests'), {
                 tutorId: currentUser.uid,
                 tutorName: currentUser.displayName || currentUser.email,
-                testName,
-                items: selectedTestItems,
+                testName: testName || templateName,
+                items: [{ url: templateId, name: templateName }], 
                 testCode: code,
                 createdAt: serverTimestamp(),
                 active: true
             });
-            showNotification(`Test Created! Code: ${code}`);
+            showNotification(`Test Ready! Code: ${code}`);
             hideCreateTestModal();
         } catch (err) {
             console.error(err);
