@@ -558,61 +558,50 @@
         localStorage.setItem('thelo-lang', currentLang);
         applyContent(currentLang); // Apply text first
         
-        // Await the reloading of groups to ensure `allGroups` is populated
-        await loadGroups(selectedGroupId); 
+        await loadTests(selectedTestId); 
        
-        // If a group is selected, reload its data to update table dates/text
-        if (selectedGroupId) {
-            const selectedGroup = allGroups.find(g => g.id === selectedGroupId);
-            if (selectedGroup) {
-                loadGroupData(selectedGroup); // Reload table data etc.
-            } 
-            // No 'else' needed, as loadGroups will handle showing the empty state if the selected group is gone.
+        if (selectedTestId) {
+            const test = allTests.find(t => t.id === selectedTestId);
+            if (test) loadTestData(test);
         }
     }
 
     /** Switches active tab */
     function switchTab(tabId) {
         tabBtnResults.classList.toggle('active', tabId === 'results');
-        tabPanelResults.classList.toggle('hidden', tabId !== 'results');
+        tabPanelResults.classList.tAoggle('hidden', tabId !== 'results');
         tabBtnHomework.classList.toggle('active', tabId === 'homework');
         tabPanelHomework.classList.toggle('hidden', tabId !== 'homework');
         tabBtnRoster.classList.toggle('active', tabId === 'roster');
         tabPanelRoster.classList.toggle('hidden', tabId !== 'roster');
     }
    
-    /** Handles group selection from pill buttons */
-    function handleGroupSelect(groupId) {
-        // If clicking the same active group, deselect it
-        if (groupId === selectedGroupId) {
-            selectedGroupId = null;
+    /** Handles test selection from pill buttons */
+    function handleTestSelect(testId) {
+        if (testId === selectedTestId) {
             selectedTestId = null;
         } else {
-            selectedGroupId = groupId;
+            selectedTestId = testId;
         }
 
         // Update visual state of all pills
-        document.querySelectorAll('#group-selection-container .thelo-btn-secondary').forEach(item => {
-            item.classList.toggle('active', item.dataset.groupId === selectedGroupId);
+        groupSelectionContainer.querySelectorAll('.thelo-btn-secondary').forEach(item => {
+            item.classList.toggle('active', item.dataset.testId === selectedTestId);
         });
 
-        if (!selectedGroupId) {
+        if (!selectedTestId) {
             showEmptyState();
-            testSelectionContainer.classList.add('hidden');
             return;
         }
         
-        const selectedGroup = allGroups.find(g => g.id === selectedGroupId);
-        if (selectedGroup) {
-            loadGroupData(selectedGroup);
-        }
+        const test = allTests.find(t => t.id === selectedTestId);
+        if (test) loadTestData(test);
     }
 
     /** Resets the main panel to empty state */
     function showEmptyState() {
         const T = strings[currentLang];
         resultsTitle.textContent = T.resultsTitleDefault;
-        testSelectionContainer.classList.add('hidden');
         selectedTestId = null;
         resultsEmptyState.classList.remove('hidden');
         resultsContent.classList.add('hidden');
@@ -621,50 +610,54 @@
     /** Logs the user out */
     async function handleLogout(e) { e.preventDefault(); try { await signOut(auth); window.location.href = '/'; } catch (err) { console.error("Error logging out:", err); } }
 
-    /** Loads groups into the pill container */
-    async function loadGroups(preserveSelected = null) {
-        allGroups = []; 
+    /** Loads tests into the pill container as the primary selection */
+    async function loadTests(preserveSelected = null) {
+        allTests = []; 
         const T = strings[currentLang];
-        groupSelectionContainer.innerHTML = ''; // Clear pill container
+        groupSelectionContainer.innerHTML = ''; 
        
-        const q = query(collection(db, "groups"), where("ownerId", "==", currentUser.uid));
+        // Add "Create New Test" pill first
+        const createPill = document.createElement('button');
+        createPill.className = 'thelo-btn-secondary border-dashed';
+        createPill.innerHTML = `<i class="fa-solid fa-plus mr-2"></i> ${T.navCreateTest}`;
+        createPill.onclick = showCreateTestModal;
+        groupSelectionContainer.appendChild(createPill);
+
+        const q = query(collection(db, "tests"), where("tutorId", "==", currentUser.uid));
         try {
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
-                noGroupsMsg.classList.remove('hidden'); 
-                groupSelectionContainer.classList.add('hidden'); 
+                noGroupsMsg.classList.remove('hidden');
                 showEmptyState(); 
                 return;
             }
            
             noGroupsMsg.classList.add('hidden'); 
-            groupSelectionContainer.classList.remove('hidden'); 
            
-            const groups = [];
-            querySnapshot.forEach(doc => groups.push({ id: doc.id, ...doc.data() }));
-            groups.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            const tests = [];
+            querySnapshot.forEach(doc => tests.push({ id: doc.id, ...doc.data() }));
+            tests.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-            let isPreservedSelected = preserveSelected && groups.some(g => g.id === preserveSelected);
-
-            groups.forEach(group => {
-                allGroups.push(group); // Keep track of all groups
+            tests.forEach(test => {
+                allTests.push(test); 
                 const item = document.createElement('button');
-                item.className = 'thelo-btn-secondary'; // Use the same class as "Create Group"
-                item.dataset.groupId = group.id;
-                item.textContent = `${group.groupName} (Code: ${group.joinCode})`;
-                item.classList.toggle('active', preserveSelected === group.id);
-                item.onclick = () => handleGroupSelect(group.id);
+                item.className = 'thelo-btn-secondary';
+                item.dataset.testId = test.id;
+                item.textContent = `${test.testName} (${test.testCode})`;
+                item.classList.toggle('active', preserveSelected === test.id);
+                item.onclick = () => handleTestSelect(test.id);
                 groupSelectionContainer.appendChild(item);
             });
 
-            if (isPreservedSelected) {
-                 selectedGroupId = preserveSelected; 
+            if (preserveSelected && tests.some(t => t.id === preserveSelected)) {
+                 selectedTestId = preserveSelected; 
+                 handleTestSelect(preserveSelected);
             } else {
-                 selectedGroupId = null; 
+                 selectedTestId = null; 
                  if (!preserveSelected) showEmptyState(); 
             }
 
-        } catch (err) { console.error("Error loading groups:", err); noGroupsMsg.textContent = "Error loading groups."; noGroupsMsg.classList.remove('hidden'); }
+        } catch (err) { console.error("Error loading tests:", err); }
     }
 
     /** Generates numeric join code to match Android App input */
@@ -696,7 +689,7 @@
         const code = generateJoinCode();
         
         try {
-            await addDoc(collection(db, 'tests'), {
+            const docRef = await addDoc(collection(db, 'tests'), {
                 tutorId: currentUser.uid,
                 tutorName: currentUser.displayName || currentUser.email,
                 testName: testName || templateName,
