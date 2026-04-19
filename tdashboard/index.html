@@ -209,8 +209,8 @@
 
     /* --- NEW Group Pill Styles --- */
     .group-pill-btn {
-        @apply px-4 py-2 border border-[var(--thelo-blue)] rounded-lg text-[var(--thelo-blue)] font-semibold transition-all duration-200 hover:bg-[var(--thelo-blue)] hover:text-white cursor-pointer text-sm;
-    }
+        @apply px-4 py-2 border border-[var(--thelo-blue)] rounded-lg text-[var(--thelo-blue)] font-semibold transition-all duration-200 hover:bg-[var(--thelo-blue)] hover:text-white cursor-pointer text-sm;
+    }
     .group-pill-btn:disabled {
         @apply bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed hover:border-slate-200 hover:text-slate-400;
     }
@@ -286,7 +286,6 @@
                     <p class="text-lg text-slate-600 mt-4" id="welcome-message" data-i18n="dashboardSubtitle">Welcome, tutor. Select a group to get started.</p>
                 </div>
                 <button id="nav-create-group-btn-mobile" class="thelo-btn-secondary md:hidden" data-i18n="navCreateGroupShort">
-                <button id="create-group-btn-mobile" class="thelo-btn-secondary md:hidden" data-i18n="navCreateGroupShort">
                     New
                 </button>
             </div>
@@ -299,7 +298,6 @@
                         <!-- 1. Group Selection -->
                         <div class="mb-12">
                             <!-- This container will be filled by JS with group buttons -->
-                            <div id="group-selection-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
                             <div id="group-selection-container" class="flex flex-wrap gap-2">
                                 <!-- JS populates this area -->
                             </div>
@@ -332,6 +330,7 @@
                             <div class="border-b border-slate-200 mb-4">
                                 <nav class="-mb-px flex space-x-8" aria-label="Tabs">
                                     <button id="tab-btn-results" class="tab-btn active" data-i18n="tabResults"></button>
+                                    <button id="tab-btn-homework" class="tab-btn" data-i18n="tabHomework">Homework</button>
                                     <button id="tab-btn-roster" class="tab-btn" data-i18n="tabRoster"></button>
                                 </nav>
                             </div>
@@ -339,6 +338,9 @@
                             <!-- Tab Panels -->
                             <div id="tab-panel-results" class="tab-panel">
                                 <div id="results-container" class="overflow-x-auto">
+                                    <div class="flex justify-end mb-4">
+                                        <button id="export-csv-btn" class="thelo-btn-secondary-sm hidden"><i class="fas fa-download mr-2"></i> Export CSV</button>
+                                    </div>
                                     <p id="results-none-msg" class="text-lg text-slate-500 hidden" data-i18n="resultsNone"></p>
                                     <table id="results-table" class="hidden min-w-full divide-y divide-slate-200">
                                         <thead class="bg-slate-50">
@@ -352,6 +354,19 @@
                                             </tr>
                                         </thead>
                                         <tbody id="results-table-body" class="bg-white divide-y divide-slate-200"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div id="tab-panel-homework" class="tab-panel hidden">
+                                <div id="homework-container" class="overflow-x-auto">
+                                    <table id="homework-table" class="min-w-full divide-y divide-slate-200">
+                                        <thead class="bg-slate-50">
+                                            <tr>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableStudent">Student</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Completed Lessons</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="homework-table-body" class="bg-white divide-y divide-slate-200"></tbody>
                                     </table>
                                 </div>
                             </div>
@@ -415,8 +430,10 @@
     const resultsEmptyState = document.getElementById('results-empty-state');
     const resultsContent = document.getElementById('results-content');
     const tabBtnResults = document.getElementById('tab-btn-results');
+    const tabBtnHomework = document.getElementById('tab-btn-homework');
     const tabBtnRoster = document.getElementById('tab-btn-roster');
     const tabPanelResults = document.getElementById('tab-panel-results');
+    const tabPanelHomework = document.getElementById('tab-panel-homework');
     const tabPanelRoster = document.getElementById('tab-panel-roster');
     const resultsContainer = document.getElementById('results-container');
     const resultsNoneMsg = document.getElementById('results-none-msg');
@@ -431,8 +448,6 @@
     const navCreateGroupBtn = document.getElementById('nav-create-group-btn');
     const navCreateGroupBtnMobile = document.getElementById('nav-create-group-btn-mobile');
     // Create Group Elements
-    const createGroupBtn = document.getElementById('nav-create-group-btn');
-    const createGroupBtnMobile = document.getElementById('create-group-btn-mobile');
     const createGroupModalOverlay = document.getElementById('create-group-modal-overlay');
     const createGroupModalCloseBtn = document.getElementById('create-group-modal-close-btn');
     const createGroupForm = document.getElementById('create-group-form');
@@ -451,10 +466,10 @@
     // UI Strings (i18n)...
     const strings = {
         en: {
-            title: 'Tutor Dashboard | thelo', navTutorPortal: 'Tutor Portal', navLogout: 'Log Out', navCreateGroup: 'Create Group', navCreateGroupShort: 'New', loading: 'Loading Dashboard...', loadingSubmit: 'Creating...', errorTitle: 'Access Denied', errorSubtitle: 'You must be a registered tutor to access this page. Please contact support if you believe this is an error.', errorButton: 'Back to Home', dashboardTitle: 'Tutor Dashboard', dashboardSubtitle: 'Welcome. Select a group to get started.', groupsTitle: 'My Groups', groupsSelectDefault: 'Select a group...', groupsNone: "You haven't created any groups yet.", groupsCreateTitle: 'Create New Group', groupsCreateLabel: 'Group Name', groupsCreateButton: 'Create Group', groupsCreateSuccess: 'Group "{groupName}" created! Join Code: {joinCode}', groupsCreateError: 'Error creating group. Please try again.', joinCode: 'Join Code', resultsTitleDefault: 'Select a group', resultsSelectPrompt: 'Select a group from the list to view its details.', resultsTitleLoading: 'Loading data for "{groupName}"...', resultsTitleLoaded: 'Showing results for {groupName}', resultsTitleSelectTest: 'Select a test to view results', resultsNone: 'No test results found for this test.', rosterTitle: 'Student Roster', rosterNone: 'No students have joined this group yet.', testsTitle: 'Tests', testsNone: 'No tests have been taken by this group yet.', tabResults: '', tabRoster: '', tableStudent: 'Student', tableTest: 'Test ID', tableScore: 'Score', tableTime: 'Time', tableDate: 'Date', tableTimeValue: '{time}s', tableView: 'View', tableViewSr: 'View Details'
+            title: 'Tutor Dashboard | thelo', navTutorPortal: 'Tutor Portal', navLogout: 'Log Out', navCreateGroup: 'Create Group', navCreateGroupShort: 'New', loading: 'Loading Dashboard...', loadingSubmit: 'Creating...', errorTitle: 'Access Denied', errorSubtitle: 'You must be a registered tutor to access this page. Please contact support if you believe this is an error.', errorButton: 'Back to Home', dashboardTitle: 'Tutor Dashboard', dashboardSubtitle: 'Welcome. Select a group to get started.', groupsTitle: 'My Groups', groupsSelectDefault: 'Select a group...', groupsNone: "You haven't created any groups yet.", groupsCreateTitle: 'Create New Group', groupsCreateLabel: 'Group Name', groupsCreateButton: 'Create Group', groupsCreateSuccess: 'Group "{groupName}" created! Join Code: {joinCode}', groupsCreateError: 'Error creating group. Please try again.', joinCode: 'Join Code', resultsTitleDefault: 'Select a group', resultsSelectPrompt: 'Select a group from the list to view its details.', resultsTitleLoading: 'Loading data for "{groupName}"...', resultsTitleLoaded: 'Showing results for {groupName}', resultsTitleSelectTest: 'Select a test to view results', resultsNone: 'No test results found for this test.', rosterTitle: 'Student Roster', rosterNone: 'No students have joined this group yet.', testsTitle: 'Tests', testsNone: 'No tests have been taken by this group yet.', tabResults: 'Results', tabHomework: 'Homework', tabRoster: 'Roster', tableStudent: 'Student', tableTest: 'Test ID', tableScore: 'Score', tableTime: 'Time', tableDate: 'Date', tableTimeValue: '{time}s', tableView: 'View', tableViewSr: 'View Details'
         },
         hy: {
-            title: 'Ուսուցչի Վահանակ | Թելո', navTutorPortal: 'Ուսուցչի Վահանակ', navLogout: 'Դուրս գալ', navCreateGroup: 'Ստեղծել Խումբ', navCreateGroupShort: 'Նոր', loading: 'Բեռնվում է...', loadingSubmit: 'Ստեղծվում է...', errorTitle: 'Մուտքը մերժված է', errorSubtitle: 'Դուք պետք է լինեք գրանցված ուսուցիչ՝ այս էջը տեսնելու համար։', errorButton: 'Գլխավոր էջ', dashboardTitle: 'Ուսուցչի Վահանակ', dashboardSubtitle: 'Բարի գալուստ։ Ընտրեք խումբ՝ սկսելու համար։', groupsTitle: 'Իմ Խմբերը', groupsSelectDefault: 'Ընտրեք խումբ...', groupsNone: 'Դուք դեռ խմբեր չեք ստեղծել։', groupsCreateTitle: 'Ստեղծել Նոր Խումբ', groupsCreateLabel: 'Խմբի Անունը', groupsCreateButton: 'Ստեղծել Խումբ', groupsCreateSuccess: '«{groupName}» խումբը ստեղծված է։ Միանալու կոդը՝ {joinCode}', groupsCreateError: 'Սխալ՝ խումբ ստեղծելիս։ Խնդրում ենք փորձել նորից։', joinCode: 'Միանալու կոդ', resultsTitleDefault: 'Ընտրեք խումբ', resultsSelectPrompt: 'Ընտրեք խումբ ցանկից՝ մանրամասները տեսնելու համար։', resultsTitleLoading: 'Բեռնվում են «{groupName}» խմբի տվյալները...', resultsTitleLoaded: '{groupName} արդյունքները', resultsTitleSelectTest: 'Ընտրեք թեստ՝ արդյունքները տեսնելու համար', resultsNone: 'Այս թեստի համար արդյունքներ չկան։', rosterTitle: 'Աշակերտների Ցուցակ', rosterNone: 'Այս խմբին դեռ ոչ մի աշակերտ չի միացել։', testsTitle: 'Թեստեր', testsNone: 'Այս խումբը դեռ թեստեր չի հանձնել։', tabResults: '', tabRoster: '', tableStudent: 'Աշակերտ', tableTest: 'Թեստի ID', tableScore: 'Միավոր', tableTime: 'Ժամանակ', tableDate: 'Ամսաթիվ', tableTimeValue: '{time}վ', tableView: 'Դիտել', tableViewSr: 'Դիտել Մանրամասները'
+            title: 'Ուսուցչի Վահանակ | Թելո', navTutorPortal: 'Ուսուցչի Վահանակ', navLogout: 'Դուրս գալ', navCreateGroup: 'Ստեղծել Խումբ', navCreateGroupShort: 'Նոր', loading: 'Բեռնվում է...', loadingSubmit: 'Ստեղծվում է...', errorTitle: 'Մուտքը մերժված է', errorSubtitle: 'Դուք պետք է լինեք գրանցված ուսուցիչ՝ այս էջը տեսնելու համար։', errorButton: 'Գլխավոր էջ', dashboardTitle: 'Ուսուցչի Վահանակ', dashboardSubtitle: 'Բարի գալուստ։ Ընտրեք խումբ՝ սկսելու համար։', groupsTitle: 'Իմ Խմբերը', groupsSelectDefault: 'Ընտրեք խումբ...', groupsNone: 'Դուք դեռ խմբեր չեք ստեղծել։', groupsCreateTitle: 'Ստեղծել Նոր Խումբ', groupsCreateLabel: 'Խմբի Անունը', groupsCreateButton: 'Ստեղծել Խումբ', groupsCreateSuccess: '«{groupName}» խումբը ստեղծված է։ Միանալու կոդը՝ {joinCode}', groupsCreateError: 'Սխալ՝ խումբ ստեղծելիս։ Խնդրում ենք փորձել նորից։', joinCode: 'Միանալու կոդ', resultsTitleDefault: 'Ընտրեք խումբ', resultsSelectPrompt: 'Ընտրեք խումբ ցանկից՝ մանրամասները տեսնելու համար։', resultsTitleLoading: 'Բեռնվում են «{groupName}» խմբի տվյալները...', resultsTitleLoaded: '{groupName} արդյունքները', resultsTitleSelectTest: 'Ընտրեք թեստ՝ արդյունքները տեսնելու համար', resultsNone: 'Այս թեստի համար արդյունքներ չկան։', rosterTitle: 'Աշակերտների Ցուցակ', rosterNone: 'Այս խմբին դեռ ոչ մի աշակերտ չի միացել։', testsTitle: 'Թեստեր', testsNone: 'Այս խումբը դեռ թեստեր չի հանձնել։', tabResults: 'Արդյունքներ', tabHomework: 'Տնային', tabRoster: 'Ցուցակ', tableStudent: 'Աշակերտ', tableTest: 'Թեստի ID', tableScore: 'Միավոր', tableTime: 'Ժամանակ', tableDate: 'Ամսաթիվ', tableTimeValue: '{time}վ', tableView: 'Դիտել', tableViewSr: 'Դիտել Մանրամասները'
         }
     };
 
@@ -544,14 +559,13 @@
         langHyBtn.addEventListener('click', () => switchLanguage('hy'));
         navCreateGroupBtn.addEventListener('click', showCreateGroupModal);
         navCreateGroupBtnMobile.addEventListener('click', showCreateGroupModal);
-        createGroupBtn.addEventListener('click', showCreateGroupModal);
-        createGroupBtnMobile.addEventListener('click', showCreateGroupModal);
         createGroupModalCloseBtn.addEventListener('click', hideCreateGroupModal);
         createGroupModalOverlay.addEventListener('click', (e) => { if (e.target === createGroupModalOverlay) hideCreateGroupModal(); });
         createGroupForm.addEventListener('submit', handleCreateGroup);
         tabBtnResults.addEventListener('click', () => switchTab('results'));
+        tabBtnHomework.addEventListener('click', () => switchTab('homework'));
         tabBtnRoster.addEventListener('click', () => switchTab('roster'));
-        // Removed modal and dropdown listeners
+        exportCsvBtn.addEventListener('click', exportResultsToCsv);
     }
    
     /** Switches active language */
@@ -575,11 +589,12 @@
 
     /** Switches active tab */
     function switchTab(tabId) {
-        const isActive = tabId === 'results';
-        tabBtnResults.classList.toggle('active', isActive);
-        tabPanelResults.classList.toggle('hidden', !isActive);
-        tabBtnRoster.classList.toggle('active', !isActive);
-        tabPanelRoster.classList.toggle('hidden', isActive);
+        tabBtnResults.classList.toggle('active', tabId === 'results');
+        tabPanelResults.classList.toggle('hidden', tabId !== 'results');
+        tabBtnHomework.classList.toggle('active', tabId === 'homework');
+        tabPanelHomework.classList.toggle('hidden', tabId !== 'homework');
+        tabBtnRoster.classList.toggle('active', tabId === 'roster');
+        tabPanelRoster.classList.toggle('hidden', tabId !== 'roster');
     }
    
     /** Handles group selection from pill buttons */
@@ -709,7 +724,10 @@
         document.getElementById('no-tests-msg').classList.add('hidden');
         rosterList.innerHTML = ''; 
         rosterNoneMsg.classList.add('hidden');
+        homeworkTableBody.innerHTML = '';
         studentNameMap.clear(); // Clear previous student data
+        currentGroupResults = [];
+        exportCsvBtn.classList.add('hidden');
 
         try {
             // Step 1: Fetch all students in the group and populate the roster and name map
@@ -720,16 +738,30 @@
                 rosterList.appendChild(rosterNoneMsg); 
                 rosterNoneMsg.classList.remove('hidden'); 
             } else {
-                studentSnapshot.forEach(doc => { const el = document.createElement('span'); el.className = 'block text-sm text-slate-700'; el.textContent = doc.data().email; rosterList.appendChild(el); });
-                studentSnapshot.forEach(doc => {
-                    const studentData = doc.data();
-                    const fullName = `${studentData.name || ''} ${studentData.surname || ''}`.trim();
-                    studentNameMap.set(studentData.email, fullName || studentData.email); // Fallback to email
-                    const el = document.createElement('span'); 
-                    el.className = 'block text-sm text-slate-700'; 
-                    el.textContent = fullName || studentData.email; // Display full name in roster
-                    rosterList.appendChild(el);
-                });
+                for (const studentDoc of studentSnapshot.docs) {
+                    const studentData = studentDoc.data();
+                    const fullName = `${studentData.firstName || ''} ${studentData.lastName || ''}`.trim();
+                    const displayName = fullName || studentData.email;
+                    studentNameMap.set(studentData.email, displayName);
+                    
+                    // Populate Roster
+                    const rel = document.createElement('span'); 
+                    rel.className = 'block text-sm text-slate-700 mb-1'; 
+                    rel.textContent = fullName ? `${fullName} (${studentData.email})` : studentData.email;
+                    rosterList.appendChild(rel);
+
+                    // Fetch Homework Progress for each student
+                    const progressSnap = await getDocs(collection(db, "thelo-students", studentDoc.id, "progress"));
+                    const completedLessons = [];
+                    progressSnap.forEach(pDoc => {
+                        if (pDoc.data().status === 'completed') completedLessons.push(pDoc.id);
+                    });
+
+                    // Add to Homework Tab Table
+                    const hrow = document.createElement('tr');
+                    hrow.innerHTML = `<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${displayName}</td><td class="px-6 py-4 text-sm text-slate-600">${completedLessons.join(', ') || '-'}</td>`;
+                    homeworkTableBody.appendChild(hrow);
+                }
             }
 
             // Step 2: Fetch all test results for the group
@@ -740,11 +772,11 @@
                 document.getElementById('no-tests-msg').classList.remove('hidden');
                 resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: group.groupName });
             } else {
-                const results = [];
-                resultsSnapshot.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
+                currentGroupResults = [];
+                resultsSnapshot.forEach(doc => currentGroupResults.push({ id: doc.id, ...doc.data() }));
                 
                 // Find unique test IDs
-                const uniqueTestIds = [...new Set(results.map(r => r.testId))];
+                const uniqueTestIds = [...new Set(currentGroupResults.map(r => r.testId))];
                 
                 const testListContainer = document.getElementById('test-list-container');
                 uniqueTestIds.forEach(testId => {
@@ -756,7 +788,7 @@
                         testListContainer.querySelectorAll('button').forEach(b => b.classList.remove('active'));
                         btn.classList.add('active');
                         selectedTestId = testId;
-                        loadTestResults(testId, results, group.groupName);
+                        loadTestResults(testId, currentGroupResults, group.groupName);
                     };
                     testListContainer.appendChild(btn);
                 });
@@ -778,13 +810,39 @@
         if (testResults.length === 0) {
             resultsNoneMsg.classList.remove('hidden');
             resultsTable.classList.add('hidden');
+            exportCsvBtn.classList.add('hidden');
         } else {
             resultsNoneMsg.classList.add('hidden');
             testResults.sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0));
             testResults.forEach(result => renderResultRow(result));
             resultsTable.classList.remove('hidden');
+            exportCsvBtn.classList.remove('hidden');
         }
         resultsTitle.textContent = formatString(T.resultsTitleLoaded, { groupName: `${groupName} / ${testId}` });
+    }
+
+    /** Exports the currently viewed results to CSV */
+    function exportResultsToCsv() {
+        if (!selectedTestId || currentGroupResults.length === 0) return;
+        const testResults = currentGroupResults.filter(r => r.testId === selectedTestId);
+        const T = strings[currentLang];
+        
+        let csv = `${T.tableStudent},${T.tableTest},${T.tableScore},${T.tableTime},${T.tableDate}\n`;
+        testResults.forEach(r => {
+            const name = studentNameMap.get(r.email) || r.email;
+            const date = r.submittedAt ? r.submittedAt.toDate().toISOString() : 'N/A';
+            csv += `"${name}","${r.testId}","${r.score}/${r.totalQuestions}","${r.timeTakenSeconds}s","${date}"\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `results_${selectedTestId}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 
     /** Renders a single result row */
