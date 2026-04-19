@@ -526,6 +526,56 @@
         return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
+    async function loadTestFromFirestore(testId) {
+        isTransitioning = true;
+        try {
+            const testSnap = await db.collection('tests').doc(testId).get();
+            if (!testSnap.exists) throw new Error("Test not found");
+            const testFirestoreData = testSnap.data();
+            
+            const stages = [];
+            for (const item of (testFirestoreData.items || [])) {
+                if (item.url && item.url.startsWith('custom:')) {
+                    const probId = item.url.split(':')[1];
+                    const probSnap = await db.collection('custom_problems').doc(probId).get();
+                    if (probSnap.exists) {
+                        const p = probSnap.data();
+                        stages.push({
+                            type: p.type,
+                            headline: p.headline,
+                            image: p.imageUrl,
+                            correctAnswer: p.correctAnswer,
+                            correctAnswerOcr: p.correctAnswer,
+                            optionsQuiz: p.optionsQuiz,
+                            studentInput: true,
+                            problemId: probId
+                        });
+                    }
+                } else if (item.url) {
+                    const res = await fetch(item.url);
+                    const data = await res.json();
+                    if (data && data.stages) stages.push(...data.stages);
+                }
+            }
+
+            testData = { stages: stages, testTitle: testFirestoreData.testName };
+            currentLang = testFirestoreData.language || 'en';
+            document.body.className = currentLang === 'hy' ? 'lang-hy' : '';
+            document.title = testData.testTitle || "thelo | Test Mode";
+            currentStageIndex = -1;
+            testResults = [];
+            updateAllUITexts();
+            submitBtn.disabled = false;
+            prevBtn.disabled = true;
+        } catch (error) {
+            console.error("Error loading test from Firestore:", error);
+            alert("Failed to load test.");
+        } finally {
+            isTransitioning = false;
+            loadingOverlay.classList.add('hidden');
+        }
+    }
+
     async function loadTest(testJsonPath) {
         isTransitioning = true;
         try {
@@ -945,8 +995,12 @@
         window.addEventListener('resize', resizeCanvases);
         const urlParams = new URLSearchParams(window.location.search);
         const testFileName = urlParams.get('testFile');
+        const testId = urlParams.get('testId');
+
         if (testFileName) {
             loadTest(`https://thelo.space/tests/${testFileName}`);
+        } else if (testId) {
+            loadTestFromFirestore(testId);
         } else {
             alert("No test file specified in the URL. Please add '?testFile=your-test.json'.");
             loadingOverlay.classList.add('hidden');
