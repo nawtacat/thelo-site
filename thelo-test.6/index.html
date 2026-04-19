@@ -256,6 +256,20 @@
     border: 1px solid var(--thelo-border);
   }
 
+  /* Orientation Lock Overlay */
+  #orientation-lock-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: #fff; z-index: 10001;
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    text-align: center;
+  }
+  @media (orientation: portrait) {
+    #orientation-lock-overlay { display: flex; }
+  }
+  .rotate-phone-icon { font-size: 3rem; margin-bottom: 1rem; }
+
   /* ===== Results/Detail View CSS has been REMOVED ===== */
 
   @media (max-width: 768px) {
@@ -282,6 +296,22 @@
 </style>
 </head>
 <body>
+    <div id="orientation-lock-overlay">
+        <div class="rotate-phone-icon">📱🔄</div>
+        <div class="orientation-message" style="font-weight: 700;">
+            Please rotate your device<br>to landscape mode.
+        </div>
+    </div>
+
+    <div id="offline-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#F8F9FA; z-index:10000; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:2rem;">
+        <div style="background:white; padding:2.5rem; border-radius:1.5rem; box-shadow:0 10px 40px rgba(0,0,0,0.1); max-width:400px; width:90%;">
+            <div style="font-size:3rem; margin-bottom:1.5rem;">📶</div>
+            <h2 style="font-size:1.5rem; font-weight:800; margin-bottom:1rem; color:#111827;" id="offline-title">No Connection</h2>
+            <p style="color:#64748b; margin-bottom:2rem; line-height:1.5;" id="offline-msg">It looks like you're offline. Please check your internet connection and try again.</p>
+            <button id="offline-btn" onclick="window.location.reload()" style="width:100%; padding:1rem; border-radius:1rem; font-weight:700; font-size:1.1rem; border:none; cursor:pointer; background:#2563EB; color:white;">Try Again</button>
+        </div>
+    </div>
+
     <div id="loading-overlay">
         <img id="loading-svg" src="https://thelo.space/img/bluethelo.svg" alt="Loading...">
     </div>
@@ -875,7 +905,24 @@
         }
     }
 
+    const updateOnlineStatus = () => {
+        const overlay = document.getElementById('offline-overlay');
+        if (!overlay) return;
+        if (!navigator.onLine) {
+            overlay.style.display = 'flex';
+        } else {
+            overlay.style.display = 'none';
+        }
+    };
+
     function initApp() {
+        if (window.AndroidInterface && window.AndroidInterface.setOrientation) {
+            window.AndroidInterface.setOrientation("landscape");
+        }
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus();
+
         resizeCanvases();
         // Test-taking listeners
         canvas.addEventListener('mousedown', handleDrawingStart);
@@ -914,4 +961,4 @@
     });
 </script>
 </body>
-</html>ƒ
+</html>
