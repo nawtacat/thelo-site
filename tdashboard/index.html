@@ -304,6 +304,25 @@
                              <p id="no-groups-msg" class="text-slate-500 mt-2 hidden" data-i18n="testsNone">You haven't created any tests yet.</p>
                         </div>
 
+                        <div class="mb-10">
+                            <h2 class="text-2xl font-bold text-slate-900" data-i18n="firstChecksTitle">Class/Homework First Checks</h2>
+                            <p id="first-checks-none-msg" class="text-slate-500 mt-2 hidden" data-i18n="firstChecksNone">No first-check results found yet.</p>
+                            <div class="overflow-x-auto mt-4">
+                                <table id="first-checks-table" class="hidden min-w-full divide-y divide-slate-200">
+                                    <thead class="bg-slate-50">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="firstChecksStudent">Student</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="firstChecksGroup">Group</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="firstChecksLesson">Lesson</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="firstChecksProblem">Problem</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="firstChecksResult">First Check</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="firstChecksDate">Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="first-checks-table-body" class="bg-white divide-y divide-slate-200"></tbody>
+                                </table>
+                            </div>
+                        </div>
 
                         <!-- 2. Results Title -->
                         <h2 id="results-title" class="text-2xl font-bold mt-8" data-i18n="resultsTitleDefault">Select a test</h2>
@@ -429,6 +448,9 @@
     const rosterNoneMsg = document.getElementById('roster-none-msg');
     const resultsPlaceholder = document.getElementById('results-placeholder');
     const exportCsvBtn = document.getElementById('export-csv-btn');
+    const firstChecksTable = document.getElementById('first-checks-table');
+    const firstChecksTableBody = document.getElementById('first-checks-table-body');
+    const firstChecksNoneMsg = document.getElementById('first-checks-none-msg');
     // Modals
     const navCreateTestBtn = document.getElementById('nav-create-test-btn');
     const navCreateTestBtnMobile = document.getElementById('nav-create-test-btn-mobile');
@@ -448,6 +470,7 @@
     let currentLang = localStorage.getItem('thelo-lang') || 'en';
     let studentNameMap = new Map(); // NEW: To store student names for easy lookup
     let currentTestResults = [];
+    let currentFirstChecks = [];
 
     // UI Strings (i18n)...
     const strings = {
@@ -532,7 +555,8 @@
         const T = strings[currentLang];
         welcomeMessage.textContent = formatString(T.dashboardSubtitle, { tutorEmail: currentTutor.email });
         applyContent(currentLang);
-        setupEventListeners(); await loadTests();
+        setupEventListeners();
+        await Promise.all([loadTests(), loadFirstChecks()]);
     }
 
     /** Sets up event listeners */
@@ -562,14 +586,13 @@
             const test = allTests.find(t => t.id === selectedTestId);
             if (test) loadTestData(test);
         }
+        renderFirstChecks();
     }
 
     /** Switches active tab */
     function switchTab(tabId) {
         tabBtnResults.classList.toggle('active', tabId === 'results');
-        tabPanelResults.classList.tAoggle('hidden', tabId !== 'results');
-        tabBtnHomework.classList.toggle('active', tabId === 'homework');
-        tabPanelHomework.classList.toggle('hidden', tabId !== 'homework');
+        tabPanelResults.classList.toggle('hidden', tabId !== 'results');
         tabBtnRoster.classList.toggle('active', tabId === 'roster');
         tabPanelRoster.classList.toggle('hidden', tabId !== 'roster');
     }
@@ -603,6 +626,67 @@
         selectedTestId = null;
         resultsEmptyState.classList.remove('hidden');
         resultsContent.classList.add('hidden');
+    }
+
+    function formatFirstCheckProblemLabel(check) {
+        if (check.problemId) return check.problemId;
+        if (typeof check.stageIndex === 'number') return `Stage ${check.stageIndex + 1}`;
+        return '-';
+    }
+
+    function renderFirstChecks() {
+        firstChecksTableBody.innerHTML = '';
+        const lang = currentLang.startsWith('hy') ? 'hy-AM' : 'en-US';
+
+        if (!currentFirstChecks.length) {
+            firstChecksTable.classList.add('hidden');
+            firstChecksNoneMsg.classList.remove('hidden');
+            return;
+        }
+
+        firstChecksNoneMsg.classList.add('hidden');
+        firstChecksTable.classList.remove('hidden');
+
+        currentFirstChecks.forEach((check) => {
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-slate-50';
+
+            const studentName = check.studentName || check.studentEmail || 'Unknown';
+            const groupName = check.groupName || '-';
+            const lessonName = check.lessonId || '-';
+            const problem = formatFirstCheckProblemLabel(check);
+            const firstStatus = (check.firstStatus || '').toLowerCase() === 'correct' ? 'Correct' : 'Incorrect';
+            const dateValue = check.createdAt?.toDate ? check.createdAt.toDate().toLocaleString(lang) : 'N/A';
+
+            row.innerHTML = `
+                <td class="px-4 py-3 text-sm font-medium text-slate-900">${studentName}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${groupName}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${lessonName}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${problem}</td>
+                <td class="px-4 py-3 text-sm ${firstStatus === 'Correct' ? 'text-emerald-600' : 'text-rose-600'} font-semibold">${firstStatus}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${dateValue}</td>
+            `;
+            firstChecksTableBody.appendChild(row);
+        });
+    }
+
+    async function loadFirstChecks() {
+        if (!currentUser?.email) return;
+        try {
+            const tutorEmail = currentUser.email.toLowerCase();
+            const checksQuery = query(collection(db, "tutor_first_checks"), where("tutorEmail", "==", tutorEmail));
+            const checksSnapshot = await getDocs(checksQuery);
+            currentFirstChecks = [];
+            checksSnapshot.forEach((checkDoc) => {
+                currentFirstChecks.push({ id: checkDoc.id, ...checkDoc.data() });
+            });
+            currentFirstChecks.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            renderFirstChecks();
+        } catch (err) {
+            console.error("Error loading first checks:", err);
+            currentFirstChecks = [];
+            renderFirstChecks();
+        }
     }
 
     /** Logs the user out */
