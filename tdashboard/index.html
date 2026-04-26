@@ -305,11 +305,28 @@
                         </div>
 
                         <div class="mb-10">
-                            <h2 class="text-2xl font-bold text-slate-900" data-i18n="
-                                        <tr>00t
-                                    <thead e
-                                    <tbod=0
-                <!-- 2. Results Title -ass="t=/
+                            <h2 class="text-2xl font-bold text-slate-900" data-i18n="activityTitle">Class/Homework Activity</h2>
+                            <p id="first-checks-none-msg" class="text-slate-500 mt-2 hidden" data-i18n="activityNone">No student activity found yet.</p>
+                            <div class="overflow-x-auto mt-4">
+                                <table id="first-checks-table" class="hidden min-w-full divide-y divide-slate-200">
+                                    <thead class="bg-slate-50">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableStudent">Student</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableGroup">Group</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableLesson">Lesson</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableStatus">Status</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" data-i18n="tableDate">Last Activity</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="first-checks-table-body" class="bg-white divide-y divide-slate-200"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- 2. Results Title -->
+                        <div class="flex justify-between items-center mb-6 border-b pb-4">
+                            <h2 id="results-title" class="text-2xl font-bold text-slate-900" data-i18n="resultsTitleDefault">Select a test</h2>
+                        </div>
                         <!-- 3. Empty St--
                         <div id="results-empty-state" class="text-center py-16">
                             <svg class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"> <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 16.5h16.5M3.75 8.25h16.5M3.75 4.5h16.5" /> </svg>
@@ -465,15 +482,16 @@
         }
     };
 
-
+    function showNotification(message, isError = false) {
         const toast = document.getElementById('notification-toast');
         const msgEl = document.getElementById('notification-message');
-        if
+        if (msgEl) msgEl.textContent = message;
         toast.classList.toggle('error', isError);
         toast.classList.remove('hidden');
         requestAnimationFrame(() => { toast.classList.add('show'); });
         setTimeout(() => {
-
+            toast.classList.remove('show');
+            setTimeout(() => { toast.classList.add('hidden'); }, 300);
         }, 3000);
     }
 
@@ -614,7 +632,12 @@
         if (!currentFirstChecks.length) {
             firstChecksTable.classList.add('hidden');
             firstChecksNoneMsg.classList.remove('hidden');
-            return;gf)
+            return;
+        }
+        firstChecksTable.classList.remove('hidden');
+        firstChecksNoneMsg.classList.add('hidden');
+
+        currentFirstChecks.forEach((check) => {
             const row = document.createElement('tr');
             row.className = 'hover:bg-slate-50';
 
@@ -624,13 +647,21 @@
             const status = check.status || '-';
             const dateValue = (check.lastActivity || check.createdAt)?.toDate ? (check.lastActivity || check.createdAt).toDate().toLocaleString(lang) : 'N/A';
 
-            row.innerHTML = `= tpy-xt
+            row.innerHTML = `
+                <td class="px-4 py-3 text-sm font-medium text-slate-900">${studentName}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${groupName}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${lessonName}</td>
+                <td class="px-4 py-3 text-sm ${status === 'Completed' ? 'text-emerald-600' : 'text-amber-600'} font-semibold">${status}</td>
+                <td class="px-4 py-3 text-sm text-slate-600">${dateValue}</td>
+            `;
             firstChecksTableBody.appendChild(row);
         });
     }
 
     async function loadFirstChecks() {
-        if (!currentUser?.email) return;mail));
+        if (!currentUser?.email) return;
+        try {
+            const checksQuery = query(collection(db, "tutor_first_checks"), where("tutorEmail", "==", currentUser.email));
             const checksSnapshot = await getDocs(checksQuery);
             currentFirstChecks = [];
             checksSnapshot.forEach((checkDoc) => {
@@ -638,6 +669,8 @@
             });
             currentFirstChecks.sort((a, b) => ( (b.lastActivity || b.createdAt)?.seconds || 0) - ( (a.lastActivity || a.createdAt)?.seconds || 0));
             renderFirstChecks();
+        } catch (err) {
+            console.error("Error loading activity:", err);
             currentFirstChecks = [];
             renderFirstChecks();
         }
@@ -646,31 +679,41 @@
     /** Logs the user out */
     async function handleLogout(e) { e.preventDefault(); try { await signOut(auth); window.location.href = '/'; } catch (err) { console.error("Error logging out:", err); } }
 
-    /** Loads tests into the pill container as the 
-        groupSelectionContainer.innerHTML = ''; 
-       
-        // Add "Create New Test" pill first
+    /** Loads tests into the pill container as selectable buttons */
+    async function loadTests(preserveSelected = null) {
+        const T = strings[currentLang];
+        allTests = [];
+        groupSelectionContainer.innerHTML = '';
+
         const createPill = document.createElement('button');
-        creat
+        createPill.type = 'button';
+        createPill.className = 'thelo-btn-secondary';
+        createPill.innerHTML = `<i class="fa-solid fa-plus mr-2"></i>${T.navCreateTest || 'Create Test'}`;
         createPill.onclick = showCreateTestModal;
         groupSelectionContainer.appendChild(createPill);
+
         try {
+            const q = query(collection(db, "tests"), where("tutorId", "==", currentUser.uid));
             const querySnapshot = await getDocs(q);
+
             if (querySnapshot.empty) {
                 noGroupsMsg.classList.remove('hidden');
-                showEmptyState(); 
+                showEmptyState();
                 return;
             }
-           
-            noGroupsMsg.classList.add('hidden'); 
-           
+
+            noGroupsMsg.classList.add('hidden');
+
             const tests = [];
-            querySnapshot.forEach(doc => tests.push({ id: doc.id, ...doc.data() }));
+            querySnapshot.forEach((docSnap) => tests.push({ id: docSnap.id, ...docSnap.data() }));
             tests.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-            tests.forEach(test => {
-                allTests.push(test); 
-             
+            tests.forEach((test) => {
+                allTests.push(test);
+
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'thelo-btn-secondary';
                 item.dataset.testId = test.id;
                 item.textContent = `${test.testName} (${test.testCode})`;
                 item.classList.toggle('active', preserveSelected === test.id);
@@ -678,15 +721,16 @@
                 groupSelectionContainer.appendChild(item);
             });
 
-            if (preserveSelected && tests.some(t => t.id === preserveSelected)) {
-                 selectedTestId = preserveSelected; 
-                 handleTestSelect(preserveSelected);
+            if (preserveSelected && tests.some((t) => t.id === preserveSelected)) {
+                selectedTestId = preserveSelected;
+                handleTestSelect(preserveSelected);
             } else {
-                 selectedTestId = null; 
-                 if (!preserveSelected) showEmptyState(); 
+                selectedTestId = null;
+                if (!preserveSelected) showEmptyState();
             }
-
-        } catch (err) { console.error("Error loading tests:", err); }
+        } catch (err) {
+            console.error("Error loading tests:", err);
+        }
     }
 
     /** Generates numeric join code to match Android App input */
