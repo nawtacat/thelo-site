@@ -3,76 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Top-Down Village Raid</title>
+    <title>Wasteland Village Defense</title>
     <style>
         body {
-            margin: 0;
-            background-color: #1a1a1a;
-            color: #fff;
+            margin: 0; background-color: #1a1a1a; color: #fff;
             font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
-            user-select: none;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden; user-select: none;
         }
         #ui-container {
-            margin-bottom: 10px;
-            text-align: center;
-            width: 800px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            width: 800px; display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px; background: #2c2c2c; padding: 10px; border: 2px solid #555;
         }
         canvas {
-            border: 4px solid #444;
-            background-color: #5c8a5c; /* Grass color */
-            image-rendering: pixelated;
-            box-shadow: 0px 10px 20px rgba(0,0,0,0.5);
-            cursor: crosshair;
+            border: 4px solid #4a3c31; background-color: #c2b280; /* Desert Sand */
+            box-shadow: 0px 10px 20px rgba(0,0,0,0.8); cursor: crosshair;
         }
-        .menu-overlay {
-            position: absolute;
-            background: rgba(0,0,0,0.8);
-            padding: 20px;
-            border: 2px solid #fff;
-            text-align: center;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background: #e67e22;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        button:hover { background: #d35400; }
+        .health-bar { width: 150px; height: 15px; background: #555; border: 2px solid #222; }
+        .health-fill { height: 100%; background: #e67e22; width: 100%; transition: width 0.2s; }
+        .overlay { position: absolute; background: rgba(0,0,0,0.8); padding: 20px; border: 2px solid #c2b280; text-align: center; }
+        button { padding: 10px 20px; font-size: 16px; background: #b05a3e; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #8a3b22; }
     </style>
 </head>
 <body>
 
 <div id="ui-container">
     <div>
-        <h2 style="margin: 0;">Raid Defense</h2>
-        <div style="font-size: 14px; color: #aaa;">WASD to Move | Mouse to Aim & Click to Attack</div>
+        <h2 style="margin: 0; color: #e67e22;">THE SCRAPYARD</h2>
+        <div style="font-size: 12px; color: #aaa;">WASD: Move | Click: Attack | Defend the Saloon!</div>
     </div>
-    <div id="game-stats" style="font-size: 18px; text-align: right;">
-        Score: <span id="scoreVal">0</span> | Wave: <span id="waveVal">1</span><br>
-        Village Health: <span id="healthVal" style="color:#2ecc71;">100%</span>
+    <div style="text-align: right;">
+        Score: <span id="scoreVal">0</span> | Wave: <span id="waveVal">1</span>
+        <div style="font-size: 14px; margin-top: 5px;">Saloon HQ Health</div>
+        <div class="health-bar"><div id="hqHealth" class="health-fill"></div></div>
     </div>
 </div>
 
-<div id="menu" class="menu-overlay">
-    <h2>Choose Your Defender</h2>
-    <select id="roleSelect" style="padding: 5px; font-size: 16px; margin-bottom: 15px;">
-        <option value="Bulwark">Bulwark (Melee, High HP)</option>
-        <option value="Fletcher">Fletcher (Bow, Fast)</option>
-    </select>
-    <br>
-    <button onclick="startGame()">Start Raid</button>
+<div id="menu" class="overlay">
+    <h1 style="color: #e67e22; margin-top:0;">WASTELAND SURVIVAL</h1>
+    <p>The canyon is blocked. They are coming from the North.</p>
+    <select id="roleSelect" style="padding: 5px; font-size: 16px; margin-bottom: 15px; background: #333; color: white;">
+        <option value="Bulwark">Scrapper (Heavy Melee, 150 HP)</option>
+        <option value="Fletcher">Drifter (Ranged Rifle, 90 HP)</option>
+    </select><br>
+    <button onclick="startGame()">Start Defense</button>
 </div>
 
 <canvas id="gameCanvas" width="800" height="600"></canvas>
@@ -82,389 +57,303 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 // Game State
-let gameRunning = false;
-let score = 0;
-let wave = 1;
-let frameCount = 0;
-
-// Input Handling
-const keys = {};
-const mouse = { x: 0, y: 0, down: false };
+let gameRunning = false; let score = 0; let wave = 1; let frameCount = 0;
+const keys = {}; const mouse = { x: 0, y: 0, down: false };
 
 window.addEventListener("keydown", e => keys[e.code] = true);
 window.addEventListener("keyup", e => keys[e.code] = false);
-
 canvas.addEventListener("mousemove", e => {
     const rect = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - rect.left;
-    mouse.y = e.clientY - rect.top;
+    mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top;
 });
 canvas.addEventListener("mousedown", () => mouse.down = true);
 canvas.addEventListener("mouseup", () => mouse.down = false);
 
-// Global Arrays
-let entities = [];
-let projectiles = [];
-let particles = [];
-let enemies = [];
-
-// The Central Target (Town Bell)
-const townCenter = {
-    x: 400, y: 300, radius: 40,
-    hp: 500, maxHp: 500,
-    draw: function() {
-        // Shadow
-        drawShadow(this.x, this.y + 15, 60, 20);
-        // Base
-        ctx.fillStyle = "#7f8c8d";
-        ctx.fillRect(this.x - 30, this.y - 10, 60, 30);
-        // Bell
-        ctx.fillStyle = "#f1c40f";
-        ctx.beginPath();
-        ctx.arc(this.x, this.y - 15, 20, Math.PI, 0);
-        ctx.lineTo(this.x + 20, this.y + 5);
-        ctx.lineTo(this.x - 20, this.y + 5);
-        ctx.fill();
-        ctx.stroke();
+// --- MAP & ENVIRONMENT DATA ---
+const mapObjects = [];
+class MapStructure {
+    constructor(name, x, y, w, h, color, isDestructible, maxHp) {
+        this.name = name; this.x = x; this.y = y; this.w = w; this.h = h;
+        this.color = color; this.isDestructible = isDestructible; 
+        this.maxHp = maxHp; this.hp = maxHp;
     }
-};
+    draw() {
+        if (this.hp <= 0 && this.isDestructible) return; // Destroyed
+        
+        // Shadow
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(this.x, this.y + this.h - 5, this.w, 10);
+        
+        // Base structure
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.strokeStyle = "#222"; ctx.lineWidth = 2;
+        ctx.strokeRect(this.x, this.y, this.w, this.h);
 
-// Utility: Draw shadows for depth illusion
-function drawShadow(x, y, w, h) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
-    ctx.beginPath();
-    ctx.ellipse(x, y, w/2, h/2, 0, 0, Math.PI * 2);
-    ctx.fill();
+        // Details based on type
+        if (this.name.includes("Gate")) {
+            ctx.fillStyle = "#333";
+            ctx.fillRect(this.x, this.y + this.h/2 - 2, this.w, 4); // Iron bar
+            // Health bar for gates
+            if (this.hp < this.maxHp) {
+                ctx.fillStyle = "red"; ctx.fillRect(this.x, this.y - 10, this.w, 4);
+                ctx.fillStyle = "#2ecc71"; ctx.fillRect(this.x, this.y - 10, this.w * (this.hp/this.maxHp), 4);
+            }
+        }
+        if (this.name === "The Saloon (HQ)") {
+            ctx.fillStyle = "#5c4033"; // Dark wood roof
+            ctx.fillRect(this.x - 10, this.y - 20, this.w + 20, 40);
+            ctx.fillStyle = "#e67e22"; ctx.font = "14px Courier"; ctx.fillText("SALOON", this.x + 55, this.y + 10);
+        }
+    }
 }
+
+// Build the Canyon
+function initMap() {
+    mapObjects.length = 0;
+    // Walls
+    mapObjects.push(new MapStructure("Left Canyon Wall", 0, 150, 250, 40, "#5c5448", false, null));
+    mapObjects.push(new MapStructure("Center Rock Pile", 330, 150, 140, 40, "#5c5448", false, null));
+    mapObjects.push(new MapStructure("Right Canyon Wall", 550, 150, 250, 40, "#5c5448", false, null));
+    // Destructible Gates
+    mapObjects.push(new MapStructure("Gate 1", 250, 150, 80, 30, "#8a3b22", true, 300));
+    mapObjects.push(new MapStructure("Gate 2", 470, 150, 80, 30, "#8a3b22", true, 300));
+    // Buildings
+    mapObjects.push(new MapStructure("Rusty Car Wreck", 100, 250, 90, 50, "#7a4b3a", false, null));
+    mapObjects.push(new MapStructure("The Saloon (HQ)", 320, 400, 160, 100, "#8b5a2b", true, 1000));
+}
+
+// --- ENTITIES ---
+let player; let enemies = []; let projectiles = []; let particles = [];
 
 class Player {
     constructor(role) {
-        this.x = 400;
-        this.y = 380;
-        this.role = role;
-        this.radius = 16;
-        this.attackCooldown = 0;
-        
-        if (role === "Bulwark") {
-            this.speed = 3;
-            this.color = "#3498db";
-            this.maxCooldown = 30;
-        } else { // Fletcher
-            this.speed = 4.5;
-            this.color = "#e67e22";
-            this.maxCooldown = 15;
-        }
+        this.x = 400; this.y = 550; this.radius = 14;
+        this.role = role; this.attackCooldown = 0;
+        if (role === "Bulwark") { this.speed = 3; this.color = "#2c3e50"; this.maxCd = 25; } 
+        else { this.speed = 4.5; this.color = "#7d6608"; this.maxCd = 12; }
     }
-
     update() {
-        // 8-Way Movement
-        let dx = 0, dy = 0;
-        if (keys["KeyA"]) dx -= 1;
-        if (keys["KeyD"]) dx += 1;
-        if (keys["KeyW"]) dy -= 1;
-        if (keys["KeyS"]) dy += 1;
+        let dx = 0; let dy = 0;
+        if (keys["KeyA"]) dx -= 1; if (keys["KeyD"]) dx += 1;
+        if (keys["KeyW"]) dy -= 1; if (keys["KeyS"]) dy += 1;
+        if (dx !== 0 && dy !== 0) { let len = Math.sqrt(dx*dx + dy*dy); dx /= len; dy /= len; }
 
-        // Normalize diagonal movement speed
-        if (dx !== 0 && dy !== 0) {
-            let length = Math.sqrt(dx*dx + dy*dy);
-            dx /= length;
-            dy /= length;
-        }
-
+        // Move X and Check Collision
         this.x += dx * this.speed;
+        if (this.checkMapCollision()) this.x -= dx * this.speed;
+        
+        // Move Y and Check Collision
         this.y += dy * this.speed;
+        if (this.checkMapCollision()) this.y -= dy * this.speed;
 
-        // Map Boundaries
         this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
-
-        // Aim Angle
         this.angle = Math.atan2(mouse.y - this.y, mouse.x - this.x);
 
-        // Attack Logic
         if (this.attackCooldown > 0) this.attackCooldown--;
-        if (mouse.down && this.attackCooldown === 0) {
-            this.attack();
-            this.attackCooldown = this.maxCooldown;
+        if (mouse.down && this.attackCooldown === 0) { this.attack(); this.attackCooldown = this.maxCd; }
+    }
+    
+    checkMapCollision() {
+        // Simple AABB Collision against solid map objects
+        for (let obj of mapObjects) {
+            if (obj.isDestructible && obj.hp <= 0) continue;
+            let closestX = Math.max(obj.x, Math.min(this.x, obj.x + obj.w));
+            let closestY = Math.max(obj.y, Math.min(this.y, obj.y + obj.h));
+            let distanceX = this.x - closestX;
+            let distanceY = this.y - closestY;
+            if ((distanceX * distanceX) + (distanceY * distanceY) < (this.radius * this.radius)) return true;
         }
+        return false;
     }
 
     attack() {
         if (this.role === "Bulwark") {
-            // Melee Sweep
-            let reach = 45;
-            let hitAngle = Math.PI / 2; // 90 degree arc
-            
-            // Visual sweep effect
-            spawnParticles(this.x + Math.cos(this.angle)*reach, this.y + Math.sin(this.angle)*reach, "#ecf0f1", 10, this.angle);
-
+            let reach = 40; let hitAngle = Math.PI / 1.5;
+            spawnParticles(this.x + Math.cos(this.angle)*reach, this.y + Math.sin(this.angle)*reach, "#bdc3c7", 10, this.angle);
             enemies.forEach(e => {
                 let dist = Math.hypot(e.x - this.x, e.y - this.y);
-                let angleToEnemy = Math.atan2(e.y - this.y, e.x - this.x);
-                let angleDiff = Math.abs(angleToEnemy - this.angle);
-                // Normalize angle diff
+                let angleDiff = Math.abs(Math.atan2(e.y - this.y, e.x - this.x) - this.angle);
                 if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-
                 if (dist < reach + e.radius && angleDiff < hitAngle/2) {
-                    e.hp -= 40;
-                    // Knockback
-                    e.x += Math.cos(this.angle) * 20;
-                    e.y += Math.sin(this.angle) * 20;
-                    spawnParticles(e.x, e.y, "#e74c3c", 5);
+                    e.hp -= 50; e.x += Math.cos(this.angle)*15; e.y += Math.sin(this.angle)*15;
+                    spawnParticles(e.x, e.y, "#a93226", 5);
                 }
             });
         } else {
-            // Ranged Shot
             projectiles.push({
-                x: this.x + Math.cos(this.angle) * 20,
-                y: this.y + Math.sin(this.angle) * 20,
-                vx: Math.cos(this.angle) * 12,
-                vy: Math.sin(this.angle) * 12,
-                radius: 4,
-                life: 60
+                x: this.x + Math.cos(this.angle)*20, y: this.y + Math.sin(this.angle)*20,
+                vx: Math.cos(this.angle)*14, vy: Math.sin(this.angle)*14, radius: 3, life: 60
             });
         }
     }
 
     draw() {
-        drawShadow(this.x, this.y + 16, 24, 10);
-
-        ctx.save();
-        ctx.translate(this.x, this.y);
-
-        // Body
-        ctx.fillStyle = this.color;
-        ctx.strokeStyle = "#2c3e50";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(-12, -12, 24, 24, 4);
-        ctx.fill();
-        ctx.stroke();
-
-        // Head/Helmet
-        ctx.fillStyle = "#ecf0f1";
-        ctx.fillRect(-8, -16, 16, 12);
-        ctx.strokeRect(-8, -16, 16, 12);
-
-        // Weapon/Aim
+        ctx.save(); ctx.translate(this.x, this.y);
+        ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(0, 10, 16, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill(); ctx.stroke();
         ctx.rotate(this.angle);
-        if (this.role === "Bulwark") {
-            ctx.fillStyle = "#7f8c8d"; // Hammer handle
-            ctx.fillRect(10, -3, 20, 6);
-            ctx.fillStyle = "#95a5a6"; // Hammer head
-            ctx.fillRect(25, -10, 12, 20);
-            ctx.strokeRect(25, -10, 12, 20);
-        } else {
-            ctx.strokeStyle = "#8e44ad"; // Bow
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(15, 0, 12, -Math.PI/2, Math.PI/2);
-            ctx.stroke();
-        }
-
+        ctx.fillStyle = "#7f8c8d"; ctx.fillRect(5, -4, 20, 8); // Weapon
         ctx.restore();
     }
 }
 
 class Enemy {
     constructor() {
-        // Spawn randomly outside map edges
-        let edge = Math.floor(Math.random() * 4);
-        if (edge === 0) { this.x = Math.random() * 800; this.y = -50; } // Top
-        if (edge === 1) { this.x = 850; this.y = Math.random() * 600; } // Right
-        if (edge === 2) { this.x = Math.random() * 800; this.y = 650; } // Bottom
-        if (edge === 3) { this.x = -50; this.y = Math.random() * 600; } // Left
-        
-        this.radius = 14;
-        this.hp = 30 + (wave * 10);
-        this.speed = 1.2 + Math.random();
-        this.attackTimer = 0;
+        this.x = Math.random() * 700 + 50; this.y = -30; // Spawn up North
+        this.radius = 12; this.hp = 40 + (wave * 10); this.speed = 0.8 + Math.random()*0.8;
+        this.color = "#1e8449"; // Mutated Raider green
     }
-
     update() {
-        let distToCenter = Math.hypot(townCenter.x - this.x, townCenter.y - this.y);
+        // Pathfind towards the Saloon (Target = 400, 450)
+        let targetX = 400; let targetY = 450;
+        let angle = Math.atan2(targetY - this.y, targetX - this.x);
         
-        if (distToCenter > townCenter.radius + this.radius) {
-            // Move toward center
-            let angle = Math.atan2(townCenter.y - this.y, townCenter.x - this.x);
-            this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * this.speed;
-            this.isMoving = true;
-        } else {
-            // Attack Town Center
-            this.isMoving = false;
-            this.attackTimer++;
-            if (this.attackTimer > 60) {
-                townCenter.hp -= 5;
-                spawnParticles(townCenter.x, townCenter.y, "#f1c40f", 3);
-                this.attackTimer = 0;
+        let dx = Math.cos(angle) * this.speed;
+        let dy = Math.sin(angle) * this.speed;
+
+        this.x += dx;
+        let hitObj = this.checkMapCollision();
+        if (hitObj) {
+            this.x -= dx;
+            // If the object is destructible (Gate or Saloon), attack it!
+            if (hitObj.isDestructible) {
+                if (frameCount % 30 === 0) { 
+                    hitObj.hp -= 5; 
+                    spawnParticles(hitObj.x + hitObj.w/2, hitObj.y, "#f39c12", 2);
+                }
+            } else {
+                // Slide along unbreakable walls
+                this.x += (this.x < 400 ? 1 : -1) * this.speed; 
             }
         }
+
+        this.y += dy;
+        hitObj = this.checkMapCollision();
+        if (hitObj) this.y -= dy;
+    }
+
+    checkMapCollision() {
+        for (let obj of mapObjects) {
+            if (obj.isDestructible && obj.hp <= 0) continue;
+            let closestX = Math.max(obj.x, Math.min(this.x, obj.x + obj.w));
+            let closestY = Math.max(obj.y, Math.min(this.y, obj.y + obj.h));
+            let distX = this.x - closestX; let distY = this.y - closestY;
+            if ((distX * distX) + (distY * distY) < (this.radius * this.radius)) return obj;
+        }
+        return null;
     }
 
     draw() {
-        drawShadow(this.x, this.y + 14, 20, 8);
-        
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        
-        // Bobbing animation if moving
-        let yOffset = this.isMoving ? Math.sin(frameCount * 0.2) * 3 : 0;
-        
-        // Orc/Goblin Body
-        ctx.fillStyle = "#27ae60";
-        ctx.strokeStyle = "#145a32";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, yOffset, this.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        // Eyes pointing at center
-        let angleToCenter = Math.atan2(townCenter.y - this.y, townCenter.x - this.x);
-        let eyeOffsetX = Math.cos(angleToCenter) * 6;
-        let eyeOffsetY = Math.sin(angleToCenter) * 6;
-        
-        ctx.fillStyle = "#c0392b"; // Red eyes
-        ctx.beginPath();
-        ctx.arc(eyeOffsetX - 4, yOffset + eyeOffsetY - 2, 3, 0, Math.PI*2);
-        ctx.arc(eyeOffsetX + 4, yOffset + eyeOffsetY - 2, 3, 0, Math.PI*2);
-        ctx.fill();
-
+        ctx.save(); ctx.translate(this.x, this.y);
+        ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(0, 10, 12, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        let angleToSaloon = Math.atan2(450 - this.y, 400 - this.x);
+        ctx.fillStyle = "#c0392b";
+        ctx.fillRect(Math.cos(angleToSaloon)*6 - 2, Math.sin(angleToSaloon)*6 - 2, 4, 4);
         ctx.restore();
     }
 }
 
 function spawnParticles(x, y, color, count, directionAngle = null) {
-    for (let i = 0; i < count; i++) {
-        let angle = directionAngle !== null ? directionAngle + (Math.random() - 0.5) : Math.random() * Math.PI * 2;
-        let speed = Math.random() * 4 + 1;
-        particles.push({
-            x: x, y: y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            life: 20 + Math.random() * 10,
-            color: color
-        });
+    for (let i=0; i<count; i++) {
+        let angle = directionAngle !== null ? directionAngle + (Math.random()-0.5) : Math.random()*Math.PI*2;
+        let speed = Math.random()*3 + 1;
+        particles.push({ x: x, y: y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, life: 15+Math.random()*10, color: color });
     }
-}
-
-function updateUI() {
-    document.getElementById("scoreVal").innerText = score;
-    let hpPercent = Math.max(0, Math.floor((townCenter.hp / townCenter.maxHp) * 100));
-    const hpSpan = document.getElementById("healthVal");
-    hpSpan.innerText = hpPercent + "%";
-    hpSpan.style.color = hpPercent > 50 ? "#2ecc71" : (hpPercent > 20 ? "#f1c40f" : "#e74c3c");
 }
 
 function triggerWave() {
-    wave++;
-    document.getElementById("waveVal").innerText = wave;
-    let spawnCount = 5 + (wave * 3);
-    for (let i = 0; i < spawnCount; i++) {
-        setTimeout(() => { if(gameRunning) enemies.push(new Enemy()); }, i * 800);
+    wave++; document.getElementById("waveVal").innerText = wave;
+    let spawnCount = 8 + (wave * 4);
+    for (let i=0; i<spawnCount; i++) {
+        setTimeout(() => { if(gameRunning) enemies.push(new Enemy()); }, i * 600);
     }
 }
 
-let player;
-
 function startGame() {
     document.getElementById("menu").style.display = "none";
-    const role = document.getElementById("roleSelect").value;
-    player = new Player(role);
-    
-    enemies = [];
-    projectiles = [];
-    particles = [];
-    score = 0; wave = 1; townCenter.hp = townCenter.maxHp;
-    
-    for(let i = 0; i < 5; i++) enemies.push(new Enemy());
-    
-    gameRunning = true;
-    requestAnimationFrame(gameLoop);
+    player = new Player(document.getElementById("roleSelect").value);
+    enemies = []; projectiles = []; particles = []; score = 0; wave = 1;
+    initMap();
+    for(let i=0; i<8; i++) enemies.push(new Enemy());
+    gameRunning = true; requestAnimationFrame(gameLoop);
 }
 
 function gameLoop() {
     if (!gameRunning) return;
     frameCount++;
 
-    // Clear Screen (Draw Grass & Grid)
-    ctx.fillStyle = "#5c8a5c";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "rgba(0,0,0,0.1)";
-    for(let i=0; i<canvas.width; i+=40) {
-        ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke();
-    }
-    for(let i=0; i<canvas.height; i+=40) {
-        ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke();
-    }
+    // Background (Desert Dirt)
+    ctx.fillStyle = "#c2b280"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Draw some random desert grit/rocks procedurally
+    ctx.fillStyle = "#a89a6c";
+    for(let i=0; i<20; i++) ctx.fillRect((i*97)%800, (i*131)%600, 3, 3);
 
     player.update();
 
-    // Update Projectiles
+    // Projectiles
     for (let i = projectiles.length - 1; i >= 0; i--) {
-        let p = projectiles[i];
-        p.x += p.vx; p.y += p.vy; p.life--;
-        
+        let p = projectiles[i]; p.x += p.vx; p.y += p.vy; p.life--;
         let hit = false;
+        // Hit Enemies
         for (let j = enemies.length - 1; j >= 0; j--) {
             if (Math.hypot(p.x - enemies[j].x, p.y - enemies[j].y) < enemies[j].radius + p.radius) {
-                enemies[j].hp -= 25;
-                spawnParticles(p.x, p.y, "#f39c12", 4);
-                hit = true; break;
+                enemies[j].hp -= 35; spawnParticles(p.x, p.y, "#f39c12", 4); hit = true; break;
+            }
+        }
+        // Hit Walls
+        for (let obj of mapObjects) {
+            if (obj.isDestructible && obj.hp <= 0) continue;
+            if (p.x > obj.x && p.x < obj.x+obj.w && p.y > obj.y && p.y < obj.y+obj.h) {
+                spawnParticles(p.x, p.y, "#bdc3c7", 3); hit = true; break;
             }
         }
         if (hit || p.life <= 0) projectiles.splice(i, 1);
     }
 
-    // Update Enemies
+    // Enemies
     for (let i = enemies.length - 1; i >= 0; i--) {
         enemies[i].update();
         if (enemies[i].hp <= 0) {
-            spawnParticles(enemies[i].x, enemies[i].y, "#27ae60", 8);
-            enemies.splice(i, 1);
-            score += 50;
+            spawnParticles(enemies[i].x, enemies[i].y, "#1e8449", 8);
+            enemies.splice(i, 1); score += 50; document.getElementById("scoreVal").innerText = score;
+        }
+    }
+    if (enemies.length === 0) triggerWave();
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let pt = particles[i]; pt.x += pt.vx; pt.y += pt.vy; pt.life--;
+        if (pt.life <= 0) particles.splice(i, 1);
+    }
+
+    // --- RENDERING (Y-Sorting) ---
+    // Draw base map objects first, then dynamic entities sorted by Y
+    mapObjects.forEach(obj => obj.draw());
+    
+    let entities = [player, ...enemies];
+    entities.sort((a, b) => a.y - b.y);
+    entities.forEach(ent => ent.draw());
+
+    projectiles.forEach(p => { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill(); });
+    particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.fillRect(pt.x, pt.y, 3, 3); });
+
+    // UI Updates
+    let saloon = mapObjects.find(o => o.name === "The Saloon (HQ)");
+    if (saloon) {
+        let hpPercent = Math.max(0, (saloon.hp / saloon.maxHp) * 100);
+        document.getElementById("hqHealth").style.width = hpPercent + "%";
+        if (saloon.hp <= 0) {
+            gameRunning = false;
+            document.getElementById("menu").style.display = "block";
+            document.querySelector("#menu h1").innerText = "THE SALOON FELL";
+            document.querySelector("#menu p").innerText = "Final Score: " + score;
         }
     }
 
-    if (enemies.length === 0) triggerWave();
-
-    // Update Particles
-    for (let i = particles.length - 1; i >= 0; i--) {
-        particles[i].x += particles[i].vx;
-        particles[i].y += particles[i].vy;
-        particles[i].life--;
-        if (particles[i].life <= 0) particles.splice(i, 1);
-    }
-
-    // --- Z-SORTING AND RENDERING ---
-    // Combine all drawable objects into one array, sort by Y coordinate
-    let renderList = [player, ...enemies, townCenter];
-    renderList.sort((a, b) => a.y - b.y);
-
-    // Draw sorted entities
-    renderList.forEach(entity => entity.draw());
-
-    // Draw projectiles & particles on top
-    ctx.fillStyle = "#fff";
-    projectiles.forEach(p => {
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
-    });
-    particles.forEach(pt => {
-        ctx.fillStyle = pt.color;
-        ctx.fillRect(pt.x, pt.y, 3, 3);
-    });
-
-    updateUI();
-
-    // Game Over Check
-    if (townCenter.hp <= 0) {
-        gameRunning = false;
-        document.getElementById("menu").style.display = "block";
-        document.querySelector("#menu h2").innerText = "Village Destroyed!\nFinal Score: " + score;
-    } else {
-        requestAnimationFrame(gameLoop);
-    }
+    if (gameRunning) requestAnimationFrame(gameLoop);
 }
 </script>
 </body>
