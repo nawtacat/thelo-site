@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Village Raid Prototype</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #ui-container {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        canvas {
+            border: 4px solid #444;
+            background-color: #2c3e50;
+            image-rendering: pixelated;
+            box-shadow: 0px 10px 20px rgba(0,0,0,0.5);
+        }
+        .controls-hint {
+            margin-top: 10px;
+            color: #888;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui-container">
+    <h1 style="margin: 0 0 5px 0;">VILLAGE RAID</h1>
+    <div id="menu">
+        <label for="roleSelect">Choose Your Role: </label>
+        <select id="roleSelect">
+            <option value="Bulwark">Bulwark (High HP, Heavy Hammer)</option>
+            <option value="Fletcher">Fletcher (Double Jump, Fast Bow)</option>
+        </select>
+        <button onclick="startGame()">Start Defense</button>
+    </div>
+    <div id="game-stats" style="display: none; font-size: 18px;">
+        Score: <span id="scoreVal">0</span> | Wave: <span id="waveVal">1</span> | Enemies Left: <span id="enemyVal">0</span>
+    </div>
+</div>
+
+<canvas id="gameCanvas" width="800" height="450"></canvas>
+
+<div class="controls-hint">
+    <strong>A / D</strong>: Move | <strong>W</strong>: Jump | <strong>SPACE</strong>: Attack / Shoot | <strong>R</strong>: Repair Gate
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// Game States
+let gameRunning = false;
+let score = 0;
+let wave = 1;
+
+// Physics Global
+const GRAVITY = 0.5;
+
+// Level Setup (Platforms and Boundaries)
+const platforms = [
+    { x: 0, y: 400, width: 800, height: 50 },     // Ground
+    { x: 100, y: 300, width: 150, height: 15 },   // Left Plat
+    { x: 550, y: 300, width: 150, height: 15 },   // Right Plat
+    { x: 300, y: 220, width: 200, height: 15 }    // Center High Plat
+];
+
+// The Town Objective (The Gate)
+const townGate = {
+    x: 375,
+    y: 320,
+    width: 50,
+    height: 80,
+    hp: 100,
+    maxHp: 100
+};
+
+// Entities
+let player;
+let enemies = [];
+let projectiles = [];
+let particles = [];
+
+// Input State
+const keys = {};
+
+// Event Listeners
+window.addEventListener("keydown", e => keys[e.code] = true);
+window.addEventListener("keyup", e => keys[e.code] = false);
+
+class Player {
+    constructor(role) {
+        this.x = 400;
+        this.y = 200;
+        this.width = 24;
+        this.height = 32;
+        this.vx = 0;
+        this.vy = 0;
+        this.role = role;
+        this.direction = 1; // 1 = right, -1 = left
+        this.onGround = false;
+        this.attackCooldown = 0;
+        this.jumpsLeft = 1;
+        this.jumpKeyReleased = true;
+
+        // Stats based on role
+        if (role === "Bulwark") {
+            this.maxHp = 150;
+            this.hp = 150;
+            this.speed = 4;
+            this.color = "#3498db"; // Blue
+        } else { // Fletcher
+            this.maxHp = 90;
+            this.hp = 90;
+            this.speed = 5.5;
+            this.color = "#e67e22"; // Orange
+        }
+    }
+
+    update() {
+        // Movement Input
+        if (keys["KeyA"]) { this.vx = -this.speed; this.direction = -1; }
+        else if (keys["KeyD"]) { this.vx = this.speed; this.direction = 1; }
+        else { this.vx = 0; }
+
+        // Jump mechanics (with double jump for Fletcher)
+        if (keys["KeyW"]) {
+            if (this.onGround && this.jumpKeyReleased) {
+                this.vy = -10;
+                this.onGround = false;
+                this.jumpKeyReleased = false;
+                if (this.role === "Fletcher") this.jumpsLeft = 1;
+            } else if (!this.onGround && this.role === "Fletcher" && this.jumpsLeft > 0 && this.jumpKeyReleased) {
+                this.vy = -8;
+                this.jumpsLeft--;
+                this.jumpKeyReleased = false;
+                spawnParticles(this.x + this.width/2, this.y + this.height, "#fff", 5);
+            }
+        }
+        if (!keys["KeyW"]) {
+            this.jumpKeyReleased = true;
+        }
+
+        // Apply Gravity
+        this.vy += GRAVITY;
+
+        // Position Updates & Separated Platform Collisions
+        this.x += this.vx;
+        this.handleXCollisions();
+
+        this.y += this.vy;
+        this.handleYCollisions();
+
+        // Combat Mechanics
+        if (this.attackCooldown > 0) this.attackCooldown--;
+
+        if (keys["Space"] && this.attackCooldown === 0) {
+            this.attack();
+        }
+
+        // Repair Gate mechanic
+        if (keys["KeyR"]) {
+            let distToGate = Math.abs((this.x + this.width/2) - (townGate.x + townGate.width/2));
+            if (distToGate < 80 && townGate.hp < townGate.maxHp) {
+                townGate.hp = Math.min(townGate.maxHp, townGate.hp + 0.3);
+                if (Math.random() < 0.1) spawnParticles(townGate.x + townGate.width/2, townGate.y + townGate.height/2, "#2ecc71", 2);
+            }
+        }
+    }
+
+    handleXCollisions() {
+        platforms.forEach(p => {
+            if (this.collidesWith(p)) {
+                if (this.vx > 0) this.x = p.x - this.width;
+                if (this.vx < 0) this.x = p.x + p.width;
+            }
+        });
+    }
+
+    handleYCollisions() {
+        this.onGround = false;
+        platforms.forEach(p => {
+            if (this.collidesWith(p)) {
+                if (this.vy > 0) { // Landing
+                    this.y = p.y - this.height;
+                    this.vy = 0;
+                    this.onGround = true;
+                }
+                else if (this.vy < 0) { // Hitting ceiling
+                    this.y = p.y + p.height;
+                    this.vy = 0;
+                }
+            }
+        });
+    }
+
+    collidesWith(rect) {
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+
+    attack() {
+        if (this.role === "Bulwark") {
+            this.attackCooldown = 25;
+            // Melee Swing hit area
+            let hitBox = {
+                x: this.direction === 1 ? this.x + this.width : this.x - 40,
+                y: this.y - 10,
+                width: 40,
+                height: this.height + 20
+            };
+            
+            // Visual swing representation via momentary particles
+            spawnParticles(hitBox.x + 20, hitBox.y + 20, "#e74c3c", 8);
+
+            enemies.forEach(e => {
+                if (checkCollision(hitBox, e)) {
+                    e.hp -= 25;
+                    e.vx = this.direction * 8; // Heavy knockback
+                    spawnParticles(e.x + e.width/2, e.y + e.height/2, "#c0392b", 5);
+                }
+            });
+        } else { // Fletcher
+            this.attackCooldown = 12; // Faster projectile attack
+            projectiles.push({
+                x: this.direction === 1 ? this.x + this.width : this.x,
+                y: this.y + this.height/2 - 3,
+                width: 8,
+                height: 4,
+                vx: this.direction * 10,
+                vy: 0
+            });
+        }
+    }
+
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        
+        // Simple eyes to indicate direction
+        ctx.fillStyle = "#fff";
+        let eyeX = this.direction === 1 ? this.x + this.width - 8 : this.x + 2;
+        ctx.fillRect(eyeX, this.y + 6, 6, 6);
+    }
+}
+
+class Enemy {
+    constructor(side) {
+        this.width = 20;
+        this.height = 30;
+        // Spawn either on the far left or far right edge
+        this.x = side === 0 ? -20 : 820;
+        this.y = 370; // ground level
+        this.vx = 0;
+        this.vy = 0;
+        this.hp = 30 + (wave * 5);
+        this.speed = 1 + Math.random() * 0.8;
+        this.color = "#95a5a6"; // Grey raider appearance
+        this.attackTimer = 0;
+    }
+
+    update() {
+        // Simple AI: Head toward the central Town Gate
+        let targetX = townGate.x + townGate.width/2;
+        let currentX = this.x + this.width/2;
+
+        if (Math.abs(currentX - targetX) > 30) {
+            this.vx = currentX < targetX ? this.speed : -this.speed;
+        } else {
+            this.vx = 0;
+            // Attack Gate
+            this.attackTimer++;
+            if (this.attackTimer % 40 === 0) {
+                townGate.hp -= 4;
+                spawnParticles(townGate.x + townGate.width/2, townGate.y + townGate.height/2, "#f1c40f", 4);
+            }
+        }
+
+        // Apply physics
+        this.vy += GRAVITY;
+        this.x += this.vx;
+        
+        // Horizontal friction/knockback decay
+        this.vx *= 0.85;
+
+        this.y += this.vy;
+        
+        // Floor constraint handling
+        if (this.y > 400 - this.height) {
+            this.y = 400 - this.height;
+            this.vy = 0;
+        }
+    }
+
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        
+        // Red angry eyes
+        ctx.fillStyle = "#e74c3c";
+        ctx.fillRect(this.vx >= 0 ? this.x + this.width - 6 : this.x + 2, this.y + 6, 4, 4);
+    }
+}
+
+// Utility Collision Check
+function checkCollision(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.width > rect2.y;
+}
+
+function spawnParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            size: Math.random() * 3 + 1,
+            color: color,
+            life: 20 + Math.random() * 10
+        });
+    }
+}
+
+function triggerNextWave() {
+    wave++;
+    let spawnCount = 3 + wave * 2;
+    document.getElementById("waveVal").innerText = wave;
+    
+    for (let i = 0; i < spawnCount; i++) {
+        setTimeout(() => {
+            if (gameRunning) {
+                let side = Math.random() > 0.5 ? 0 : 1;
+                enemies.push(new Enemy(side));
+            }
+        }, i * 1200); // Stagger enemy arrivals
+    }
+}
+
+function startGame() {
+    const role = document.getElementById("roleSelect").value;
+    player = new Player(role);
+    enemies = [];
+    projectiles = [];
+    particles = [];
+    score = 0;
+    wave = 1;
+    townGate.hp = townGate.maxHp;
+    
+    document.getElementById("menu").style.display = "none";
+    document.getElementById("game-stats").style.display = "block";
+    
+    // Spawn Initial Wave
+    let initialSpawns = 4;
+    for (let i = 0; i < initialSpawns; i++) {
+        enemies.push(new Enemy(Math.random() > 0.5 ? 0 : 1));
+    }
+
+    gameRunning = true;
+    requestAnimationFrame(gameLoop);
+}
+
+function gameLoop() {
+    if (!gameRunning) return;
+
+    // 1. UPDATE LOGIC
+    player.update();
+
+    // Update Projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        let p = projectiles[i];
+        p.x += p.vx;
+        
+        // Hit detection on enemies
+        let hit = false;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+            if (checkCollision(p, enemies[j])) {
+                enemies[j].hp -= 15;
+                spawnParticles(p.x, p.y, "#e67e22", 3);
+                hit = true;
+                break;
+            }
+        }
+        
+        // Remove offscreen or spent projectiles
+        if (hit || p.x < 0 || p.x > canvas.width) {
+            projectiles.splice(i, 1);
+        }
+    }
+
+    // Update Enemies
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        e.update();
+
+        if (e.hp <= 0) {
+            spawnParticles(e.x + e.width/2, e.y + e.height/2, "#7f8c8d", 10);
+            enemies.splice(i, 1);
+            score += 100 * wave;
+            document.getElementById("scoreVal").innerText = score;
+        }
+    }
+
+    // Update Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let pt = particles[i];
+        pt.x += pt.vx;
+        pt.y += pt.vy;
+        pt.life--;
+        if (pt.life <= 0) particles.splice(i, 1);
+    }
+
+    // Check Auto-Wave Progression
+    document.getElementById("enemyVal").innerText = enemies.length;
+    if (enemies.length === 0) {
+        triggerNextWave();
+    }
+
+    // Loss Conditions
+    if (townGate.hp <= 0) {
+        gameRunning = false;
+        alert(`The Village has Fallen! Final Score: ${score}`);
+        document.getElementById("menu").style.display = "block";
+        document.getElementById("game-stats").style.display = "none";
+    }
+
+    // 2. RENDERING LOGIC
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Platforms
+    ctx.fillStyle = "#7f8c8d";
+    platforms.forEach(p => ctx.fillRect(p.x, p.y, p.width, p.height));
+
+    // Draw Town Gate Centerpiece
+    ctx.fillStyle = "#8e44ad"; // Purple gate structure
+    ctx.fillRect(townGate.x, townGate.y, townGate.width, townGate.height);
+    
+    // Gate Health Bar UI
+    ctx.fillStyle = "#c0392b";
+    ctx.fillRect(townGate.x - 10, townGate.y - 15, townGate.width + 20, 6);
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillRect(townGate.x - 10, townGate.y - 15, (townGate.width + 20) * (townGate.hp / townGate.maxHp), 6);
+
+    // Draw Entities
+    player.draw();
+    enemies.forEach(e => e.draw());
+    
+    ctx.fillStyle = "#f1c40f"; // Projectiles color
+    projectiles.forEach(p => ctx.fillRect(p.x, p.y, p.width, p.height));
+
+    // Draw Particles
+    particles.forEach(pt => {
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.x, pt.y, pt.size, pt.size);
+    });
+
+    requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>
