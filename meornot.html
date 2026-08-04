@@ -100,9 +100,10 @@
             background: #000000;
             color: #00FF00;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 16px;
+            font-size: 18px;
             border: 2px inset #FFFFFF;
             padding: 5px;
+            text-align: center;
         }
 
         .scoreboard {
@@ -243,10 +244,10 @@
 <body>
 
     <div class="marquee-container">
-        <marquee scrollamount="12">😜 WELCOME TO CAMFOOLERY! 😜 FOOL YOUR FRIENDS WITH STILL PHOTOS & MOTIONLESS REAL-TIME VIDEO! 💬 CHAT IN REALTIME BELOW! 🤪</marquee>
+        <marquee scrollamount="12">WELCOME TO CAMFOOLERY! FOOL YOUR FRIENDS WITH STILL PHOTOS & MOTIONLESS REAL-TIME VIDEO! CHAT IN REALTIME BELOW!</marquee>
     </div>
 
-    <h1>🤪 CAMFOOLERY 🤪</h1>
+    <h1>CAMFOOLERY</h1>
 
     <!-- SETUP AREA -->
     <div id="setup-area" class="window">
@@ -257,10 +258,10 @@
         <div id="setup-error" class="banner-err"></div>
 
         <p>1. Allow Camera Access!</p>
-        <p>Your Peer ID: <b id="my-peer-id" class="blink" style="color:#000; background:#00FF00; padding:2px 6px;">GENERATING...</b></p>
+        <p>Your 6-Digit Room Code: <b id="my-peer-id" class="blink" style="color:#000; background:#00FF00; padding:2px 8px; font-size: 22px; font-family: 'Courier New', Courier, monospace;">GENERATING...</b></p>
         <hr color="#000" width="80%">
         <p>2. Connect to your opponent:</p>
-        <input type="text" id="target-id" placeholder="Paste Opponent's ID">
+        <input type="text" id="target-id" placeholder="123456" maxlength="6" style="width: 160px; letter-spacing: 3px;">
         <br>
         <button onclick="connectToFriend()">CONNECT & START</button>
     </div>
@@ -293,7 +294,7 @@
                 <div class="media-box">
                     <video id="remote-video" autoplay playsinline></video>
                     <img id="remote-image" style="display:none;" />
-                    <div id="remote-hidden">📺 TIME'S UP!<br>GUESS!</div>
+                    <div id="remote-hidden">TIME'S UP!<br>GUESS!</div>
                 </div>
             </div>
         </div>
@@ -310,16 +311,16 @@
                     <option value="10">10 Secs (High Risk: +100 Pts)</option>
                 </select>
             </p>
-            <button id="btn-send-image" class="btn-primary" onclick="startChallenge('image')">📸 SEND STILL IMAGE</button>
-            <button id="btn-send-video" class="btn-primary" onclick="startChallenge('video')">🎥 SEND LIVE VIDEO (DON'T MOVE!)</button>
+            <button id="btn-send-image" class="btn-primary" onclick="startChallenge('image')">SEND STILL IMAGE</button>
+            <button id="btn-send-video" class="btn-primary" onclick="startChallenge('video')">SEND LIVE VIDEO (DON'T MOVE!)</button>
         </div>
 
         <!-- GUESSER CONTROLS -->
         <div id="guesser-controls" class="window" style="margin-top: 15px;">
             <div class="titlebar">GUESSER MENU</div>
             <p>What were you just looking at?!</p>
-            <button onclick="submitGuess('image')" style="font-size:20px;">📸 IT WAS AN IMAGE!</button>
-            <button onclick="submitGuess('video')" style="font-size:20px;">🎥 IT WAS A VIDEO!</button>
+            <button onclick="submitGuess('image')" style="font-size:20px;">IT WAS AN IMAGE!</button>
+            <button onclick="submitGuess('video')" style="font-size:20px;">IT WAS A VIDEO!</button>
         </div>
 
         <!-- REALTIME CHAT WINDOW -->
@@ -331,8 +332,8 @@
                 <div class="chat-line chat-sys">[SYSTEM]: Connected to CyberChat room! Type below to trash-talk your opponent...</div>
             </div>
             <div style="display: flex; gap: 5px;">
-                <input type="text" id="chat-input" placeholder="Type a message..." style="flex-grow: 1;" onkeypress="if(event.key === 'Enter') sendChatMessage()">
-                <button onclick="sendChatMessage()" style="margin:0;">SEND 💬</button>
+                <input type="text" id="chat-input" placeholder="Type a message..." style="flex-grow: 1; text-align: left;" onkeypress="if(event.key === 'Enter') sendChatMessage()">
+                <button onclick="sendChatMessage()" style="margin:0;">SEND</button>
             </div>
         </div>
     </div>
@@ -345,7 +346,7 @@
             </div>
             <h2 id="modal-headline" style="font-size: 30px;">RESULT</h2>
             <p id="modal-text" style="margin: 15px 0; font-size: 18px; line-height: 1.4;"></p>
-            <button class="btn-primary" style="font-size: 20px; padding: 10px 20px;" onclick="closeModalNextRound()">NEXT ROUND ➡️</button>
+            <button class="btn-primary" style="font-size: 20px; padding: 10px 20px;" onclick="closeModalNextRound()">NEXT ROUND</button>
         </div>
     </div>
 
@@ -367,45 +368,60 @@
         let currentDuration = 0;
         let countdownInterval;
 
-        // Synchronization State: Handshake to ensure opponent dismissed modal
+        // Synchronization State
         let myReady = false;
         let theirReady = false;
 
-        // Initialize PeerJS and WebCam
+        // Generate 6-Digit Code
+        function generate6DigitCode() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
+
+        // Initialize WebCam and PeerJS
         async function init() {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                 document.getElementById('local-video').srcObject = localStream;
                 
-                peer = new Peer();
-                
-                peer.on('open', id => {
-                    document.getElementById('my-peer-id').innerText = id;
-                    document.getElementById('my-peer-id').classList.remove('blink');
-                });
-
-                peer.on('connection', conn => {
-                    dataConn = conn;
-                    setupDataConnection();
-                    isChallenger = false; 
-                });
-
-                peer.on('call', call => {
-                    mediaCall = call;
-                    call.answer(localStream);
-                    call.on('stream', remoteStream => {
-                        document.getElementById('remote-video').srcObject = remoteStream;
-                        startGameUI();
-                    });
-                });
-
-                peer.on('error', err => {
-                    showSetupError("Peer Error: " + err.type);
-                });
+                initPeer();
 
             } catch (err) {
                 showSetupError("Camera access denied or unavailable! Please refresh and grant camera permission.");
             }
+        }
+
+        function initPeer() {
+            const roomCode = generate6DigitCode();
+            peer = new Peer(roomCode);
+            
+            peer.on('open', id => {
+                document.getElementById('my-peer-id').innerText = id;
+                document.getElementById('my-peer-id').classList.remove('blink');
+            });
+
+            peer.on('connection', conn => {
+                dataConn = conn;
+                setupDataConnection();
+                isChallenger = false; 
+            });
+
+            peer.on('call', call => {
+                mediaCall = call;
+                call.answer(localStream);
+                call.on('stream', remoteStream => {
+                    document.getElementById('remote-video').srcObject = remoteStream;
+                    startGameUI();
+                });
+            });
+
+            peer.on('error', err => {
+                if (err.type === 'unavailable-id') {
+                    // Code collision - silently retry with new code
+                    initPeer();
+                } else {
+                    showSetupError("Peer Error: " + err.type);
+                }
+            });
         }
 
         function showSetupError(msg) {
@@ -416,8 +432,8 @@
 
         function connectToFriend() {
             const targetId = document.getElementById('target-id').value.trim();
-            if (!targetId) {
-                showSetupError("Please enter a valid Opponent ID!");
+            if (!targetId || targetId.length !== 6) {
+                showSetupError("Please enter a valid 6-digit Room Code!");
                 return;
             }
 
@@ -436,7 +452,6 @@
         function setupDataConnection() {
             dataConn.on('open', () => {
                 appendSysMessage("Opponent connected! Game ready!");
-                // Initial state ready handshake
                 myReady = true;
                 theirReady = true;
                 updateChallengerReadyState();
@@ -504,7 +519,6 @@
         // --- GAMEPLAY FLOW & SYNCHRONIZATION ---
 
         function resetRound() {
-            // Restore live media feeds
             document.getElementById('remote-video').style.display = 'block';
             document.getElementById('remote-image').style.display = 'none';
             document.getElementById('remote-hidden').style.display = 'none';
@@ -537,9 +551,8 @@
         }
 
         function startChallenge(mode) {
-            if (!theirReady) return; // Guard clause
+            if (!theirReady) return;
 
-            // Reset ready state for the new round
             myReady = false;
             theirReady = false;
 
@@ -578,7 +591,6 @@
             }
             
             runCountdown(data.duration, "ANALYZE CAREFULLY... IMAGE OR VIDEO?", () => {
-                // Hide media after timer ends
                 document.getElementById('remote-video').style.display = 'none';
                 document.getElementById('remote-image').style.display = 'none';
                 document.getElementById('remote-hidden').style.display = 'block';
@@ -633,7 +645,7 @@
             let detailMsg = `The challenger used a <b>${data.actualMode.toUpperCase()}</b> for ${data.duration} seconds.<br><br>`;
 
             if (data.correct) {
-                headline.innerText = "🎯 GUESS CORRECT!";
+                headline.innerText = "GUESS CORRECT!";
                 headline.style.color = "#00FF00";
                 if (!isChallenger) {
                     detailMsg += "You saw right through them! <b>+10 Points</b> to you!";
@@ -644,7 +656,7 @@
                 }
             } else {
                 const pts = data.duration * 10;
-                headline.innerText = "🤪 FOOLED YA!";
+                headline.innerText = "FOOLED YA!";
                 headline.style.color = "#FF0000";
                 if (isChallenger) {
                     detailMsg += `Your deception worked! You earned <b>+${pts} Points</b>!`;
@@ -655,14 +667,11 @@
                 }
             }
 
-            // Update Scoreboard
             document.getElementById('score-me').innerText = myScore;
             document.getElementById('score-them').innerText = theirScore;
 
-            // Log result in system chat
             appendSysMessage(`Round over! Result: ${data.actualMode.toUpperCase()} (${data.correct ? 'Guessed' : 'Fooled'}). Score: You ${myScore} - Them ${theirScore}`);
 
-            // Render Custom Modal Window
             text.innerHTML = detailMsg;
             document.getElementById('result-modal').style.display = 'flex';
         }
@@ -670,10 +679,8 @@
         function closeModalNextRound() {
             document.getElementById('result-modal').style.display = 'none';
             
-            // Swap roles
             isChallenger = !isChallenger;
             
-            // Send ready signal to opponent
             myReady = true;
             if (dataConn) {
                 dataConn.send({ type: 'ready' });
@@ -682,7 +689,6 @@
             resetRound();
         }
 
-        // Start App
         window.onload = init;
     </script>
 </body>
