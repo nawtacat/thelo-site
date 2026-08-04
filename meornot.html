@@ -93,7 +93,7 @@
             background: #000000;
             color: #00FF00;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 18px;
+            font-size: 16px;
             border: 2px inset #FFFFFF;
             padding: 5px;
         }
@@ -110,17 +110,6 @@
             border: 2px solid #00FF00;
             padding: 8px 25px;
             color: #00FFFF;
-        }
-
-        .voice-bar {
-            background: #111;
-            border: 3px inset #C0C0C0;
-            padding: 8px;
-            margin: 10px auto;
-            max-width: 500px;
-            display: flex;
-            align-items: center;
-            justify-content: space-around;
         }
 
         .media-container {
@@ -166,6 +155,35 @@
             text-shadow: 2px 2px #FFF;
         }
 
+        /* REALTIME CHAT STYLING */
+        #chat-window {
+            width: 660px;
+            max-width: 95%;
+            margin: 15px auto;
+            text-align: left;
+        }
+
+        #chat-messages {
+            height: 140px;
+            background: #000000;
+            border: 3px inset #FFFFFF;
+            overflow-y: auto;
+            padding: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 15px;
+            color: #00FF00;
+            margin-bottom: 8px;
+        }
+
+        .chat-line {
+            margin-bottom: 4px;
+            word-wrap: break-word;
+        }
+
+        .chat-me { color: #00FFFF; }
+        .chat-them { color: #FF00FF; }
+        .chat-sys { color: #FFFF00; font-style: italic; }
+
         .blink {
             animation: blinker 1s linear infinite;
         }
@@ -185,14 +203,14 @@
             height: 60px;
         }
 
-        /* CUSTOM MODAL OVERLAY (REPLACES ALERT) */
+        /* CUSTOM MODAL OVERLAY (NO BROWSER ALERTS) */
         .modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.85);
             display: none;
             justify-content: center;
             align-items: center;
@@ -218,7 +236,7 @@
 <body>
 
     <div class="marquee-container">
-        <marquee scrollamount="12">🤪 WELCOME TO CAMFOOLERY! 😜 FOOL YOUR FRIENDS WITH STILL PHOTOS & MOTIONLESS REAL-TIME VIDEO! 🎙️ VOICE CHAT ACTIVE BETWEEN BATTLES! 🤪</marquee>
+        <marquee scrollamount="12">😜 WELCOME TO CAMFOOLERY! 😜 FOOL YOUR FRIENDS WITH STILL PHOTOS & MOTIONLESS REAL-TIME VIDEO! 💬 CHAT IN REALTIME BELOW! 🤪</marquee>
     </div>
 
     <h1>🤪 CAMFOOLERY 🤪</h1>
@@ -231,7 +249,7 @@
         
         <div id="setup-error" class="banner-err"></div>
 
-        <p>1. Allow Camera & Microphone Access!</p>
+        <p>1. Allow Camera Access!</p>
         <p>Your Peer ID: <b id="my-peer-id" class="blink" style="color:#000; background:#00FF00; padding:2px 6px;">GENERATING...</b></p>
         <hr color="#000" width="80%">
         <p>2. Connect to your opponent:</p>
@@ -253,13 +271,6 @@
             </tr>
         </table>
 
-        <!-- VOICE CHAT CONTROL -->
-        <div class="voice-bar">
-            <span style="color: #00FF00; font-weight: bold;">🎙️ VOICE CHAT:</span>
-            <span id="mic-status" style="color: #FFFF00;">MUTED DURING BATTLE</span>
-            <button id="mic-btn" onclick="toggleMic()">MUTE MIC 🔇</button>
-        </div>
-
         <h2 id="status-message" class="blink">WAITING FOR CONNECTION...</h2>
         <div id="countdown-timer" class="giant-timer"></div>
 
@@ -273,8 +284,6 @@
             <div>
                 <h3>OPPONENT WEBCAM</h3>
                 <div class="media-box">
-                    <!-- Remote audio plays here -->
-                    <audio id="remote-audio" autoplay></audio>
                     <video id="remote-video" autoplay playsinline></video>
                     <img id="remote-image" style="display:none;" />
                     <div id="remote-hidden">📺 TIME'S UP!<br>GUESS!</div>
@@ -296,7 +305,6 @@
             </p>
             <button class="btn-primary" onclick="startChallenge('image')">📸 SEND STILL IMAGE</button>
             <button class="btn-primary" onclick="startChallenge('video')">🎥 SEND LIVE VIDEO (DON'T MOVE!)</button>
-            <p><small style="color: #666;"><i>(Mics automatically mute while testing their eyes!)</i></small></p>
         </div>
 
         <!-- GUESSER CONTROLS -->
@@ -306,9 +314,23 @@
             <button onclick="submitGuess('image')" style="font-size:20px;">📸 IT WAS AN IMAGE!</button>
             <button onclick="submitGuess('video')" style="font-size:20px;">🎥 IT WAS A VIDEO!</button>
         </div>
+
+        <!-- REALTIME CHAT WINDOW -->
+        <div id="chat-window" class="window">
+            <div class="titlebar">
+                <span>C:\CAMFOOLERY\CYBER_CHAT.EXE</span>
+            </div>
+            <div id="chat-messages">
+                <div class="chat-line chat-sys">[SYSTEM]: Connected to CyberChat room! Type below to trash-talk your opponent...</div>
+            </div>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="chat-input" placeholder="Type a message..." style="flex-grow: 1;" onkeypress="if(event.key === 'Enter') sendChatMessage()">
+                <button onclick="sendChatMessage()" style="margin:0;">SEND 💬</button>
+            </div>
+        </div>
     </div>
 
-    <!-- RETRO RESULT MODAL (NO MORE ALERTS!) -->
+    <!-- RETRO RESULT MODAL -->
     <div id="result-modal" class="modal-overlay">
         <div class="window modal-body">
             <div class="titlebar">
@@ -316,7 +338,6 @@
             </div>
             <h2 id="modal-headline" style="font-size: 30px;">RESULT</h2>
             <p id="modal-text" style="margin: 15px 0; font-size: 18px; line-height: 1.4;"></p>
-            <p style="color: #000080; font-size: 14px;">🎙️ Voice chat is now UNMUTED! Talk it out!</p>
             <button class="btn-primary" style="font-size: 20px; padding: 10px 20px;" onclick="closeModalNextRound()">NEXT ROUND ➡️</button>
         </div>
     </div>
@@ -338,13 +359,11 @@
         let currentMode = ''; 
         let currentDuration = 0;
         let countdownInterval;
-        let micEnabled = true;
 
-        // Initialize PeerJS and WebCam/Mic
+        // Initialize PeerJS and WebCam (Video only, no mic)
         async function init() {
             try {
-                // Request BOTH Video and Audio for CamFoolery
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                 document.getElementById('local-video').srcObject = localStream;
                 
                 peer = new Peer();
@@ -365,7 +384,6 @@
                     call.answer(localStream);
                     call.on('stream', remoteStream => {
                         document.getElementById('remote-video').srcObject = remoteStream;
-                        document.getElementById('remote-audio').srcObject = remoteStream;
                         startGameUI();
                     });
                 });
@@ -375,7 +393,7 @@
                 });
 
             } catch (err) {
-                showSetupError("Camera/Mic access denied or unavailable! Please refresh and allow permissions.");
+                showSetupError("Camera access denied or unavailable! Please refresh and grant camera permission.");
             }
         }
 
@@ -398,7 +416,6 @@
             mediaCall = peer.call(targetId, localStream);
             mediaCall.on('stream', remoteStream => {
                 document.getElementById('remote-video').srcObject = remoteStream;
-                document.getElementById('remote-audio').srcObject = remoteStream;
                 startGameUI();
             });
 
@@ -407,7 +424,7 @@
 
         function setupDataConnection() {
             dataConn.on('open', () => {
-                console.log("Data connection live!");
+                appendSysMessage("Opponent connected! Game ready!");
             });
             
             dataConn.on('data', data => {
@@ -417,6 +434,8 @@
                     resolveGuess(data.guess);
                 } else if (data.type === 'result') {
                     applyResult(data);
+                } else if (data.type === 'chat') {
+                    receiveChatMessage(data.text);
                 }
             });
         }
@@ -427,34 +446,41 @@
             resetRound();
         }
 
-        // --- MICROPHONE MANAGEMENT ---
+        // --- CHAT SYSTEM ---
 
-        function setAudioState(active) {
-            if (localStream && localStream.getAudioTracks().length > 0) {
-                localStream.getAudioTracks().forEach(track => {
-                    track.enabled = active && micEnabled;
-                });
-            }
+        function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text || !dataConn) return;
+
+            dataConn.send({ type: 'chat', text: text });
             
-            const micStatus = document.getElementById('mic-status');
-            if (!active) {
-                micStatus.innerText = "MUTED FOR BATTLE 🤫";
-                micStatus.style.color = "#FF0000";
-            } else {
-                micStatus.innerText = micEnabled ? "VOICE LIVE 🎙️" : "MIC MUTED BY YOU 🔇";
-                micStatus.style.color = micEnabled ? "#00FF00" : "#FFFF00";
-            }
+            const chatBox = document.getElementById('chat-messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-line chat-me';
+            msgDiv.innerText = `[YOU]: ${text}`;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            input.value = '';
         }
 
-        function toggleMic() {
-            micEnabled = !micEnabled;
-            const btn = document.getElementById('mic-btn');
-            btn.innerText = micEnabled ? "MUTE MIC 🔇" : "UNMUTE MIC 🎙️";
-            
-            // Apply if not currently in challenge state
-            if (document.getElementById('countdown-timer').innerText === '') {
-                setAudioState(true);
-            }
+        function receiveChatMessage(text) {
+            const chatBox = document.getElementById('chat-messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-line chat-them';
+            msgDiv.innerText = `[OPPONENT]: ${text}`;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function appendSysMessage(text) {
+            const chatBox = document.getElementById('chat-messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-line chat-sys';
+            msgDiv.innerText = `[SYSTEM]: ${text}`;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
         }
 
         // --- GAMEPLAY FLOW ---
@@ -469,9 +495,6 @@
             document.getElementById('guesser-controls').style.display = 'none';
             document.getElementById('countdown-timer').innerText = '';
 
-            // Enable Mic for post-round banter
-            setAudioState(true);
-
             if (isChallenger) {
                 document.getElementById('status-message').innerText = "YOUR TURN TO FOOL THEM!";
                 document.getElementById('challenger-controls').style.display = 'inline-block';
@@ -484,9 +507,6 @@
             const duration = parseInt(document.getElementById('duration-select').value);
             currentMode = mode;
             currentDuration = duration;
-            
-            // Mute mic during challenge so breath/noise doesn't spoil live video/image
-            setAudioState(false);
 
             let payload = { type: 'start_challenge', mode: mode, duration: duration };
 
@@ -509,9 +529,6 @@
         }
 
         function receiveChallenge(data) {
-            // Mute mic while observing
-            setAudioState(false);
-
             if (data.mode === 'image') {
                 document.getElementById('remote-video').style.display = 'none';
                 document.getElementById('remote-image').src = data.snapshot;
@@ -568,9 +585,6 @@
         }
 
         function applyResult(data) {
-            // Enable mic immediately so players can talk over result window
-            setAudioState(true);
-
             const headline = document.getElementById('modal-headline');
             const text = document.getElementById('modal-text');
 
@@ -602,6 +616,9 @@
             // Update Scoreboard
             document.getElementById('score-me').innerText = myScore;
             document.getElementById('score-them').innerText = theirScore;
+
+            // Log result in system chat
+            appendSysMessage(`Round over! Result: ${data.actualMode.toUpperCase()} (${data.correct ? 'Guessed' : 'Fooled'}). Score: You ${myScore} - Them ${theirScore}`);
 
             // Render Custom Modal Window
             text.innerHTML = detailMsg;
