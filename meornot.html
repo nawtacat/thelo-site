@@ -84,6 +84,13 @@
             border: 4px inset #FFFFFF;
         }
 
+        button:disabled {
+            background: #808080;
+            color: #555555;
+            border-color: #A0A0A0;
+            cursor: not-allowed;
+        }
+
         button.btn-primary {
             background: #00FF00;
             border-color: #00FF00;
@@ -203,7 +210,7 @@
             height: 60px;
         }
 
-        /* CUSTOM MODAL OVERLAY (NO BROWSER ALERTS) */
+        /* CUSTOM MODAL OVERLAY */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -303,8 +310,8 @@
                     <option value="10">10 Secs (High Risk: +100 Pts)</option>
                 </select>
             </p>
-            <button class="btn-primary" onclick="startChallenge('image')">📸 SEND STILL IMAGE</button>
-            <button class="btn-primary" onclick="startChallenge('video')">🎥 SEND LIVE VIDEO (DON'T MOVE!)</button>
+            <button id="btn-send-image" class="btn-primary" onclick="startChallenge('image')">📸 SEND STILL IMAGE</button>
+            <button id="btn-send-video" class="btn-primary" onclick="startChallenge('video')">🎥 SEND LIVE VIDEO (DON'T MOVE!)</button>
         </div>
 
         <!-- GUESSER CONTROLS -->
@@ -360,7 +367,11 @@
         let currentDuration = 0;
         let countdownInterval;
 
-        // Initialize PeerJS and WebCam (Video only, no mic)
+        // Synchronization State: Handshake to ensure opponent dismissed modal
+        let myReady = false;
+        let theirReady = false;
+
+        // Initialize PeerJS and WebCam
         async function init() {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -425,6 +436,10 @@
         function setupDataConnection() {
             dataConn.on('open', () => {
                 appendSysMessage("Opponent connected! Game ready!");
+                // Initial state ready handshake
+                myReady = true;
+                theirReady = true;
+                updateChallengerReadyState();
             });
             
             dataConn.on('data', data => {
@@ -436,6 +451,9 @@
                     applyResult(data);
                 } else if (data.type === 'chat') {
                     receiveChatMessage(data.text);
+                } else if (data.type === 'ready') {
+                    theirReady = true;
+                    updateChallengerReadyState();
                 }
             });
         }
@@ -483,7 +501,7 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // --- GAMEPLAY FLOW ---
+        // --- GAMEPLAY FLOW & SYNCHRONIZATION ---
 
         function resetRound() {
             // Restore live media feeds
@@ -495,15 +513,36 @@
             document.getElementById('guesser-controls').style.display = 'none';
             document.getElementById('countdown-timer').innerText = '';
 
+            updateChallengerReadyState();
+        }
+
+        function updateChallengerReadyState() {
             if (isChallenger) {
-                document.getElementById('status-message').innerText = "YOUR TURN TO FOOL THEM!";
                 document.getElementById('challenger-controls').style.display = 'inline-block';
+                const btnImg = document.getElementById('btn-send-image');
+                const btnVid = document.getElementById('btn-send-video');
+
+                if (theirReady) {
+                    document.getElementById('status-message').innerText = "YOUR TURN TO FOOL THEM!";
+                    btnImg.disabled = false;
+                    btnVid.disabled = false;
+                } else {
+                    document.getElementById('status-message').innerText = "WAITING FOR OPPONENT TO CLICK NEXT ROUND...";
+                    btnImg.disabled = true;
+                    btnVid.disabled = true;
+                }
             } else {
                 document.getElementById('status-message').innerText = "OPPONENT IS PREPARING A CHALLENGE...";
             }
         }
 
         function startChallenge(mode) {
+            if (!theirReady) return; // Guard clause
+
+            // Reset ready state for the new round
+            myReady = false;
+            theirReady = false;
+
             const duration = parseInt(document.getElementById('duration-select').value);
             currentMode = mode;
             currentDuration = duration;
@@ -523,12 +562,15 @@
             dataConn.send(payload);
             document.getElementById('challenger-controls').style.display = 'none';
             
-            runCountdown(duration, "DONT MOVE OR SMILE! HOLD STILL!", () => {
+            runCountdown(duration, "DON'T MOVE OR SMILE! HOLD STILL!", () => {
                 document.getElementById('status-message').innerText = "WAITING FOR THEIR GUESS...";
             });
         }
 
         function receiveChallenge(data) {
+            myReady = false;
+            theirReady = false;
+
             if (data.mode === 'image') {
                 document.getElementById('remote-video').style.display = 'none';
                 document.getElementById('remote-image').src = data.snapshot;
@@ -627,7 +669,16 @@
 
         function closeModalNextRound() {
             document.getElementById('result-modal').style.display = 'none';
+            
+            // Swap roles
             isChallenger = !isChallenger;
+            
+            // Send ready signal to opponent
+            myReady = true;
+            if (dataConn) {
+                dataConn.send({ type: 'ready' });
+            }
+
             resetRound();
         }
 
