@@ -1,366 +1,490 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>IMAGE OR VIDEO?!</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMAGE OR VIDEO???</title>
+    <!-- Include PeerJS -->
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <style>
+        /* EARLY INTERNET GEOCITIES VIBE */
+        body {
+            background-color: #000080;
+            color: #FFFF00;
+            font-family: "Comic Sans MS", "Chalkboard SE", sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-image: radial-gradient(#0000FF 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
 
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+        h1 {
+            color: #FF00FF;
+            text-shadow: 3px 3px #00FFFF;
+            font-size: 48px;
+            margin: 10px 0;
+            text-transform: uppercase;
+        }
 
-<style>
-body {
-    background:#111;
-    color:#00ff00;
-    font-family:"Courier New", monospace;
-    text-align:center;
-}
+        h2, h3 {
+            color: #00FF00;
+            text-shadow: 2px 2px #000000;
+        }
 
-.box {
-    border:4px ridge #aaa;
-    background:#222;
-    padding:20px;
-    margin:20px auto;
-    width:700px;
-}
+        .marquee-container {
+            background: #FF0000;
+            color: #FFFFFF;
+            font-size: 24px;
+            font-weight: bold;
+            border-top: 4px ridge #C0C0C0;
+            border-bottom: 4px ridge #C0C0C0;
+            padding: 5px 0;
+        }
 
-button {
-    font-family:"Courier New";
-    font-weight:bold;
-    padding:12px;
-    margin:5px;
-    cursor:pointer;
-    background:#ddd;
-}
+        .window {
+            background: #C0C0C0;
+            color: #000000;
+            border: 5px ridge #FFFFFF;
+            display: inline-block;
+            margin: 10px;
+            padding: 10px;
+            max-width: 90%;
+        }
 
-video, img {
-    width:320px;
-    height:240px;
-    background:black;
-    border:5px solid lime;
-}
+        .titlebar {
+            background: #000080;
+            color: #FFFFFF;
+            font-weight: bold;
+            text-align: left;
+            padding: 5px;
+            margin: -10px -10px 10px -10px;
+            font-family: 'Courier New', Courier, monospace;
+        }
 
-.big {
-    font-size:28px;
-    color:yellow;
-}
+        button {
+            background: #C0C0C0;
+            border: 4px outset #FFFFFF;
+            font-family: "Comic Sans MS", "Chalkboard SE", sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 5px 15px;
+            cursor: pointer;
+            color: #000000;
+            margin: 5px;
+        }
 
-blink {
-    animation: blink 0.8s infinite;
-}
+        button:active {
+            border: 4px inset #FFFFFF;
+        }
 
-@keyframes blink {
-    50% {opacity:0;}
-}
-</style>
+        input, select {
+            background: #000000;
+            color: #00FF00;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 18px;
+            border: 2px inset #FFFFFF;
+            padding: 5px;
+        }
+
+        table.scoreboard {
+            margin: 10px auto;
+            border-collapse: collapse;
+            background: #000000;
+            border: 5px ridge #FF00FF;
+            font-size: 24px;
+        }
+
+        table.scoreboard td, table.scoreboard th {
+            border: 2px solid #00FF00;
+            padding: 10px 20px;
+            color: #00FFFF;
+        }
+
+        .media-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .media-box {
+            border: 5px groove #FF00FF;
+            background: #000000;
+            width: 320px;
+            height: 240px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        video, img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #remote-hidden {
+            z-index: 10;
+            background: repeating-linear-gradient(45deg, #000, #000 10px, #333 10px, #333 20px);
+            width: 100%;
+            height: 100%;
+            display: none;
+            color: #FF0000;
+            font-size: 32px;
+            font-weight: bold;
+            text-align: center;
+            padding-top: 80px;
+            box-sizing: border-box;
+            text-shadow: 2px 2px #FFF;
+        }
+
+        .blink {
+            animation: blinker 1s linear infinite;
+        }
+
+        @keyframes blinker {
+            50% { opacity: 0; }
+        }
+
+        #game-area { display: none; }
+        #challenger-controls, #guesser-controls { display: none; }
+        
+        .giant-timer {
+            font-size: 48px;
+            color: #FF0000;
+            text-shadow: 3px 3px #FFFF00;
+            font-family: 'Courier New', Courier, monospace;
+        }
+    </style>
 </head>
-
 <body>
 
-<h1>💾 IMAGE OR VIDEO?! 💾</h1>
-<div class="big">
-<blink>THE ULTIMATE HUMAN WEBCAM TEST</blink>
-</div>
-
-<div class="box">
-
-<h3>Your ID:</h3>
-<div id="myid">loading...</div>
-
-<input id="joinid" placeholder="Friend's ID">
-<button onclick="join()">JOIN</button>
-<button onclick="create()">CREATE ROOM</button>
-
-<p id="status">Waiting for opponent...</p>
-
-</div>
-
-
-<div class="box">
-
-<h3>Your Camera</h3>
-<video id="localVideo" autoplay muted></video>
-
-<br>
-
-<button onclick="choose('image')">
-📸 IMAGE MODE
-</button>
-
-<button onclick="choose('video')">
-🎥 VIDEO MODE
-</button>
-
-</div>
-
-
-<div class="box">
-
-<h3>Opponent</h3>
-
-<video id="remoteVideo" autoplay></video>
-<img id="remoteImage" style="display:none">
-
-<br>
-
-<button onclick="guess('image')">
-I THINK IMAGE
-</button>
-
-<button onclick="guess('video')">
-I THINK VIDEO
-</button>
-
-<h2 id="score">
-Score: 0
-</h2>
-
-</div>
-
-
-<script>
-
-let peer;
-let conn;
-let call;
-
-let localStream;
-
-let score = 0;
-
-let mode = null;
-let startTime;
-
-
-const localVideo =
-document.getElementById("localVideo");
-
-const remoteVideo =
-document.getElementById("remoteVideo");
-
-const remoteImage =
-document.getElementById("remoteImage");
-
-
-navigator.mediaDevices.getUserMedia({
-    video:true,
-    audio:false
-})
-.then(stream=>{
-    localStream=stream;
-    localVideo.srcObject=stream;
-});
-
-
-function create(){
-
-    peer = new Peer();
-
-    peer.on("open", id=>{
-        document.getElementById("myid").innerHTML=id;
-        document.getElementById("status").innerHTML=
-        "Give your friend this ID";
-    });
-
-
-    peer.on("connection", c=>{
-        conn=c;
-        setupConnection();
-    });
-
-
-    peer.on("call", incoming=>{
-
-        incoming.answer(localStream);
-
-        incoming.on("stream", stream=>{
-            remoteVideo.srcObject=stream;
-        });
-
-    });
-}
-
-
-
-function join(){
-
-    peer=new Peer();
-
-    peer.on("open",id=>{
-
-        document.getElementById("myid").innerHTML=id;
-
-        conn=peer.connect(
-            document.getElementById("joinid").value
-        );
-
-        setupConnection();
-
-
-        call=peer.call(
-            document.getElementById("joinid").value,
-            localStream
-        );
-
-        call.on("stream",stream=>{
-            remoteVideo.srcObject=stream;
-        });
-
-    });
-
-}
-
-
-
-function setupConnection(){
-
-    conn.on("open",()=>{
-        document.getElementById("status").innerHTML=
-        "CONNECTED. Someone is probably judging your face.";
-    });
-
-
-    conn.on("data",data=>{
-
-
-        if(data.type==="image"){
-
-            remoteVideo.style.display="none";
-            remoteImage.style.display="inline";
-            remoteImage.src=data.img;
-
-            startTime=Date.now();
-
+    <div class="marquee-container">
+        <marquee scrollamount="12">🔥 WELCOME TO THE ULTIMATE CYBERSPACE CHALLENGE! 🔥 CAN YOU TELL A STATIC IMAGE FROM A REAL-TIME VIDEO? 🔥 FOOL YOUR FRIENDS! WIN POINTS! 🔥</marquee>
+    </div>
+
+    <h1>📸 IMAGE OR VIDEO? 🎥</h1>
+
+    <!-- SETUP AREA -->
+    <div id="setup-area" class="window">
+        <div class="titlebar">C:\INTERNET\CONNECTION.EXE</div>
+        <p>1. Allow Camera Access!</p>
+        <p>Your Peer ID: <span id="my-peer-id" class="blink">GENERATING...</span></p>
+        <hr color="#00FF00" width="80%">
+        <p>2. Connect to a friend:</p>
+        <input type="text" id="target-id" placeholder="Paste friend's ID here">
+        <button onclick="connectToFriend()">CONNECT</button>
+    </div>
+
+    <!-- GAME AREA -->
+    <div id="game-area">
+        <table class="scoreboard">
+            <tr>
+                <th>YOU</th>
+                <th>THEM</th>
+            </tr>
+            <tr>
+                <td id="score-me">0</td>
+                <td id="score-them">0</td>
+            </tr>
+        </table>
+
+        <h2 id="status-message" class="blink">WAITING FOR CONNECTION...</h2>
+        <div id="countdown-timer" class="giant-timer"></div>
+
+        <div class="media-container">
+            <div>
+                <h3>YOUR WEBCAM</h3>
+                <div class="media-box">
+                    <video id="local-video" autoplay muted playsinline></video>
+                </div>
+            </div>
+            <div>
+                <h3>THEIR WEBCAM</h3>
+                <div class="media-box">
+                    <video id="remote-video" autoplay playsinline></video>
+                    <img id="remote-image" style="display:none;" />
+                    <div id="remote-hidden">📺 TIME'S UP!<br>GUESS!</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHALLENGER CONTROLS -->
+        <div id="challenger-controls" class="window" style="margin-top: 20px;">
+            <div class="titlebar">CHALLENGER MENU</div>
+            <p>It's your turn to fool them!</p>
+            <p>
+                Duration: 
+                <select id="duration-select">
+                    <option value="3">3 Seconds (Low Risk, 30 Pts)</option>
+                    <option value="5">5 Seconds (Med Risk, 50 Pts)</option>
+                    <option value="10">10 Seconds (High Risk, 100 Pts)</option>
+                </select>
+            </p>
+            <button onclick="startChallenge('image')">SEND IMAGE 📸</button>
+            <button onclick="startChallenge('video')">SEND VIDEO 🎥</button>
+            <p><small><i>If you send video, DON'T MOVE!</i></small></p>
+        </div>
+
+        <!-- GUESSER CONTROLS -->
+        <div id="guesser-controls" class="window" style="margin-top: 20px;">
+            <div class="titlebar">GUESSER MENU</div>
+            <p>What did you just look at?!</p>
+            <button onclick="submitGuess('image')">IT WAS AN IMAGE!</button>
+            <button onclick="submitGuess('video')">IT WAS A VIDEO!</button>
+        </div>
+    </div>
+
+    <!-- Hidden Canvas for taking snapshots -->
+    <canvas id="snapshot-canvas" style="display:none;"></canvas>
+
+    <script>
+        // Game State
+        let peer;
+        let dataConn;
+        let mediaCall;
+        let localStream;
+        
+        let isChallenger = false;
+        let myScore = 0;
+        let theirScore = 0;
+        
+        let currentMode = ''; // 'image' or 'video'
+        let currentDuration = 0;
+        let countdownInterval;
+
+        // Initialize WebRTC and PeerJS
+        async function init() {
+            try {
+                // Get local media (Video only, no audio to prevent giveaway breathing sounds)
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                document.getElementById('local-video').srcObject = localStream;
+                
+                // Initialize Peer
+                peer = new Peer();
+                
+                peer.on('open', id => {
+                    document.getElementById('my-peer-id').innerText = id;
+                    document.getElementById('my-peer-id').classList.remove('blink');
+                });
+
+                // Handle incoming connection
+                peer.on('connection', conn => {
+                    dataConn = conn;
+                    setupDataConnection();
+                    isChallenger = false; // The person receiving the connection guesses first
+                });
+
+                // Handle incoming call
+                peer.on('call', call => {
+                    mediaCall = call;
+                    call.answer(localStream);
+                    call.on('stream', remoteStream => {
+                        document.getElementById('remote-video').srcObject = remoteStream;
+                        startGameUI();
+                    });
+                });
+
+            } catch (err) {
+                alert("ERROR! Needs camera access to play the game! " + err);
+            }
         }
 
+        function connectToFriend() {
+            const targetId = document.getElementById('target-id').value;
+            if (!targetId) return alert("ENTER AN ID FIRST!");
 
-        if(data.type==="video"){
+            // Connect Data
+            dataConn = peer.connect(targetId);
+            setupDataConnection();
+            
+            // Connect Media
+            mediaCall = peer.call(targetId, localStream);
+            mediaCall.on('stream', remoteStream => {
+                document.getElementById('remote-video').srcObject = remoteStream;
+                startGameUI();
+            });
 
-            remoteImage.style.display="none";
-            remoteVideo.style.display="inline";
-
-            startTime=Date.now();
-
+            isChallenger = true; // Initiator is challenger first
         }
 
+        function setupDataConnection() {
+            dataConn.on('open', () => {
+                console.log("Data connection established!");
+            });
+            
+            dataConn.on('data', data => {
+                console.log("Received data:", data);
+                if (data.type === 'start_challenge') {
+                    receiveChallenge(data);
+                } else if (data.type === 'guess') {
+                    resolveGuess(data.guess);
+                } else if (data.type === 'result') {
+                    applyResult(data);
+                }
+            });
+        }
 
-        if(data.type==="result"){
+        function startGameUI() {
+            document.getElementById('setup-area').style.display = 'none';
+            document.getElementById('game-area').style.display = 'block';
+            resetRound();
+        }
 
-            if(data.correct){
-                score+=data.points;
+        // --- GAMEPLAY LOGIC ---
+
+        function resetRound() {
+            // Restore live video for both
+            document.getElementById('remote-video').style.display = 'block';
+            document.getElementById('remote-image').style.display = 'none';
+            document.getElementById('remote-hidden').style.display = 'none';
+            
+            document.getElementById('challenger-controls').style.display = 'none';
+            document.getElementById('guesser-controls').style.display = 'none';
+            document.getElementById('countdown-timer').innerText = '';
+
+            if (isChallenger) {
+                document.getElementById('status-message').innerText = "YOUR TURN TO CHALLENGE!";
+                document.getElementById('challenger-controls').style.display = 'inline-block';
+            } else {
+                document.getElementById('status-message').innerText = "WAITING FOR THEM TO PREPARE CHALLENGE...";
+            }
+        }
+
+        function startChallenge(mode) {
+            const duration = parseInt(document.getElementById('duration-select').value);
+            currentMode = mode;
+            currentDuration = duration;
+            
+            let payload = { type: 'start_challenge', mode: mode, duration: duration };
+
+            // If image, take a snapshot
+            if (mode === 'image') {
+                const video = document.getElementById('local-video');
+                const canvas = document.getElementById('snapshot-canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                payload.snapshot = canvas.toDataURL('image/jpeg', 0.6);
             }
 
-            document.getElementById("score")
-            .innerHTML=
-            "Score: "+score;
-
+            dataConn.send(payload);
+            document.getElementById('challenger-controls').style.display = 'none';
+            
+            // Start countdown for challenger
+            runCountdown(duration, "HOLD STILL!!!", () => {
+                document.getElementById('status-message').innerText = "WAITING FOR THEIR GUESS...";
+            });
         }
 
-    });
+        function receiveChallenge(data) {
+            // Setup media
+            if (data.mode === 'image') {
+                document.getElementById('remote-video').style.display = 'none';
+                document.getElementById('remote-image').src = data.snapshot;
+                document.getElementById('remote-image').style.display = 'block';
+            } else {
+                // Keep video open
+            }
+            
+            // Start countdown for guesser
+            runCountdown(data.duration, "WATCH CLOSELY...", () => {
+                // Hide media after time is up so they can't keep analyzing
+                document.getElementById('remote-video').style.display = 'none';
+                document.getElementById('remote-image').style.display = 'none';
+                document.getElementById('remote-hidden').style.display = 'block';
+                
+                document.getElementById('status-message').innerText = "MAKE YOUR GUESS!";
+                document.getElementById('guesser-controls').style.display = 'inline-block';
+            });
+        }
 
-}
+        function runCountdown(seconds, message, callback) {
+            document.getElementById('status-message').innerText = message;
+            let timeleft = seconds;
+            document.getElementById('countdown-timer').innerText = timeleft;
+            
+            clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                timeleft--;
+                if (timeleft <= 0) {
+                    clearInterval(countdownInterval);
+                    document.getElementById('countdown-timer').innerText = '';
+                    callback();
+                } else {
+                    document.getElementById('countdown-timer').innerText = timeleft;
+                }
+            }, 1000);
+        }
 
+        function submitGuess(guess) {
+            document.getElementById('guesser-controls').style.display = 'none';
+            document.getElementById('status-message').innerText = "SENDING GUESS...";
+            dataConn.send({ type: 'guess', guess: guess });
+        }
 
+        function resolveGuess(guess) {
+            const isCorrect = (guess === currentMode);
+            const challengerPoints = currentDuration * 10;
+            const guesserPoints = 10; // Flat points for correct guess
+            
+            let resultData = {
+                type: 'result',
+                correct: isCorrect,
+                actualMode: currentMode,
+                duration: currentDuration
+            };
 
-function choose(choice){
+            dataConn.send(resultData);
+            applyResult(resultData); // Apply locally
+        }
 
-    mode=choice;
+        function applyResult(data) {
+            // data.correct: Did the guesser get it right?
+            let msg = `It was actually a ${data.actualMode.toUpperCase()}!\n\n`;
+            
+            if (data.correct) {
+                if (!isChallenger) {
+                    msg += "YOU GUESSED CORRECTLY! You get 10 Points!";
+                    myScore += 10;
+                } else {
+                    msg += "THEY GUESSED CORRECTLY! They get 10 Points.";
+                    theirScore += 10;
+                }
+            } else {
+                const points = data.duration * 10;
+                if (isChallenger) {
+                    msg += `YOU FOOLED THEM! You get ${points} Points!`;
+                    myScore += points;
+                } else {
+                    msg += `YOU WERE FOOLED! They get ${points} Points!`;
+                    theirScore += points;
+                }
+            }
 
+            // Update DOM scores
+            document.getElementById('score-me').innerText = myScore;
+            document.getElementById('score-them').innerText = theirScore;
 
-    if(choice==="image"){
+            // Dramatic retro alert pause
+            setTimeout(() => {
+                alert(msg);
+                // Swap roles and reset
+                isChallenger = !isChallenger;
+                resetRound();
+            }, 500);
+        }
 
-        let canvas=document.createElement("canvas");
+        // Start initialization when page loads
+        window.onload = init;
 
-        canvas.width=320;
-        canvas.height=240;
-
-        let ctx=canvas.getContext("2d");
-
-        ctx.drawImage(
-            localVideo,
-            0,
-            0,
-            320,
-            240
-        );
-
-
-        let img=canvas.toDataURL();
-
-
-        conn.send({
-            type:"image",
-            img:img
-        });
-
-        alert(
-        "FREEZE! You are now a JPEG pretending to be alive."
-        );
-
-    }
-
-
-    if(choice==="video"){
-
-        conn.send({
-            type:"video"
-        });
-
-        alert(
-        "Stay perfectly still. Become the world's least convincing statue."
-        );
-
-    }
-
-}
-
-
-
-function guess(choice){
-
-    let correct =
-    choice===mode;
-
-
-    let seconds =
-    Math.floor(
-        (Date.now()-startTime)/1000
-    );
-
-
-    let points = Math.max(
-        1,
-        20-seconds
-    );
-
-
-    conn.send({
-
-        type:"result",
-
-        correct:correct,
-
-        points:points
-
-    });
-
-
-    if(correct){
-
-        alert(
-        "CORRECT! Your suspicion muscles work."
-        );
-
-    }
-    else{
-
-        alert(
-        "WRONG! The internet has fooled you."
-        );
-
-    }
-
-}
-
-
-</script>
-
+    </script>
 </body>
 </html>
