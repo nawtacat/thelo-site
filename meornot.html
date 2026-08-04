@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>IMAGE OR VIDEO?!</title>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+<style>
+body {
+    background:#111;
+    color:#00ff00;
+    font-family:"Courier New", monospace;
+    text-align:center;
+}
+
+.box {
+    border:4px ridge #aaa;
+    background:#222;
+    padding:20px;
+    margin:20px auto;
+    width:700px;
+}
+
+button {
+    font-family:"Courier New";
+    font-weight:bold;
+    padding:12px;
+    margin:5px;
+    cursor:pointer;
+    background:#ddd;
+}
+
+video, img {
+    width:320px;
+    height:240px;
+    background:black;
+    border:5px solid lime;
+}
+
+.big {
+    font-size:28px;
+    color:yellow;
+}
+
+blink {
+    animation: blink 0.8s infinite;
+}
+
+@keyframes blink {
+    50% {opacity:0;}
+}
+</style>
+</head>
+
+<body>
+
+<h1>💾 IMAGE OR VIDEO?! 💾</h1>
+<div class="big">
+<blink>THE ULTIMATE HUMAN WEBCAM TEST</blink>
+</div>
+
+<div class="box">
+
+<h3>Your ID:</h3>
+<div id="myid">loading...</div>
+
+<input id="joinid" placeholder="Friend's ID">
+<button onclick="join()">JOIN</button>
+<button onclick="create()">CREATE ROOM</button>
+
+<p id="status">Waiting for opponent...</p>
+
+</div>
+
+
+<div class="box">
+
+<h3>Your Camera</h3>
+<video id="localVideo" autoplay muted></video>
+
+<br>
+
+<button onclick="choose('image')">
+📸 IMAGE MODE
+</button>
+
+<button onclick="choose('video')">
+🎥 VIDEO MODE
+</button>
+
+</div>
+
+
+<div class="box">
+
+<h3>Opponent</h3>
+
+<video id="remoteVideo" autoplay></video>
+<img id="remoteImage" style="display:none">
+
+<br>
+
+<button onclick="guess('image')">
+I THINK IMAGE
+</button>
+
+<button onclick="guess('video')">
+I THINK VIDEO
+</button>
+
+<h2 id="score">
+Score: 0
+</h2>
+
+</div>
+
+
+<script>
+
+let peer;
+let conn;
+let call;
+
+let localStream;
+
+let score = 0;
+
+let mode = null;
+let startTime;
+
+
+const localVideo =
+document.getElementById("localVideo");
+
+const remoteVideo =
+document.getElementById("remoteVideo");
+
+const remoteImage =
+document.getElementById("remoteImage");
+
+
+navigator.mediaDevices.getUserMedia({
+    video:true,
+    audio:false
+})
+.then(stream=>{
+    localStream=stream;
+    localVideo.srcObject=stream;
+});
+
+
+function create(){
+
+    peer = new Peer();
+
+    peer.on("open", id=>{
+        document.getElementById("myid").innerHTML=id;
+        document.getElementById("status").innerHTML=
+        "Give your friend this ID";
+    });
+
+
+    peer.on("connection", c=>{
+        conn=c;
+        setupConnection();
+    });
+
+
+    peer.on("call", incoming=>{
+
+        incoming.answer(localStream);
+
+        incoming.on("stream", stream=>{
+            remoteVideo.srcObject=stream;
+        });
+
+    });
+}
+
+
+
+function join(){
+
+    peer=new Peer();
+
+    peer.on("open",id=>{
+
+        document.getElementById("myid").innerHTML=id;
+
+        conn=peer.connect(
+            document.getElementById("joinid").value
+        );
+
+        setupConnection();
+
+
+        call=peer.call(
+            document.getElementById("joinid").value,
+            localStream
+        );
+
+        call.on("stream",stream=>{
+            remoteVideo.srcObject=stream;
+        });
+
+    });
+
+}
+
+
+
+function setupConnection(){
+
+    conn.on("open",()=>{
+        document.getElementById("status").innerHTML=
+        "CONNECTED. Someone is probably judging your face.";
+    });
+
+
+    conn.on("data",data=>{
+
+
+        if(data.type==="image"){
+
+            remoteVideo.style.display="none";
+            remoteImage.style.display="inline";
+            remoteImage.src=data.img;
+
+            startTime=Date.now();
+
+        }
+
+
+        if(data.type==="video"){
+
+            remoteImage.style.display="none";
+            remoteVideo.style.display="inline";
+
+            startTime=Date.now();
+
+        }
+
+
+        if(data.type==="result"){
+
+            if(data.correct){
+                score+=data.points;
+            }
+
+            document.getElementById("score")
+            .innerHTML=
+            "Score: "+score;
+
+        }
+
+    });
+
+}
+
+
+
+function choose(choice){
+
+    mode=choice;
+
+
+    if(choice==="image"){
+
+        let canvas=document.createElement("canvas");
+
+        canvas.width=320;
+        canvas.height=240;
+
+        let ctx=canvas.getContext("2d");
+
+        ctx.drawImage(
+            localVideo,
+            0,
+            0,
+            320,
+            240
+        );
+
+
+        let img=canvas.toDataURL();
+
+
+        conn.send({
+            type:"image",
+            img:img
+        });
+
+        alert(
+        "FREEZE! You are now a JPEG pretending to be alive."
+        );
+
+    }
+
+
+    if(choice==="video"){
+
+        conn.send({
+            type:"video"
+        });
+
+        alert(
+        "Stay perfectly still. Become the world's least convincing statue."
+        );
+
+    }
+
+}
+
+
+
+function guess(choice){
+
+    let correct =
+    choice===mode;
+
+
+    let seconds =
+    Math.floor(
+        (Date.now()-startTime)/1000
+    );
+
+
+    let points = Math.max(
+        1,
+        20-seconds
+    );
+
+
+    conn.send({
+
+        type:"result",
+
+        correct:correct,
+
+        points:points
+
+    });
+
+
+    if(correct){
+
+        alert(
+        "CORRECT! Your suspicion muscles work."
+        );
+
+    }
+    else{
+
+        alert(
+        "WRONG! The internet has fooled you."
+        );
+
+    }
+
+}
+
+
+</script>
+
+</body>
+</html>
