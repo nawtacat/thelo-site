@@ -300,13 +300,13 @@
 
             <!-- Panel: Challenger Controls -->
             <div id="panel-challenger-prep" class="panel">
-                <p style="color: #FF0000; font-weight: bold;">YOUR MIC IS CURRENTLY MUTED. PREPARE YOUR POSE!</p>
+                <p style="color: #FF0000; font-weight: bold;">YOUR MIC IS MUTE AND THEY CANNOT SEE YOU.<br><span style="color: #000; background: #00FF00; padding: 2px;">(BUT YOU CAN STILL SEE AND HEAR THEM!)</span><br>PREPARE YOUR POSE!</p>
                 <p>
                     Challenge Time: 
                     <select id="duration-select">
-                        <option value="3">3 Secs (Low Risk: +30 Pts)</option>
-                        <option value="5" selected>5 Secs (Med Risk: +50 Pts)</option>
-                        <option value="10">10 Secs (High Risk: +100 Pts)</option>
+                        <option value="1.5">1.5 Secs (Low Risk: +15 Pts)</option>
+                        <option value="3" selected>3.0 Secs (Med Risk: +30 Pts)</option>
+                        <option value="5">5.0 Secs (High Risk: +50 Pts)</option>
                     </select>
                 </p>
                 <button class="btn-primary" onclick="startChallenge('image')">SEND STILL IMAGE</button>
@@ -316,7 +316,7 @@
             <!-- Panel: Guesser Waiting for Prep -->
             <div id="panel-guesser-wait" class="panel">
                 <h3>OPPONENT IS PREPARING THEIR CHALLENGE...</h3>
-                <p>Their video and audio are hidden so they can set up.</p>
+                <p>Their video and audio are hidden so they can set up.<br><span style="color: #FF00FF; font-weight: bold;">(Beware: They can still perfectly see and hear you!)</span></p>
             </div>
 
             <!-- Panel: Guesser Input -->
@@ -522,17 +522,20 @@
             
             if (isChallenger) {
                 // Challenger: Mute mic so opponent can't hear them setup
+                // (Guesser is NOT muted, so challenger can still hear them)
                 setLocalMicMuted(true);
                 switchPanel('panel-challenger-prep');
             } else {
                 // Guesser: Put a blind over the remote video feed
+                // (Challenger has no blind, so they can still see the guesser)
                 document.getElementById('remote-blind').style.display = 'block';
                 switchPanel('panel-guesser-wait');
             }
         }
 
         function startChallenge(mode) {
-            const duration = parseInt(document.getElementById('duration-select').value);
+            // Using parseFloat to support decimals like 1.5
+            const duration = parseFloat(document.getElementById('duration-select').value);
             currentMode = mode;
             currentDuration = duration;
 
@@ -579,22 +582,24 @@
             });
         }
 
+        // Updated for decimal countdown (100ms intervals)
         function runCountdown(seconds, message, callback) {
             document.getElementById('status-message').innerText = message;
             let timeleft = seconds;
-            document.getElementById('countdown-timer').innerText = timeleft;
+            document.getElementById('countdown-timer').innerText = timeleft.toFixed(1);
             
             clearInterval(countdownInterval);
             countdownInterval = setInterval(() => {
-                timeleft--;
-                if (timeleft <= 0) {
+                timeleft -= 0.1;
+                // Using 0.05 buffer to prevent floating point drift bugs
+                if (timeleft <= 0.05) { 
                     clearInterval(countdownInterval);
                     document.getElementById('countdown-timer').innerText = '';
                     callback();
                 } else {
-                    document.getElementById('countdown-timer').innerText = timeleft;
+                    document.getElementById('countdown-timer').innerText = timeleft.toFixed(1);
                 }
-            }, 1000);
+            }, 100);
         }
 
         function submitGuess(guess) {
@@ -631,6 +636,9 @@
             const text = document.getElementById('result-text');
 
             let detailMsg = `The challenger used a <b>${data.actualMode.toUpperCase()}</b> for ${data.duration} seconds.<br><br>`;
+            
+            // Calculates points (Math.floor safely parses floats like 1.5 * 10 = 15)
+            const pts = Math.floor(data.duration * 10);
 
             if (data.correct) {
                 headline.innerText = "GUESS CORRECT!";
@@ -643,7 +651,6 @@
                     theirScore += 10;
                 }
             } else {
-                const pts = data.duration * 10;
                 headline.innerText = "FOOLED!";
                 headline.style.color = "#FF0000";
                 if (isChallenger) {
