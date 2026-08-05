@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CamFoolery - Image or Video?</title>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <style>
+        /* RETRO GEOCITIES / WIN95 AESTHETIC */
+        body {
+            background-color: #000080;
+            color: #FFFF00;
+            font-family: "Comic Sans MS", "Chalkboard SE", sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-image: radial-gradient(#0000FF 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        h1 {
+            color: #FF00FF;
+            text-shadow: 3px 3px #00FFFF;
+            font-size: 46px;
+            margin: 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        h2, h3 {
+            color: #00FF00;
+            text-shadow: 2px 2px #000000;
+            margin: 5px 0;
+        }
+
+        .marquee-container {
+            background: #FF0000;
+            color: #FFFFFF;
+            font-size: 20px;
+            font-weight: bold;
+            border-top: 4px ridge #C0C0C0;
+            border-bottom: 4px ridge #C0C0C0;
+            padding: 4px 0;
+        }
+
+        .window {
+            background: #C0C0C0;
+            color: #000000;
+            border: 5px ridge #FFFFFF;
+            display: inline-block;
+            margin: 10px;
+            padding: 10px;
+            max-width: 90%;
+            box-shadow: 6px 6px 0px #000000;
+        }
+
+        .titlebar {
+            background: #000080;
+            color: #FFFFFF;
+            font-weight: bold;
+            text-align: left;
+            padding: 4px 8px;
+            margin: -10px -10px 10px -10px;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        button {
+            background: #C0C0C0;
+            border: 4px outset #FFFFFF;
+            font-family: "Comic Sans MS", "Chalkboard SE", sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 6px 16px;
+            cursor: pointer;
+            color: #000000;
+            margin: 5px;
+        }
+
+        button:active {
+            border: 4px inset #FFFFFF;
+        }
+
+        button:disabled {
+            background: #808080;
+            color: #555555;
+            border-color: #A0A0A0;
+            cursor: not-allowed;
+        }
+
+        button.btn-primary {
+            background: #00FF00;
+            border-color: #00FF00;
+        }
+
+        input, select {
+            background: #000000;
+            color: #00FF00;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 18px;
+            border: 2px inset #FFFFFF;
+            padding: 5px;
+            text-align: center;
+        }
+
+        .scoreboard {
+            margin: 10px auto;
+            border-collapse: collapse;
+            background: #000000;
+            border: 4px ridge #FF00FF;
+            font-size: 22px;
+        }
+
+        .scoreboard td, .scoreboard th {
+            border: 2px solid #00FF00;
+            padding: 8px 25px;
+            color: #00FFFF;
+        }
+
+        .media-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .media-box {
+            border: 5px groove #FF00FF;
+            background: #000000;
+            width: 320px;
+            height: 240px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        video, img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* Blackout screen for when challenger is preparing */
+        #remote-blind {
+            z-index: 15;
+            background: #000000;
+            width: 100%;
+            height: 100%;
+            display: none;
+            color: #00FF00;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            padding-top: 90px;
+            box-sizing: border-box;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* Guesser time-up screen */
+        #remote-hidden {
+            z-index: 10;
+            background: repeating-linear-gradient(45deg, #000, #000 10px, #222 10px, #222 20px);
+            width: 100%;
+            height: 100%;
+            display: none;
+            color: #FF0000;
+            font-size: 28px;
+            font-weight: bold;
+            text-align: center;
+            padding-top: 70px;
+            box-sizing: border-box;
+            text-shadow: 2px 2px #FFF;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .blink {
+            animation: blinker 1s linear infinite;
+        }
+
+        @keyframes blinker {
+            50% { opacity: 0; }
+        }
+
+        #game-area { display: none; }
+        
+        /* Action Center Panels */
+        .panel { display: none; margin-top: 10px; }
+        .panel.active { display: block; }
+
+        .giant-timer {
+            font-size: 52px;
+            color: #FF0000;
+            text-shadow: 3px 3px #FFFF00;
+            font-family: 'Courier New', Courier, monospace;
+            height: 60px;
+        }
+
+        .banner-err {
+            background: #FF0000;
+            color: #FFFFFF;
+            padding: 5px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .result-text {
+            font-size: 18px;
+            margin: 10px 0;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="marquee-container">
+        <marquee scrollamount="12">WELCOME TO CAMFOOLERY! VOICE CHAT IS LIVE. FOOL YOUR FRIENDS WITH STILL PHOTOS OR MOTIONLESS LIVE VIDEO!</marquee>
+    </div>
+
+    <h1>CAMFOOLERY</h1>
+
+    <!-- SETUP AREA -->
+    <div id="setup-area" class="window">
+        <div class="titlebar">
+            <span>C:\CAMFOOLERY\CONNECT.EXE</span>
+        </div>
+        
+        <div id="setup-error" class="banner-err"></div>
+
+        <p>1. Allow Camera and Microphone Access!</p>
+        <p>Your 6-Digit Room Code: <b id="my-peer-id" class="blink" style="color:#000; background:#00FF00; padding:2px 8px; font-size: 22px; font-family: 'Courier New', Courier, monospace;">GENERATING...</b></p>
+        <hr color="#000" width="80%">
+        <p>2. Connect to your opponent:</p>
+        <input type="text" id="target-id" placeholder="123456" maxlength="6" style="width: 160px; letter-spacing: 3px;">
+        <br>
+        <button onclick="connectToFriend()">CONNECT TO GAME</button>
+    </div>
+
+    <!-- GAME AREA -->
+    <div id="game-area">
+        <table class="scoreboard">
+            <tr>
+                <th>YOU</th>
+                <th>OPPONENT</th>
+            </tr>
+            <tr>
+                <td id="score-me">0</td>
+                <td id="score-them">0</td>
+            </tr>
+        </table>
+
+        <h2 id="status-message" class="blink">WAITING FOR CONNECTION...</h2>
+        <div id="countdown-timer" class="giant-timer"></div>
+
+        <div class="media-container">
+            <div>
+                <h3>YOUR FEED</h3>
+                <div class="media-box">
+                    <!-- Local video is muted locally so you don't hear your own echo -->
+                    <video id="local-video" autoplay muted playsinline></video>
+                </div>
+            </div>
+            <div>
+                <h3>OPPONENT FEED</h3>
+                <div class="media-box">
+                    <video id="remote-video" autoplay playsinline></video>
+                    <img id="remote-image" style="display:none;" />
+                    <div id="remote-blind">OPPONENT IS PREPARING...<br>(Audio Muted)</div>
+                    <div id="remote-hidden">TIME IS UP!<br>MAKE YOUR GUESS!</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTION CENTER (Replaces Modals) -->
+        <div id="action-center" class="window" style="width: 660px; margin-top: 15px;">
+            <div class="titlebar">ACTION CENTER</div>
+
+            <!-- Panel: Ready Up -->
+            <div id="panel-ready" class="panel">
+                <p>Click below when you are ready to start the round.</p>
+                <button class="btn-primary" style="font-size: 20px; padding: 10px 30px;" onclick="declareReady()">I AM READY</button>
+            </div>
+
+            <!-- Panel: Waiting for opponent to ready -->
+            <div id="panel-wait" class="panel">
+                <h3 class="blink">WAITING FOR OPPONENT TO BE READY...</h3>
+            </div>
+
+            <!-- Panel: Challenger Controls -->
+            <div id="panel-challenger-prep" class="panel">
+                <p style="color: #FF0000; font-weight: bold;">YOUR MIC IS CURRENTLY MUTED. PREPARE YOUR POSE!</p>
+                <p>
+                    Challenge Time: 
+                    <select id="duration-select">
+                        <option value="3">3 Secs (Low Risk: +30 Pts)</option>
+                        <option value="5" selected>5 Secs (Med Risk: +50 Pts)</option>
+                        <option value="10">10 Secs (High Risk: +100 Pts)</option>
+                    </select>
+                </p>
+                <button class="btn-primary" onclick="startChallenge('image')">SEND STILL IMAGE</button>
+                <button class="btn-primary" onclick="startChallenge('video')">SEND LIVE VIDEO</button>
+            </div>
+
+            <!-- Panel: Guesser Waiting for Prep -->
+            <div id="panel-guesser-wait" class="panel">
+                <h3>OPPONENT IS PREPARING THEIR CHALLENGE...</h3>
+                <p>Their video and audio are hidden so they can set up.</p>
+            </div>
+
+            <!-- Panel: Guesser Input -->
+            <div id="panel-guessing" class="panel">
+                <p>What were you just looking at?!</p>
+                <button onclick="submitGuess('image')" style="font-size:20px;">IT WAS AN IMAGE</button>
+                <button onclick="submitGuess('video')" style="font-size:20px;">IT WAS A VIDEO</button>
+            </div>
+
+            <!-- Panel: Result Display -->
+            <div id="panel-result" class="panel">
+                <h2 id="result-headline" style="font-size: 28px; margin: 5px 0;">RESULT</h2>
+                <div id="result-text" class="result-text"></div>
+                <button class="btn-primary" style="margin-top: 10px;" onclick="resetForNextRound()">CONTINUE TO NEXT ROUND</button>
+            </div>
+            
+            <!-- Panel: Blank / Idle -->
+            <div id="panel-idle" class="panel active">
+                <p>Establishing connection...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Canvas for capturing static frames -->
+    <canvas id="snapshot-canvas" style="display:none;"></canvas>
+
+    <script>
+        // System / Network Variables
+        let peer;
+        let dataConn;
+        let mediaCall;
+        let localStream;
+        
+        // Game State Variables
+        let isChallenger = false;
+        let myScore = 0;
+        let theirScore = 0;
+        
+        let currentMode = ''; 
+        let currentDuration = 0;
+        let countdownInterval;
+
+        // Synchronization State
+        let myReady = false;
+        let theirReady = false;
+
+        // Generate 6-Digit Code
+        function generate6DigitCode() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
+
+        // Initialize WebCam, Mic and PeerJS
+        async function init() {
+            try {
+                // Request BOTH Video and Audio
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('local-video').srcObject = localStream;
+                initPeer();
+            } catch (err) {
+                showSetupError("Camera or Microphone access denied! Please refresh and grant permissions.");
+            }
+        }
+
+        function initPeer() {
+            const roomCode = generate6DigitCode();
+            
+            const peerConfig = {
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelay',
+                            credential: 'openrelay'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelay',
+                            credential: 'openrelay'
+                        }
+                    ]
+                }
+            };
+
+            peer = new Peer(roomCode, peerConfig);
+            
+            peer.on('open', id => {
+                document.getElementById('my-peer-id').innerText = id;
+                document.getElementById('my-peer-id').classList.remove('blink');
+            });
+
+            peer.on('connection', conn => {
+                dataConn = conn;
+                setupDataConnection();
+                isChallenger = false; 
+            });
+
+            peer.on('call', call => {
+                mediaCall = call;
+                call.answer(localStream);
+                call.on('stream', remoteStream => {
+                    document.getElementById('remote-video').srcObject = remoteStream;
+                    startGameUI();
+                });
+            });
+
+            peer.on('error', err => {
+                if (err.type === 'unavailable-id') {
+                    initPeer();
+                } else {
+                    showSetupError("Network Error: " + err.type);
+                }
+            });
+        }
+
+        function showSetupError(msg) {
+            const errBox = document.getElementById('setup-error');
+            errBox.innerText = msg;
+            errBox.style.display = 'block';
+        }
+
+        function connectToFriend() {
+            const targetId = document.getElementById('target-id').value.trim();
+            if (!targetId || targetId.length !== 6) {
+                showSetupError("Please enter a valid 6-digit Room Code!");
+                return;
+            }
+
+            dataConn = peer.connect(targetId);
+            setupDataConnection();
+            
+            mediaCall = peer.call(targetId, localStream);
+            mediaCall.on('stream', remoteStream => {
+                document.getElementById('remote-video').srcObject = remoteStream;
+                startGameUI();
+            });
+
+            isChallenger = true; 
+        }
+
+        function setupDataConnection() {
+            dataConn.on('open', () => {
+                document.getElementById('status-message').innerText = "CONNECTED! VOICE CHAT ACTIVE.";
+                document.getElementById('status-message').classList.remove('blink');
+                switchPanel('panel-ready');
+            });
+            
+            dataConn.on('data', data => {
+                if (data.type === 'ready') {
+                    theirReady = true;
+                    checkBothReady();
+                } else if (data.type === 'start_challenge') {
+                    receiveChallenge(data);
+                } else if (data.type === 'guess') {
+                    resolveGuess(data.guess);
+                } else if (data.type === 'result') {
+                    applyResult(data);
+                }
+            });
+        }
+
+        function startGameUI() {
+            document.getElementById('setup-area').style.display = 'none';
+            document.getElementById('game-area').style.display = 'block';
+        }
+
+        // --- UI PANEL MANAGEMENT ---
+        function switchPanel(panelId) {
+            const panels = document.querySelectorAll('.panel');
+            panels.forEach(p => p.classList.remove('active'));
+            document.getElementById(panelId).classList.add('active');
+        }
+
+        function setLocalMicMuted(mute) {
+            if (localStream && localStream.getAudioTracks().length > 0) {
+                // enabled = true means mic is live. enabled = false means muted.
+                localStream.getAudioTracks()[0].enabled = !mute;
+            }
+        }
+
+        // --- GAMEPLAY FLOW ---
+
+        function declareReady() {
+            myReady = true;
+            dataConn.send({ type: 'ready' });
+            
+            if (theirReady) {
+                checkBothReady();
+            } else {
+                switchPanel('panel-wait');
+            }
+        }
+
+        function checkBothReady() {
+            if (myReady && theirReady) {
+                startPrepPhase();
+            }
+        }
+
+        function startPrepPhase() {
+            document.getElementById('status-message').innerText = "PREPARATION PHASE";
+            
+            if (isChallenger) {
+                // Challenger: Mute mic so opponent can't hear them setup
+                setLocalMicMuted(true);
+                switchPanel('panel-challenger-prep');
+            } else {
+                // Guesser: Put a blind over the remote video feed
+                document.getElementById('remote-blind').style.display = 'block';
+                switchPanel('panel-guesser-wait');
+            }
+        }
+
+        function startChallenge(mode) {
+            const duration = parseInt(document.getElementById('duration-select').value);
+            currentMode = mode;
+            currentDuration = duration;
+
+            let payload = { type: 'start_challenge', mode: mode, duration: duration };
+
+            if (mode === 'image') {
+                const video = document.getElementById('local-video');
+                const canvas = document.getElementById('snapshot-canvas');
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                payload.snapshot = canvas.toDataURL('image/jpeg', 0.6);
+            }
+
+            dataConn.send(payload);
+            switchPanel('panel-idle');
+            
+            runCountdown(duration, "HOLD STILL! DO NOT MOVE OR SPEAK!", () => {
+                document.getElementById('status-message').innerText = "WAITING FOR OPPONENT TO GUESS...";
+            });
+        }
+
+        function receiveChallenge(data) {
+            // Remove the blind, reveal the challenge visual
+            document.getElementById('remote-blind').style.display = 'none';
+
+            if (data.mode === 'image') {
+                document.getElementById('remote-video').style.display = 'none';
+                document.getElementById('remote-image').src = data.snapshot;
+                document.getElementById('remote-image').style.display = 'block';
+            }
+            
+            switchPanel('panel-idle');
+
+            runCountdown(data.duration, "ANALYZE CAREFULLY... WAS IT IMAGE OR VIDEO?", () => {
+                // Hide evidence when time is up
+                document.getElementById('remote-video').style.display = 'none';
+                document.getElementById('remote-image').style.display = 'none';
+                document.getElementById('remote-hidden').style.display = 'block';
+                
+                document.getElementById('status-message').innerText = "TIME IS UP! MAKE YOUR SELECTION!";
+                switchPanel('panel-guessing');
+            });
+        }
+
+        function runCountdown(seconds, message, callback) {
+            document.getElementById('status-message').innerText = message;
+            let timeleft = seconds;
+            document.getElementById('countdown-timer').innerText = timeleft;
+            
+            clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                timeleft--;
+                if (timeleft <= 0) {
+                    clearInterval(countdownInterval);
+                    document.getElementById('countdown-timer').innerText = '';
+                    callback();
+                } else {
+                    document.getElementById('countdown-timer').innerText = timeleft;
+                }
+            }, 1000);
+        }
+
+        function submitGuess(guess) {
+            switchPanel('panel-idle');
+            document.getElementById('status-message').innerText = "SENDING GUESS...";
+            dataConn.send({ type: 'guess', guess: guess });
+        }
+
+        function resolveGuess(guess) {
+            const isCorrect = (guess === currentMode);
+            
+            let resultData = {
+                type: 'result',
+                correct: isCorrect,
+                actualMode: currentMode,
+                duration: currentDuration
+            };
+
+            dataConn.send(resultData);
+            applyResult(resultData);
+        }
+
+        function applyResult(data) {
+            // Unmute the Challenger's microphone now that the round is over
+            setLocalMicMuted(false);
+
+            // Clean up visual overlays
+            document.getElementById('remote-video').style.display = 'block';
+            document.getElementById('remote-image').style.display = 'none';
+            document.getElementById('remote-blind').style.display = 'none';
+            document.getElementById('remote-hidden').style.display = 'none';
+
+            const headline = document.getElementById('result-headline');
+            const text = document.getElementById('result-text');
+
+            let detailMsg = `The challenger used a <b>${data.actualMode.toUpperCase()}</b> for ${data.duration} seconds.<br><br>`;
+
+            if (data.correct) {
+                headline.innerText = "GUESS CORRECT!";
+                headline.style.color = "#00FF00";
+                if (!isChallenger) {
+                    detailMsg += "You saw right through them! <b>+10 Points</b> to you!";
+                    myScore += 10;
+                } else {
+                    detailMsg += "They caught you! <b>+10 Points</b> to your opponent.";
+                    theirScore += 10;
+                }
+            } else {
+                const pts = data.duration * 10;
+                headline.innerText = "FOOLED!";
+                headline.style.color = "#FF0000";
+                if (isChallenger) {
+                    detailMsg += `Your deception worked! You earned <b>+${pts} Points</b>!`;
+                    myScore += pts;
+                } else {
+                    detailMsg += `You were tricked! Opponent earned <b>+${pts} Points</b>!`;
+                    theirScore += pts;
+                }
+            }
+
+            document.getElementById('score-me').innerText = myScore;
+            document.getElementById('score-them').innerText = theirScore;
+
+            text.innerHTML = detailMsg;
+            document.getElementById('status-message').innerText = "ROUND COMPLETE!";
+            switchPanel('panel-result');
+        }
+
+        function resetForNextRound() {
+            // Reset state variables
+            myReady = false;
+            theirReady = false;
+            
+            // Swap roles
+            isChallenger = !isChallenger;
+            
+            // Go back to the Ready panel
+            document.getElementById('status-message').innerText = "VOICE CHAT ACTIVE. GET READY FOR NEXT ROUND.";
+            switchPanel('panel-ready');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
