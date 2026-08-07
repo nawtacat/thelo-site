@@ -1,0 +1,38 @@
+# Netlify custom headers.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# The Thelo Android app bundles its HTML inside the APK, so the WebView runs the
+# page from file:///android_asset/... . That gives the page the opaque origin
+# "null", which means every fetch() it makes to this site is a CROSS-ORIGIN
+# request and requires an Access-Control-Allow-Origin header on the response.
+#
+# The site used to be served from GitHub Pages (thelo.space), which sends
+# "access-control-allow-origin: *" on every response automatically. Netlify does
+# not. So when the site moved to Netlify (thelo.ink), the app kept rendering its
+# whiteboard -- the HTML is local -- but silently failed to fetch any lesson JSON:
+#
+#     Access to fetch at 'https://thelo.ink/lessons/E1.json' from origin 'null'
+#     has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header
+#     is present on the requested resource.
+#
+# Images and audio kept working because <img> and <audio> are not CORS-restricted.
+# That is why the symptom looked like "opens but content is missing" rather than
+# an outright failure.
+#
+# This restores the behaviour the app was built against. It grants no new access:
+# every file here is already publicly readable over plain HTTP.
+
+/*
+  Access-Control-Allow-Origin: *
+
+# Web fonts are CORS-restricted even when referenced from CSS url(), so they need
+# the header explicitly too. Long cache since these are content-addressed by name.
+/fonts/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=31536000
+
+# Lesson content changes without the filename changing, so it must revalidate.
+/lessons/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=0, must-revalidate
