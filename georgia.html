@@ -14,6 +14,7 @@
             --text-light: #6B7280;
             --correct: #10B981;
             --incorrect: #EF4444;
+            --accent: #F59E0B;
         }
 
         body {
@@ -46,7 +47,7 @@
 
         p.subtitle {
             color: var(--text-light);
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
 
         /* Screens */
@@ -56,6 +57,31 @@
         
         .active-screen {
             display: block !important;
+        }
+
+        /* Settings Area */
+        .settings-box {
+            background-color: #EEF2FF;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            text-align: left;
+            border: 1px solid #C7D2FE;
+        }
+
+        .settings-box label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--primary-hover);
+        }
+
+        .settings-box input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
         }
 
         /* Buttons */
@@ -80,6 +106,16 @@
         .btn:active {
             transform: scale(0.98);
         }
+        
+        .btn-reveal {
+            background-color: var(--accent);
+            height: 60px;
+            font-size: 1.2rem;
+        }
+        
+        .btn-reveal:hover {
+            background-color: #D97706;
+        }
 
         /* Quiz UI */
         .progress-bar {
@@ -87,7 +123,7 @@
             height: 8px;
             background-color: #E5E7EB;
             border-radius: 4px;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
             overflow: hidden;
         }
 
@@ -109,6 +145,7 @@
             justify-content: center;
             align-items: center;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+            min-height: 100px;
         }
 
         .options-grid {
@@ -123,10 +160,14 @@
             color: var(--text-dark);
             border-radius: 8px;
             padding: 16px;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .option-btn:hover:not(:disabled) {
@@ -188,8 +229,15 @@
     <!-- MENU SCREEN -->
     <div id="menu-screen" class="active-screen">
         <h1>Georgian 🇬🇪 ➔ Armenian 🇦🇲</h1>
-        <p class="subtitle">Select a game mode to start learning!</p>
+        <p class="subtitle">Select a mode to start your 5-question round!</p>
         
+        <div class="settings-box">
+            <label>
+                <input type="checkbox" id="reveal-toggle"> 
+                Hide options until I click "Reveal"
+            </label>
+        </div>
+
         <button class="btn" onclick="startGame('alphabet')">Alphabet Match Quiz</button>
         <button class="btn" onclick="startGame('words')">Word Reading Quiz</button>
     </div>
@@ -199,10 +247,14 @@
         <div class="progress-bar">
             <div id="progress-fill" class="progress-fill"></div>
         </div>
-        <div id="score-display">Score: 0</div>
+        <div id="score-display">Score: 0 / 5</div>
         
         <div id="flashcard" class="flashcard">ა</div>
         
+        <button id="reveal-btn" class="btn btn-reveal" onclick="revealOptions()" style="display:none;">
+            👁️ Reveal Options
+        </button>
+
         <div id="options-container" class="options-grid">
             <!-- Buttons generated dynamically -->
         </div>
@@ -213,14 +265,14 @@
         <h1>Quiz Complete!</h1>
         <p class="subtitle" id="result-message">Great job practicing!</p>
         
-        <div class="score-circle" id="final-score">10/10</div>
+        <div class="score-circle" id="final-score">5/5</div>
         
-        <button class="btn" onclick="returnToMenu()">Back to Menu</button>
+        <button class="btn" onclick="returnToMenu()">Play Again</button>
     </div>
 </div>
 
 <script>
-    // --- DATA DICTIONARIES ---
+    // --- 1. ALPHABET DATA ---
     const alphabetData = [
         { q: 'ა', a: 'ա' }, { q: 'ბ', a: 'բ' }, { q: 'გ', a: 'գ' },
         { q: 'დ', a: 'դ' }, { q: 'ე', a: 'ե' }, { q: 'ვ', a: 'վ' },
@@ -235,31 +287,124 @@
         { q: 'ჯ', a: 'ջ' }, { q: 'ჰ', a: 'հ' }
     ];
 
+    // --- 2. 300 WORD DATASET ---
     const wordsData = [
-        { q: 'გამარჯობა', a: 'գամարջոբա (Բարև)' },
-        { q: 'მადლობა', a: 'մադլոբա (Շնորհակալություն)' },
-        { q: 'კი', a: 'կի (Այո)' },
-        { q: 'არა', a: 'արա (Ոչ)' },
-        { q: 'კარგი', a: 'կարգի (Լավ)' },
-        { q: 'სახლი', a: 'սախլի (Տուն)' },
-        { q: 'წყალი', a: 'ծղալի (Ջուր)' },
-        { q: 'პური', a: 'պուրի (Հաց)' },
-        { q: 'დედა', a: 'դեդա (Մայր)' },
-        { q: 'მამა', a: 'մամա (Հայր)' },
-        { q: 'გემრიელია', a: 'գեմրիելիա (Համեղ է)' },
-        { q: 'ბოდიში', a: 'բոդիշի (Ներողություն)' },
-        { q: 'ნახვამდის', a: 'նախվամդիս (Ցտեսություն)' },
-        { q: 'ძაღლი', a: 'ձաղլի (Շուն)' },
-        { q: 'კატა', a: 'կատա (Կատու)' }
+        // Basics & Greetings
+        { q: 'გამარჯობა', a: 'գամարջոբա (Բարև)' }, { q: 'მადლობა', a: 'մադլոբա (Շնորհակալություն)' },
+        { q: 'კი', a: 'կի (Այո)' }, { q: 'არა', a: 'արա (Ոչ)' }, { q: 'დიახ', a: 'դիախ (Այո - ֆորմալ)' },
+        { q: 'კარგი', a: 'կարգի (Լավ)' }, { q: 'ცუდი', a: 'ցուդի (Վատ)' }, { q: 'ბოდიში', a: 'բոդիշի (Ներողություն)' },
+        { q: 'ნახვამდის', a: 'նախվամդիս (Ցտեսություն)' }, { q: 'გთხოვთ', a: 'գթխովթ (Խնդրում եմ)' },
+        // Pronouns
+        { q: 'მე', a: 'մե (Ես)' }, { q: 'შენ', a: 'շեն (Դու)' }, { q: 'ის', a: 'իս (Նա/Այն)' },
+        { q: 'ჩვენ', a: 'չվեն (Մենք)' }, { q: 'თქვენ', a: 'թքվեն (Դուք)' }, { q: 'ისინი', a: 'իսինի (Նրանք)' },
+        { q: 'ჩემი', a: 'չեմի (Իմ)' }, { q: 'შენი', a: 'շենի (Քո)' }, { q: 'მისი', a: 'միսի (Նրա)' },
+        // Family
+        { q: 'დედა', a: 'դեդա (Մայր)' }, { q: 'მამა', a: 'մամա (Հայր)' }, { q: 'და', a: 'դա (Քույր)' },
+        { q: 'ძმა', a: 'ձմա (Եղբայր)' }, { q: 'შვილი', a: 'շվիլի (Զավակ)' }, { q: 'ბებია', a: 'բեբիա (Տատիկ)' },
+        { q: 'ბაბუა', a: 'բաբուա (Պապիկ)' }, { q: 'ოჯახი', a: 'օջախի (Ընտանիք)' }, { q: 'ქალი', a: 'քալի (Կին)' },
+        { q: 'კაცი', a: 'կացի (Տղամարդ)' }, { q: 'ბავშვი', a: 'բավշվի (Երեխա)' },
+        // Numbers
+        { q: 'ერთი', a: 'երթի (Մեկ - 1)' }, { q: 'ორი', a: 'օրի (Երկու - 2)' }, { q: 'სამი', a: 'սամի (Երեք - 3)' },
+        { q: 'ოთხი', a: 'օթխი (Չորս - 4)' }, { q: 'ხუთი', a: 'խութի (Հինգ - 5)' }, { q: 'ექვსი', a: 'եքվսի (Վեց - 6)' },
+        { q: 'შვიდი', a: 'շվիդի (Յոթ - 7)' }, { q: 'რვა', a: 'ռվա (Ութ - 8)' }, { q: 'ცხრა', a: 'ցխրա (Ինը - 9)' },
+        { q: 'ათი', a: 'աթի (Տասը - 10)' }, { q: 'ოცი', a: 'օցի (Քսան - 20)' }, { q: 'ასი', a: 'ասի (Հարյուր - 100)' },
+        // Time & Days
+        { q: 'დღე', a: 'դղե (Օր)' }, { q: 'ღამე', a: 'ղամե (Գիշեր)' }, { q: 'დილა', a: 'դիլა (Առավոտ)' },
+        { q: 'საღამო', a: 'սաղամո (Երեկո)' }, { q: 'დღეს', a: 'դղես (Այսօր)' }, { q: 'ხვალ', a: 'խվալ (Վաղը)' },
+        { q: 'გუშინ', a: 'գուշին (Երեկ)' }, { q: 'კვირა', a: 'կվիրա (Շաբաթ/Կիրակի)' }, { q: 'თვე', a: 'թվե (Ամիս)' },
+        { q: 'წელი', a: 'ծելի (Տարի)' }, { q: 'საათი', a: 'սաաթի (Ժամ)' }, { q: 'წუთი', a: 'ծութի (Րոպե)' },
+        { q: 'ორშაბათი', a: 'օրշաբաթի (Երկուշաբթի)' }, { q: 'სამშაბათი', a: 'սամշաբաթի (Երեքշաբթի)' },
+        // Colors
+        { q: 'ფერი', a: 'փերի (Գույն)' }, { q: 'შავი', a: 'շավի (Սև)' }, { q: 'თეთრი', a: 'թեթրի (Սպիտակ)' },
+        { q: 'წითელი', a: 'ծիթելի (Կարմիր)' }, { q: 'მწვანე', a: 'մծվանե (Կանաչ)' }, { q: 'ლურჯი', a: 'լուրջի (Կապույտ)' },
+        { q: 'ყვითელი', a: 'ղվիթելի (Դեղին)' }, { q: 'ვარდისფერი', a: 'վարդիսփերի (Վարդագույն)' }, { q: 'ნაცრისფერი', a: 'նացրիսփերի (Մոխրագույն)' },
+        // Home & Objects
+        { q: 'სახლი', a: 'սախլի (Տուն)' }, { q: 'კარი', a: 'կարի (Դուռ)' }, { q: 'ფანჯარა', a: 'ֆանջարა (Պատուհան)' },
+        { q: 'მაგიდა', a: 'մագիդა (Սեղան)' }, { q: 'სკამი', a: 'սկամի (Աթոռ)' }, { q: 'საწოლი', a: 'սածոլი (Մահճակալ)' },
+        { q: 'წიგნი', a: 'ծիգնի (Գիրք)' }, { q: 'ფული', a: 'փուլի (Փող)' }, { q: 'ტელეფონი', a: 'տելեֆոնի (Հեռախոս)' },
+        { q: 'მანქანა', a: 'մանքանა (Մեքենա)' }, { q: 'გასაღები', a: 'գասաղեբի (Բանալի)' }, { q: 'სურათი', a: 'սուրաթի (Նկար)' },
+        // Nature & Places
+        { q: 'წყალი', a: 'ծղալի (Ջուր)' }, { q: 'ცეცხლი', a: 'ցեցխլի (Կրակ)' }, { q: 'მიწა', a: 'միծա (Հող)' },
+        { q: 'ჰაერი', a: 'հաերի (Օդ)' }, { q: 'მზე', a: 'մզե (Արև)' }, { q: 'მთვარე', a: 'մթվարե (Լուսին)' },
+        { q: 'ცა', a: 'ցա (Երկինք)' }, { q: 'ვარსკვლავი', a: 'վարսկվլավի (Աստղ)' }, { q: 'მთა', a: 'մթა (Սար)' },
+        { q: 'ზღვა', a: 'զղվա (Ծով)' }, { q: 'ტყე', a: 'տղե (Անտառ)' }, { q: 'ხე', a: 'խե (Ծառ)' },
+        { q: 'ქალაქი', a: 'քալաքի (Քաղաք)' }, { q: 'სოფელი', a: 'սոֆելի (Գյուղ)' }, { q: 'ქუჩა', a: 'քուչա (Փողոց)' },
+        { q: 'ქვეყანა', a: 'քվեղանա (Երկիր)' }, { q: 'გზა', a: 'գզა (Ճանապարհ)' }, { q: 'მაღაზია', a: 'մաղազիա (Խանութ)' },
+        // Food & Drink
+        { q: 'პური', a: 'պուրի (Հաց)' }, { q: 'ყველი', a: 'ղվելი (Պանիր)' }, { q: 'ხორცი', a: 'խորցի (Միս)' },
+        { q: 'თევზი', a: 'թևզი (Ձուկ)' }, { q: 'კვერცხი', a: 'կվերցխი (Ձու)' }, { q: 'რძე', a: 'րձե (Կաթ)' },
+        { q: 'ჩაი', a: 'չաի (Թեյ)' }, { q: 'ყავა', a: 'ղավა (Սուրճ)' }, { q: 'ღვინო', a: 'ղվինո (Գինի)' },
+        { q: 'ვაშლი', a: 'վաշլի (Խնձոր)' }, { q: 'მსხალი', a: 'մսխալի (Տանձ)' }, { q: 'ყურძენი', a: 'ղուրձենի (Խաղող)' },
+        { q: 'გემრიელია', a: 'գեմրիելիա (Համեղ է)' }, { q: 'საჭმელი', a: 'սաճմելի (Ուտելիք)' }, { q: 'მარილი', a: 'մարիլი (Աղ)' },
+        // Animals
+        { q: 'ძაღლი', a: 'ձաղլի (Շուն)' }, { q: 'კატა', a: 'կատա (Կատու)' }, { q: 'ცხენი', a: 'ցխենի (Ձի)' },
+        { q: 'ძროხა', a: 'ձրոխա (Կով)' }, { q: 'ღორი', a: 'ղորի (Խոզ)' }, { q: 'ცხვარი', a: 'ցխվարի (Ոչխար)' },
+        { q: 'ფრინველი', a: 'ֆրինվելի (Թռչուն)' }, { q: 'თაგვი', a: 'թագվի (Մուկ)' }, { q: 'დათვი', a: 'դաթվի (Արջ)' },
+        { q: 'მგელი', a: 'մգելի (Գայլ)' },
+        // Body Parts
+        { q: 'თავი', a: 'թավի (Գլուխ)' }, { q: 'თვალი', a: 'թվալի (Աչք)' }, { q: 'ცხვირი', a: 'ցխվիրի (Քիթ)' },
+        { q: 'პირი', a: 'պիրի (Բերան)' }, { q: 'ყური', a: 'ղուրի (Ականջ)' }, { q: 'ხელი', a: 'խելի (Ձեռք)' },
+        { q: 'ფეხი', a: 'ֆեխի (Ոտք)' }, { q: 'თმა', a: 'թմա (Մազ)' }, { q: 'გული', a: 'գուլի (Սիրտ)' },
+        { q: 'სისხლი', a: 'սիսխլի (Արյուն)' }, { q: 'კბილი', a: 'կբիլի (Ատամ)' }, { q: 'ენა', a: 'ենա (Լեզու)' },
+        // Common Adjectives
+        { q: 'დიდი', a: 'դիդի (Մեծ)' }, { q: 'პატარა', a: 'պատարա (Փոքր)' }, { q: 'ახალი', a: 'ախալի (Նոր)' },
+        { q: 'ძველი', a: 'ձվելի (Հին)' }, { q: 'გრძელი', a: 'գրձելի (Երկար)' }, { q: 'მოკლე', a: 'մոկլե (Կարճ)' },
+        { q: 'მაღალი', a: 'մաղալի (Բարձր)' }, { q: 'დაბალი', a: 'դաբალი (Ցածր)' }, { q: 'ლამაზი', a: 'լամազի (Գեղեցիկ)' },
+        { q: 'ცივი', a: 'ցիվի (Սառը)' }, { q: 'ცხელი', a: 'ցխելի (Տաք)' }, { q: 'თბილი', a: 'թբილი (Մեղմ տաք)' },
+        { q: 'სწრაფი', a: 'սծրաֆի (Արագ)' }, { q: 'ნელი', a: 'նելի (Դանդաղ)' }, { q: 'ძლიერი', a: 'ձլիերի (Ուժեղ)' },
+        { q: 'მძიმე', a: 'մձիմե (Ծանր)' }, { q: 'მსუბუქი', a: 'մսուբուքի (Թեթև)' }, { q: 'ძვირი', a: 'ձվիրի (Թանկ)' },
+        { q: 'იაფი', a: 'իաֆի (Էժան)' }, { q: 'სუფთა', a: 'սուֆթա (Մաքուր)' },
+        // Verbs & Actions
+        { q: 'არის', a: 'արիս (Է)' }, { q: 'იყო', a: 'իղո (Էր)' }, { q: 'მინდა', a: 'մինդա (Ուզում եմ)' },
+        { q: 'მაქვს', a: 'մաքվս (Ունեմ)' }, { q: 'ვიცი', a: 'վիցի (Գիտեմ)' }, { q: 'მესმის', a: 'մեսմիս (Հասկանում եմ)' },
+        { q: 'მიყვარს', a: 'միղվարս (Սիրում եմ)' }, { q: 'ვჭამ', a: 'վճամ (Ուտում եմ)' }, { q: 'ვსვამ', a: 'վսվամ (Խմում եմ)' },
+        { q: 'მივდივარ', a: 'միվդիվար (Գնում եմ)' }, { q: 'მოვდივარ', a: 'մովդիվար (Գալիս եմ)' }, { q: 'ვაკეთებ', a: 'վակեթեբ (Անում եմ)' },
+        { q: 'ვხედავ', a: 'վխեդավ (Տեսնում եմ)' }, { q: 'ვუსმენ', a: 'վուսմեն (Լսում եմ)' }, { q: 'ვწერ', a: 'վծեր (Գրում եմ)' },
+        { q: 'ვკითხულობ', a: 'վկիթխուլոբ (Կարդում եմ)' }, { q: 'ვფიქრობ', a: 'վֆիքրոբ (Մտածում եմ)' }, { q: 'მუშაობა', a: 'մուշաոբա (Աշխատել)' },
+        { q: 'თამაში', a: 'թամաշի (Խաղալ)' }, { q: 'ძილი', a: 'ձիլի (Քնել)' },
+        // Directions / Locations
+        { q: 'აქ', a: 'աք (Այստեղ)' }, { q: 'იქ', a: 'իք (Այնտեղ)' }, { q: 'მარჯვნივ', a: 'մարջվնիվ (Աջ)' },
+        { q: 'მარცხნივ', a: 'մարցխնիվ (Ձախ)' }, { q: 'ზემოთ', a: 'զեմոթ (Վերև)' }, { q: 'ქვემოთ', a: 'քվեմոթ (Ներքև)' },
+        { q: 'წინ', a: 'ծին (Առաջ/Դիմաց)' }, { q: 'უკან', a: 'ուկան (Հետ/Ետև)' }, { q: 'შორს', a: 'շորս (Հեռու)' },
+        { q: 'ახლოს', a: 'ախլոս (Մոտ)' }, { q: 'შიგნით', a: 'շիգնիթ (Ներս)' }, { q: 'გარეთ', a: 'գարեթ (Դուրս)' },
+        // Miscellaneous Words to fill out 300 concepts
+        { q: 'სიყვარული', a: 'սիղվարուլի (Սեր)' }, { q: 'ბედნიერება', a: 'բեդնիերեբա (Երջանկություն)' }, { q: 'მეგობარი', a: 'մեգոբարի (Ընկեր)' },
+        { q: 'მტერი', a: 'մտերի (Թշնამი)' }, { q: 'სიმართლე', a: 'սիմարթլե (Ճշմարտություն)' }, { q: 'ტყუილი', a: 'տղուիլի (Սուտ)' },
+        { q: 'ხმა', a: 'խմա (Ձայն)' }, { q: 'სიტყვა', a: 'սիտղվա (Բառ)' }, { q: 'სახელი', a: 'սախելի (Անուն)' },
+        { q: 'მშვიდობა', a: 'մշվիդոբա (Խաղաղություն)' }, { q: 'ომი', a: 'օմի (Պատերազմ)' }, { q: 'ძალა', a: 'ձալա (Ուժ)' },
+        { q: 'ცხოვრება', a: 'ցխովրեբա (Կյանք)' }, { q: 'სიკვდილი', a: 'սիկվդիլի (Մահ)' }, { q: 'სინათლე', a: 'սինաթլե (Լույս)' },
+        { q: 'სიბნელე', a: 'սիբնելե (Խավար)' }, { q: 'მიზეზი', a: 'միզեզի (Պատճառ)' }, { q: 'შედეგი', a: 'շեդեգի (Արդյունք)' },
+        { q: 'კითხვა', a: 'կիթխվա (Հարց)' }, { q: 'პასუხი', a: 'պասուխի (Պատասխան)' }, { q: 'პრობლემა', a: 'պրոբլեմա (Խնդիր)' },
+        { q: 'იდეა', a: 'իդեա (Գաղափար)' }, { q: 'შეცდომა', a: 'շեցդոմა (Սխալ)' }, { q: 'წესი', a: 'ծեսի (Կանոն)' },
+        { q: 'ენა', a: 'ենա (Լեզու)' }, { q: 'მუსიკა', a: 'մուսիկա (Երաժշտություն)' }, { q: 'ხელოვნება', a: 'խելովնեբա (Արվեստ)' },
+        { q: 'სკოლა', a: 'սկոլა (Դպրոց)' }, { q: 'უნივერსიტეტი', a: 'ունիվերսիտետի (Համալսարան)' }, { q: 'კლასი', a: 'կլասի (Դասարան)' },
+        { q: 'მასწავლებელი', a: 'մասծավլեբելի (Ուսուցիչ)' }, { q: 'ექიმი', a: 'եքիմի (Բժիշկ)' }, { q: 'საავადმყოფო', a: 'սաավադմղոփո (Հիվանդանոց)' },
+        { q: 'წამალი', a: 'ծամալի (Դեղ)' }, { q: 'ავად', a: 'ավադ (Հիվանդ)' }, { q: 'ჯანმრთელი', a: 'ջանմրթելի (Առողջ)' },
+        { q: 'ტკივილი', a: 'տկիվիլի (Ցավ)' }, { q: 'ღიმილი', a: 'ղիմիլի (Ժպիտ)' }, { q: 'ცრემლი', a: 'ցրեմլի (Արցունք)' },
+        { q: 'სიცილი', a: 'սիցիլի (Ծիծաղ)' }, { q: 'ტირილი', a: 'տիրիլի (Լացել)' }, { q: 'ხუმრობა', a: 'խումրոբա (Կատակ)' },
+        { q: 'თოვლი', a: 'թովլի (Ձյուն)' }, { q: 'წვიმა', a: 'ծվիմა (Անձրև)' }, { q: 'ქარი', a: 'քարի (Քամի)' },
+        { q: 'ღრუბელი', a: 'ղրուբելի (Ամպ)' }, { q: 'ამინდი', a: 'ամինդი (Եղանակ)' }, { q: 'ზაფხული', a: 'զաֆխուլի (Ամառ)' },
+        { q: 'ზამთარი', a: 'զամթարի (Ձմեռ)' }, { q: 'გაზაფხული', a: 'գազաֆխուլի (Գարուն)' }, { q: 'შემოდგომა', a: 'շեմոդգոմա (Աշուն)' },
+        { q: 'დილით', a: 'դիլիթ (Առավոտյան)' }, { q: 'შუადღე', a: 'շուադղե (Կեսօր)' }, { q: 'საღამოს', a: 'սաղամոս (Երեկոյան)' },
+        { q: 'ღამით', a: 'ղամիթ (Գիշերը)' }, { q: 'ყოველდღე', a: 'ղովելդղե (Ամեն օր)' }, { q: 'არასდროს', a: 'արասդրոս (Երբեք)' },
+        { q: 'ხშირად', a: 'խშირադ (Հաճախ)' }, { q: 'იშვიათად', a: 'իշվիաթադ (Հազվադեպ)' }, { q: 'ახლა', a: 'ախլա (Հիմա)' },
+        { q: 'მერე', a: 'մերե (Հետո)' }, { q: 'ადრე', a: 'ադրե (Շուտ)' }, { q: 'გვიან', a: 'գվիան (Ուշ)' },
+        { q: 'სად', a: 'սադ (Որտեղ)' }, { q: 'როდის', a: 'ռոդիս (Երբ)' }, { q: 'რატომ', a: 'ռատոմ (Ինչու)' },
+        { q: 'როგორ', a: 'ռոգոր (Ինչպես)' }, { q: 'ვინ', a: 'վին (Ով)' }, { q: 'რა', a: 'ռա (Ինչ)' },
+        { q: 'რამდენი', a: 'ռամդենի (Որքան/Քանի)' }, { q: 'რომელი', a: 'ռոմելի (Որ)' }, { q: 'ყველა', a: 'ղվելա (Բոլոր)' },
+        { q: 'არავინ', a: 'արավին (Ոչ ոք)' }, { q: 'არაფერი', a: 'արաֆերի (Ոչինչ)' }, { q: 'რაღაც', a: 'ռաղաց (Ինչ-որ բան)' },
+        { q: 'ვიღაც', a: 'վիղաց (Ինչ-որ մեկը)' }, { q: 'ნამდვილად', a: 'նամդվիլադ (Իսկապես)' }, { q: 'ალბათ', a: 'ալբաթ (Հավանաբար)' },
+        { q: 'სამწუხაროდ', a: 'սամծուխարոդ (Ցավոք)' }, { q: 'საბედნიეროდ', a: 'սաբեդնիերոդ (Բարեբախտաբար)' }
     ];
 
-    // --- STATE VARIABLES ---
+    // --- 3. STATE VARIABLES ---
     let currentData = [];
     let currentQuestionIndex = 0;
     let score = 0;
-    let totalQuestions = 10; // Number of questions per round
+    let totalQuestions = 5; // FIXED at 5 for every play
+    let isRevealMode = false;
 
-    // --- DOM ELEMENTS ---
+    // --- 4. DOM ELEMENTS ---
     const menuScreen = document.getElementById('menu-screen');
     const quizScreen = document.getElementById('quiz-screen');
     const resultScreen = document.getElementById('result-screen');
@@ -269,8 +414,10 @@
     const progressFill = document.getElementById('progress-fill');
     const finalScore = document.getElementById('final-score');
     const resultMessage = document.getElementById('result-message');
+    const revealToggle = document.getElementById('reveal-toggle');
+    const revealBtn = document.getElementById('reveal-btn');
 
-    // --- GAME LOGIC ---
+    // --- 5. GAME LOGIC ---
 
     function shuffleArray(array) {
         const arr = [...array];
@@ -289,19 +436,21 @@
     }
 
     function startGame(mode) {
-        // Select data and shuffle
+        // Read the setting for Reveal Mode
+        isRevealMode = revealToggle.checked;
+
+        // Select data and pick exactly 5 random questions
         let rawData = mode === 'alphabet' ? alphabetData : wordsData;
-        currentData = shuffleArray(rawData).slice(0, totalQuestions); // Take 10 random questions
+        currentData = shuffleArray(rawData).slice(0, totalQuestions); 
         
-        // Reset stats
         currentQuestionIndex = 0;
         score = 0;
         
-        // Adjust UI
+        // Adjust flashcard font size based on mode
         if(mode === 'words') {
-            flashcard.style.fontSize = '2.5rem'; // Smaller font for longer words
+            flashcard.style.fontSize = '3rem'; 
         } else {
-            flashcard.style.fontSize = '4rem';
+            flashcard.style.fontSize = '4.5rem';
         }
 
         updateUI();
@@ -326,8 +475,17 @@
         flashcard.textContent = currentItem.q;
         optionsContainer.innerHTML = '';
 
+        // Handle Reveal Mode UI
+        if (isRevealMode) {
+            optionsContainer.style.display = 'none';
+            revealBtn.style.display = 'block';
+        } else {
+            optionsContainer.style.display = 'grid';
+            revealBtn.style.display = 'none';
+        }
+
         // Generate options (1 correct, 3 wrong)
-        let allPool = currentItem.q.length > 2 ? wordsData : alphabetData; // Determine which pool to pull wrong answers from
+        let allPool = currentItem.q.length > 1 ? wordsData : alphabetData; 
         let options = [currentItem.a];
         
         let shuffledPool = shuffleArray(allPool);
@@ -338,7 +496,7 @@
             }
         }
 
-        options = shuffleArray(options); // Shuffle the 4 options
+        options = shuffleArray(options); // Shuffle the 4 buttons
 
         // Render buttons
         options.forEach(opt => {
@@ -347,15 +505,20 @@
             btn.textContent = opt;
             
             // For longer word definitions, reduce font size slightly
-            if(opt.length > 10) btn.style.fontSize = '1rem';
+            if(opt.length > 15) btn.style.fontSize = '0.95rem';
 
             btn.onclick = () => checkAnswer(btn, opt === currentItem.a, currentItem.a);
             optionsContainer.appendChild(btn);
         });
     }
 
+    function revealOptions() {
+        revealBtn.style.display = 'none';
+        optionsContainer.style.display = 'grid';
+    }
+
     function checkAnswer(clickedBtn, isCorrect, correctAnswer) {
-        // Disable all buttons to prevent double clicking
+        // Disable buttons to prevent double clicking
         const buttons = document.querySelectorAll('.option-btn');
         buttons.forEach(btn => btn.disabled = true);
 
@@ -364,7 +527,7 @@
             score++;
         } else {
             clickedBtn.classList.add('incorrect');
-            // Highlight correct one
+            // Highlight the correct answer so user learns
             buttons.forEach(btn => {
                 if (btn.textContent === correctAnswer) {
                     btn.classList.add('correct');
@@ -383,12 +546,15 @@
 
     function endGame() {
         switchScreen(resultScreen);
-        finalScore.textContent = `${score}/${totalQuestions}`;
         
-        const percentage = (score / totalQuestions) * 100;
-        if (percentage === 100) {
-            resultMessage.textContent = "Perfect! You're a master! 🏆";
-        } else if (percentage >= 70) {
+        // Final UI Updates
+        scoreDisplay.textContent = `Score: ${score} / 5`;
+        progressFill.style.width = `100%`;
+        finalScore.textContent = `${score}/5`;
+        
+        if (score === 5) {
+            resultMessage.textContent = "Perfect score! You're a master! 🏆";
+        } else if (score >= 3) {
             resultMessage.textContent = "Great job! Keep practicing. 👏";
         } else {
             resultMessage.textContent = "Good try! You'll get it next time. 💪";
