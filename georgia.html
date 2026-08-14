@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Georgian to Armenian Learning Game</title>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --bg-color: #F3F4F6;
+            --card-bg: #FFFFFF;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --correct: #10B981;
+            --incorrect: #EF4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 90%;
+            max-width: 500px;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            color: var(--primary);
+        }
+
+        p.subtitle {
+            color: var(--text-light);
+            margin-bottom: 2rem;
+        }
+
+        /* Screens */
+        #menu-screen, #quiz-screen, #result-screen {
+            display: none;
+        }
+        
+        .active-screen {
+            display: block !important;
+        }
+
+        /* Buttons */
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 1rem;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Quiz UI */
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #E5E7EB;
+            border-radius: 4px;
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .flashcard {
+            background-color: var(--bg-color);
+            border-radius: 12px;
+            padding: 3rem 1rem;
+            margin-bottom: 2rem;
+            font-size: 4rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .option-btn {
+            background-color: white;
+            border: 2px solid #E5E7EB;
+            color: var(--text-dark);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .option-btn:hover:not(:disabled) {
+            border-color: var(--primary);
+            background-color: #EEF2FF;
+        }
+
+        .option-btn:disabled {
+            cursor: default;
+        }
+
+        .option-btn.correct {
+            background-color: var(--correct);
+            border-color: var(--correct);
+            color: white;
+        }
+
+        .option-btn.incorrect {
+            background-color: var(--incorrect);
+            border-color: var(--incorrect);
+            color: white;
+        }
+
+        #score-display {
+            font-weight: bold;
+            margin-bottom: 1rem;
+            color: var(--text-light);
+        }
+
+        /* Results */
+        .score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background-color: #EEF2FF;
+            color: var(--primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 0 auto 2rem auto;
+            border: 4px solid var(--primary);
+        }
+
+        @media (max-width: 400px) {
+            .options-grid {
+                grid-template-columns: 1fr;
+            }
+            .flashcard {
+                font-size: 3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- MENU SCREEN -->
+    <div id="menu-screen" class="active-screen">
+        <h1>Georgian 🇬🇪 ➔ Armenian 🇦🇲</h1>
+        <p class="subtitle">Select a game mode to start learning!</p>
+        
+        <button class="btn" onclick="startGame('alphabet')">Alphabet Match Quiz</button>
+        <button class="btn" onclick="startGame('words')">Word Reading Quiz</button>
+    </div>
+
+    <!-- QUIZ SCREEN -->
+    <div id="quiz-screen">
+        <div class="progress-bar">
+            <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div id="score-display">Score: 0</div>
+        
+        <div id="flashcard" class="flashcard">ა</div>
+        
+        <div id="options-container" class="options-grid">
+            <!-- Buttons generated dynamically -->
+        </div>
+    </div>
+
+    <!-- RESULT SCREEN -->
+    <div id="result-screen">
+        <h1>Quiz Complete!</h1>
+        <p class="subtitle" id="result-message">Great job practicing!</p>
+        
+        <div class="score-circle" id="final-score">10/10</div>
+        
+        <button class="btn" onclick="returnToMenu()">Back to Menu</button>
+    </div>
+</div>
+
+<script>
+    // --- DATA DICTIONARIES ---
+    const alphabetData = [
+        { q: 'ა', a: 'ա' }, { q: 'ბ', a: 'բ' }, { q: 'გ', a: 'գ' },
+        { q: 'დ', a: 'դ' }, { q: 'ე', a: 'ե' }, { q: 'ვ', a: 'վ' },
+        { q: 'ზ', a: 'զ' }, { q: 'თ', a: 'թ' }, { q: 'ი', a: 'ի' },
+        { q: 'კ', a: 'կ' }, { q: 'ლ', a: 'լ' }, { q: 'მ', a: 'մ' },
+        { q: 'ნ', a: 'ն' }, { q: 'ო', a: 'օ' }, { q: 'პ', a: 'պ' },
+        { q: 'ჟ', a: 'ժ' }, { q: 'რ', a: 'ր' }, { q: 'ს', a: 'ս' },
+        { q: 'ტ', a: 'տ' }, { q: 'უ', a: 'ու' }, { q: 'ფ', a: 'փ' },
+        { q: 'ქ', a: 'ք' }, { q: 'ღ', a: 'ղ' }, { q: 'შ', a: 'շ' },
+        { q: 'ჩ', a: 'չ' }, { q: 'ც', a: 'ց' }, { q: 'ძ', a: 'ձ' },
+        { q: 'წ', a: 'ծ' }, { q: 'ჭ', a: 'ճ' }, { q: 'ხ', a: 'խ' },
+        { q: 'ჯ', a: 'ջ' }, { q: 'ჰ', a: 'հ' }
+    ];
+
+    const wordsData = [
+        { q: 'გამარჯობა', a: 'գամարջոբա (Բարև)' },
+        { q: 'მადლობა', a: 'մադլոբա (Շնորհակալություն)' },
+        { q: 'კი', a: 'կի (Այո)' },
+        { q: 'არა', a: 'արա (Ոչ)' },
+        { q: 'კარგი', a: 'կարգի (Լավ)' },
+        { q: 'სახლი', a: 'սախլի (Տուն)' },
+        { q: 'წყალი', a: 'ծղալի (Ջուր)' },
+        { q: 'პური', a: 'պուրի (Հաց)' },
+        { q: 'დედა', a: 'դեդա (Մայր)' },
+        { q: 'მამა', a: 'մամա (Հայր)' },
+        { q: 'გემრიელია', a: 'գեմրիելիա (Համեղ է)' },
+        { q: 'ბოდიში', a: 'բոդիշի (Ներողություն)' },
+        { q: 'ნახვამდის', a: 'նախվամդիս (Ցտեսություն)' },
+        { q: 'ძაღლი', a: 'ձաղլի (Շուն)' },
+        { q: 'კატა', a: 'կատա (Կատու)' }
+    ];
+
+    // --- STATE VARIABLES ---
+    let currentData = [];
+    let currentQuestionIndex = 0;
+    let score = 0;
+    let totalQuestions = 10; // Number of questions per round
+
+    // --- DOM ELEMENTS ---
+    const menuScreen = document.getElementById('menu-screen');
+    const quizScreen = document.getElementById('quiz-screen');
+    const resultScreen = document.getElementById('result-screen');
+    const flashcard = document.getElementById('flashcard');
+    const optionsContainer = document.getElementById('options-container');
+    const scoreDisplay = document.getElementById('score-display');
+    const progressFill = document.getElementById('progress-fill');
+    const finalScore = document.getElementById('final-score');
+    const resultMessage = document.getElementById('result-message');
+
+    // --- GAME LOGIC ---
+
+    function shuffleArray(array) {
+        const arr = [...array];
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    function switchScreen(screen) {
+        menuScreen.classList.remove('active-screen');
+        quizScreen.classList.remove('active-screen');
+        resultScreen.classList.remove('active-screen');
+        screen.classList.add('active-screen');
+    }
+
+    function startGame(mode) {
+        // Select data and shuffle
+        let rawData = mode === 'alphabet' ? alphabetData : wordsData;
+        currentData = shuffleArray(rawData).slice(0, totalQuestions); // Take 10 random questions
+        
+        // Reset stats
+        currentQuestionIndex = 0;
+        score = 0;
+        
+        // Adjust UI
+        if(mode === 'words') {
+            flashcard.style.fontSize = '2.5rem'; // Smaller font for longer words
+        } else {
+            flashcard.style.fontSize = '4rem';
+        }
+
+        updateUI();
+        switchScreen(quizScreen);
+        loadQuestion();
+    }
+
+    function updateUI() {
+        scoreDisplay.textContent = `Score: ${score} / ${currentQuestionIndex}`;
+        const progressPercentage = (currentQuestionIndex / totalQuestions) * 100;
+        progressFill.style.width = `${progressPercentage}%`;
+    }
+
+    function loadQuestion() {
+        if (currentQuestionIndex >= totalQuestions) {
+            endGame();
+            return;
+        }
+
+        updateUI();
+        const currentItem = currentData[currentQuestionIndex];
+        flashcard.textContent = currentItem.q;
+        optionsContainer.innerHTML = '';
+
+        // Generate options (1 correct, 3 wrong)
+        let allPool = currentItem.q.length > 2 ? wordsData : alphabetData; // Determine which pool to pull wrong answers from
+        let options = [currentItem.a];
+        
+        let shuffledPool = shuffleArray(allPool);
+        for (let i = 0; i < shuffledPool.length; i++) {
+            if (options.length === 4) break;
+            if (shuffledPool[i].a !== currentItem.a) {
+                options.push(shuffledPool[i].a);
+            }
+        }
+
+        options = shuffleArray(options); // Shuffle the 4 options
+
+        // Render buttons
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.textContent = opt;
+            
+            // For longer word definitions, reduce font size slightly
+            if(opt.length > 10) btn.style.fontSize = '1rem';
+
+            btn.onclick = () => checkAnswer(btn, opt === currentItem.a, currentItem.a);
+            optionsContainer.appendChild(btn);
+        });
+    }
+
+    function checkAnswer(clickedBtn, isCorrect, correctAnswer) {
+        // Disable all buttons to prevent double clicking
+        const buttons = document.querySelectorAll('.option-btn');
+        buttons.forEach(btn => btn.disabled = true);
+
+        if (isCorrect) {
+            clickedBtn.classList.add('correct');
+            score++;
+        } else {
+            clickedBtn.classList.add('incorrect');
+            // Highlight correct one
+            buttons.forEach(btn => {
+                if (btn.textContent === correctAnswer) {
+                    btn.classList.add('correct');
+                }
+            });
+        }
+
+        updateUI();
+
+        // Wait 1.5 seconds, then load next question
+        setTimeout(() => {
+            currentQuestionIndex++;
+            loadQuestion();
+        }, 1500);
+    }
+
+    function endGame() {
+        switchScreen(resultScreen);
+        finalScore.textContent = `${score}/${totalQuestions}`;
+        
+        const percentage = (score / totalQuestions) * 100;
+        if (percentage === 100) {
+            resultMessage.textContent = "Perfect! You're a master! 🏆";
+        } else if (percentage >= 70) {
+            resultMessage.textContent = "Great job! Keep practicing. 👏";
+        } else {
+            resultMessage.textContent = "Good try! You'll get it next time. 💪";
+        }
+    }
+
+    function returnToMenu() {
+        switchScreen(menuScreen);
+    }
+</script>
+
+</body>
+</html>
