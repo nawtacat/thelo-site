@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ԱՐԵՎ | Armenian Font Design Studio</title>
+    <!-- OpenType.js for Font Generation & Export -->
+    <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+    <style>
+        :root {
+            --bg-main: #0f1117;
+            --bg-panel: #181b24;
+            --bg-card: #222634;
+            --border-color: #2e3446;
+            --accent-color: #6366f1;
+            --accent-hover: #4f46e5;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --canvas-bg: #13151d;
+            --baseline-color: #ef4444;
+            --guide-color: #3b82f6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* App Header */
+        header {
+            height: 50px;
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1rem;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent-color);
+        }
+
+        .logo span {
+            color: var(--text-main);
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        button {
+            background: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: var(--border-color);
+        }
+
+        button.primary {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+
+        button.primary:hover {
+            background: var(--accent-hover);
+        }
+
+        /* Studio Main Layout */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 170px);
+        }
+
+        /* Left Sidebar - Armenian Alphabet Picker */
+        .sidebar-left {
+            width: 220px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-title {
+            padding: 0.75rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .glyph-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            padding: 8px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .glyph-cell {
+            aspect-ratio: 1;
+            background: var(--bg-card);
+            border: 1px solid transparent;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .glyph-cell:hover {
+            border-color: var(--accent-color);
+        }
+
+        .glyph-cell.active {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        /* Center Canvas Area */
+        .canvas-area {
+            flex: 1;
+            background: var(--canvas-bg);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        canvas {
+            background: #11131a;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            cursor: crosshair;
+        }
+
+        .canvas-toolbar {
+            position: absolute;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 4px;
+            display: flex;
+            gap: 4px;
+        }
+
+        .tool-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            background: transparent;
+        }
+
+        .tool-btn.active {
+            background: var(--accent-color);
+        }
+
+        /* Right Sidebar - Glyph & Font Controls */
+        .sidebar-right {
+            width: 260px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border-color);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            overflow-y: auto;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .control-group label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent-color);
+        }
+
+        /* Bottom Live Preview */
+        .preview-footer {
+            height: 120px;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border-color);
+            padding: 0.75rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .preview-input {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .preview-display {
+            flex: 1;
+            background: var(--canvas-bg);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            padding: 0 1rem;
+            font-size: 2.2rem;
+            white-space: nowrap;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .vector-path-custom {
+            fill: none;
+            stroke: var(--text-main);
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            ԱՐԵՎ <span>(Arev Font Studio)</span>
+        </div>
+        <div class="actions">
+            <button onclick="clearCanvas()">Clear Glyph</button>
+            <button onclick="resetGlyph()">Reset Preset</button>
+            <button onclick="exportSVG()">Export SVG</button>
+            <button class="primary" onclick="exportOTF()">Export .OTF Font</button>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <!-- Left Sidebar: Armenian Alphabet Select -->
+        <div class="sidebar-left">
+            <div class="panel-title">Armenian Alphabet</div>
+            <div class="glyph-grid" id="glyphGrid"></div>
+        </div>
+
+        <!-- Center: Interactive Vector Canvas -->
+        <div class="canvas-area">
+            <div class="canvas-toolbar">
+                <button class="tool-btn active" id="toolSelect" onclick="setTool('select')">Select / Move</button>
+                <button class="tool-btn" id="toolAdd" onclick="setTool('add')">Add Node</button>
+            </div>
+            <canvas id="designCanvas" width="500" height="500"></canvas>
+        </div>
+
+        <!-- Right Sidebar: Parametric Controls -->
+        <div class="sidebar-right">
+            <div class="panel-title">Metrics & Parametrics</div>
+            
+            <div class="control-group">
+                <label>Stroke Width <span id="valStroke">12</span>px</label>
+                <input type="range" id="paramStroke" min="2" max="40" value="12" oninput="updateParams()">
+            </div>
+
+            <div class="control-group">
+                <label>Slant / Italics <span id="valSlant">0</span>°</label>
+                <input type="range" id="paramSlant" min="-20" max="20" value="0" oninput="updateParams()">
+            </div>
+
+            <div class="control-group">
+                <label>Advance Width <span id="valWidth">300</span>px</label>
+                <input type="range" id="paramWidth" min="150" max="450" value="300" oninput="updateParams()">
+            </div>
+
+            <div class="panel-title">Guidelines</div>
+            
+            <div class="control-group">
+                <label><input type="checkbox" id="chkGrid" checked onclick="render()"> Show Grid Snap</label>
+            </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="chkGuides" checked onclick="render()"> Show Baseline Metrics</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom: Interactive Type Preview -->
+    <div class="preview-footer">
+        <input type="text" class="preview-input" id="previewInput" value="ԲԱՐԵՎ ԱՇԽԱՐՀ (Hello World)" oninput="updatePreviewText()">
+        <div class="preview-display" id="previewDisplay"></div>
+    </div>
+
+    <script>
+        // Armenian Alphabet Unicode List
+        const armenianChars = [
+            'Ա','Բ','Գ','Դ','Ե','Զ','Է','Ը','Թ','Ժ','Ի','Լ','Խ','Ծ','Կ','Հ',
+            'Ձ','Ղ','Ճ','Մ','Յ','Ն','Շ','Ո','Չ','Պ','Ջ','Ռ','Ս','Վ','Տ','Ր',
+            'Ց','Ւ','Փ','Ք','Օ','Ֆ','ա','բ','գ','դ','ե','զ','է','ը','թ','ժ'
+        ];
+
+        // Sample initial bezier node data for Armenian letter 'Ա' (A)
+        const defaultGlyphData = {
+            'Ա': [
+                {x: 150, y: 380, type: 'M'},
+                {x: 250, y: 100, type: 'L'},
+                {x: 350, y: 380, type: 'L'},
+                {x: 180, y: 280, type: 'M'},
+                {x: 320, y: 280, type: 'L'}
+            ],
+            'Բ': [
+                {x: 150, y: 380, type: 'M'},
+                {x: 150, y: 100, type: 'L'},
+                {x: 300, y: 100, type: 'L'},
+                {x: 300, y: 230, type: 'L'},
+                {x: 150, y: 230, type: 'L'},
+                {x: 310, y: 230, type: 'L'},
+                {x: 310, y: 380, type: 'L'},
+                {x: 150, y: 380, type: 'L'}
+            ]
+        };
+
+        let currentSymbol = 'Ա';
+        let glyphsStore = {};
+        let activeTool = 'select';
+        let selectedNodeIndex = -1;
+        let isDragging = false;
+
+        // Metrics
+        const BASELINE = 380;
+        const CAP_HEIGHT = 100;
+        const X_HEIGHT = 220;
+
+        const canvas = document.getElementById('designCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Initialize Store
+        armenianChars.forEach(char => {
+            glyphsStore[char] = {
+                nodes: defaultGlyphData[char] ? JSON.parse(JSON.stringify(defaultGlyphData[char])) : [
+                    {x: 150, y: 380, type: 'M'},
+                    {x: 150, y: 100, type: 'L'},
+                    {x: 300, y: 100, type: 'L'}
+                ],
+                strokeWidth: 12,
+                slant: 0,
+                width: 300
+            };
+        });
+
+        function initUI() {
+            const grid = document.getElementById('glyphGrid');
+            grid.innerHTML = '';
+            armenianChars.forEach(char => {
+                const cell = document.createElement('div');
+                cell.className = `glyph-cell ${char === currentSymbol ? 'active' : ''}`;
+                cell.innerText = char;
+                cell.onclick = () => selectGlyph(char);
+                grid.appendChild(cell);
+            });
+            loadGlyphData();
+        }
+
+        function selectGlyph(char) {
+            currentSymbol = char;
+            document.querySelectorAll('.glyph-cell').forEach(el => {
+                el.classList.toggle('active', el.innerText === char);
+            });
+            loadGlyphData();
+            render();
+            updatePreviewText();
+        }
+
+        function loadGlyphData() {
+            const data = glyphsStore[currentSymbol];
+            document.getElementById('paramStroke').value = data.strokeWidth;
+            document.getElementById('valStroke').innerText = data.strokeWidth;
+            document.getElementById('paramSlant').value = data.slant;
+            document.getElementById('valSlant').innerText = data.slant;
+            document.getElementById('paramWidth').value = data.width;
+            document.getElementById('valWidth').innerText = data.width;
+            selectedNodeIndex = -1;
+            render();
+        }
+
+        function setTool(tool) {
+            activeTool = tool;
+            document.getElementById('toolSelect').classList.toggle('active', tool === 'select');
+            document.getElementById('toolAdd').classList.toggle('active', tool === 'add');
+        }
+
+        function updateParams() {
+            const data = glyphsStore[currentSymbol];
+            data.strokeWidth = parseInt(document.getElementById('paramStroke').value);
+            data.slant = parseInt(document.getElementById('paramSlant').value);
+            data.width = parseInt(document.getElementById('paramWidth').value);
+
+            document.getElementById('valStroke').innerText = data.strokeWidth;
+            document.getElementById('valSlant').innerText = data.slant;
+            document.getElementById('valWidth').innerText = data.width;
+
+            render();
+            updatePreviewText();
+        }
+
+        // Canvas Rendering
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const showGrid = document.getElementById('chkGrid').checked;
+            const showGuides = document.getElementById('chkGuides').checked;
+            const glyph = glyphsStore[currentSymbol];
+
+            // 1. Draw Grid Lines
+            if (showGrid) {
+                ctx.strokeStyle = '#1e2330';
+                ctx.lineWidth = 1;
+                for (let x = 0; x < canvas.width; x += 25) {
+                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+                }
+                for (let y = 0; y < canvas.height; y += 25) {
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+                }
+            }
+
+            // 2. Draw Metrics / Guidelines
+            if (showGuides) {
+                // Baseline
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(0, BASELINE); ctx.lineTo(canvas.width, BASELINE); ctx.stroke();
+                ctx.fillStyle = '#ef4444'; ctx.font = '10px sans-serif'; ctx.fillText('BASELINE', 10, BASELINE - 4);
+
+                // Cap Height
+                ctx.strokeStyle = '#3b82f6';
+                ctx.beginPath(); ctx.moveTo(0, CAP_HEIGHT); ctx.lineTo(canvas.width, CAP_HEIGHT); ctx.stroke();
+                ctx.fillStyle = '#3b82f6'; ctx.fillText('CAP HEIGHT', 10, CAP_HEIGHT - 4);
+
+                // X-Height
+                ctx.strokeStyle = '#10b981';
+                ctx.beginPath(); ctx.moveTo(0, X_HEIGHT); ctx.lineTo(canvas.width, X_HEIGHT); ctx.stroke();
+
+                // Advance Width Line
+                ctx.strokeStyle = '#f59e0b';
+                ctx.beginPath(); ctx.moveTo(glyph.width + 100, 0); ctx.lineTo(glyph.width + 100, canvas.height); ctx.stroke();
+            }
+
+            // Transform matrix for Slant
+            ctx.save();
+            const shear = Math.tan((glyph.slant * Math.PI) / 180);
+            ctx.transform(1, 0, -shear, 1, shear * BASELINE, 0);
+
+            // 3. Draw Path
+            const nodes = glyph.nodes;
+            if (nodes.length > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#6366f1';
+                ctx.lineWidth = glyph.strokeWidth;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                nodes.forEach((node, i) => {
+                    if (node.type === 'M' || i === 0) {
+                        ctx.moveTo(node.x, node.y);
+                    } else if (node.type === 'L') {
+                        ctx.lineTo(node.x, node.y);
+                    }
+                });
+                ctx.stroke();
+
+                // 4. Draw Interactive Nodes
+                nodes.forEach((node, i) => {
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, i === selectedNodeIndex ? 7 : 5, 0, Math.PI * 2);
+                    ctx.fillStyle = i === selectedNodeIndex ? '#f59e0b' : '#ffffff';
+                    ctx.fill();
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+            }
+
+            ctx.restore();
+        }
+
+        // Mouse Interactions
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const glyph = glyphsStore[currentSymbol];
+            const shear = Math.tan((glyph.slant * Math.PI) / 180);
+            
+            // Adjust x coordinate for slant transformation reverse calculation
+            const adjustedX = mouseX + shear * (mouseY - BASELINE);
+
+            if (activeTool === 'add') {
+                glyph.nodes.push({ x: adjustedX, y: mouseY, type: glyph.nodes.length === 0 ? 'M' : 'L' });
+                selectedNodeIndex = glyph.nodes.length - 1;
+                render();
+                updatePreviewText();
+                return;
+            }
+
+            // Find clicked node
+            selectedNodeIndex = glyph.nodes.findIndex(node => {
+                const dx = node.x - adjustedX;
+                const dy = node.y - mouseY;
+                return Math.sqrt(dx * dx + dy * dy) < 10;
+            });
+
+            if (selectedNodeIndex !== -1) {
+                isDragging = true;
+            }
+            render();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging || selectedNodeIndex === -1) return;
+            const rect = canvas.getBoundingClientRect();
+            const glyph = glyphsStore[currentSymbol];
+            const shear = Math.tan((glyph.slant * Math.PI) / 180);
+
+            let x = (e.clientX - rect.left) + shear * ((e.clientY - rect.top) - BASELINE);
+            let y = e.clientY - rect.top;
+
+            // Grid snapping
+            if (document.getElementById('chkGrid').checked) {
+                x = Math.round(x / 25) * 25;
+                y = Math.round(y / 25) * 25;
+            }
+
+            glyph.nodes[selectedNodeIndex].x = x;
+            glyph.nodes[selectedNodeIndex].y = y;
+
+            render();
+            updatePreviewText();
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        function clearCanvas() {
+            glyphsStore[currentSymbol].nodes = [];
+            render();
+            updatePreviewText();
+        }
+
+        function resetGlyph() {
+            if (defaultGlyphData[currentSymbol]) {
+                glyphsStore[currentSymbol].nodes = JSON.parse(JSON.stringify(defaultGlyphData[currentSymbol]));
+            } else {
+                clearCanvas();
+            }
+            render();
+            updatePreviewText();
+        }
+
+        // Live Text Preview Engine
+        function updatePreviewText() {
+            const container = document.getElementById('previewDisplay');
+            const text = document.getElementById('previewInput').value;
+            container.innerHTML = '';
+
+            for (let char of text) {
+                if (char === ' ') {
+                    const space = document.createElement('div');
+                    space.style.width = '30px';
+                    container.appendChild(space);
+                    continue;
+                }
+
+                const glyphData = glyphsStore[char];
+                if (!glyphData || glyphData.nodes.length === 0) {
+                    const fallback = document.createElement('span');
+                    fallback.innerText = char;
+                    container.appendChild(fallback);
+                    continue;
+                }
+
+                // Render dynamic SVG for each character
+                const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svg.setAttribute("height", "60");
+                svg.setAttribute("viewBox", `0 0 ${glyphData.width + 100} 500`);
+                
+                const shear = Math.tan((glyphData.slant * Math.PI) / 180);
+                
+                let pathStr = "";
+                glyphData.nodes.forEach((node, idx) => {
+                    pathStr += `${node.type === 'M' || idx === 0 ? 'M' : 'L'} ${node.x} ${node.y} `;
+                });
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", pathStr);
+                path.setAttribute("stroke", "currentColor");
+                path.setAttribute("fill", "none");
+                path.setAttribute("stroke-width", glyphData.strokeWidth);
+                path.setAttribute("stroke-linecap", "round");
+                path.setAttribute("stroke-linejoin", "round");
+                path.setAttribute("transform", `skewX(${-glyphData.slant})`);
+
+                svg.appendChild(path);
+                container.appendChild(svg);
+            }
+        }
+
+        // Export as Scalable Vector Graphics (SVG)
+        function exportSVG() {
+            const glyph = glyphsStore[currentSymbol];
+            let pathStr = "";
+            glyph.nodes.forEach((node, idx) => {
+                pathStr += `${node.type === 'M' || idx === 0 ? 'M' : 'L'} ${node.x} ${node.y} `;
+            });
+
+            const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${glyph.width + 100} 500">
+  <path d="${pathStr}" stroke="black" fill="none" stroke-width="${glyph.strokeWidth}" stroke-linecap="round" transform="skewX(${-glyph.slant})"/>
+</svg>`;
+
+            const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `armenian_glyph_${currentSymbol}.svg`;
+            a.click();
+        }
+
+        // Export OpenType Font File (.OTF)
+        function exportOTF() {
+            const fontGlyphs = [];
+
+            // Define .notdef character
+            const notdefPath = new opentype.Path();
+            notdefPath.moveTo(100, 0);
+            notdefPath.lineTo(100, 700);
+            notdefPath.lineTo(500, 700);
+            notdefPath.lineTo(500, 0);
+            notdefPath.closePath();
+            
+            fontGlyphs.push(new opentype.Glyph({
+                name: '.notdef',
+                unicode: 0,
+                advanceWidth: 600,
+                path: notdefPath
+            }));
+
+            // Process user-designed Armenian glyphs
+            armenianChars.forEach((char) => {
+                const data = glyphsStore[char];
+                const path = new opentype.Path();
+
+                if (data && data.nodes.length > 0) {
+                    data.nodes.forEach((node, i) => {
+                        // Invert Y coordinate for OpenType coordinate system (0,0 is bottom-left)
+                        const otY = BASELINE - node.y + 100;
+                        if (node.type === 'M' || i === 0) {
+                            path.moveTo(node.x, otY);
+                        } else {
+                            path.lineTo(node.x, otY);
+                        }
+                    });
+                }
+
+                fontGlyphs.push(new opentype.Glyph({
+                    name: char,
+                    unicode: char.charCodeAt(0),
+                    advanceWidth: data ? data.width + 100 : 400,
+                    path: path
+                }));
+            });
+
+            const font = new opentype.Font({
+                familyName: 'Arev Armenian Custom',
+                styleName: 'Medium',
+                unitsPerEm: 1000,
+                ascender: 800,
+                descender: -200,
+                glyphs: fontGlyphs
+            });
+
+            font.download();
+        }
+
+        // Startup setup
+        initUI();
+    </script>
+</body>
+</html>
