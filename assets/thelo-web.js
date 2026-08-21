@@ -41,26 +41,48 @@
         document.title = titles[page];
     }
 
-    /* --- 2. Scan wording --------------------------------------------------
-       On a phone the button means "open the camera". On a desktop the same
-       control opens a file picker, so the instruction has to change or it reads
-       as broken to a student with no webcam pointed at their homework. */
+    /* --- 2. Scan is upload-only on the web --------------------------------
+       On a phone "Take photo" means the rear camera pointed at a worksheet. A
+       desktop either has no camera or has one pointed at the student's face, so
+       that button can only disappoint. thelo-web.css hides it; here the gallery
+       button is promoted to primary and the copy stops talking about cameras.
+
+       The page rewrites these strings itself whenever the language changes, so
+       the text is re-applied through an observer rather than set once. */
     if (page === 'scan') {
+        var COPY = {
+            'cap-title':   { en: 'Upload a photo of a problem', hy: 'Վերբեռնեք խնդրի լուսանկարը' },
+            'lbl-gallery': { en: 'Choose an image',             hy: 'Ընտրել նկար' }
+        };
+        var ARMENIAN = /[԰-֏]/;
+
+        var applyCopy = function () {
+            Object.keys(COPY).forEach(function (id) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                var current = el.textContent || '';
+                var lang = ARMENIAN.test(current) ? 'hy' : 'en';
+                var wanted = COPY[id][lang];
+                if (current.trim() !== wanted) el.textContent = wanted;
+            });
+
+        };
+
         document.addEventListener('DOMContentLoaded', function () {
-            var swaps = [
-                ['Take a photo', 'Choose an image'],
-                ['Take Photo', 'Choose Image'],
-                ['Նկարել', 'Ընտրել նկար']
-            ];
-            var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-            var node;
-            while ((node = walker.nextNode())) {
-                for (var i = 0; i < swaps.length; i++) {
-                    if (node.nodeValue.indexOf(swaps[i][0]) !== -1) {
-                        node.nodeValue = node.nodeValue.replace(swaps[i][0], swaps[i][1]);
-                    }
-                }
-            }
+            applyCopy();
+            var targets = Object.keys(COPY)
+                .map(function (id) { return document.getElementById(id); })
+                .filter(Boolean);
+            if (!targets.length) return;
+
+            var observer = new MutationObserver(function () {
+                // Re-entrant: our own writes trigger this. applyCopy() is a no-op
+                // once the text already matches, so it settles after one pass.
+                applyCopy();
+            });
+            targets.forEach(function (el) {
+                observer.observe(el, { childList: true, characterData: true, subtree: true });
+            });
         });
     }
 

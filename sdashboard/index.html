@@ -903,7 +903,7 @@
 <script type="module">
     window.__homeModuleStarted = true;
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser, sendEmailVerification } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, query, orderBy, where, addDoc, serverTimestamp, onSnapshot, increment, writeBatch, deleteDoc, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // CONFIG
@@ -1299,6 +1299,18 @@ function updateLogos(lang) {
             });
 
             await updateProfile(cred.user, { displayName: firstName, photoURL: profilePicture });
+
+            // Send the verification email. Firebase does NOT do this on its own --
+            // createUserWithEmailAndPassword only creates the account -- so without
+            // this call emailVerified stays false forever, and anything gated on it
+            // (the old /sdashboard on the website, for one) locks the student out.
+            //
+            // Deliberately not awaited into the failure path: a mail that does not
+            // send must never abort a signup whose account and profile already
+            // exist. The student can request another from their profile.
+            sendEmailVerification(cred.user).catch(e => {
+                console.warn("Could not send verification email:", e && e.code, e && e.message);
+            });
 
             // Log new signup event for Growth analytics
             await addDoc(collection(db, "analytics_events"), {
