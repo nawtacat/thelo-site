@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Thelo — Scan</title>
+<link rel="icon" href="https://thelo.ink/img/thelofavicon.png" type="image/png" />
+<!-- Same icon set home.html uses, so the bottom bar is identical across tabs. -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+
+<style>
+/* Fonts are BUNDLED in assets/fonts/ — keep these relative, never absolute. */
+@font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-Regular.otf') format('opentype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-SemiBold.otf') format('opentype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-ExtraBold.otf') format('opentype'); font-weight: 800; font-display: swap; }
+
+:root {
+    --thelo-blue: #2563EB;
+    --thelo-blue-dark: #1d4ed8;
+    --thelo-bg: #F8F9FA;
+    --thelo-text: #111827;
+    --grid-color: #E5E7EB;
+    --slate-200: #e2e8f0;
+    --slate-400: #94a3b8;
+    --slate-500: #64748b;
+    --white: #ffffff;
+    --points-star: #FACC15;
+    --success-green: #22C55E;
+    --error-red: #EF4444;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; height: 100%; overscroll-behavior: none; }
+body {
+    font-family: 'Montserrat Arm', system-ui, -apple-system, sans-serif;
+    background: var(--thelo-bg);
+    color: var(--thelo-text);
+    display: flex; flex-direction: column;
+    background-image: linear-gradient(var(--grid-color) 1px, transparent 1px),
+                      linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+header {
+    /* MainActivity applies zero TOP inset (setPadding(left, 0, right, bottom)), so
+       the WebView renders underneath the status bar and camera cutout. Reserve that
+       space here or the title sits under the lens.
+       max() rather than a bare env(): on devices that report 0 we still want a
+       sensible bar height, and env()'s own fallback only applies when env() is
+       unsupported, not when it resolves to 0. */
+    /* 2.1rem floor + 0.9rem = 3rem, matching #view-hangar header in home.html,
+       which already clears the cutout on this hardware. A device reporting a
+       larger inset gets more. */
+    padding: calc(0.9rem + max(env(safe-area-inset-top, 0px), 2.1rem)) 1rem 0.9rem;
+    background: var(--white);
+    border-bottom: 1px solid var(--slate-200);
+    display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;
+}
+header img { height: 30px; width: auto; }
+header .title { font-weight: 800; font-size: 1rem; }
+header .spacer { flex: 1; }
+.badge {
+    background: var(--thelo-bg); border: 1px solid var(--slate-200);
+    border-radius: 999px; padding: 0.25rem 0.7rem;
+    font-size: 0.8rem; font-weight: 600;
+}
+
+main { flex: 1; overflow-y: auto; padding: 1rem; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
+
+.screen { display: none; animation: fade 0.25s ease; }
+/* Screens fill the available height and centre their content, so short screens
+   (capture, solving, done) no longer sit bunched against the header with a large
+   dead area underneath. Taller screens simply scroll as before. */
+.screen.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.screen.centred { justify-content: center; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.card {
+    background: var(--white); border: 1px solid var(--slate-200);
+    border-radius: 16px; padding: 1.1rem; margin-bottom: 1rem;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+}
+.card-label {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--slate-400); margin-bottom: 0.4rem;
+}
+
+.btn {
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    width: 100%; padding: 0.95rem 1rem; border: none; border-radius: 12px;
+    font-family: inherit; font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: transform 0.08s ease, background 0.15s ease;
+}
+.btn:active:not(:disabled) { transform: scale(0.985); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn-primary { background: var(--thelo-blue); color: var(--white); }
+.btn-primary:active:not(:disabled) { background: var(--thelo-blue-dark); }
+.btn-ghost { background: var(--white); color: var(--thelo-text); border: 1.5px solid var(--slate-200); }
+.btn-row { display: flex; gap: 0.85rem; }
+.btn-gap { height: 0.85rem; flex-shrink: 0; }
+.btn-row .btn { width: auto; flex: 1; }
+
+/* ---- capture ---- */
+.capture-zone {
+    border: 2px dashed var(--slate-200); border-radius: 20px;
+    background: var(--white); padding: 2.5rem 1.25rem; text-align: center;
+    margin-bottom: 1rem;
+}
+.capture-icon { font-size: 2.6rem; line-height: 1; margin-bottom: 0.75rem; color: var(--thelo-blue); }
+.capture-title { font-weight: 800; font-size: 1.05rem; margin-bottom: 0.3rem; }
+.capture-sub { color: var(--slate-500); font-size: 0.85rem; line-height: 1.5; }
+#file-input { display: none; }
+
+.tips { margin-top: 1.5rem; }
+.tip {
+    display: flex; align-items: center; gap: 0.7rem;
+    padding: 0.55rem 0; color: var(--slate-500); font-size: 0.85rem;
+}
+.tip i { color: var(--thelo-blue); width: 20px; text-align: center; flex-shrink: 0; }
+
+#preview-img {
+    width: 100%; border-radius: 12px; display: block;
+    border: 1px solid var(--slate-200); background: var(--white);
+}
+
+/* ---- solution ---- */
+.problem-text {
+    font-size: 1.15rem; font-weight: 700; line-height: 1.5;
+    word-break: break-word;
+}
+.step { display: flex; gap: 0.8rem; padding: 0.7rem 0; border-top: 1px solid var(--slate-200); }
+.step:first-of-type { border-top: none; }
+.step-num {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--thelo-blue); color: var(--white);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700;
+}
+.step-title { font-weight: 700; font-size: 0.92rem; margin-bottom: 0.15rem; }
+.step-detail { font-size: 0.88rem; color: var(--slate-500); line-height: 1.55; }
+.answer-card {
+    background: var(--thelo-blue); color: var(--white);
+    border-radius: 16px; padding: 1.1rem; margin-bottom: 1rem; text-align: center;
+}
+.answer-card .card-label { color: rgba(255,255,255,0.7); }
+.answer-value { font-size: 1.5rem; font-weight: 800; word-break: break-word; }
+
+.pill {
+    display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.pill-easy   { background: #DCFCE7; color: #15803D; }
+.pill-medium { background: #FEF3C7; color: #B45309; }
+.pill-hard   { background: #FEE2E2; color: #B91C1C; }
+
+/* ---- practice ---- */
+.progress-dots { display: flex; gap: 0.35rem; justify-content: center; margin-bottom: 0.9rem; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--slate-200); }
+.dot.done { background: var(--success-green); }
+.dot.current { background: var(--thelo-blue); transform: scale(1.3); }
+
+#pad-wrap { position: relative; }
+#pad {
+    width: 100%; height: 340px; display: block; touch-action: none;
+    background: var(--white); border: 1px solid var(--slate-200);
+    border-radius: 12px;
+    background-image: linear-gradient(var(--grid-color) 1px, transparent 1px),
+                      linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 25px 25px;
+}
+.pad-hint {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--slate-400); font-size: 0.9rem; pointer-events: none;
+}
+.pad-hint.hidden { display: none; }
+
+/* Small control cluster floating over the pad, in both inline and fullscreen. */
+.pad-tools {
+    position: absolute; top: 0.5rem; right: 0.5rem;
+    display: flex; gap: 0.4rem; z-index: 5;
+}
+.pad-tool {
+    width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--slate-200);
+    background: rgba(255,255,255,0.95); color: var(--thelo-text);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.95rem; cursor: pointer; padding: 0;
+}
+.pad-tool.on { background: var(--thelo-blue); color: var(--white); border-color: var(--thelo-blue); }
+
+/* ---- fullscreen writing mode ----
+   The inline pad is fine for "x = 5" but cramped for real multi-line working.
+   Fullscreen promotes #pad-wrap to a fixed overlay; the canvas is re-measured on
+   entry and exit and the existing ink is redrawn, so nothing the student wrote is
+   lost either way. */
+body.pad-fullscreen { overflow: hidden; }
+body.pad-fullscreen #pad-wrap {
+    position: fixed; inset: 0; z-index: 900;
+    background: var(--white); border-radius: 0;
+    display: flex; flex-direction: column;
+}
+body.pad-fullscreen #pad {
+    flex: 1; height: auto; border: none; border-radius: 0;
+}
+body.pad-fullscreen .pad-tools {
+    top: calc(0.6rem + max(env(safe-area-inset-top, 0px), 2.1rem));
+    right: 0.75rem;
+}
+
+/* Problem text pinned to the top of the fullscreen pad, so the student can still
+   see what they are answering while they write.
+   The two 40px tool buttons plus their gap and right offset occupy ~7rem on the
+   right; reserving exactly that stops long problems disappearing underneath them.
+   min-height matches the button height so a short problem still clears the row. */
+.fs-problem {
+    display: none;
+    padding: calc(0.6rem + max(env(safe-area-inset-top, 0px), 2.1rem)) 7rem 0.6rem 1rem;
+    min-height: calc(40px + 1.2rem + max(env(safe-area-inset-top, 0px), 2.1rem));
+    font-weight: 700; font-size: 1rem; line-height: 1.4;
+    border-bottom: 1px solid var(--slate-200);
+    background: var(--white);
+    /* A long multi-line problem scrolls inside its own strip rather than pushing
+       the canvas off-screen. */
+    max-height: 35vh; overflow-y: auto;
+}
+body.pad-fullscreen .fs-problem { display: block; }
+
+/* Exit button, bottom-right as requested. Sits above the canvas and clear of the
+   gesture-navigation inset on newer Android builds. */
+#btn-fs-exit {
+    display: none;
+    position: fixed; z-index: 910;
+    right: calc(1rem + env(safe-area-inset-right, 0px));
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    width: auto; padding: 0.8rem 1.15rem; border-radius: 999px;
+    background: var(--thelo-blue); color: var(--white);
+    border: none; font-family: inherit; font-size: 0.95rem; font-weight: 700;
+    box-shadow: 0 6px 18px rgba(37,99,235,0.35);
+    align-items: center; gap: 0.5rem; cursor: pointer;
+}
+body.pad-fullscreen #btn-fs-exit { display: flex; }
+
+.feedback {
+    border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 1rem;
+    font-size: 0.92rem; font-weight: 600; line-height: 1.5;
+    /* "Show me how" renders numbered steps separated by newlines; without this
+       they collapse onto a single unreadable line. */
+    white-space: pre-wrap;
+}
+.feedback.correct { background: #DCFCE7; color: #15803D; }
+.feedback.wrong   { background: #FEE2E2; color: #B91C1C; }
+.feedback.info    { background: #EFF6FF; color: #1D4ED8; }
+
+.spinner {
+    width: 34px; height: 34px; margin: 0 auto 0.9rem;
+    border: 3px solid var(--slate-200); border-top-color: var(--thelo-blue);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.center { text-align: center; padding: 2.5rem 1rem; }
+
+/* Matches home.html's .nav-bar / .nav-item exactly so the bar does not visibly
+   change when the student moves between tabs. */
+.nav-bar {
+    position: relative; width: 100%;
+    background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--grid-color);
+    display: flex; justify-content: space-around; padding: 0.75rem 0 1.5rem;
+    z-index: 50; flex-shrink: 0;
+}
+.nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+    color: var(--slate-500); font-size: 0.7rem; font-weight: 600;
+    text-decoration: none; width: 64px;
+}
+.nav-item.active { color: var(--thelo-blue); }
+.nav-item i { font-size: 1.1rem; }
+</style>
+    <link rel="stylesheet" href="/assets/thelo-web.css">
+</head>
+<body>
+
+<header>
+    <img src="https://thelo.ink/img/bluethelo.svg" alt="Thelo" onerror="this.style.display='none'">
+    <span class="title" id="hdr-title">Scan a problem</span>
+    <span class="spacer"></span>
+    <span class="badge" id="points-badge">⭐ 0</span>
+</header>
+
+<main>
+
+    <!-- 1. CAPTURE -->
+    <section id="screen-capture" class="screen active centred">
+        <div class="capture-zone">
+            <div class="capture-icon"><i class="fa-solid fa-camera-retro"></i></div>
+            <div class="capture-title" id="cap-title">Point your camera at a problem</div>
+            <div class="capture-sub" id="cap-sub">
+                Take a clear photo of one maths problem. Keep the page flat and make sure
+                the whole question is inside the frame.
+            </div>
+        </div>
+        <button class="btn btn-primary" id="btn-camera"><i class="fa-solid fa-camera"></i> <span id="lbl-camera">Take photo</span></button>
+        <div class="btn-gap"></div>
+        <button class="btn btn-ghost" id="btn-gallery"><i class="fa-regular fa-image"></i> <span id="lbl-gallery">Choose from gallery</span></button>
+
+        <!-- Fills the dead space under the buttons with something actually useful. -->
+        <div class="tips">
+            <div class="card-label" id="lbl-tips">For the best result</div>
+            <div class="tip"><i class="fa-solid fa-crop-simple"></i><span id="tip-1">Frame one problem at a time</span></div>
+            <div class="tip"><i class="fa-solid fa-sun"></i><span id="tip-2">Good light, no shadow across the page</span></div>
+            <div class="tip"><i class="fa-solid fa-align-left"></i><span id="tip-3">Hold the page flat and straight</span></div>
+        </div>
+
+        <!--
+          capture="environment" asks Android for the rear camera. This needs
+          WebChromeClient.onShowFileChooser implemented in MainActivity, otherwise
+          the WebView silently ignores the tap. See MainActivity.java.
+        -->
+        <input type="file" id="file-input" accept="image/*" capture="environment">
+        <input type="file" id="file-input-gallery" accept="image/*" style="display:none">
+
+        <div id="capture-error"></div>
+    </section>
+
+    <!-- 2. PREVIEW -->
+    <section id="screen-preview" class="screen">
+        <div class="card" style="padding:0.6rem">
+            <img id="preview-img" alt="Captured problem">
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-ghost" id="btn-retake"><span id="lbl-retake">Retake</span></button>
+            <button class="btn btn-primary" id="btn-solve"><span id="lbl-solve">Solve it</span></button>
+        </div>
+    </section>
+
+    <!-- 3. SOLVING -->
+    <section id="screen-solving" class="screen centred">
+        <div class="center">
+            <div class="spinner"></div>
+            <div style="font-weight:700" id="lbl-reading">Reading your problem…</div>
+            <div style="color:var(--slate-500); font-size:0.85rem; margin-top:0.3rem" id="lbl-reading-sub">
+                This usually takes a few seconds.
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. SOLUTION -->
+    <section id="screen-solution" class="screen">
+        <div class="card">
+            <div class="card-label"><span id="lbl-problem">Problem</span> · <span id="difficulty-pill"></span></div>
+            <div class="problem-text" id="out-problem"></div>
+        </div>
+        <div class="card">
+            <div class="card-label" id="lbl-solution">Solution</div>
+            <div id="out-steps"></div>
+        </div>
+        <div class="answer-card">
+            <div class="card-label" id="lbl-answer">Answer</div>
+            <div class="answer-value" id="out-answer"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-practice">✏️ <span id="lbl-practice">Practise this</span></button>
+        <div class="btn-gap"></div>
+        <button class="btn btn-ghost" id="btn-scan-again"><span id="lbl-again">Scan another</span></button>
+    </section>
+
+    <!-- 5. PRACTICE -->
+    <section id="screen-practice" class="screen">
+        <div class="progress-dots" id="dots"></div>
+        <div class="card">
+            <div class="card-label"><span id="lbl-yourturn">Your turn</span> · <span id="practice-counter"></span></div>
+            <div class="problem-text" id="practice-problem"></div>
+        </div>
+        <div id="practice-feedback"></div>
+        <div class="card" style="padding:0.6rem">
+            <div id="pad-wrap">
+                <div class="fs-problem" id="fs-problem"></div>
+                <div class="pad-tools">
+                    <button class="pad-tool" id="btn-eraser" title="Eraser"><i class="fa-solid fa-eraser"></i></button>
+                    <button class="pad-tool" id="btn-fs" title="Fullscreen"><i class="fa-solid fa-expand"></i></button>
+                </div>
+                <canvas id="pad"></canvas>
+                <div class="pad-hint" id="pad-hint">Write your working here</div>
+            </div>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-ghost" id="btn-clear"><span id="lbl-clear">Clear</span></button>
+            <button class="btn btn-ghost" id="btn-hint"><i class="fa-regular fa-lightbulb"></i> <span id="lbl-hint">Hint</span></button>
+        </div>
+        <div class="btn-gap"></div>
+        <button class="btn btn-primary" id="btn-check"><span id="lbl-check">Check</span></button>
+        <div class="btn-gap"></div>
+        <button class="btn btn-ghost" id="btn-show-solution"><span id="lbl-show">Show me how</span></button>
+    </section>
+
+    <!-- Exit control for fullscreen writing. Lives outside <main> so it is not
+         clipped by the scroll container. -->
+    <button id="btn-fs-exit"><i class="fa-solid fa-compress"></i> <span id="lbl-fs-exit">Done</span></button>
+
+    <!-- 6. DONE -->
+    <section id="screen-done" class="screen centred">
+        <div class="center">
+            <div style="font-size:3rem; margin-bottom:0.5rem">🎉</div>
+            <div style="font-weight:800; font-size:1.2rem" id="lbl-done">Nice work!</div>
+            <div style="color:var(--slate-500); margin-top:0.4rem" id="done-summary"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-done-again">📷 <span id="lbl-done-again">Scan another problem</span></button>
+        <div class="btn-gap"></div>
+        <button class="btn btn-ghost" onclick="location.href = '/sdashboard/'"><span id="lbl-home">Back to home</span></button>
+    </section>
+
+</main>
+
+<nav class="nav-bar">
+    <a href="/sdashboard/" class="nav-item"><i class="fa-solid fa-house"></i> <span id="nav-home">Hangar</span></a>
+    <a href="/sdashboard/?view=courses" class="nav-item"><i class="fa-solid fa-layer-group"></i> <span id="nav-courses">Courses</span></a>
+    <a href="#" class="nav-item active"><i class="fa-solid fa-camera"></i> <span id="nav-scan">Scan</span></a>
+    <a href="/sdashboard/?view=profile" class="nav-item"><i class="fa-solid fa-user"></i> <span id="nav-profile">Profile</span></a>
+</nav>
+
+<script>
+/* =====================================================================
+   Thelo — Scan tab
+   ---------------------------------------------------------------------
+   Flow:  photo -> solveScannedProblem (new callable) -> solution ->
+          1-3 generated practice problems -> analyzeMathDrawing (EXISTING
+          callable, unchanged) checks each handwritten answer.
+
+   This page is bundled at file:///android_asset/scan.html, so its origin is
+   "null". Remote assets must be ABSOLUTE https URLs; bundled fonts stay
+   relative. Same rule as lesson.html.
+   ===================================================================== */
+
+const ASSET_ORIGIN = 'https://thelo.ink';
+
+// Students write in blue on the lesson whiteboard (--ink-blue: var(--thelo-blue)),
+// and the checker prompt literally refers to "your answer in blue". Match it here so
+// the scan tab's practice pad feels like the same pen.
+const INK_BLUE = getComputedStyle(document.documentElement)
+    .getPropertyValue('--thelo-blue').trim() || '#2563EB';
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
+    authDomain: "physmathacademy-722b3.firebaseapp.com",
+    databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com",
+    projectId: "physmathacademy-722b3",
+    storageBucket: "physmathacademy-722b3.appspot.com",
+    messagingSenderId: "1093640992262",
+    appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
+};
+
+// Same defensive init as lesson.html: a blocked gstatic CDN must not kill the page.
+let firebaseReady = false;
+try {
+    if (typeof firebase === 'undefined') throw new Error('Firebase SDK did not load');
+    firebase.initializeApp(firebaseConfig);
+    firebaseReady = true;
+} catch (e) {
+    console.error('Firebase unavailable — scanning will not work:', e);
+}
+const auth = firebaseReady ? firebase.auth() : null;
+const db   = firebaseReady ? firebase.firestore() : null;
+const fns  = firebaseReady ? firebase.functions() : null;
+
+/* ---------------- i18n ---------------- */
+const TXT = {
+    en: {
+        hdr: "Scan a problem", capTitle: "Point your camera at a problem",
+        capSub: "Take a clear photo of one maths problem. Keep the page flat and make sure the whole question is inside the frame.",
+        camera: "Take photo", gallery: "Choose from gallery", retake: "Retake", solve: "Solve it",
+        reading: "Reading your problem…", readingSub: "This usually takes a few seconds.",
+        problem: "Problem", solution: "Solution", answer: "Answer",
+        practice: "Practise this", again: "Scan another", yourturn: "Your turn",
+        clear: "Clear", hint: "Hint", check: "Check", checking: "Checking…",
+        show: "Show me how", done: "Nice work!", doneAgain: "Scan another problem",
+        home: "Back to home", navHome: "Hangar", navCourses: "Courses", navScan: "Scan", navProfile: "Profile",
+        tips: "For the best result", tip1: "Frame one problem at a time",
+        tip2: "Good light, no shadow across the page", tip3: "Hold the page flat and straight",
+        fsExit: "Done",
+        padHint: "Write your working here",
+        correct: "Correct! Well done.", next: "Next problem", finish: "Finish",
+        needInk: "Write your answer on the pad first.",
+        noProblem: "No maths problem found in that photo. Try again with better light.",
+        failed: "Could not read that. Try a clearer photo.",
+        offline: "You appear to be offline. Connect and try again.",
+        signIn: "Please sign in from the home tab first.",
+        summary: (a, b) => `You solved ${a} of ${b} practice problems.`,
+        noCamera: "Camera could not be opened. If this keeps happening, the app may need the camera permission enabled in Android settings."
+    },
+    hy: {
+        hdr: "Սկանավորել խնդիրը", capTitle: "Ուղղեք տեսախցիկը խնդրին",
+        capSub: "Լուսանկարեք մեկ խնդիր հստակ։ Էջը պահեք հարթ և համոզվեք, որ ամբողջ հարցը կադրի մեջ է։",
+        camera: "Լուսանկարել", gallery: "Ընտրել պատկերասրահից", retake: "Կրկին", solve: "Լուծել",
+        reading: "Կարդում եմ խնդիրը…", readingSub: "Սովորաբար տևում է մի քանի վայրկյան։",
+        problem: "Խնդիր", solution: "Լուծում", answer: "Պատասխան",
+        practice: "Վարժվել", again: "Սկանավորել նորը", yourturn: "Ձեր հերթն է",
+        clear: "Մաքրել", hint: "Հուշում", check: "Ստուգել", checking: "Ստուգվում է…",
+        show: "Ցույց տուր լուծումը", done: "Հիանալի է!", doneAgain: "Սկանավորել նոր խնդիր",
+        home: "Վերադառնալ", navHome: "Գլխավոր", navCourses: "Դասընթացներ", navScan: "Սկան", navProfile: "Պրոֆիլ",
+        tips: "Լավագույն արդյունքի համար", tip1: "Մեկ խնդիր մեկ կադրում",
+        tip2: "Լավ լույս, առանց ստվերի էջին", tip3: "Պահեք էջը հարթ և ուղիղ",
+        fsExit: "Պատրաստ է",
+        padHint: "Գրեք ձեր լուծումն այստեղ",
+        correct: "Ճիշտ է! Ապրես։", next: "Հաջորդ խնդիրը", finish: "Ավարտել",
+        needInk: "Նախ գրեք ձեր պատասխանը։",
+        noProblem: "Այս լուսանկարում խնդիր չգտնվեց։ Փորձեք ավելի լավ լուսավորությամբ։",
+        failed: "Չհաջողվեց կարդալ։ Փորձեք ավելի հստակ լուսանկար։",
+        offline: "Կապ չկա։ Միացեք ինտերնետին և փորձեք կրկին։",
+        signIn: "Նախ մուտք գործեք գլխավոր էջից։",
+        summary: (a, b) => `Դուք լուծեցիք ${b}-ից ${a} խնդիր։`,
+        noCamera: "Տեսախցիկը չբացվեց։ Ստուգեք հավելվածի թույլտվությունները։"
+    }
+};
+let lang = 'en';
+let T = TXT.en;
+
+function applyLang() {
+    T = TXT[lang] || TXT.en;
+    document.body.style.fontFamily = "'Montserrat Arm', system-ui, sans-serif";
+    const map = {
+        'hdr-title': T.hdr, 'cap-title': T.capTitle, 'cap-sub': T.capSub,
+        'lbl-camera': T.camera, 'lbl-gallery': T.gallery, 'lbl-retake': T.retake,
+        'lbl-solve': T.solve, 'lbl-reading': T.reading, 'lbl-reading-sub': T.readingSub,
+        'lbl-problem': T.problem, 'lbl-solution': T.solution, 'lbl-answer': T.answer,
+        'lbl-practice': T.practice, 'lbl-again': T.again, 'lbl-yourturn': T.yourturn,
+        'lbl-clear': T.clear, 'lbl-hint': T.hint, 'lbl-check': T.check,
+        'lbl-show': T.show, 'lbl-done': T.done, 'lbl-done-again': T.doneAgain,
+        'lbl-home': T.home, 'nav-home': T.navHome, 'nav-scan': T.navScan,
+        'pad-hint': T.padHint,
+        'nav-courses': T.navCourses, 'nav-profile': T.navProfile,
+        'lbl-tips': T.tips, 'tip-1': T.tip1, 'tip-2': T.tip2, 'tip-3': T.tip3,
+        'lbl-fs-exit': T.fsExit
+    };
+    for (const id in map) { const el = document.getElementById(id); if (el) el.textContent = map[id]; }
+}
+
+/* ---------------- screens ---------------- */
+function show(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const el = document.getElementById('screen-' + name);
+    if (el) el.classList.add('active');
+    document.querySelector('main').scrollTop = 0;
+}
+
+function notice(containerId, message, kind = 'info') {
+    const c = document.getElementById(containerId);
+    if (c) c.innerHTML = `<div class="feedback ${kind}">${escapeHtml(message)}</div>`;
+}
+function clearNotice(containerId) {
+    const c = document.getElementById(containerId);
+    if (c) c.innerHTML = '';
+}
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------------- image capture ---------------- */
+let capturedBase64 = null;
+
+/**
+ * Downscale before upload. Phone cameras produce 4-12MB JPEGs; the model does not
+ * need that resolution to read a problem, and a smaller payload means a much faster
+ * round trip on school wifi. 1600px on the long edge keeps text legible.
+ */
+function downscale(file, maxEdge = 1600, quality = 0.85) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Could not read the image file.'));
+        reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('Could not decode the image.'));
+            img.onload = () => {
+                let { width: w, height: h } = img;
+                if (Math.max(w, h) > maxEdge) {
+                    const scale = maxEdge / Math.max(w, h);
+                    w = Math.round(w * scale); h = Math.round(h * scale);
+                }
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(c.toDataURL('image/jpeg', quality));
+            };
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+async function handleFile(file) {
+    if (!file) return;
+    clearNotice('capture-error');
+    try {
+        const dataUrl = await downscale(file);
+        capturedBase64 = dataUrl;
+        document.getElementById('preview-img').src = dataUrl;
+        show('preview');
+    } catch (e) {
+        console.error(e);
+        notice('capture-error', T.failed, 'wrong');
+    }
+}
+
+document.getElementById('btn-camera').onclick = () => {
+    clearNotice('capture-error');
+    const input = document.getElementById('file-input');
+    input.value = '';           // allow re-picking the same file
+    input.click();
+    // If onShowFileChooser is missing in MainActivity the click does nothing at all
+    // and no event ever fires, so warn after a grace period rather than hanging.
+    const armed = Date.now();
+    window.__cameraWatch = setTimeout(() => {
+        if (!capturedBase64 && Date.now() - armed >= 1000 && document.visibilityState === 'visible') {
+            notice('capture-error', T.noCamera, 'info');
+        }
+    }, 1500);
+};
+document.getElementById('btn-gallery').onclick = () => {
+    const input = document.getElementById('file-input-gallery');
+    input.value = ''; input.click();
+};
+document.getElementById('file-input').onchange = (e) => {
+    clearTimeout(window.__cameraWatch);
+    handleFile(e.target.files && e.target.files[0]);
+};
+document.getElementById('file-input-gallery').onchange = (e) => handleFile(e.target.files && e.target.files[0]);
+
+document.getElementById('btn-retake').onclick = () => { capturedBase64 = null; show('capture'); };
+
+/* ---------------- solve ---------------- */
+let solution = null;      // full response from solveScannedProblem
+let practiceIndex = 0;
+let practiceSolved = 0;
+
+document.getElementById('btn-solve').onclick = async () => {
+    if (!capturedBase64) return;
+    if (!navigator.onLine) { notice('capture-error', T.offline, 'wrong'); show('capture'); return; }
+    if (!fns || !auth?.currentUser) { notice('capture-error', T.signIn, 'wrong'); show('capture'); return; }
+
+    show('solving');
+    try {
+        const solveScannedProblem = fns.httpsCallable('solveScannedProblem');
+        const res = await solveScannedProblem({
+            imageBase64: capturedBase64.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''),
+            language: lang
+        });
+        const data = res.data || {};
+
+        if (!data.isMathProblem) {
+            notice('capture-error', data.rejectReason || T.noProblem, 'wrong');
+            show('capture');
+            return;
+        }
+
+        solution = data;
+        practiceIndex = 0;
+        practiceSolved = 0;
+        renderSolution(data);
+        logEvent('scan_solved', { difficulty: data.difficulty });
+        show('solution');
+    } catch (err) {
+        console.error('solveScannedProblem failed:', err);
+        const msg = err.code === 'functions/unauthenticated' ? T.signIn
+                  : err.code === 'functions/not-found' ? 'solveScannedProblem is not deployed yet.'
+                  : T.failed;
+        notice('capture-error', msg, 'wrong');
+        show('capture');
+    }
+};
+
+function renderSolution(d) {
+    document.getElementById('out-problem').textContent = d.problemText;
+    document.getElementById('out-answer').textContent = d.finalAnswer;
+
+    const pill = document.getElementById('difficulty-pill');
+    pill.className = 'pill pill-' + (d.difficulty || 'medium');
+    pill.textContent = d.difficulty || 'medium';
+
+    document.getElementById('out-steps').innerHTML = (d.solutionSteps || []).map((s, i) => `
+        <div class="step">
+            <div class="step-num">${i + 1}</div>
+            <div>
+                <div class="step-title">${escapeHtml(s.title)}</div>
+                <div class="step-detail">${escapeHtml(s.detail)}</div>
+            </div>
+        </div>`).join('');
+
+    const n = (d.practiceProblems || []).length;
+    document.getElementById('btn-practice').style.display = n ? 'flex' : 'none';
+}
+
+document.getElementById('btn-scan-again').onclick = resetToCapture;
+document.getElementById('btn-done-again').onclick = resetToCapture;
+function resetToCapture() {
+    capturedBase64 = null; solution = null;
+    practiceIndex = 0; practiceSolved = 0;
+    clearNotice('capture-error');
+    show('capture');
+}
+
+/* ---------------- practice ---------------- */
+document.getElementById('btn-practice').onclick = () => { practiceIndex = 0; startPractice(); };
+
+function startPractice() {
+    const list = solution?.practiceProblems || [];
+    if (practiceIndex >= list.length) {
+        document.getElementById('done-summary').textContent = T.summary(practiceSolved, list.length);
+        logEvent('scan_practice_finished', { solved: practiceSolved, total: list.length });
+        show('done');
+        return;
+    }
+    const p = list[practiceIndex];
+    document.getElementById('practice-problem').textContent = p.problemText;
+    document.getElementById('practice-counter').textContent = `${practiceIndex + 1} / ${list.length}`;
+    document.getElementById('dots').innerHTML = list.map((_, i) =>
+        `<div class="dot ${i < practiceIndex ? 'done' : i === practiceIndex ? 'current' : ''}"></div>`).join('');
+
+    clearNotice('practice-feedback');
+    const btn = document.getElementById('btn-check');
+    btn.disabled = false;
+    btn.querySelector('span').textContent = T.check;
+    btn.onclick = checkAnswer;
+    document.getElementById('btn-show-solution').style.display = 'flex';
+
+    show('practice');
+    requestAnimationFrame(() => { sizePad(); clearPad(); });
+}
+
+/* ---- lightweight handwriting pad ----
+   Deliberately not the full lesson.html whiteboard (thelobook, replay, panning).
+   This is one page of ink, which is all a practice answer needs, and it keeps the
+   scan tab independent of that machinery. */
+const pad = document.getElementById('pad');
+const padCtx = pad.getContext('2d');
+let drawing = false, hasInk = false, lastX = 0, lastY = 0;
+let erasing = false;
+
+function applyPadStyle() {
+    padCtx.lineCap = 'round';
+    padCtx.lineJoin = 'round';
+    // Erase by compositing rather than painting white, so the grid background
+    // shows through again instead of leaving white smears over it.
+    padCtx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+    padCtx.lineWidth = erasing ? 26 : 3;
+    padCtx.strokeStyle = erasing ? 'rgba(0,0,0,1)' : INK_BLUE;
+}
+
+function sizePad() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = pad.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    pad.width = Math.round(rect.width * dpr);
+    pad.height = Math.round(rect.height * dpr);
+    padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    applyPadStyle();
+}
+
+/**
+ * Resize without losing what the student has written. Changing canvas.width
+ * clears it, so snapshot first and repaint after. Used when entering/leaving
+ * fullscreen and on rotation.
+ */
+function resizePadPreservingInk() {
+    const hadInk = hasInk;
+    const snapshot = (pad.width && pad.height) ? pad.toDataURL() : null;
+    const prevW = pad.clientWidth, prevH = pad.clientHeight;
+    sizePad();
+    if (!snapshot || !hadInk) return;
+    const img = new Image();
+    img.onload = () => {
+        const w = pad.clientWidth, h = pad.clientHeight;
+        // Preserve aspect: scale to fit the new box rather than stretching the
+        // handwriting, which would make it unreadable to the checker.
+        const scale = Math.min(w / (prevW || w), h / (prevH || h)) || 1;
+        const op = padCtx.globalCompositeOperation;
+        padCtx.globalCompositeOperation = 'source-over';
+        padCtx.drawImage(img, 0, 0, (prevW || w) * scale, (prevH || h) * scale);
+        padCtx.globalCompositeOperation = op;
+    };
+    img.src = snapshot;
+}
+
+function clearPad() {
+    const op = padCtx.globalCompositeOperation;
+    padCtx.globalCompositeOperation = 'source-over';
+    padCtx.clearRect(0, 0, pad.width, pad.height);
+    padCtx.globalCompositeOperation = op;
+    hasInk = false;
+    document.getElementById('pad-hint').classList.remove('hidden');
+}
+
+/* ---- eraser ---- */
+function setErasing(on) {
+    erasing = on;
+    document.getElementById('btn-eraser').classList.toggle('on', erasing);
+    applyPadStyle();
+}
+document.getElementById('btn-eraser').onclick = () => setErasing(!erasing);
+
+/* ---- fullscreen writing ---- */
+function setFullscreen(on) {
+    document.body.classList.toggle('pad-fullscreen', on);
+    const p = solution?.practiceProblems?.[practiceIndex];
+    document.getElementById('fs-problem').textContent = p ? p.problemText : '';
+    document.getElementById('btn-fs').innerHTML = on
+        ? '<i class="fa-solid fa-compress"></i>'
+        : '<i class="fa-solid fa-expand"></i>';
+    // Let the layout settle at its new size before measuring the canvas.
+    requestAnimationFrame(() => requestAnimationFrame(resizePadPreservingInk));
+}
+document.getElementById('btn-fs').onclick = () => setFullscreen(!document.body.classList.contains('pad-fullscreen'));
+document.getElementById('btn-fs-exit').onclick = () => setFullscreen(false);
+
+// Android back button / gesture should leave fullscreen rather than the page.
+window.addEventListener('popstate', () => {
+    if (document.body.classList.contains('pad-fullscreen')) setFullscreen(false);
+});
+function padPos(e) {
+    const r = pad.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+}
+function startDraw(e) {
+    e.preventDefault();
+    drawing = true;
+    const p = padPos(e); lastX = p.x; lastY = p.y;
+    if (!hasInk) { hasInk = true; document.getElementById('pad-hint').classList.add('hidden'); }
+}
+function moveDraw(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = padPos(e);
+    padCtx.beginPath();
+    padCtx.moveTo(lastX, lastY);
+    padCtx.lineTo(p.x, p.y);
+    padCtx.stroke();
+    lastX = p.x; lastY = p.y;
+}
+function endDraw() { drawing = false; }
+
+pad.addEventListener('pointerdown', startDraw);
+pad.addEventListener('pointermove', moveDraw);
+window.addEventListener('pointerup', endDraw);
+pad.addEventListener('touchstart', startDraw, { passive: false });
+pad.addEventListener('touchmove', moveDraw, { passive: false });
+window.addEventListener('touchend', endDraw);
+window.addEventListener('resize', resizePadPreservingInk);
+
+document.getElementById('btn-clear').onclick = clearPad;
+document.getElementById('btn-hint').onclick = () => {
+    const p = solution?.practiceProblems?.[practiceIndex];
+    if (p?.hint) notice('practice-feedback', '💡 ' + p.hint, 'info');
+};
+
+/**
+ * Flatten the transparent ink canvas onto white before sending.
+ * analyzeMathDrawing expects a normal photo-like image; a transparent PNG reads as
+ * a black rectangle once the model composites it.
+ */
+function padImageBase64() {
+    const flat = document.createElement('canvas');
+    flat.width = pad.width; flat.height = pad.height;
+    const c = flat.getContext('2d');
+    c.fillStyle = '#ffffff'; c.fillRect(0, 0, flat.width, flat.height);
+    c.drawImage(pad, 0, 0);
+    return flat.toDataURL('image/png');
+}
+
+async function checkAnswer() {
+    if (!hasInk) { notice('practice-feedback', T.needInk, 'info'); return; }
+    const p = solution.practiceProblems[practiceIndex];
+    const btn = document.getElementById('btn-check');
+    btn.disabled = true;
+    btn.querySelector('span').textContent = T.checking;
+    clearNotice('practice-feedback');
+
+    try {
+        // Reuses the EXISTING callable — no backend change needed for checking.
+        const analyze = fns.httpsCallable('analyzeMathDrawing');
+        const res = await analyze({
+            userImage: padImageBase64(),
+            questionImage: null,
+            problemText: p.problemText,
+            correctAnswer: p.correctAnswer,
+            solutionSteps: p.solutionSteps,
+            customInstructions: 'The student is solving a practice problem generated from a scanned question. Judge only whether their final answer is mathematically correct; be encouraging and specific about any mistake.',
+            language: lang
+        });
+        const { status, feedback } = res.data || {};
+
+        if (status === 'correct') {
+            practiceSolved++;
+            awardPoints(10);
+            notice('practice-feedback', feedback || T.correct, 'correct');
+            document.getElementById('btn-show-solution').style.display = 'none';
+            btn.disabled = false;
+            const last = practiceIndex >= solution.practiceProblems.length - 1;
+            btn.querySelector('span').textContent = last ? T.finish : T.next;
+            btn.onclick = () => { practiceIndex++; startPractice(); };
+        } else {
+            notice('practice-feedback', feedback || '—', 'wrong');
+            btn.disabled = false;
+            btn.querySelector('span').textContent = T.check;
+        }
+    } catch (err) {
+        console.error('analyzeMathDrawing failed:', err);
+        notice('practice-feedback', T.failed, 'wrong');
+        btn.disabled = false;
+        btn.querySelector('span').textContent = T.check;
+    }
+}
+
+document.getElementById('btn-show-solution').onclick = () => {
+    const p = solution?.practiceProblems?.[practiceIndex];
+    if (!p) return;
+    const steps = String(p.solutionSteps || '').split('|').map(s => s.trim()).filter(Boolean);
+    notice('practice-feedback',
+        (steps.length ? steps.map((s, i) => `${i + 1}. ${s}`).join('\n') : p.solutionSteps) +
+        `\n\n= ${p.correctAnswer}`, 'info');
+    const btn = document.getElementById('btn-check');
+    const last = practiceIndex >= solution.practiceProblems.length - 1;
+    btn.querySelector('span').textContent = last ? T.finish : T.next;
+    btn.onclick = () => { practiceIndex++; startPractice(); };
+};
+
+/* ---------------- points + analytics ---------------- */
+let userPoints = 0;
+function renderPoints() { document.getElementById('points-badge').textContent = '⭐ ' + userPoints; }
+
+function awardPoints(n) {
+    userPoints += n;
+    renderPoints();
+    const u = auth?.currentUser;
+    if (!u || !db) return;
+    db.collection('thelo-students').doc(u.uid).set({
+        points: firebase.firestore.FieldValue.increment(n)
+    }, { merge: true }).catch(e => console.warn('points update failed', e));
+}
+
+function logEvent(type, extra = {}) {
+    const u = auth?.currentUser;
+    if (!u || !db) return;
+    db.collection('analytics_events').add({
+        type, userId: u.uid, source: 'scan',
+        ...extra,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(() => {});
+}
+
+/* ---------------- boot ---------------- */
+applyLang();
+renderPoints();
+
+/**
+ * Scanning requires an account: it calls two authenticated Cloud Functions and
+ * writes points to the student's profile. So a genuinely signed-out visitor is
+ * sent back to home.html to log in rather than shown a half-working screen.
+ *
+ * The wait matters. Firebase fires onAuthStateChanged with null BEFORE it has
+ * restored a persisted session, so redirecting on that first null would bounce
+ * signed-in students straight back out of the tab. Only act once the initial
+ * state has actually settled.
+ */
+async function authHasSettled() {
+    try {
+        if (typeof auth.authStateReady === 'function') await auth.authStateReady();
+        else await new Promise(r => setTimeout(r, 1200));
+    } catch (e) {
+        console.warn('authStateReady failed:', e);
+    }
+}
+
+// Keep capture disabled until we know who this is, so nobody starts a scan that
+// is going to fail on an unauthenticated callable.
+function setCaptureEnabled(on) {
+    ['btn-camera', 'btn-gallery'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !on;
+    });
+}
+setCaptureEnabled(false);
+
+if (auth) {
+    auth.onAuthStateChanged(async (user) => {
+        if (!user) {
+            await authHasSettled();
+            if (auth.currentUser) return;   // session turned up; the next call handles it
+            location.replace('home.html');
+            return;
+        }
+        setCaptureEnabled(true);
+        try {
+            const snap = await db.collection('thelo-students').doc(user.uid).get();
+            if (snap.exists) {
+                const d = snap.data();
+                userPoints = d.points || 0;
+                renderPoints();
+                if (d.preferences?.language === 'hy') {
+                    lang = 'hy';
+                    document.body.classList.add('lang-hy');
+                    applyLang();
+                }
+            }
+        } catch (e) { console.warn('profile load failed', e); }
+    });
+} else {
+    // Firebase SDK itself failed to load (blocked CDN, offline). Scanning cannot
+    // work at all in that state, so say so rather than redirecting into a loop.
+    notice('capture-error', T.signIn, 'info');
+    setCaptureEnabled(false);
+}
+
+window.addEventListener('orientationchange', () => setTimeout(sizePad, 300));
+</script>
+<script src="/assets/thelo-web.js"></script>
+</body>
+</html>
