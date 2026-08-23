@@ -1705,10 +1705,17 @@ function updateLogos(lang) {
         const u = user || auth.currentUser;
         if (!u || !ui.hReviewSection) return;
 
+        const FALLBACK = {
+            header: "Worth Another Look", sub: "Missed {n}x", subOnce: "Missed once",
+            fixed: "got it on the retry"
+        };
         const txt = {
-            en: { header: "Worth Another Look", sub: "Missed {n}x", subOnce: "Missed once" },
-            hy: { header: "Արժե կրկին նայել", sub: "Սխալվել ես {n} անգամ", subOnce: "Սխալվել ես մեկ անգամ" }
-        }[userLang] || { header: "Worth Another Look", sub: "Missed {n}x", subOnce: "Missed once" };
+            en: FALLBACK,
+            hy: {
+                header: "Արժե կրկին նայել", sub: "Սխալվել ես {n} անգամ",
+                subOnce: "Սխալվել ես մեկ անգամ", fixed: "երկրորդ փորձից ստացվեց"
+            }
+        }[userLang] || FALLBACK;
 
         try {
             // One row per question missed, newest first. Was limit(5), which could
@@ -1737,7 +1744,10 @@ function updateLogos(lang) {
                 if (!m.lessonFile) return;
 
                 const attempts = Number(m.attempts) || 1;
-                const sub = attempts > 1 ? txt.sub.replace('{n}', String(attempts)) : txt.subOnce;
+                // A row that survived because the student only got there on the
+                // retry says so, rather than looking like an unresolved failure.
+                const sub = (attempts > 1 ? txt.sub.replace('{n}', String(attempts)) : txt.subOnce)
+                    + (m.lastOutcome === 'corrected-after-retry' ? ' · ' + txt.fixed : '');
                 // questionText only -- lesson.html deliberately never writes the
                 // authoring `problemText` here, because it often contains the answer.
                 const title = m.questionText || m.lessonTitle || m.lessonId || 'Question';

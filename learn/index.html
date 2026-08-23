@@ -6848,9 +6848,35 @@ ${langLine}`;
         }, { merge: true }).catch(e => console.warn('Could not record mistake', e));
     }
 
+    /**
+     * Retire a mistake — but only once the student has actually learned it.
+     *
+     * This used to delete the row on ANY correct answer, which meant getting it
+     * wrong and then right on the next try erased the record seconds after
+     * creating it. In practice almost every mistake is corrected on the retry, so
+     * "Worth Another Look" stayed permanently empty and the whole feature looked
+     * like it had never been built.
+     *
+     * Needing two goes is not the same as knowing it. So the row survives a
+     * same-sitting correction and is only cleared when the question is answered
+     * correctly FIRST TRY — which, since attemptsInCurrentStage resets whenever a
+     * stage is entered, means on a later visit. That is exactly the moment the
+     * student has demonstrated they no longer need the reminder.
+     */
     function clearMistake() {
         const target = mistakeDocRef();
         if (!target) return;
+
+        if (attemptsInCurrentStage > 1) {
+            // Got there, but only after getting it wrong. Keep it for review and
+            // record that this attempt ended well.
+            target.ref.set({
+                lastOutcome: 'corrected-after-retry',
+                correctedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true }).catch(e => console.warn('Could not mark mistake corrected', e));
+            return;
+        }
+
         target.ref.delete().catch(() => { /* nothing there to clear -- fine */ });
     }
 
