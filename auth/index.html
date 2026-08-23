@@ -324,6 +324,26 @@ function populateAvatars() {
 }
 
 /**
+ * Send the verification email, and report honestly whether it worked.
+ *
+ * Never throws. The caller has already created the account by the time this
+ * runs, so a mail problem must not be allowed to unwind that.
+ *
+ * The failure worth knowing about is auth/too-many-requests: Firebase throttles
+ * per address and per project, and once tripped it stays tripped for a while.
+ * That is what the old "resend on every sign-in" behaviour was quietly doing.
+ */
+async function sendVerificationEmail(user) {
+    try {
+        await sendEmailVerification(user);
+        return { ok: true, code: null };
+    } catch (e) {
+        console.error("sendEmailVerification failed:", e && e.code, e && e.message);
+        return { ok: false, code: (e && e.code) || 'unknown' };
+    }
+}
+
+/**
  * ===== MODIFIED: Handles new user sign-up for BOTH students and tutors =====
  */
 async function handleNewUserSignUp(email, password, fullName, avatarUrl, accountType) {
@@ -332,8 +352,15 @@ async function handleNewUserSignUp(email, password, fullName, avatarUrl, account
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Step 2: Send verification email
-        await sendEmailVerification(user);
+        // The verification email used to be awaited HERE, before the profile was
+        // written. That made a mail failure fatal: sendEmailVerification throws
+        // (auth/too-many-requests, most often), the whole signup falls into the
+        // catch below reporting "an unknown error", and the student is left with
+        // an Auth account but NO thelo-students document — an orphan that cannot
+        // sign in properly afterwards.
+        //
+        // It is now sent after the profile exists, and its failure is reported
+        // rather than allowed to destroy the signup. See sendVerificationEmail().
 
         const nameParts = fullName.split(' ');
         const firstName = nameParts[0] || '';
@@ -380,8 +407,20 @@ async function handleNewUserSignUp(email, password, fullName, avatarUrl, account
             });
         }
         
-        console.log(`Successfully created ${accountType} and sent verification email.`);
-        showToast("Account created! Please check your inbox to verify your email.", false);
+        // The account and profile both exist now, so the mail is a bonus rather
+        // than a precondition. Whatever happens here, the student has an account.
+        const mail = await sendVerificationEmail(user);
+
+        console.log(`Successfully created ${accountType}. Verification mail: ${mail.ok ? 'sent' : 'FAILED (' + mail.code + ')'}`);
+
+        if (mail.ok) {
+            showToast("Account created! Please check your inbox to verify your email.", false);
+        } else {
+            // Say so plainly. Silently claiming a mail was sent is how this went
+            // unnoticed for so long.
+            showToast("Account created, but the verification email could not be sent (" + mail.code + "). You can still sign in.", true);
+        }
+
         setLoading(false); // Stop loading but don't redirect
         setTimeout(() => { location.reload(); }, 5000);
 
@@ -392,6 +431,9 @@ async function handleNewUserSignUp(email, password, fullName, avatarUrl, account
             errorMessage = "This email is already in use. Please sign in or use a different email.";
         } else if (error.code === 'auth/weak-password') {
             errorMessage = "Password is too weak. It should be at least 6 characters.";
+        } else if (error.code) {
+            // Anything else: show the code. "Unknown error" told nobody anything.
+            errorMessage = "Sign up failed (" + error.code + "). Please try again.";
         }
         showToast(errorMessage, true);
         setLoading(false);
@@ -470,11 +512,17 @@ form.addEventListener('submit', async (e) => {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
+            // Verification is asked for ONCE, at sign-up. It is not a gate here.
+            //
+            // This block used to refuse the sign-in and fire off another
+            // verification email on EVERY attempt. Two consequences: a student
+            // whose mail never arrived could never get in, and the repeated sends
+            // walked straight into Firebase's rate limit — after which
+            // sendEmailVerification started throwing for everyone, including the
+            // one call at sign-up that actually mattered. Spamming the mail is
+            // what stopped the mail working.
             if (!user.emailVerified) {
-                showToast("Please verify your email before signing in. Another verification email has been sent.", true);
-                await sendEmailVerification(user);
-                setLoading(false);
-                return;
+                console.log("Signing in an unverified account:", user.uid);
             }
 
             console.log("User signed in:", user.uid);
