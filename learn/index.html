@@ -2451,6 +2451,17 @@
 
             if (!drawingData || !drawingData.strokes) return;
 
+            // Recorded drawings stretch to fill the board. Generated ones set
+            // preserveAspect so text and circles keep their shape on any screen:
+            // fit the recorded canvas inside the board and centre it.
+            let spanX = canvasWidth, spanY = canvasHeight, offX = 0, offY = 0;
+            const dims = drawingData.canvasDimensions;
+            if (drawingData.preserveAspect && dims && dims.width > 0 && dims.height > 0) {
+                const fit = Math.min(canvasWidth / dims.width, canvasHeight / dims.height);
+                spanX = dims.width * fit; spanY = dims.height * fit;
+                offX = (canvasWidth - spanX) / 2; offY = (canvasHeight - spanY) / 2;
+            }
+
             drawingData.strokes.forEach(stroke => {
                 const strokeStartTime = (stroke.startTime || 0) / 1000;
                 if (targetTimeInSeconds < strokeStartTime) return;
@@ -2471,14 +2482,14 @@
                     if (pointTimeAbsolute > targetTimeInSeconds) break;
 
                     if (!movedToFirstPoint) {
-                        targetCtx.moveTo(point.normX * canvasWidth, point.normY * canvasHeight);
+                        targetCtx.moveTo(offX + point.normX * spanX, offY + point.normY * spanY);
                         movedToFirstPoint = true;
                     } else {
-                        targetCtx.lineTo(point.normX * canvasWidth, point.normY * canvasHeight);
+                        targetCtx.lineTo(offX + point.normX * spanX, offY + point.normY * spanY);
                     }
                     if (points.length === 1) {
                         targetCtx.closePath(); targetCtx.beginPath();
-                        targetCtx.arc(point.normX * canvasWidth, point.normY * canvasHeight, (stroke.lineWidth || 2) / 2, 0, Math.PI * 2);
+                        targetCtx.arc(offX + point.normX * spanX, offY + point.normY * spanY, (stroke.lineWidth || 2) / 2, 0, Math.PI * 2);
                         targetCtx.fill();
                         break;
                     }
