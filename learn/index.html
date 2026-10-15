@@ -1343,13 +1343,11 @@
            font-family: 'Montserrat Arm', sans-serif !important;
            font-weight: 400 !important; /* Regular weight for UI elements */
        }
-         /* ===== NEW: MCQ Keyboard-Only Mode ===== */
-       body.mcq-active {
-           cursor: none; /* Hide the system cursor */
-       }
-
+         /* ===== MCQ: pick an answer by tapping/clicking it or with the arrow keys ===== */
        body.mcq-active .mcq-option-btn {
-           pointer-events: none; /* Disable all mouse/touch interactions on the buttons */
+           pointer-events: auto; /* taps must reach the answers, not the whiteboard underneath */
+           cursor: pointer;
+           touch-action: manipulation;
        }
 
        /* This makes the selected option more prominent without a cursor */
@@ -3691,7 +3689,11 @@
             optionButton.classList.add('mcq-option-btn');
             renderMixedKaTeXInto(optionButton, optionText);
             optionButton.dataset.index = index;
-            // NO click listener
+            optionButton.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                handleMcqOptionClick(index, mcqDetails);
+            });
             mcqOptionsContainer.appendChild(optionButton);
         });
 
@@ -3715,7 +3717,10 @@
         });
     }  // Replace your old function with this simplified version
     function handleMcqOptionClick(selectedIndex, mcqDetails){
-        return; // Clicks are disabled
+        // A tap/click selects the answer; the Check button then checks it (same as the arrow keys + Enter).
+        if (isMcqAnsweredCorrectly) return;
+        if (nextCheckBtn && nextCheckBtn.disabled) return; // wait for the "incorrect" flash to finish
+        updateMcqSelectionVisuals(selectedIndex);
     }/**
      * Toggles a distraction-free fullscreen mode that hides the browser's
      * default 'X' button on interaction.
