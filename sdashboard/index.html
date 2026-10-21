@@ -268,6 +268,7 @@
         .path-unit.done .path-badge { background: #DCFCE7; color: var(--success-green); }
         .path-unit.current .path-badge { background: var(--thelo-blue); color: var(--white); }
         .path-unit.locked .path-badge { background: var(--slate-200); color: var(--slate-500); }
+        .path-unit.free .path-badge { background: #EFF6FF; color: var(--thelo-blue); }
         .path-head-text { flex: 1; min-width: 0; }
         .path-title { display: block; font-size: 1rem; font-weight: 800; line-height: 1.3; }
         .path-unit.locked .path-title { color: var(--slate-500); }
@@ -1374,7 +1375,7 @@ ${stream[lang]}` : '');
                 profilePicture: profilePicture,
                 role: state.role,
                 groupId: groupId || null,
-                preferences: { language: state.lang, grade: state.grade, stream: state.stream || null },
+                preferences: { language: state.lang, grade: state.grade, stream: state.stream || null, maxGrade: Number(state.grade) || null },
                 points: 0, lessonsCompleted: 0,
                 totalTimeSeconds: 0,
                 streakData: { currentStreak: 0, longestStreak: 0 },
@@ -1773,29 +1774,34 @@ ${stream[lang]}` : '');
                 // What the student has now: moving above it needs a grade test.
                 courseState.currentGrade = courseState.grade;
                 courseState.currentStream = p.stream || null;
+                courseState.maxGrade = Math.max(Number(p.maxGrade) || 0, Number(p.grade) || 0,
+                    Number(window.theloCoursePath && window.theloCoursePath.maxGrade) || 0);
                 updateCoursesUI();
             }
         } catch(e) { console.error(e); }
     };
 
     // --- COURSES LOGIC ---
-    let courseState = { lang: 'en', grade: '5', stream: null, currentGrade: null, currentStream: null };
+    let courseState = { lang: 'en', grade: '5', stream: null, currentGrade: null, currentStream: null, maxGrade: 0 };
 
     /**
-     * Moving to a higher grade means skipping lessons, so it needs a grade test
-     * (jumptest.html) covering every grade being skipped. Going down, changing the
-     * language or the stream, and going up one grade after finishing the current
-     * course need none. Returns the test's URL, or null when no test is needed.
+     * Moving above the highest grade the student has reached (preferences.maxGrade)
+     * means skipping lessons, so it needs a grade test (jumptest.html) covering every
+     * grade being skipped. Any grade up to the highest one reached, a language or
+     * stream change, and going up one grade after finishing the course of the highest
+     * grade need none. Returns the test's URL, or null when no test is needed.
      */
     function gradeTestUrl() {
-        const cur = Number(courseState.currentGrade);
+        const cur = Number(courseState.currentGrade) || 0;
+        const reached = Math.max(Number(courseState.maxGrade) || 0, cur);
         const target = Number(courseState.grade);
-        if (!cur || !target || target <= cur) return null;
+        if (!reached || !target || target <= reached) return null;
         const path = window.theloCoursePath;
-        const complete = !!(path && String(path.grade) === String(courseState.currentGrade) && path.complete);
-        if (complete && target === cur + 1) return null;
-        return `/jump/?kind=grade&lang=${encodeURIComponent(courseState.lang)}&from=${cur}` +
-            `&curstream=${encodeURIComponent(courseState.currentStream || '')}&complete=${complete ? 1 : 0}` +
+        const complete = !!(path && Number(path.grade) === reached && path.complete);
+        if (complete && target === reached + 1) return null;
+        const reachedStream = reached === cur ? (courseState.currentStream || '') : '';
+        return `/jump/?kind=grade&lang=${encodeURIComponent(courseState.lang)}&from=${reached}` +
+            `&curstream=${encodeURIComponent(reachedStream)}&complete=${complete ? 1 : 0}` +
             `&target=${target}&stream=${encodeURIComponent(courseState.stream || '')}`;
     }
 
@@ -1836,10 +1842,12 @@ ${stream[lang]}` : '');
                 'groupId': groupId || null,
                 'preferences.language': courseState.lang,
                 'preferences.grade': courseState.grade,
-                'preferences.stream': courseState.stream || null
+                'preferences.stream': courseState.stream || null,
+                'preferences.maxGrade': Math.max(Number(courseState.maxGrade) || 0, Number(courseState.grade) || 0)
             });
             courseState.currentGrade = courseState.grade;
             courseState.currentStream = courseState.stream || null;
+            courseState.maxGrade = Math.max(Number(courseState.maxGrade) || 0, Number(courseState.grade) || 0);
 
             if (courseState.lang === 'hy') document.body.classList.add('lang-hy');
             else document.body.classList.remove('lang-hy');
@@ -2096,6 +2104,28 @@ ${stream[lang]}` : '');
         const completedIds = new Set();
         progSnap.forEach(d => { if(d.data().status === 'completed') completedIds.add(d.id); });
 
+        // The highest grade this student has reached (preferences.maxGrade). Going back to
+        // a lower grade to look something up must not cost them their place: every grade up
+        // to this one can be chosen again without a grade test, and lower grades open fully.
+        // Students from before maxGrade existed get it rebuilt from their finished lessons
+        // (ids like 12adv-05-das / en-9-31-gorc) and passed grade tests.
+        const profileData = profileSnap.exists() ? profileSnap.data() : {};
+        const storedMaxGrade = Number(profileData.preferences?.maxGrade) || 0;
+        let maxGrade = Math.max(storedMaxGrade, Number(userGrade) || 0);
+        completedIds.forEach(id => {
+            const m = /^(?:en-)?(\d{1,2})(?:gen|adv)?-\d+-(?:das|gorc)$/.exec(id);
+            if (m) maxGrade = Math.max(maxGrade, Number(m[1]));
+        });
+        Object.entries(profileData.jumpTests || {}).forEach(([key, rec]) => {
+            const m = /^g_[a-z]+_(\d{1,2})/.exec(key);
+            if (m && rec && rec.passedAt) maxGrade = Math.max(maxGrade, Number(m[1]));
+        });
+        if (maxGrade > storedMaxGrade) {
+            updateDoc(doc(db, 'thelo-students', u.uid), { 'preferences.maxGrade': maxGrade })
+                .catch(e => console.warn('Could not save preferences.maxGrade', e));
+        }
+        const belowReached = (Number(userGrade) || 0) < maxGrade;
+
         let listHTML = '';
         let nextFound = false;
 
@@ -2158,7 +2188,7 @@ ${stream[lang]}` : '');
         const jumpTests = (profileSnap.exists() && profileSnap.data().jumpTests) || {};
         const fillIn = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
         // For the Courses screen: moving up one grade needs no test once this course is done.
-        window.theloCoursePath = { grade: userGrade, stream: userStream, lang: userLang, complete: courseComplete };
+        window.theloCoursePath = { grade: userGrade, stream: userStream, lang: userLang, complete: courseComplete, maxGrade };
 
         if (frontier) {
             nextFound = true;
@@ -2175,9 +2205,10 @@ ${stream[lang]}` : '');
 
         let gi = 0;
         pathUnits.forEach((pu, ui_) => {
-            const state = (courseComplete || ui_ < frontierUnit) ? 'done' : (ui_ === frontierUnit ? 'current' : 'locked');
             const doneCount = pu.topics.filter(t => completedIds.has(t.id)).length;
-            const icon = { done: 'fa-check', current: 'fa-play', locked: 'fa-lock' }[state];
+            let state = (courseComplete || ui_ < frontierUnit) ? 'done' : (ui_ === frontierUnit ? 'current' : 'locked');
+            if (belowReached && state === 'locked') state = doneCount === pu.topics.length ? 'done' : 'free';
+            const icon = { done: 'fa-check', current: 'fa-play', locked: 'fa-lock', free: 'fa-folder-open' }[state];
             const pct = pu.topics.length ? Math.round(100 * doneCount / pu.topics.length) : 0;
 
             let jumpHTML = '';
@@ -2210,7 +2241,7 @@ ${stream[lang]}` : '');
             pu.topics.forEach(t => {
                 const isDone = completedIds.has(t.id);
                 const isNext = frontier && t === frontier;
-                const isLocked = !isDone && frontier && gi > frontierIdx;
+                const isLocked = !belowReached && !isDone && frontier && gi > frontierIdx;
                 gi++;
                 if (isLocked) {
                     itemsHTML += `
