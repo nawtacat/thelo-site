@@ -4,14 +4,22 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Thelo — Scan</title>
+<script>
+if (window.parent === window) {
+    const destination = new URL('/sdashboard/', location.href);
+    destination.searchParams.set('view', 'scan');
+    location.replace(destination.href);
+}
+</script>
 <link rel="icon" href="https://thelo.ink/img/thelofavicon.png" type="image/png" />
 <!-- Same icon set home.html uses, so the bottom bar is identical across tabs. -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+<script defer src="scan-pad.js"></script>
 
 <style>
 /* Fonts are BUNDLED in assets/fonts/ — keep these relative, never absolute. */
@@ -164,7 +172,7 @@ main { flex: 1; overflow-y: auto; padding: 1rem; -webkit-overflow-scrolling: tou
 .dot.done { background: var(--success-green); }
 .dot.current { background: var(--thelo-blue); transform: scale(1.3); }
 
-#pad-wrap { position: relative; }
+#pad-wrap { position: relative; overflow: hidden; border-radius: 12px; }
 #pad {
     width: 100%; height: 340px; display: block; touch-action: none;
     background: var(--white); border: 1px solid var(--slate-200);
@@ -191,12 +199,8 @@ main { flex: 1; overflow-y: auto; padding: 1rem; -webkit-overflow-scrolling: tou
     font-size: 0.95rem; cursor: pointer; padding: 0;
 }
 .pad-tool.on { background: var(--thelo-blue); color: var(--white); border-color: var(--thelo-blue); }
+.pad-controls-hint { color: var(--slate-500); font-size: 0.78rem; line-height: 1.5; margin: 0.6rem 0 0; }
 
-/* ---- fullscreen writing mode ----
-   The inline pad is fine for "x = 5" but cramped for real multi-line working.
-   Fullscreen promotes #pad-wrap to a fixed overlay; the canvas is re-measured on
-   entry and exit and the existing ink is redrawn, so nothing the student wrote is
-   lost either way. */
 body.pad-fullscreen { overflow: hidden; }
 body.pad-fullscreen #pad-wrap {
     position: fixed; inset: 0; z-index: 900;
@@ -204,21 +208,16 @@ body.pad-fullscreen #pad-wrap {
     display: flex; flex-direction: column;
 }
 body.pad-fullscreen #pad {
-    flex: 1; height: auto; border: none; border-radius: 0;
+    flex: 1; height: 0; min-height: 0; border: none; border-radius: 0;
 }
 body.pad-fullscreen .pad-tools {
-    top: calc(0.6rem + max(env(safe-area-inset-top, 0px), 2.1rem));
-    right: 0.75rem;
+    position: static; justify-content: flex-end; padding: 0.5rem 0.75rem;
+    flex-shrink: 0; background: var(--white);
 }
 
-/* Problem text pinned to the top of the fullscreen pad, so the student can still
-   see what they are answering while they write.
-   The two 40px tool buttons plus their gap and right offset occupy ~7rem on the
-   right; reserving exactly that stops long problems disappearing underneath them.
-   min-height matches the button height so a short problem still clears the row. */
 .fs-problem {
     display: none;
-    padding: calc(0.6rem + max(env(safe-area-inset-top, 0px), 2.1rem)) 7rem 0.6rem 1rem;
+    padding: calc(0.6rem + max(env(safe-area-inset-top, 0px), 2.1rem)) 1rem 0.6rem;
     min-height: calc(40px + 1.2rem + max(env(safe-area-inset-top, 0px), 2.1rem));
     font-weight: 700; font-size: 1rem; line-height: 1.4;
     border-bottom: 1px solid var(--slate-200);
@@ -303,9 +302,9 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
                 the whole question is inside the frame.
             </div>
         </div>
-        <button class="btn btn-primary" id="btn-camera"><i class="fa-solid fa-camera"></i> <span id="lbl-camera">Take photo</span></button>
+        <button class="btn btn-primary" id="btn-camera" disabled><i class="fa-solid fa-camera"></i> <span id="lbl-camera">Take photo</span></button>
         <div class="btn-gap"></div>
-        <button class="btn btn-ghost" id="btn-gallery"><i class="fa-regular fa-image"></i> <span id="lbl-gallery">Choose from gallery</span></button>
+        <button class="btn btn-ghost" id="btn-gallery" disabled><i class="fa-regular fa-image"></i> <span id="lbl-gallery">Choose from gallery</span></button>
 
         <!-- Fills the dead space under the buttons with something actually useful. -->
         <div class="tips">
@@ -380,11 +379,15 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
                 <div class="fs-problem" id="fs-problem"></div>
                 <div class="pad-tools">
                     <button class="pad-tool" id="btn-eraser" title="Eraser"><i class="fa-solid fa-eraser"></i></button>
+                    <button class="pad-tool" id="btn-pan" title="Move board"><i class="fa-solid fa-hand"></i></button>
+                    <button class="pad-tool" id="btn-undo" title="Undo"><i class="fa-solid fa-rotate-left"></i></button>
+                    <button class="pad-tool" id="btn-pad-home" title="Back to start"><i class="fa-solid fa-house"></i></button>
                     <button class="pad-tool" id="btn-fs" title="Fullscreen"><i class="fa-solid fa-expand"></i></button>
                 </div>
                 <canvas id="pad"></canvas>
                 <div class="pad-hint" id="pad-hint">Write your working here</div>
             </div>
+            <p class="pad-controls-hint" id="pad-controls-hint">Move with two fingers or the hand tool. Pinch to zoom. Your working has no page edges.</p>
         </div>
         <div class="btn-row">
             <button class="btn btn-ghost" id="btn-clear"><span id="lbl-clear">Clear</span></button>
@@ -409,7 +412,7 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
         </div>
         <button class="btn btn-primary" id="btn-done-again">📷 <span id="lbl-done-again">Scan another problem</span></button>
         <div class="btn-gap"></div>
-        <button class="btn btn-ghost" onclick="location.href = '/sdashboard/'"><span id="lbl-home">Back to home</span></button>
+        <button class="btn btn-ghost" id="btn-home"><span id="lbl-home">Back to home</span></button>
     </section>
 
 </main>
@@ -422,6 +425,7 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
 </nav>
 
 <script>
+window.addEventListener('DOMContentLoaded', () => {
 /* =====================================================================
    Thelo — Scan tab
    ---------------------------------------------------------------------
@@ -434,13 +438,27 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
    relative. Same rule as lesson.html.
    ===================================================================== */
 
-const ASSET_ORIGIN = 'https://thelo.ink';
+const HOME_URL = '/sdashboard/';
+const scanParams = new URLSearchParams(location.search);
+const embedded = window.parent !== window && scanParams.get('embedded') === '1';
 
-// Students write in blue on the lesson whiteboard (--ink-blue: var(--thelo-blue)),
-// and the checker prompt literally refers to "your answer in blue". Match it here so
-// the scan tab's practice pad feels like the same pen.
-const INK_BLUE = getComputedStyle(document.documentElement)
-    .getPropertyValue('--thelo-blue').trim() || '#2563EB';
+function navigateHome(view = 'hangar') {
+    if (embedded) {
+        window.parent.postMessage({ type: 'thelo-scan-navigate', view }, '*');
+        return;
+    }
+    location.href = HOME_URL + (view === 'hangar' ? '' : '?view=' + view);
+}
+
+document.getElementById('btn-home').onclick = () => navigateHome();
+document.querySelectorAll('.nav-bar a').forEach(link => {
+    if (link.classList.contains('active')) return;
+    link.addEventListener('click', event => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        navigateHome(new URL(link.href).searchParams.get('view') || 'hangar');
+    });
+});
 
 const firebaseConfig = {
     apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8",
@@ -480,6 +498,8 @@ const TXT = {
         tips: "For the best result", tip1: "Frame one problem at a time",
         tip2: "Good light, no shadow across the page", tip3: "Hold the page flat and straight",
         fsExit: "Done",
+        eraser: "Eraser", pan: "Move board", undo: "Undo", boardHome: "Back to start", fullscreen: "Fullscreen",
+        padControls: "Move with two fingers or the hand tool. Pinch to zoom. Your working has no page edges.",
         padHint: "Write your working here",
         correct: "Correct! Well done.", next: "Next problem", finish: "Finish",
         needInk: "Write your answer on the pad first.",
@@ -503,6 +523,8 @@ const TXT = {
         tips: "Լավագույն արդյունքի համար", tip1: "Մեկ խնդիր մեկ կադրում",
         tip2: "Լավ լույս, առանց ստվերի էջին", tip3: "Պահեք էջը հարթ և ուղիղ",
         fsExit: "Պատրաստ է",
+        eraser: "Ռետին", pan: "Տեղափոխել գրատախտակը", undo: "Հետարկել", boardHome: "Վերադառնալ սկզբին", fullscreen: "Ամբողջ էկրանով",
+        padControls: "Տեղափոխեք երկու մատով կամ ձեռքի գործիքով։ Մատներով մեծացրեք կամ փոքրացրեք։ Գրատախտակը էջի սահմաններ չունի։",
         padHint: "Գրեք ձեր լուծումն այստեղ",
         correct: "Ճիշտ է! Ապրես։", next: "Հաջորդ խնդիրը", finish: "Ավարտել",
         needInk: "Նախ գրեք ձեր պատասխանը։",
@@ -514,7 +536,7 @@ const TXT = {
         noCamera: "Տեսախցիկը չբացվեց։ Ստուգեք հավելվածի թույլտվությունները։"
     }
 };
-let lang = 'en';
+let lang = scanParams.get('lang') === 'hy' ? 'hy' : 'en';
 let T = TXT.en;
 
 function applyLang() {
@@ -532,9 +554,15 @@ function applyLang() {
         'pad-hint': T.padHint,
         'nav-courses': T.navCourses, 'nav-profile': T.navProfile,
         'lbl-tips': T.tips, 'tip-1': T.tip1, 'tip-2': T.tip2, 'tip-3': T.tip3,
-        'lbl-fs-exit': T.fsExit
+        'lbl-fs-exit': T.fsExit, 'pad-controls-hint': T.padControls
     };
     for (const id in map) { const el = document.getElementById(id); if (el) el.textContent = map[id]; }
+    const tools = { 'btn-eraser': T.eraser, 'btn-pan': T.pan, 'btn-undo': T.undo, 'btn-pad-home': T.boardHome, 'btn-fs': T.fullscreen };
+    for (const [id, label] of Object.entries(tools)) {
+        const button = document.getElementById(id);
+        button.title = label;
+        button.setAttribute('aria-label', label);
+    }
 }
 
 /* ---------------- screens ---------------- */
@@ -729,79 +757,41 @@ function startPractice() {
     requestAnimationFrame(() => { sizePad(); clearPad(); });
 }
 
-/* ---- lightweight handwriting pad ----
-   Deliberately not the full lesson.html whiteboard (thelobook, replay, panning).
-   This is one page of ink, which is all a practice answer needs, and it keeps the
-   scan tab independent of that machinery. */
 const pad = document.getElementById('pad');
-const padCtx = pad.getContext('2d');
-let drawing = false, hasInk = false, lastX = 0, lastY = 0;
-let erasing = false;
-
-function applyPadStyle() {
-    padCtx.lineCap = 'round';
-    padCtx.lineJoin = 'round';
-    // Erase by compositing rather than painting white, so the grid background
-    // shows through again instead of leaving white smears over it.
-    padCtx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
-    padCtx.lineWidth = erasing ? 26 : 3;
-    padCtx.strokeStyle = erasing ? 'rgba(0,0,0,1)' : INK_BLUE;
-}
+const scanPad = new ScanPad(pad, () => {
+    document.getElementById('pad-hint').classList.toggle('hidden', scanPad.hasInk);
+});
 
 function sizePad() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = pad.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    pad.width = Math.round(rect.width * dpr);
-    pad.height = Math.round(rect.height * dpr);
-    padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    applyPadStyle();
-}
-
-/**
- * Resize without losing what the student has written. Changing canvas.width
- * clears it, so snapshot first and repaint after. Used when entering/leaving
- * fullscreen and on rotation.
- */
-function resizePadPreservingInk() {
-    const hadInk = hasInk;
-    const snapshot = (pad.width && pad.height) ? pad.toDataURL() : null;
-    const prevW = pad.clientWidth, prevH = pad.clientHeight;
-    sizePad();
-    if (!snapshot || !hadInk) return;
-    const img = new Image();
-    img.onload = () => {
-        const w = pad.clientWidth, h = pad.clientHeight;
-        // Preserve aspect: scale to fit the new box rather than stretching the
-        // handwriting, which would make it unreadable to the checker.
-        const scale = Math.min(w / (prevW || w), h / (prevH || h)) || 1;
-        const op = padCtx.globalCompositeOperation;
-        padCtx.globalCompositeOperation = 'source-over';
-        padCtx.drawImage(img, 0, 0, (prevW || w) * scale, (prevH || h) * scale);
-        padCtx.globalCompositeOperation = op;
-    };
-    img.src = snapshot;
+    scanPad.resize();
 }
 
 function clearPad() {
-    const op = padCtx.globalCompositeOperation;
-    padCtx.globalCompositeOperation = 'source-over';
-    padCtx.clearRect(0, 0, pad.width, pad.height);
-    padCtx.globalCompositeOperation = op;
-    hasInk = false;
-    document.getElementById('pad-hint').classList.remove('hidden');
+    scanPad.clear();
 }
 
-/* ---- eraser ---- */
-function setErasing(on) {
-    erasing = on;
-    document.getElementById('btn-eraser').classList.toggle('on', erasing);
-    applyPadStyle();
+function setPadTool(tool) {
+    scanPad.setTool(tool);
+    for (const [id, name] of [['btn-eraser', 'eraser'], ['btn-pan', 'hand']]) {
+        const button = document.getElementById(id);
+        button.classList.toggle('on', tool === name);
+        button.setAttribute('aria-pressed', String(tool === name));
+    }
 }
-document.getElementById('btn-eraser').onclick = () => setErasing(!erasing);
+document.getElementById('btn-eraser').onclick = () => setPadTool(scanPad.tool === 'eraser' ? 'pen' : 'eraser');
+document.getElementById('btn-pan').onclick = () => setPadTool(scanPad.tool === 'hand' ? 'pen' : 'hand');
+document.getElementById('btn-undo').onclick = () => scanPad.undo();
+document.getElementById('btn-pad-home').onclick = () => scanPad.home();
 
 /* ---- fullscreen writing ---- */
-function setFullscreen(on) {
+function setFullscreen(on, updateHistory = true) {
+    const wasFullscreen = document.body.classList.contains('pad-fullscreen');
+    if (on === wasFullscreen) return;
+    scanPad.finishStroke();
+    if (updateHistory) {
+        if (on) history.pushState({ scanFullscreen: true }, '');
+        else if (history.state?.scanFullscreen) history.back();
+    }
     document.body.classList.toggle('pad-fullscreen', on);
     const p = solution?.practiceProblems?.[practiceIndex];
     document.getElementById('fs-problem').textContent = p ? p.problemText : '';
@@ -809,45 +799,15 @@ function setFullscreen(on) {
         ? '<i class="fa-solid fa-compress"></i>'
         : '<i class="fa-solid fa-expand"></i>';
     // Let the layout settle at its new size before measuring the canvas.
-    requestAnimationFrame(() => requestAnimationFrame(resizePadPreservingInk));
+    requestAnimationFrame(sizePad);
 }
 document.getElementById('btn-fs').onclick = () => setFullscreen(!document.body.classList.contains('pad-fullscreen'));
 document.getElementById('btn-fs-exit').onclick = () => setFullscreen(false);
 
 // Android back button / gesture should leave fullscreen rather than the page.
 window.addEventListener('popstate', () => {
-    if (document.body.classList.contains('pad-fullscreen')) setFullscreen(false);
+    setFullscreen(!!history.state?.scanFullscreen, false);
 });
-function padPos(e) {
-    const r = pad.getBoundingClientRect();
-    const t = e.touches ? e.touches[0] : e;
-    return { x: t.clientX - r.left, y: t.clientY - r.top };
-}
-function startDraw(e) {
-    e.preventDefault();
-    drawing = true;
-    const p = padPos(e); lastX = p.x; lastY = p.y;
-    if (!hasInk) { hasInk = true; document.getElementById('pad-hint').classList.add('hidden'); }
-}
-function moveDraw(e) {
-    if (!drawing) return;
-    e.preventDefault();
-    const p = padPos(e);
-    padCtx.beginPath();
-    padCtx.moveTo(lastX, lastY);
-    padCtx.lineTo(p.x, p.y);
-    padCtx.stroke();
-    lastX = p.x; lastY = p.y;
-}
-function endDraw() { drawing = false; }
-
-pad.addEventListener('pointerdown', startDraw);
-pad.addEventListener('pointermove', moveDraw);
-window.addEventListener('pointerup', endDraw);
-pad.addEventListener('touchstart', startDraw, { passive: false });
-pad.addEventListener('touchmove', moveDraw, { passive: false });
-window.addEventListener('touchend', endDraw);
-window.addEventListener('resize', resizePadPreservingInk);
 
 document.getElementById('btn-clear').onclick = clearPad;
 document.getElementById('btn-hint').onclick = () => {
@@ -855,22 +815,12 @@ document.getElementById('btn-hint').onclick = () => {
     if (p?.hint) notice('practice-feedback', '💡 ' + p.hint, 'info');
 };
 
-/**
- * Flatten the transparent ink canvas onto white before sending.
- * analyzeMathDrawing expects a normal photo-like image; a transparent PNG reads as
- * a black rectangle once the model composites it.
- */
 function padImageBase64() {
-    const flat = document.createElement('canvas');
-    flat.width = pad.width; flat.height = pad.height;
-    const c = flat.getContext('2d');
-    c.fillStyle = '#ffffff'; c.fillRect(0, 0, flat.width, flat.height);
-    c.drawImage(pad, 0, 0);
-    return flat.toDataURL('image/png');
+    return scanPad.exportImage();
 }
 
 async function checkAnswer() {
-    if (!hasInk) { notice('practice-feedback', T.needInk, 'info'); return; }
+    if (!scanPad.hasInk) { notice('practice-feedback', T.needInk, 'info'); return; }
     const p = solution.practiceProblems[practiceIndex];
     const btn = document.getElementById('btn-check');
     btn.disabled = true;
@@ -988,7 +938,7 @@ if (auth) {
         if (!user) {
             await authHasSettled();
             if (auth.currentUser) return;   // session turned up; the next call handles it
-            location.replace('home.html');
+            navigateHome();
             return;
         }
         setCaptureEnabled(true);
@@ -998,11 +948,9 @@ if (auth) {
                 const d = snap.data();
                 userPoints = d.points || 0;
                 renderPoints();
-                if (d.preferences?.language === 'hy') {
-                    lang = 'hy';
-                    document.body.classList.add('lang-hy');
-                    applyLang();
-                }
+                lang = d.preferences?.language === 'hy' ? 'hy' : 'en';
+                document.body.classList.toggle('lang-hy', lang === 'hy');
+                applyLang();
             }
         } catch (e) { console.warn('profile load failed', e); }
     });
@@ -1014,6 +962,17 @@ if (auth) {
 }
 
 window.addEventListener('orientationchange', () => setTimeout(sizePad, 300));
+window.addEventListener('message', event => {
+    if (!embedded || event.source !== window.parent || event.data?.type !== 'thelo-scan-visibility') return;
+    scanPad.finishStroke();
+    scanPad.pointers.clear();
+    if (event.data.active) {
+        requestAnimationFrame(sizePad);
+        const language = event.data.language === 'hy' ? 'hy' : 'en';
+        if (lang !== language) { lang = language; applyLang(); }
+    }
+});
+});
 </script>
 <script src="/assets/thelo-web.js"></script>
 </body>

@@ -38,6 +38,8 @@ port () {
         -e 's|href="scan\.html"|href="/scan/"|g' \
         -e 's|href="home\.html?view=|href="/sdashboard/?view=|g' \
         -e 's|href="home\.html"|href="/sdashboard/"|g' \
+        -e "s|'scan\\.html'|'/scan/'|g" \
+        -e "s|'home\\.html'|'/sdashboard/'|g" \
         -e "s|location\.href *= *'home\.html'|location.href = '/sdashboard/'|g" \
         -e "s|location\.href='home\.html'|location.href='/sdashboard/'|g" \
         "$infile" > "$outfile"
@@ -59,6 +61,7 @@ port () {
 port "$SRC/home.html"   "$HERE/sdashboard/index.html" "dashboard"
 port "$SRC/lesson.html" "$HERE/learn/index.html"      "lesson"
 port "$SRC/scan.html"   "$HERE/scan/index.html"       "scan"
+cp "$SRC/scan-pad.js" "$HERE/scan/scan-pad.js"
 
 echo
 echo "--- verification ---"
@@ -79,10 +82,18 @@ for f in "$HERE/sdashboard/index.html" "$HERE/learn/index.html" "$HERE/scan/inde
     check "$f" 'thelo-web.css' 'desktop stylesheet' present
     check "$f" 'thelo-web.js'  'desktop script'     present
     check "$f" 'href="home\.html"' 'raw home.html link' gone
+    check "$f" "'home\\.html'" 'raw home runtime route' gone
+    check "$f" "'scan\\.html'" 'raw scan runtime route' gone
     check "$f" 'lesson\.html?lessonFile=' 'raw lesson.html link' gone
 done
 check "$HERE/learn/index.html" 'isMobileMode = true;' 'hardcoded mobile flag' gone
 check "$HERE/learn/index.html" 'pointer: coarse' 'pointer detection' present
+check "$HERE/scan/index.html" 'src="scan-pad.js"' 'scan whiteboard script' present
+if cmp -s "$SRC/scan-pad.js" "$HERE/scan/scan-pad.js"; then
+    echo "  ok    scan whiteboard script matches the app"
+else
+    echo "  FAIL  scan whiteboard script differs from the app"; fail=$((fail+1))
+fi
 
 # The Armenian faces are bundled beside the HTML in the APK, so the app refers to
 # them as fonts/... . Served from /learn/ that resolves to /learn/fonts/ and 404s,

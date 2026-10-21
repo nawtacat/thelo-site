@@ -87,6 +87,10 @@
             transform: scale(1);
         }
 
+        #view-scan { visibility: hidden; transition: none; background: var(--thelo-bg); }
+        #view-scan.active { visibility: visible; }
+        #scan-frame { width: 100%; height: 100%; border: 0; flex: 1; }
+
         /* === VIEW 1: SPLASH & WIZARD STYLES === */
 
         #view-splash .top-bar {
@@ -656,7 +660,7 @@
     <nav class="nav-bar">
         <a href="#" class="nav-item active" onclick="goHome(); return false;"><i class="fa-solid fa-house"></i> <span data-i18n="navHangar">Hangar</span></a>
         <a href="#" class="nav-item nav-courses-tab" onclick="switchToCourses(); return false;"><i class="fa-solid fa-layer-group"></i> <span data-i18n="navCourses">Courses</span></a>
-        <a href="/scan/" class="nav-item"><i class="fa-solid fa-camera"></i> <span data-i18n="navScan">Scan</span></a>
+        <a href="/scan/" class="nav-item" onclick="switchToScan(); return false;"><i class="fa-solid fa-camera"></i> <span data-i18n="navScan">Scan</span></a>
         <a href="#" class="nav-item" onclick="switchToProfile(); return false;"><i class="fa-solid fa-user"></i> <span data-i18n="navProfile">Profile</span></a>
     </nav>
 </div>
@@ -699,7 +703,7 @@
     <nav class="nav-bar">
         <a href="#" class="nav-item" onclick="goHome(); return false;"><i class="fa-solid fa-house"></i> <span data-i18n="navHangar">Hangar</span></a>
         <a href="#" class="nav-item active nav-courses-tab" onclick="switchToCourses(); return false;"><i class="fa-solid fa-layer-group"></i> <span data-i18n="navCourses">Courses</span></a>
-        <a href="/scan/" class="nav-item"><i class="fa-solid fa-camera"></i> <span data-i18n="navScan">Scan</span></a>
+        <a href="/scan/" class="nav-item" onclick="switchToScan(); return false;"><i class="fa-solid fa-camera"></i> <span data-i18n="navScan">Scan</span></a>
         <a href="#" class="nav-item" onclick="switchToProfile(); return false;"><i class="fa-solid fa-user"></i> <span data-i18n="navProfile">Profile</span></a>
     </nav>
 </div>
@@ -782,9 +786,13 @@
     <nav class="nav-bar">
         <a href="#" class="nav-item" onclick="goHome(); return false;"><i class="fa-solid fa-house"></i> <span data-i18n="navHangar">Hangar</span></a>
         <a href="#" class="nav-item nav-courses-tab" onclick="switchToCourses(); return false;"><i class="fa-solid fa-layer-group"></i> <span data-i18n="navCourses">Courses</span></a>
-        <a href="/scan/" class="nav-item"><i class="fa-solid fa-camera"></i> <span data-i18n="navScan">Scan</span></a>
+        <a href="/scan/" class="nav-item" onclick="switchToScan(); return false;"><i class="fa-solid fa-camera"></i> <span data-i18n="navScan">Scan</span></a>
         <a href="#" class="nav-item active" onclick="switchToProfile(); return false;"><i class="fa-solid fa-user"></i> <span data-i18n="navProfile">Profile</span></a>
     </nav>
+</div>
+
+<div id="view-scan" class="app-view">
+    <iframe id="scan-frame" title="Scan a problem" allow="camera"></iframe>
 </div>
 
 <!-- Modals & Toasts -->
@@ -1056,6 +1064,7 @@
         courses: document.getElementById('view-courses'),
         probList: document.getElementById('t-problem-list'),
         profile: document.getElementById('view-profile'),
+        scan: document.getElementById('view-scan'),
         drawer: document.getElementById('wizard-drawer'),
         splashHero: document.getElementById('splash-hero'),
         // Hangar Elements
@@ -1625,11 +1634,70 @@ ${stream[lang]}` : '');
      * Deactivating every view here means a new view can never be forgotten again.
      */
     function setActiveView(viewToShow) {
-        [ui.splash, ui.hangar, ui.courses, ui.profile, ui.tutorDashboard].forEach(v => {
+        document.querySelectorAll('.app-view').forEach(v => {
             if (v) v.classList.remove('active');
         });
         if (viewToShow) viewToShow.classList.add('active');
+        const url = new URL(location.href);
+        if (viewToShow === ui.scan) url.searchParams.set('view', 'scan');
+        else if (url.searchParams.get('view') === 'scan') url.searchParams.delete('view');
+        history.replaceState({ ...history.state, theloView: viewToShow?.id }, '', url.href);
+        updateScanVisibility();
     }
+
+    function updateScanVisibility() {
+        const frame = document.getElementById('scan-frame');
+        frame.contentWindow?.postMessage({
+            type: 'thelo-scan-visibility', active: ui.scan.classList.contains('active'), language: state.lang
+        }, '*');
+    }
+
+    function prepareScan() {
+        if (!auth.currentUser) return;
+        const frame = document.getElementById('scan-frame');
+        if (frame.dataset.user === auth.currentUser.uid) return;
+        const url = new URL('/scan/', location.href);
+        url.searchParams.set('embedded', '1');
+        url.searchParams.set('lang', state.lang);
+        frame.dataset.user = auth.currentUser.uid;
+        frame.onload = updateScanVisibility;
+        frame.src = url.href;
+    }
+
+    window.switchToScan = () => {
+        if (!auth.currentUser) return;
+        prepareScan();
+        if (!ui.scan.classList.contains('active')) {
+            const url = new URL(location.href);
+            url.searchParams.set('view', 'scan');
+            history.pushState({ theloView: 'view-scan' }, '', url.href);
+        }
+        setActiveView(ui.scan);
+    };
+
+    window.addEventListener('message', event => {
+        const frame = document.getElementById('scan-frame');
+        if (event.source !== frame.contentWindow || event.data?.type !== 'thelo-scan-navigate' ||
+            !ui.scan.classList.contains('active') || !auth.currentUser) return;
+        if (event.data.view === 'courses') switchToCourses();
+        else if (event.data.view === 'profile') switchToProfile();
+        else if (event.data.view === 'hangar') {
+            if (state.role === 'tutor') switchToTutorDashboard();
+            else switchToHangar();
+        }
+    });
+
+    window.addEventListener('popstate', event => {
+        if (!auth.currentUser) return;
+        const view = event.state?.theloView;
+        if (view === 'view-scan' || new URLSearchParams(location.search).get('view') === 'scan') {
+            prepareScan();
+            setActiveView(ui.scan);
+        } else if (view === 'view-courses') switchToCourses();
+        else if (view === 'view-profile') switchToProfile();
+        else if (view === 'view-tutor-dashboard') switchToTutorDashboard();
+        else switchToHangar();
+    });
 
     window.switchToHangar = (user) => {
         const u = user || auth.currentUser;
@@ -2274,7 +2342,11 @@ updateOnlineStatus();
             // back from the Scan tab.
             const requestedView = new URLSearchParams(location.search).get('view');
             try {
-                if (requestedView === 'courses' || requestedView === 'profile') {
+                if (requestedView === 'scan') {
+                    await handleViewTransition(user);
+                    switchToScan();
+                }
+                else if (requestedView === 'courses' || requestedView === 'profile') {
                     // scan.html links back here with ?view=... so its bottom bar can
                     // offer the same tabs. Honour it once, then strip it from the URL
                     // so a later reload lands on the hangar as usual.
@@ -2311,6 +2383,8 @@ updateOnlineStatus();
             };
 
             checkDailyActive();
+            if ('requestIdleCallback' in window) window.requestIdleCallback(prepareScan, { timeout: 2000 });
+            else setTimeout(prepareScan, 600);
 
             // 2. Time Tracking
             let lastInteractionTime = Date.now();
@@ -2374,6 +2448,9 @@ updateOnlineStatus();
             if (auth.currentUser) return;
 
             console.log("No Auth -> Showing splash");
+            const scanFrame = document.getElementById('scan-frame');
+            scanFrame.removeAttribute('src');
+            delete scanFrame.dataset.user;
             setActiveView(ui.splash);
         }
 
