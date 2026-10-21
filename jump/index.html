@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Thelo · Test</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" crossorigin="anonymous">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" crossorigin="anonymous"></script>
+    <style>
+        /*
+         * Jump tests. A section test unlocks a later section of the student's course; a
+         * grade test lets them move up to a higher grade. Opened from home.html:
+         *
+         *   /jump/?kind=section&lang=hy&course=grade9-hy-math&folder=NINE-HY&from=12&to=30&unit=3&title=...
+         *   /jump/?kind=grade&lang=hy&from=7&curstream=&complete=0&target=9&stream=
+         *
+         * Questions come from lessons/<FOLDER>/tests.json (written by lesson-gen/build.py):
+         * quick ones (multiple choice, or a number typed on the keypad) are checked here;
+         * handwritten ones go to the same analyzeMathDrawing function the lessons use.
+         * 80% passes. Starting a test counts as a try: leaving or failing locks that test
+         * for 24 hours (thelo-students/{uid}.jumpTests).
+         */
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-blue-dark: #1d4ed8;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+            --slate-200: #e2e8f0;
+            --slate-400: #94a3b8;
+            --slate-500: #64748b;
+            --white: #ffffff;
+            --green: #16A34A;
+            --green-bg: #DCFCE7;
+            --red: #DC2626;
+            --red-bg: #FEE2E2;
+        }
+        @font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-Regular.otf'); font-weight: 400; }
+        @font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-SemiBold.otf'); font-weight: 600; }
+        @font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-ExtraBold.otf'); font-weight: 800; }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; }
+        body {
+            font-family: 'Manrope', sans-serif; background: var(--thelo-bg); color: var(--thelo-text);
+            height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+            background-image:
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        body.lang-hy { font-family: 'Montserrat Arm', 'Manrope', sans-serif; }
+        .wrap { width: 100%; max-width: 560px; margin: 0 auto; }
+
+        header.jt-top {
+            display: flex; align-items: center; gap: 0.9rem;
+            padding: calc(env(safe-area-inset-top) + 1rem) 1.25rem 0.75rem;
+        }
+        .icon-btn {
+            width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--grid-color);
+            background: var(--white); color: var(--slate-500); font-size: 1.1rem; cursor: pointer; flex-shrink: 0;
+        }
+        .jt-bar { flex: 1; height: 12px; background: var(--slate-200); border-radius: 999px; overflow: hidden; }
+        .jt-fill { height: 100%; width: 0; background: var(--thelo-blue); border-radius: 999px; transition: width 0.3s ease; }
+        .jt-count { font-weight: 800; font-size: 0.85rem; color: var(--slate-500); min-width: 3.2rem; text-align: right; }
+
+        main#jt-main { flex: 1; overflow-y: auto; padding: 0.5rem 1.25rem 1rem; display: flex; flex-direction: column; }
+        footer#jt-foot { padding: 0.75rem 1.25rem calc(env(safe-area-inset-bottom) + 1rem); }
+
+        .card {
+            background: var(--white); border: 1px solid var(--grid-color); border-radius: 1rem;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06); padding: 1.5rem;
+        }
+        .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--slate-500); font-weight: 700; }
+        h1.title { font-size: 1.6rem; font-weight: 800; line-height: 1.25; margin: 0.4rem 0 0.9rem; }
+        p.body { font-size: 1rem; line-height: 1.5; color: #374151; margin-bottom: 0.75rem; }
+        .facts { list-style: none; margin: 1rem 0 0.25rem; display: grid; gap: 0.6rem; }
+        .facts li { display: flex; gap: 0.7rem; align-items: center; font-weight: 600; font-size: 0.95rem; }
+        .facts i { width: 1.2rem; text-align: center; color: var(--thelo-blue); }
+        .note { font-size: 0.85rem; color: var(--slate-500); margin-top: 1rem; line-height: 1.45; }
+        .center { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+        .btn {
+            width: 100%; padding: 1rem; border-radius: 1rem; font-weight: 800; font-size: 1.05rem; font-family: inherit;
+            border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 0.5rem;
+            transition: 0.2s;
+        }
+        .btn-primary { background: var(--thelo-blue); color: var(--white); box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.3); }
+        .btn-primary:disabled { background: var(--slate-200); color: var(--slate-400); box-shadow: none; cursor: default; }
+        .btn-green { background: var(--green); color: var(--white); }
+        .btn-red { background: var(--red); color: var(--white); }
+        .btn-ghost { background: none; color: var(--slate-500); font-weight: 700; margin-top: 0.4rem; }
+
+        .q-label { margin: 0.25rem 0 0.5rem; }
+        .q-text { font-size: 1.2rem; font-weight: 700; line-height: 1.45; margin-bottom: 1.1rem; word-wrap: break-word; }
+        .q-text .katex { font-size: 1.05em; }
+
+        .choices { display: grid; gap: 0.7rem; }
+        .choice {
+            text-align: left; font: inherit; font-size: 1.05rem; font-weight: 600; padding: 1rem 1.1rem;
+            background: var(--white); border: 2px solid var(--grid-color); border-radius: 0.9rem; cursor: pointer;
+            box-shadow: 0 2px 0 var(--grid-color);
+        }
+        .choice.sel { border-color: var(--thelo-blue); background: #EFF6FF; box-shadow: 0 2px 0 var(--thelo-blue); }
+        .choice.right { border-color: var(--green); background: var(--green-bg); box-shadow: none; }
+        .choice.wrong { border-color: var(--red); background: var(--red-bg); box-shadow: none; }
+        .choice:disabled { cursor: default; color: inherit; }
+
+        .answer-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; }
+        .answer-box {
+            flex: 1; min-height: 3.6rem; display: flex; align-items: center; padding: 0 1rem;
+            background: var(--white); border: 2px solid var(--thelo-blue); border-radius: 0.9rem;
+            font-size: 1.6rem; font-weight: 800; letter-spacing: 0.02em;
+        }
+        .answer-box.empty::after { content: '?'; color: var(--slate-400); }
+        .answer-box.right { border-color: var(--green); background: var(--green-bg); }
+        .answer-box.wrong { border-color: var(--red); background: var(--red-bg); }
+        .unit { font-size: 1.3rem; font-weight: 700; color: var(--slate-500); }
+        .keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.55rem; }
+        .key {
+            font: inherit; font-size: 1.35rem; font-weight: 800; padding: 0.85rem 0; border-radius: 0.8rem;
+            background: var(--white); border: 1px solid var(--grid-color); box-shadow: 0 2px 0 var(--grid-color); cursor: pointer;
+        }
+        .key.op { color: var(--thelo-blue); }
+        .key:active { transform: translateY(1px); box-shadow: none; }
+        .key:disabled { color: var(--slate-400); }
+
+        .pad-wrap {
+            flex: 1; min-height: 260px; position: relative; background: var(--white);
+            border: 2px solid var(--grid-color); border-radius: 1rem; overflow: hidden;
+        }
+        .pad-wrap canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+        .pad-tools { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.4rem; }
+        .pad-hint { position: absolute; left: 0.9rem; bottom: 0.6rem; font-size: 0.8rem; color: var(--slate-400); pointer-events: none; }
+
+        .feedback { border-radius: 1rem; padding: 1rem 1.1rem; margin-bottom: 0.75rem; font-weight: 700; line-height: 1.4; }
+        .feedback.right { background: var(--green-bg); color: #14532D; }
+        .feedback.wrong { background: var(--red-bg); color: #7F1D1D; }
+        .feedback .fb-title { font-size: 1.1rem; font-weight: 800; display: flex; gap: 0.5rem; align-items: center; }
+        .feedback .fb-body { font-weight: 600; margin-top: 0.3rem; font-size: 0.95rem; }
+
+        .result-icon {
+            width: 96px; height: 96px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 2.6rem; margin: 0 auto 1.2rem;
+        }
+        .result-icon.pass { background: var(--green-bg); color: var(--green); }
+        .result-icon.fail { background: var(--red-bg); color: var(--red); }
+        .score { font-size: 3rem; font-weight: 800; text-align: center; }
+        .score small { font-size: 1.4rem; color: var(--slate-500); }
+        .text-center { text-align: center; }
+
+        .modal-back {
+            position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); display: none;
+            align-items: flex-end; justify-content: center; z-index: 50;
+        }
+        .modal-back.show { display: flex; }
+        .modal { background: var(--white); width: 100%; max-width: 560px; border-radius: 1.25rem 1.25rem 0 0; padding: 1.5rem 1.25rem calc(env(safe-area-inset-bottom) + 1.25rem); }
+        .modal h2 { font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem; }
+
+        .spinner { width: 42px; height: 42px; border: 4px solid var(--slate-200); border-top-color: var(--thelo-blue); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <link rel="stylesheet" href="/assets/thelo-web.css">
+</head>
+<body data-thelo-page="jump">
+    <header class="jt-top wrap">
+        <button class="icon-btn" id="jt-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+        <div class="jt-bar"><div class="jt-fill" id="jt-fill"></div></div>
+        <span class="jt-count" id="jt-count"></span>
+    </header>
+    <main id="jt-main" class="wrap"></main>
+    <footer id="jt-foot" class="wrap"></footer>
+
+    <div class="modal-back" id="jt-modal">
+        <div class="modal">
+            <h2 id="jt-modal-title"></h2>
+            <p class="body" id="jt-modal-body"></p>
+            <button class="btn btn-red" id="jt-modal-leave"></button>
+            <button class="btn btn-ghost" id="jt-modal-stay"></button>
+        </div>
+    </div>
+
+    <script src="scan-pad.js"></script>
+    <script>
+    (function () {
+        'use strict';
+
+        const ASSET_ORIGIN = 'https://thelo.ink';
+        const PASS_RATIO = 0.8;
+        const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+        const SIZES = { section: { quick: 8, written: 2 }, grade: { quick: 12, written: 3 } };
+        const FOLDER_NAMES = { 5: 'FIVE', 6: 'SIX', 7: 'SEVEN', 8: 'EIGHT', 9: 'NINE', 10: 'TEN', 11: 'ELEVEN', 12: 'TWELVE' };
+
+        const params = new URLSearchParams(location.search);
+        const KIND = params.get('kind') === 'grade' ? 'grade' : 'section';
+        const LANG = params.get('lang') === 'en' ? 'en' : 'hy';
+        // A local preview (http://localhost/...?demo=1) runs without an account and saves nothing.
+        const DEMO = ['localhost', '127.0.0.1'].includes(location.hostname) && params.get('demo') === '1';
+
+        const T = {
+            en: {
+                sectionTitle: 'Jump to “{t}”',
+                sectionBody: 'Show that you already know everything before this section, and it opens for you. The lessons you skip will count as done.',
+                gradeTitle: 'Skip to grade {g}',
+                gradeBody: 'This test covers {list}. Pass it and your course switches to grade {g}.',
+                gradeList1: 'grade {a}', gradeListN: 'grades {a} to {b}',
+                nQuestions: '{n} questions', passNeed: 'Pass with {p} correct', handwritten: '{w} of them you solve by hand',
+                tryRule: 'Starting the test counts as a try. If you leave or don\'t pass, you can try again in 24 hours.',
+                start: 'Start the test', back: 'Back',
+                loading: 'Preparing your test…', loadFail: 'The test could not be loaded. Check your connection and try again.',
+                signIn: 'Please sign in to take a test.',
+                waitTitle: 'Try again later', waitBody: 'You can take this test again in {h}.',
+                hours: '{n} h', minutes: '{n} min',
+                question: 'Question {i} of {n}', chooseOne: 'Choose the answer', typeAnswer: 'Type the answer', writeAnswer: 'Solve it by hand and write the answer',
+                check: 'Check', checking: 'Checking…', continue: 'Continue', finish: 'See the result',
+                right: 'Correct!', wrong: 'Not quite', answerWas: 'Answer: {a}',
+                noInk: 'Write your solution first.', checkFail: 'The answer could not be checked. Please try again.',
+                undo: 'Undo', clear: 'Clear', padHint: 'Write here with your finger or pen',
+                passTitle: 'You passed!', failTitle: 'Not this time',
+                passSection: 'The section is open. Keep going from there!', passGrade: 'Welcome to grade {g}!',
+                failBody: 'You need {p} correct to pass. Keep learning and try again in 24 hours.',
+                saving: 'Saving…', saveFail: 'Your result could not be saved. Check your connection and tap to try again.',
+                toCourse: 'Go to my course', retrySave: 'Try again',
+                leaveTitle: 'Leave the test?', leaveBody: 'Leaving now counts as a try: you can take this test again in 24 hours.',
+                leave: 'Leave', stay: 'Keep going',
+            },
+            hy: {
+                sectionTitle: 'Թռիչք դեպի «{t}»',
+                sectionBody: 'Ցույց տուր, որ արդեն գիտես այս բաժնից առաջ եղած ամեն ինչը, և բաժինը կբացվի։ Բաց թողնված դասերը կհամարվեն անցած։',
+                gradeTitle: 'Անցում {g}-րդ դասարան',
+                gradeBody: 'Թեստն ընդգրկում է {list}։ Հաջողությամբ անցնելու դեպքում քո դասընթացը կդառնա {g}-րդ դասարանինը։',
+                gradeList1: '{a}-րդ դասարանը', gradeListN: '{a}–{b}-րդ դասարանները',
+                nQuestions: '{n} հարց', passNeed: 'Անցնելու համար՝ {p} ճիշտ պատասխան', handwritten: 'Դրանցից {w}-ը լուծում ես ձեռքով',
+                tryRule: 'Թեստը սկսելը համարվում է փորձ։ Եթե դուրս գաս կամ չանցնես, կարող ես նորից փորձել 24 ժամ հետո։',
+                start: 'Սկսել թեստը', back: 'Հետ',
+                loading: 'Թեստը պատրաստվում է…', loadFail: 'Թեստը չբեռնվեց։ Ստուգիր կապը և փորձիր նորից։',
+                signIn: 'Թեստ հանձնելու համար մուտք գործիր։',
+                waitTitle: 'Փորձիր ավելի ուշ', waitBody: 'Այս թեստը կարող ես նորից հանձնել {h} հետո։',
+                hours: '{n} ժ', minutes: '{n} ր',
+                question: 'Հարց {i} / {n}', chooseOne: 'Ընտրիր պատասխանը', typeAnswer: 'Գրիր պատասխանը', writeAnswer: 'Լուծիր ձեռքով և գրիր պատասխանը',
+                check: 'Ստուգել', checking: 'Ստուգվում է…', continue: 'Շարունակել', finish: 'Տեսնել արդյունքը',
+                right: 'Ճիշտ է։', wrong: 'Սխալ է', answerWas: 'Պատասխանը՝ {a}',
+                noInk: 'Նախ գրիր լուծումը։', checkFail: 'Պատասխանը չստուգվեց։ Փորձիր նորից։',
+                undo: 'Հետարկել', clear: 'Մաքրել', padHint: 'Գրիր այստեղ մատով կամ գրիչով',
+                passTitle: 'Անցար։', failTitle: 'Այս անգամ՝ ոչ',
+                passSection: 'Բաժինը բացված է։ Շարունակիր այնտեղից։', passGrade: 'Բարի գալուստ {g}-րդ դասարան։',
+                failBody: 'Անցնելու համար պետք է {p} ճիշտ պատասխան։ Շարունակիր սովորել և նորից փորձիր 24 ժամ հետո։',
+                saving: 'Պահպանվում է…', saveFail: 'Արդյունքը չպահպանվեց։ Ստուգիր կապը և փորձիր նորից։',
+                toCourse: 'Գնալ իմ դասընթացին', retrySave: 'Փորձել նորից',
+                leaveTitle: 'Դուրս գա՞լ թեստից', leaveBody: 'Հիմա դուրս գալը համարվում է փորձ. թեստը կարող ես նորից հանձնել 24 ժամ հետո։',
+                leave: 'Դուրս գալ', stay: 'Շարունակել թեստը',
+            },
+        }[LANG];
+        const fmt = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => (v && k in v ? v[k] : ''));
+
+        if (LANG === 'hy') document.body.classList.add('lang-hy');
+        document.documentElement.lang = LANG;
+
+        const $main = document.getElementById('jt-main');
+        const $foot = document.getElementById('jt-foot');
+        const $fill = document.getElementById('jt-fill');
+        const $count = document.getElementById('jt-count');
+        const goHome = () => { location.href = '/sdashboard/'; };
+
+        // ------------------------------------------------------------------ firebase
+        const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
+        let db = null, auth = null, functions = null;
+        try {
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore(); auth = firebase.auth(); functions = firebase.functions();
+        } catch (e) {
+            console.error('Firebase unavailable', e);
+        }
+
+        // ------------------------------------------------------------------ helpers
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        /** Text with /K ... K/ KaTeX segments, as written by lesson-gen. */
+        function renderRich(el, text) {
+            el.textContent = '';
+            const re = /\/K\s?([\s\S]*?)\s?K\//g;
+            let last = 0, m;
+            const src = String(text ?? '');
+            while ((m = re.exec(src))) {
+                if (m.index > last) el.appendChild(document.createTextNode(src.slice(last, m.index)));
+                const span = document.createElement('span');
+                try { katex.render(m[1], span, { throwOnError: false }); } catch (e) { span.textContent = m[1]; }
+                el.appendChild(span);
+                last = re.lastIndex;
+            }
+            if (last < src.length) el.appendChild(document.createTextNode(src.slice(last)));
+        }
+        const plain = (s) => String(s ?? '').replace(/\/K\s?|\s?K\//g, '');
+
+        function shuffle(a) {
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        function parseNum(s) {
+            const t = String(s ?? '').replace(/[\s ]/g, '').replace(/−/g, '-').replace(/,/g, '.');
+            if (!/^-?(\d+\.?\d*|\.\d+)(\/-?(\d+\.?\d*|\.\d+))?$/.test(t)) return NaN;
+            if (t.includes('/')) {
+                const [a, b] = t.split('/').map(Number);
+                return b === 0 ? NaN : a / b;
+            }
+            return Number(t);
+        }
+        const sameNumber = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
+        const numText = (n) => (LANG === 'hy' ? String(n).replace('.', ',') : String(n)).replace(/^-/, '−');
+
+        function folderFor(grade, stream) {
+            const hs = Number(grade) >= 10;
+            return `${FOLDER_NAMES[grade]}${hs ? (stream === 'adv' ? '-ADV' : '-GEN') : ''}-${LANG === 'en' ? 'EN' : 'HY'}`;
+        }
+
+        function remaining(ms) {
+            const h = Math.floor(ms / 3600000);
+            return h >= 1 ? fmt(T.hours, { n: h }) : fmt(T.minutes, { n: Math.max(1, Math.ceil(ms / 60000)) });
+        }
+
+        // ------------------------------------------------------------------ the test being asked for
+        const spec = (() => {
+            if (KIND === 'section') {
+                const course = params.get('course') || '';
+                const unit = params.get('unit') || '';
+                return {
+                    key: `s_${course}_u${unit}`,
+                    folders: [params.get('folder') || ''],
+                    from: Number(params.get('from')) || 1,
+                    to: Number(params.get('to')) || 0,
+                    title: params.get('title') || '',
+                    size: SIZES.section,
+                };
+            }
+            const target = Number(params.get('target'));
+            const tstream = params.get('stream') || '';
+            const cur = Number(params.get('from'));
+            const curStream = params.get('curstream') || '';
+            const start = params.get('complete') === '1' ? cur + 1 : cur;
+            const grades = [];
+            for (let g = start; g < target; g++) {
+                if (!FOLDER_NAMES[g]) continue;
+                grades.push({ grade: g, stream: g >= 10 ? (g === cur ? (curStream || tstream || 'gen') : (tstream || 'gen')) : '' });
+            }
+            return {
+                key: `g_${LANG}_${target}${tstream}`,
+                folders: grades.map(g => folderFor(g.grade, g.stream)),
+                grades, target, tstream,
+                size: SIZES.grade,
+            };
+        })();
+        spec.key = spec.key.replace(/[^A-Za-z0-9_]/g, '_');
+
+        // ------------------------------------------------------------------ choosing the questions
+        /**
+         * Spread the questions evenly over the material being skipped: the lessons are cut
+         * into as many consecutive slices as there are questions, and each question comes
+         * from a random lesson of its slice. So a test over several grades asks about all
+         * of them, not just whichever has the most exercises.
+         */
+        function pickQuestions(lessons, nQuick, nWritten) {
+            const used = new Set();
+            const pickFrom = (ls, n, key) => {
+                const out = [];
+                if (!ls.length) return out;
+                for (let i = 0; i < n; i++) {
+                    const lo = Math.floor(i * ls.length / n);
+                    const hi = Math.max(lo + 1, Math.floor((i + 1) * ls.length / n));
+                    for (let tries = 0; tries < 15; tries++) {
+                        const span = tries < 8 ? hi - lo : ls.length;
+                        const l = ls[(tries < 8 ? lo : 0) + Math.floor(Math.random() * span)];
+                        const qi = Math.floor(Math.random() * l[key].length);
+                        const tag = `${l.id}|${key}|${qi}`;
+                        if (used.has(tag)) continue;
+                        used.add(tag);
+                        out.push(Object.assign({}, l[key][qi]));
+                        break;
+                    }
+                }
+                return out;
+            };
+            const written = pickFrom(lessons.filter(l => l.written && l.written.length), nWritten, 'written')
+                .map(q => Object.assign(q, { type: 'written' }));
+            const quick = pickFrom(lessons.filter(l => l.quick && l.quick.length), nQuick + (nWritten - written.length), 'quick')
+                .map(q => Object.assign(q, { type: q.c ? 'mcq' : 'num' }));
+            quick.forEach(q => {
+                if (q.type === 'mcq') {
+                    q.order = shuffle(q.c.map((_, i) => i));
+                }
+            });
+            return shuffle(quick).concat(written);       // the handwritten ones come last
+        }
+
+        async function loadPools() {
+            const pools = await Promise.all(spec.folders.map(async folder => {
+                const base = DEMO && params.get('pools') ? params.get('pools') : `${ASSET_ORIGIN}/lessons`;
+                const res = await fetch(`${base}/${encodeURIComponent(folder)}/tests.json`, { cache: 'no-cache' });
+                if (!res.ok) throw new Error(`HTTP ${res.status} for ${folder}/tests.json`);
+                return res.json();
+            }));
+            const lessons = [];
+            for (const pool of pools) {
+                for (const unit of pool.units || []) {
+                    for (const l of unit.lessons || []) {
+                        if (KIND === 'section' && (l.n < spec.from || l.n > spec.to)) continue;
+                        lessons.push(l);
+                    }
+                }
+            }
+            return lessons;
+        }
+
+        // ------------------------------------------------------------------ state
+        let user = null;
+        let studentData = {};
+        let scopeLessons = [];
+        let questions = [];
+        let idx = 0;
+        let correct = 0;
+        let running = false;
+
+        function setProgress(i, n) {
+            $fill.style.width = n ? `${Math.round(100 * i / n)}%` : '0';
+            $count.textContent = n ? `${Math.min(i + 1, n)}/${n}` : '';
+        }
+
+        function screen(mainHTML, footHTML) {
+            $main.innerHTML = mainHTML;
+            $foot.innerHTML = footHTML || '';
+            $main.scrollTop = 0;
+        }
+
+        // ------------------------------------------------------------------ screens
+        function showMessage(title, body, buttonText, onClick) {
+            setProgress(0, 0);
+            screen(`<div class="center"><div class="card"><h1 class="title">${esc(title)}</h1><p class="body">${esc(body || '')}</p></div></div>`,
+                `<button class="btn btn-primary" id="jt-msg-btn">${esc(buttonText || T.back)}</button>`);
+            document.getElementById('jt-msg-btn').onclick = onClick || goHome;
+        }
+
+        function showLoading(text) {
+            setProgress(0, 0);
+            screen(`<div class="center text-center"><div class="spinner"></div><p class="body">${esc(text)}</p></div>`);
+        }
+
+        function introTexts() {
+            if (KIND === 'section') {
+                return { title: fmt(T.sectionTitle, { t: spec.title }), body: T.sectionBody };
+            }
+            const gs = spec.grades.map(g => g.grade);
+            const list = gs.length === 1 ? fmt(T.gradeList1, { a: gs[0] }) : fmt(T.gradeListN, { a: gs[0], b: gs[gs.length - 1] });
+            return { title: fmt(T.gradeTitle, { g: spec.target }), body: fmt(T.gradeBody, { list, g: spec.target }) };
+        }
+
+        function showIntro() {
+            const n = questions.length;
+            const need = Math.ceil(PASS_RATIO * n);
+            const w = questions.filter(q => q.type === 'written').length;
+            const { title, body } = introTexts();
+            setProgress(0, 0);
+            screen(`
+                <div class="center"><div class="card">
+                    <span class="label"><i class="fa-solid fa-bolt"></i> Thelo</span>
+                    <h1 class="title">${esc(title)}</h1>
+                    <p class="body">${esc(body)}</p>
+                    <ul class="facts">
+                        <li><i class="fa-solid fa-list-ol"></i>${esc(fmt(T.nQuestions, { n }))}</li>
+                        <li><i class="fa-solid fa-trophy"></i>${esc(fmt(T.passNeed, { p: need }))}</li>
+                        ${w ? `<li><i class="fa-solid fa-pen"></i>${esc(fmt(T.handwritten, { w }))}</li>` : ''}
+                    </ul>
+                    <p class="note">${esc(T.tryRule)}</p>
+                </div></div>`,
+                `<button class="btn btn-primary" id="jt-start">${esc(T.start)}</button>
+                 <button class="btn btn-ghost" id="jt-back">${esc(T.back)}</button>`);
+            document.getElementById('jt-back').onclick = goHome;
+            document.getElementById('jt-start').onclick = startTest;
+        }
+
+        async function startTest() {
+            const btn = document.getElementById('jt-start');
+            btn.disabled = true;
+            // A test that is started and then abandoned counts as a failed try, so the
+            // try is recorded now; finishing the test overwrites it with the result.
+            if (!DEMO) {
+                try {
+                    await db.collection('thelo-students').doc(user.uid).set(
+                        { jumpTests: { [spec.key]: { failedAt: Date.now(), score: null, total: questions.length } } }, { merge: true });
+                } catch (e) {
+                    console.error('Could not record the attempt', e);
+                    btn.disabled = false;
+                    showMessage(T.loadFail, '', T.back);
+                    return;
+                }
+            }
+            running = true;
+            idx = 0; correct = 0;
+            showQuestion();
+        }
+
+        function questionHeader(q, hint) {
+            return `<div class="q-label label">${esc(fmt(T.question, { i: idx + 1, n: questions.length }))} · ${esc(hint)}</div>
+                    <div class="q-text" id="jt-q"></div>`;
+        }
+
+        function showQuestion() {
+            const q = questions[idx];
+            setProgress(idx, questions.length);
+            if (q.type === 'mcq') return showMcq(q);
+            if (q.type === 'num') return showNum(q);
+            return showWritten(q);
+        }
+
+        // --- multiple choice
+        function showMcq(q) {
+            let picked = -1;
+            screen(`${questionHeader(q, T.chooseOne)}
+                    <div class="choices">${q.order.map(i => `<button class="choice" data-i="${i}"></button>`).join('')}</div>`,
+                `<button class="btn btn-primary" id="jt-check" disabled>${esc(T.check)}</button>`);
+            renderRich(document.getElementById('jt-q'), q.q);
+            const buttons = [...$main.querySelectorAll('.choice')];
+            buttons.forEach(b => {
+                renderRich(b, q.c[Number(b.dataset.i)]);
+                b.onclick = () => {
+                    picked = Number(b.dataset.i);
+                    buttons.forEach(x => x.classList.toggle('sel', x === b));
+                    document.getElementById('jt-check').disabled = false;
+                };
+            });
+            document.getElementById('jt-check').onclick = () => {
+                const ok = picked === q.a;
+                buttons.forEach(b => {
+                    b.disabled = true;
+                    const i = Number(b.dataset.i);
+                    if (i === q.a) b.classList.add('right');
+                    else if (i === picked) b.classList.add('wrong');
+                    b.classList.remove('sel');
+                });
+                answered(ok, ok ? '' : fmt(T.answerWas, { a: q.c[q.a] }));
+            };
+        }
+
+        // --- a number on the keypad
+        function showNum(q) {
+            let typed = '';
+            const dec = LANG === 'hy' ? ',' : '.';
+            const keys = ['7', '8', '9', '⌫', '4', '5', '6', '−', '1', '2', '3', '/', '0', dec, '', ''];
+            screen(`${questionHeader(q, T.typeAnswer)}
+                    <div class="answer-row"><div class="answer-box empty" id="jt-box"></div>${q.u ? `<span class="unit">${esc(q.u)}</span>` : ''}</div>
+                    <div class="keypad">${keys.map(k => k ? `<button class="key${/[⌫−\/,.]/.test(k) ? ' op' : ''}" data-k="${esc(k)}">${esc(k)}</button>` : '<span></span>').join('')}</div>`,
+                `<button class="btn btn-primary" id="jt-check" disabled>${esc(T.check)}</button>`);
+            renderRich(document.getElementById('jt-q'), q.q);
+            const box = document.getElementById('jt-box');
+            const check = document.getElementById('jt-check');
+            const draw = () => {
+                box.textContent = typed;
+                box.classList.toggle('empty', !typed);
+                check.disabled = !typed;
+            };
+            $main.querySelectorAll('.key').forEach(b => {
+                b.onclick = () => {
+                    const k = b.dataset.k;
+                    if (k === '⌫') typed = typed.slice(0, -1);
+                    else if (k === '−') typed = typed.startsWith('−') ? typed.slice(1) : '−' + typed;
+                    else if (typed.length < 12) typed += k;
+                    draw();
+                };
+            });
+            check.onclick = () => {
+                const ok = sameNumber(parseNum(typed), parseNum(q.n));
+                $main.querySelectorAll('.key').forEach(b => { b.disabled = true; });
+                box.classList.add(ok ? 'right' : 'wrong');
+                answered(ok, ok ? '' : fmt(T.answerWas, { a: `${numText(q.n)}${q.u ? ' ' + q.u : ''}` }));
+            };
+        }
+
+        // --- handwritten, checked by the AI
+        function showWritten(q) {
+            screen(`${questionHeader(q, T.writeAnswer)}
+                    <div class="pad-wrap">
+                        <canvas id="jt-pad"></canvas>
+                        <div class="pad-tools">
+                            <button class="icon-btn" id="jt-undo" aria-label="${esc(T.undo)}"><i class="fa-solid fa-rotate-left"></i></button>
+                            <button class="icon-btn" id="jt-clear" aria-label="${esc(T.clear)}"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                        <span class="pad-hint" id="jt-pad-hint">${esc(T.padHint)}</span>
+                    </div>`,
+                `<div id="jt-fb"></div><button class="btn btn-primary" id="jt-check">${esc(T.check)}</button>`);
+            renderRich(document.getElementById('jt-q'), q.q);
+            const hint = document.getElementById('jt-pad-hint');
+            const pad = new ScanPad(document.getElementById('jt-pad'), () => { hint.style.display = pad.hasInk ? 'none' : ''; });
+            document.getElementById('jt-undo').onclick = () => pad.undo();
+            document.getElementById('jt-clear').onclick = () => pad.clear();
+            const check = document.getElementById('jt-check');
+            const fb = document.getElementById('jt-fb');
+            check.onclick = async () => {
+                if (!pad.hasInk) {
+                    fb.innerHTML = `<div class="feedback wrong"><div class="fb-body">${esc(T.noInk)}</div></div>`;
+                    return;
+                }
+                fb.innerHTML = '';
+                check.disabled = true;
+                check.textContent = T.checking;
+                let status = null, feedback = '';
+                if (DEMO) {
+                    status = 'correct';
+                } else {
+                    try {
+                        const result = await functions.httpsCallable('analyzeMathDrawing')({
+                            userImage: pad.exportImage(),
+                            questionImage: null,
+                            problemText: q.p || plain(q.q),
+                            correctAnswer: q.a || '',
+                            solutionSteps: q.s || '',
+                            customInstructions: [
+                                q.x || '',
+                                `This is a placement test with one attempt. Mark the work 'correct' only if the student's final answer matches the correct answer (${q.a}); an equivalent form counts. Reply in one short sentence and do not reveal the correct answer.`,
+                            ].filter(Boolean).join('\n'),
+                            language: LANG,
+                        });
+                        status = result.data && result.data.status;
+                        feedback = (result.data && result.data.feedback) || '';
+                    } catch (e) {
+                        console.error('analyzeMathDrawing failed', e);
+                    }
+                }
+                if (status !== 'correct' && status !== 'incorrect') {
+                    // The check itself failed: not the student's fault, let them check again.
+                    check.disabled = false;
+                    check.textContent = T.check;
+                    fb.innerHTML = `<div class="feedback wrong"><div class="fb-body">${esc(T.checkFail)}</div></div>`;
+                    return;
+                }
+                const ok = status === 'correct';
+                document.querySelector('.pad-wrap').style.pointerEvents = 'none';
+                answered(ok, ok ? '' : [feedback, fmt(T.answerWas, { a: q.a })].filter(Boolean).join(' '));
+            };
+        }
+
+        function answered(ok, detail) {
+            if (ok) correct++;
+            const last = idx === questions.length - 1;
+            setProgress(idx + 1, questions.length);
+            $count.textContent = `${idx + 1}/${questions.length}`;
+            $foot.innerHTML = `
+                <div class="feedback ${ok ? 'right' : 'wrong'}">
+                    <div class="fb-title"><i class="fa-solid ${ok ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>${esc(ok ? T.right : T.wrong)}</div>
+                    ${detail ? '<div class="fb-body" id="jt-fb-body"></div>' : ''}
+                </div>
+                <button class="btn ${ok ? 'btn-green' : 'btn-red'}" id="jt-next">${esc(last ? T.finish : T.continue)}</button>`;
+            if (detail) renderRich(document.getElementById('jt-fb-body'), detail);
+            document.getElementById('jt-next').onclick = () => {
+                if (last) finish();
+                else { idx++; showQuestion(); }
+            };
+        }
+
+        // ------------------------------------------------------------------ the result
+        async function finish() {
+            running = false;
+            const total = questions.length;
+            const need = Math.ceil(PASS_RATIO * total);
+            const passed = correct >= need;
+            setProgress(total, total);
+            $count.textContent = '';
+            showLoading(T.saving);
+            try {
+                if (!DEMO) await saveResult(passed, total);
+            } catch (e) {
+                console.error('Saving the result failed', e);
+                showMessage(T.saveFail, '', T.retrySave, () => finishAgain(passed, total));
+                return;
+            }
+            showResult(passed, total, need);
+        }
+
+        async function finishAgain(passed, total) {
+            showLoading(T.saving);
+            try {
+                await saveResult(passed, total);
+                showResult(passed, total, Math.ceil(PASS_RATIO * total));
+            } catch (e) {
+                console.error('Saving the result failed again', e);
+                showMessage(T.saveFail, '', T.retrySave, () => finishAgain(passed, total));
+            }
+        }
+
+        async function saveResult(passed, total) {
+            const studentRef = db.collection('thelo-students').doc(user.uid);
+            const record = passed
+                ? { passedAt: Date.now(), failedAt: null, score: correct, total }
+                : { failedAt: Date.now(), score: correct, total };
+            if (!passed) {
+                await studentRef.set({ jumpTests: { [spec.key]: record } }, { merge: true });
+                return;
+            }
+            if (KIND === 'section') {
+                // Every lesson and practice set being skipped counts as done, so the
+                // course path continues at the section the student jumped to.
+                const ids = [];
+                scopeLessons.forEach(l => ids.push(`${l.id}-das`, `${l.id}-gorc`));
+                for (let i = 0; i < ids.length; i += 400) {
+                    const batch = db.batch();
+                    ids.slice(i, i + 400).forEach(id => batch.set(studentRef.collection('progress').doc(id), {
+                        status: 'completed', completedVia: 'jump-test',
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true }));
+                    await batch.commit();
+                }
+                await studentRef.set({ jumpTests: { [spec.key]: record } }, { merge: true });
+                return;
+            }
+            // Grade test: move the student up, as the Courses screen does when it saves a grade.
+            let groupId = null;
+            try {
+                const groups = await db.collection('groups').where('groupName', '==', String(spec.target)).limit(1).get();
+                if (!groups.empty) groupId = groups.docs[0].id;
+            } catch (e) {
+                console.warn('Group lookup failed', e);
+            }
+            await studentRef.set({
+                groupId,
+                preferences: { language: LANG, grade: String(spec.target), stream: spec.target >= 10 ? (spec.tstream || 'gen') : null },
+                jumpTests: { [spec.key]: record },
+            }, { merge: true });
+        }
+
+        function showResult(passed, total, need) {
+            const body = passed
+                ? (KIND === 'section' ? T.passSection : fmt(T.passGrade, { g: spec.target }))
+                : fmt(T.failBody, { p: need });
+            screen(`
+                <div class="center text-center">
+                    <div class="result-icon ${passed ? 'pass' : 'fail'}"><i class="fa-solid ${passed ? 'fa-trophy' : 'fa-rotate'}"></i></div>
+                    <h1 class="title">${esc(passed ? T.passTitle : T.failTitle)}</h1>
+                    <div class="score">${correct}<small> / ${total}</small></div>
+                    <p class="body" style="margin-top:1rem">${esc(body)}</p>
+                </div>`,
+                `<button class="btn btn-primary" id="jt-done">${esc(T.toCourse)}</button>`);
+            document.getElementById('jt-done').onclick = goHome;
+        }
+
+        // ------------------------------------------------------------------ leaving mid-test
+        const modal = document.getElementById('jt-modal');
+        document.getElementById('jt-modal-title').textContent = T.leaveTitle;
+        document.getElementById('jt-modal-body').textContent = T.leaveBody;
+        document.getElementById('jt-modal-leave').textContent = T.leave;
+        document.getElementById('jt-modal-stay').textContent = T.stay;
+        document.getElementById('jt-modal-leave').onclick = goHome;
+        document.getElementById('jt-modal-stay').onclick = () => modal.classList.remove('show');
+        document.getElementById('jt-close').onclick = () => {
+            if (running) modal.classList.add('show');
+            else goHome();
+        };
+
+        // ------------------------------------------------------------------ start
+        async function prepare() {
+            showLoading(T.loading);
+            if (!DEMO) {
+                try {
+                    const snap = await db.collection('thelo-students').doc(user.uid).get();
+                    studentData = snap.exists ? snap.data() : {};
+                } catch (e) {
+                    console.warn('Could not read the student profile', e);
+                }
+                const rec = (studentData.jumpTests || {})[spec.key];
+                const failedAt = rec && rec.failedAt;
+                if (failedAt && Date.now() - failedAt < COOLDOWN_MS) {
+                    showMessage(T.waitTitle, fmt(T.waitBody, { h: remaining(COOLDOWN_MS - (Date.now() - failedAt)) }), T.back);
+                    return;
+                }
+            }
+            try {
+                scopeLessons = await loadPools();
+            } catch (e) {
+                console.error('Could not load the question pool', e);
+                showMessage(T.loadFail, '', T.back);
+                return;
+            }
+            questions = pickQuestions(scopeLessons, spec.size.quick, spec.size.written);
+            if (!questions.length) {
+                showMessage(T.loadFail, '', T.back);
+                return;
+            }
+            showIntro();
+        }
+
+        if (DEMO) {
+            prepare();
+        } else if (!auth) {
+            showMessage(T.loadFail, '', T.back);
+        } else {
+            showLoading(T.loading);
+            const stop = auth.onAuthStateChanged(u => {
+                stop();
+                if (!u || u.isAnonymous) {
+                    showMessage(T.signIn, '', T.back);
+                    return;
+                }
+                user = u;
+                prepare();
+            });
+        }
+    })();
+    </script>
+<script src="/assets/thelo-web.js"></script>
+</body>
+</html>

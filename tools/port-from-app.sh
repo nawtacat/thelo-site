@@ -32,6 +32,7 @@ port () {
 
     sed \
         -e 's|lesson\.html?lessonFile=|/learn/?lessonFile=|g' \
+        -e 's|jumptest\.html?|/jump/?|g' \
         -e "s|url('fonts/|url('/fonts/|g" \
         -e 's|url("fonts/|url("/fonts/|g' \
         -e 's|url(fonts/|url(/fonts/|g' \
@@ -61,7 +62,9 @@ port () {
 port "$SRC/home.html"   "$HERE/sdashboard/index.html" "dashboard"
 port "$SRC/lesson.html" "$HERE/learn/index.html"      "lesson"
 port "$SRC/scan.html"   "$HERE/scan/index.html"       "scan"
+port "$SRC/jumptest.html" "$HERE/jump/index.html"     "jump test"
 cp "$SRC/scan-pad.js" "$HERE/scan/scan-pad.js"
+cp "$SRC/scan-pad.js" "$HERE/jump/scan-pad.js"
 
 echo
 echo "--- verification ---"
@@ -78,7 +81,7 @@ check () {
     fi
 }
 
-for f in "$HERE/sdashboard/index.html" "$HERE/learn/index.html" "$HERE/scan/index.html"; do
+for f in "$HERE/sdashboard/index.html" "$HERE/learn/index.html" "$HERE/scan/index.html" "$HERE/jump/index.html"; do
     check "$f" 'thelo-web.css' 'desktop stylesheet' present
     check "$f" 'thelo-web.js'  'desktop script'     present
     check "$f" 'href="home\.html"' 'raw home.html link' gone
@@ -89,6 +92,13 @@ done
 check "$HERE/learn/index.html" 'isMobileMode = true;' 'hardcoded mobile flag' gone
 check "$HERE/learn/index.html" 'pointer: coarse' 'pointer detection' present
 check "$HERE/scan/index.html" 'src="scan-pad.js"' 'scan whiteboard script' present
+check "$HERE/jump/index.html" 'src="scan-pad.js"' 'jump-test whiteboard script' present
+check "$HERE/sdashboard/index.html" 'jumptest\.html?' 'raw jumptest.html link' gone
+if cmp -s "$SRC/scan-pad.js" "$HERE/jump/scan-pad.js"; then
+    echo "  ok    jump-test whiteboard script matches the app"
+else
+    echo "  FAIL  jump-test whiteboard script differs from the app"; fail=$((fail+1))
+fi
 if cmp -s "$SRC/scan-pad.js" "$HERE/scan/scan-pad.js"; then
     echo "  ok    scan whiteboard script matches the app"
 else
@@ -98,7 +108,7 @@ fi
 # The Armenian faces are bundled beside the HTML in the APK, so the app refers to
 # them as fonts/... . Served from /learn/ that resolves to /learn/fonts/ and 404s,
 # silently dropping the page to a fallback face. They must be root-absolute.
-for f in "$HERE/sdashboard/index.html" "$HERE/learn/index.html" "$HERE/scan/index.html"; do
+for f in "$HERE/sdashboard/index.html" "$HERE/learn/index.html" "$HERE/scan/index.html" "$HERE/jump/index.html"; do
     check "$f" "url('fonts/" 'page-relative font path' gone
 done
 for face in Montserratarm-Regular.otf Montserratarm-ExtraBold.otf Montserratarm-SemiBold.otf; do

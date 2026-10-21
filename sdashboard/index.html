@@ -246,6 +246,47 @@
 
         .lesson-name { font-size: 1rem; font-weight: 700; line-height: 1.3; }
         .lesson-sub { font-size: 0.75rem; font-weight: 600; color: var(--slate-500); margin-top: 2px; }
+        .lesson-item.locked { cursor: default; }
+        .lesson-item.locked .lesson-name { color: var(--slate-400); }
+
+        /* Course path: each unit (section) is a folder; lessons open one after another,
+           and a locked section can be unlocked early with a jump test (jumptest.html). */
+        .path-unit {
+            background: var(--white); border: 1px solid var(--grid-color); border-radius: 1rem;
+            margin-bottom: 1rem; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        }
+        .path-unit.current { border-color: var(--thelo-blue); box-shadow: 0 6px 16px rgba(37, 99, 235, 0.12); }
+        .path-unit.locked { background: #FAFAFA; }
+        .path-head {
+            width: 100%; display: flex; align-items: center; gap: 0.9rem; padding: 1rem 1.1rem;
+            background: none; border: none; text-align: left; font: inherit; color: inherit; cursor: pointer;
+        }
+        .path-badge {
+            width: 44px; height: 44px; border-radius: 0.8rem; display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; flex-shrink: 0;
+        }
+        .path-unit.done .path-badge { background: #DCFCE7; color: var(--success-green); }
+        .path-unit.current .path-badge { background: var(--thelo-blue); color: var(--white); }
+        .path-unit.locked .path-badge { background: var(--slate-200); color: var(--slate-500); }
+        .path-head-text { flex: 1; min-width: 0; }
+        .path-title { display: block; font-size: 1rem; font-weight: 800; line-height: 1.3; }
+        .path-unit.locked .path-title { color: var(--slate-500); }
+        .path-sub { display: block; font-size: 0.75rem; font-weight: 700; color: var(--slate-500); margin-top: 3px; }
+        .path-bar { display: block; height: 6px; background: var(--slate-200); border-radius: 999px; margin-top: 6px; overflow: hidden; }
+        .path-bar > span { display: block; height: 100%; background: var(--success-green); border-radius: 999px; }
+        .path-chev { color: var(--slate-400); transition: transform 0.2s; }
+        .path-unit.open .path-chev { transform: rotate(180deg); }
+        .path-body { display: none; padding: 0 1rem 0.25rem; }
+        .path-unit.open .path-body { display: block; }
+        .path-body .lesson-item { padding: 0.9rem 1rem; margin-bottom: 0.75rem; gap: 1rem; }
+        .path-jump { display: flex; align-items: center; gap: 0.75rem; padding: 0 1.1rem 1rem; }
+        .path-jump-text { flex: 1; font-size: 0.8rem; font-weight: 600; color: var(--slate-500); line-height: 1.35; }
+        .btn-jump {
+            border: none; border-radius: 0.75rem; padding: 0.6rem 1rem; font: inherit; font-weight: 800; font-size: 0.9rem;
+            background: var(--thelo-blue); color: var(--white); cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
+            box-shadow: 0 6px 14px -4px rgba(37, 99, 235, 0.35); white-space: nowrap;
+        }
+        .btn-jump:disabled { background: var(--slate-200); color: var(--slate-500); box-shadow: none; cursor: default; }
 
         /* Questions the student got wrong and has not yet put right. Amber rather
            than red: this is an invitation to try again, not a failure notice. */
@@ -1729,13 +1770,34 @@ ${stream[lang]}` : '');
                 // produces reads no security rule covers, which are denied.
                 courseState.grade = p.grade || '5';
                 courseState.stream = p.stream || defaultStream(courseState.grade);
+                // What the student has now: moving above it needs a grade test.
+                courseState.currentGrade = courseState.grade;
+                courseState.currentStream = p.stream || null;
                 updateCoursesUI();
             }
         } catch(e) { console.error(e); }
     };
 
     // --- COURSES LOGIC ---
-    let courseState = { lang: 'en', grade: '5', stream: null };
+    let courseState = { lang: 'en', grade: '5', stream: null, currentGrade: null, currentStream: null };
+
+    /**
+     * Moving to a higher grade means skipping lessons, so it needs a grade test
+     * (jumptest.html) covering every grade being skipped. Going down, changing the
+     * language or the stream, and going up one grade after finishing the current
+     * course need none. Returns the test's URL, or null when no test is needed.
+     */
+    function gradeTestUrl() {
+        const cur = Number(courseState.currentGrade);
+        const target = Number(courseState.grade);
+        if (!cur || !target || target <= cur) return null;
+        const path = window.theloCoursePath;
+        const complete = !!(path && String(path.grade) === String(courseState.currentGrade) && path.complete);
+        if (complete && target === cur + 1) return null;
+        return `/jump/?kind=grade&lang=${encodeURIComponent(courseState.lang)}&from=${cur}` +
+            `&curstream=${encodeURIComponent(courseState.currentStream || '')}&complete=${complete ? 1 : 0}` +
+            `&target=${target}&stream=${encodeURIComponent(courseState.stream || '')}`;
+    }
 
     function updateCoursesUI() {
         document.querySelectorAll('#c-lang-grid .option-card').forEach(c => {
@@ -1760,6 +1822,11 @@ ${stream[lang]}` : '');
     };
 
     window.saveCourse = async () => {
+        const testUrl = gradeTestUrl();
+        if (testUrl) {
+            window.location.href = testUrl;
+            return;
+        }
         const btn = document.getElementById('btn-update-course');
         btn.disabled = true; btn.textContent = "...";
         try {
@@ -1771,6 +1838,8 @@ ${stream[lang]}` : '');
                 'preferences.grade': courseState.grade,
                 'preferences.stream': courseState.stream || null
             });
+            courseState.currentGrade = courseState.grade;
+            courseState.currentStream = courseState.stream || null;
 
             if (courseState.lang === 'hy') document.body.classList.add('lang-hy');
             else document.body.classList.remove('lang-hy');
@@ -1936,7 +2005,15 @@ ${stream[lang]}` : '');
                 notAvail: "Course not yet available",
                 completed: "Completed",
                 available: "Available",
-                upNextSub: "Up Next"
+                upNextSub: "Up Next",
+                locked: "Locked",
+                lockedMsg: "Finish the lessons before this one first.",
+                lessonsDone: "{d} of {n} done",
+                jumpHere: "Jump here",
+                jumpSub: "Know this already? Pass a test to unlock it.",
+                jumpWait: "Try again in {h}",
+                courseDone: "Course complete! 🎉",
+                courseDoneBtn: "Choose the next grade"
             },
             hy: {
                 noCourse: "Դասընթաց չգտնվեց",
@@ -1946,9 +2023,17 @@ ${stream[lang]}` : '');
                 notAvail: "Դասընթացը դեռ հասանելի չէ",
                 completed: "Ավարտված",
                 available: "Հասանելի",
-                upNextSub: "Հաջորդը"
+                upNextSub: "Հաջորդը",
+                locked: "Փակ է",
+                lockedMsg: "Նախ անցիր դրանից առաջ եղած դասերը։",
+                lessonsDone: "{d} / {n} անցած",
+                jumpHere: "Թռիչք այստեղ",
+                jumpSub: "Արդեն գիտե՞ս։ Բաց այն թեստով։",
+                jumpWait: "Նորից՝ {h} հետո",
+                courseDone: "Դասընթացն ավարտված է 🎉",
+                courseDoneBtn: "Ընտրել հաջորդ դասարանը"
             }
-        }[userLang] || { noCourse: "No Course Found", noCourseDesc: "No course found for Grade", comingSoon: "Coming Soon", comingSoonDesc: "Course coming soon!", notAvail: "Course not yet available", completed: "Completed", available: "Available", upNextSub: "Up Next" };
+        }[userLang] || { noCourse: "No Course Found", noCourseDesc: "No course found for Grade", comingSoon: "Coming Soon", comingSoonDesc: "Course coming soon!", notAvail: "Course not yet available", completed: "Completed", available: "Available", upNextSub: "Up Next", locked: "Locked", lockedMsg: "Finish the lessons before this one first.", lessonsDone: "{d} of {n} done", jumpHere: "Jump here", jumpSub: "Know this already? Pass a test to unlock it.", jumpWait: "Try again in {h}", courseDone: "Course complete! 🎉", courseDoneBtn: "Choose the next grade" };
 
         // 3. Fetch course content from all supported schemas
         let courseDoc = null;
@@ -2048,19 +2133,122 @@ ${stream[lang]}` : '');
             `;
         };
 
-        // 4. Build Curriculum List
-        for (const uDoc of unitsSnap.docs) {
-            const uData = uDoc.data();
-            listHTML += `<div style="margin-bottom:1.5rem"><div class="card-label" style="margin-bottom:0.5rem">${escapeHTML(uData.unitTitle)}</div>`;
-
+        // 4. The course path, Duolingo-style. Each unit is a folder (section). Lessons and
+        // their practice sets open strictly in order: everything up to the first unfinished
+        // item is open, everything after it is locked (except items finished earlier, which
+        // stay open for review). A locked section can be unlocked early by passing a jump
+        // test (jumptest.html), which marks every lesson before it as done.
+        const lessonIdOf = (url) => (url || '').split('/').pop().replace('.json', '');
+        const lessonNumOf = (id) => { const m = /-(\d+)-(?:das|gorc)$/.exec(id); return m ? Number(m[1]) : null; };
+        const pathUnits = await Promise.all(unitsSnap.docs.map(async (uDoc) => {
             const tSnap = await safeGetDocs(query(collection(uDoc.ref, 'topics'), orderBy('order')), `${uDoc.ref.path}/topics`);
-
+            const topics = [];
             tSnap.forEach(tDoc => {
-                const tData = tDoc.data();
-                pushLessonToList(tData.lessonFileUrl, tData.topicName);
+                const t = tDoc.data();
+                if (t.lessonFileUrl) topics.push({ url: t.lessonFileUrl, name: t.topicName || lessonIdOf(t.lessonFileUrl), id: lessonIdOf(t.lessonFileUrl) });
             });
-            listHTML += `</div>`;
+            const m = /unit(\d+)$/.exec(uDoc.id);
+            return { title: uDoc.data().unitTitle || '', num: m ? Number(m[1]) : null, topics };
+        }));
+        const pathTopics = pathUnits.flatMap(pu => pu.topics);
+        const frontierIdx = pathTopics.findIndex(t => !completedIds.has(t.id));
+        const frontier = frontierIdx >= 0 ? pathTopics[frontierIdx] : null;
+        const courseComplete = pathTopics.length > 0 && !frontier;
+        const frontierUnit = frontier ? pathUnits.findIndex(pu => pu.topics.includes(frontier)) : pathUnits.length;
+        const jumpTests = (profileSnap.exists() && profileSnap.data().jumpTests) || {};
+        const fillIn = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
+        // For the Courses screen: moving up one grade needs no test once this course is done.
+        window.theloCoursePath = { grade: userGrade, stream: userStream, lang: userLang, complete: courseComplete };
+
+        if (frontier) {
+            nextFound = true;
+            ui.hTitle.textContent = frontier.name;
+            ui.hBtn.disabled = false;
+            ui.hBtn.onclick = () => window.location.href = lessonHref(frontier.url);
+        } else if (courseComplete) {
+            nextFound = true;
+            ui.hTitle.textContent = txt.courseDone;
+            ui.hBtn.disabled = false;
+            ui.hBtn.textContent = txt.courseDoneBtn;
+            ui.hBtn.onclick = () => window.switchToCourses();
         }
+
+        let gi = 0;
+        pathUnits.forEach((pu, ui_) => {
+            const state = (courseComplete || ui_ < frontierUnit) ? 'done' : (ui_ === frontierUnit ? 'current' : 'locked');
+            const doneCount = pu.topics.filter(t => completedIds.has(t.id)).length;
+            const icon = { done: 'fa-check', current: 'fa-play', locked: 'fa-lock' }[state];
+            const pct = pu.topics.length ? Math.round(100 * doneCount / pu.topics.length) : 0;
+
+            let jumpHTML = '';
+            if (state === 'locked' && frontier) {
+                const prev = pathUnits[ui_ - 1];
+                const from = lessonNumOf(frontier.id);
+                const to = prev && prev.topics.length ? lessonNumOf(prev.topics[prev.topics.length - 1].id) : null;
+                const folder = frontier.url.includes('/') ? frontier.url.split('/')[0] : '';
+                if (from && to && folder) {
+                    const unitNum = pu.num ?? ui_ + 1;
+                    const key = `s_${courseDoc.id}_u${unitNum}`.replace(/[^A-Za-z0-9_]/g, '_');
+                    const failedAt = jumpTests[key] && jumpTests[key].failedAt;
+                    const waitMs = failedAt ? 24 * 3600 * 1000 - (Date.now() - failedAt) : 0;
+                    const href = `/jump/?kind=section&lang=${encodeURIComponent(userLang)}&course=${encodeURIComponent(courseDoc.id)}` +
+                        `&folder=${encodeURIComponent(folder)}&from=${from}&to=${to}&unit=${unitNum}&title=${encodeURIComponent(pu.title)}`;
+                    const waitText = waitMs > 0
+                        ? fillIn(txt.jumpWait, { h: waitMs >= 3600000 ? `${Math.floor(waitMs / 3600000)} h` : `${Math.ceil(waitMs / 60000)} min` })
+                        : '';
+                    jumpHTML = `
+                        <div class="path-jump">
+                            <span class="path-jump-text">${escapeHTML(waitText || txt.jumpSub)}</span>
+                            <button class="btn-jump" ${waitMs > 0 ? 'disabled' : ''} data-href="${escapeHTML(href)}" onclick="window.location.href = this.dataset.href">
+                                <i class="fa-solid fa-bolt"></i> ${escapeHTML(txt.jumpHere)}
+                            </button>
+                        </div>`;
+                }
+            }
+
+            let itemsHTML = '';
+            pu.topics.forEach(t => {
+                const isDone = completedIds.has(t.id);
+                const isNext = frontier && t === frontier;
+                const isLocked = !isDone && frontier && gi > frontierIdx;
+                gi++;
+                if (isLocked) {
+                    itemsHTML += `
+                        <div class="lesson-item locked" onclick="window.pathLocked()">
+                            <div class="lesson-icon icon-locked"><i class="fa-solid fa-lock"></i></div>
+                            <div>
+                                <div class="lesson-name">${escapeHTML(t.name)}</div>
+                                <div class="lesson-sub">${escapeHTML(txt.locked)}</div>
+                            </div>
+                        </div>`;
+                    return;
+                }
+                itemsHTML += `
+                    <a href="${escapeHTML(lessonHref(t.url))}" class="lesson-item ${isNext ? 'active' : ''}">
+                        <div class="lesson-icon ${isDone ? 'icon-done' : 'icon-active'}"><i class="fa-solid ${isDone ? 'fa-check' : 'fa-play'}"></i></div>
+                        <div>
+                            <div class="lesson-name">${escapeHTML(t.name)}</div>
+                            <div class="lesson-sub">${escapeHTML(isNext ? txt.upNextSub : (isDone ? txt.completed : txt.available))}</div>
+                        </div>
+                    </a>`;
+            });
+
+            listHTML += `
+                <section class="path-unit ${state} ${state === 'current' ? 'open' : ''}">
+                    <button class="path-head" onclick="this.parentElement.classList.toggle('open')">
+                        <span class="path-badge"><i class="fa-solid ${icon}"></i></span>
+                        <span class="path-head-text">
+                            <span class="path-title">${escapeHTML(pu.title)}</span>
+                            <span class="path-sub">${escapeHTML(fillIn(txt.lessonsDone, { d: doneCount, n: pu.topics.length }))}</span>
+                            <span class="path-bar"><span style="width:${pct}%"></span></span>
+                        </span>
+                        <i class="fa-solid fa-chevron-down path-chev"></i>
+                    </button>
+                    ${jumpHTML}
+                    <div class="path-body">${itemsHTML}</div>
+                </section>`;
+        });
+        window.pathLocked = () => showToast(txt.lockedMsg);
 
         // New schema support:
         // courses/{5_group..12_group}/Demo1/{doc} with fields { lessonFileUrl, topicName, order }
