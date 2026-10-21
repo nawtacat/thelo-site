@@ -17,6 +17,8 @@
     <link rel="manifest" href="/manifest.json" />
 
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+    <!-- First-run tutorial (lesson.html?tutorial=1 is its demo lesson). -->
+    <script src="tutorial.js"></script>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2306,8 +2308,20 @@
 
         // Honour a tap that landed while this was still downloading.
         consumePendingStartTap();
+
+        // For tutorial.js: the lesson is on screen and waiting for its first tap.
+        document.dispatchEvent(new CustomEvent('thelo:lesson-ready', {
+          detail: { lang: currentLang, mobile: !!isMobileMode, stages: Array.isArray(lessonStages) ? lessonStages.length : 0 }
+        }));
       }
     }
+
+    // What tutorial.js may do with this page: open and close the lesson menu.
+    window.theloLessonApi = {
+        openMenu: () => openMenuFromFab(),
+        labels: () => { const t = getCurrentUIText(); return { start: t.start, check: t.check, next: t.next, nextStage: t.nextStage, hint: t.hint }; },
+        closeMenu: () => { const m = document.getElementById('mobileMenu'); if (m && m.classList.contains('visible')) toggleMobileMenu(); },
+    };
 
     function resizeCanvases() {
         clearTimeout(window.resizeTimeout);
@@ -3130,8 +3144,21 @@
         fab.classList.toggle('hidden', hide);
     }
 
+    /**
+     * The menu's first button stands in for the main Check / Next button, whose label
+     * changes during a stage (Check -> Next after a right answer). It was only copied in
+     * updateAllUITexts(), so the menu could still say "Go" on a question. Copy it every
+     * time the menu opens.
+     */
+    function syncMobileCheckLabel() {
+        const main = document.getElementById('nextCheckBtn');
+        const mirror = document.getElementById('mobileCheckBtn');
+        if (main && mirror && main.textContent.trim()) mirror.textContent = main.textContent;
+    }
+
     function toggleMobileMenu(x = null, y = null) {
         const isVisible = mobileMenu.classList.contains('visible');
+        if (!isVisible) syncMobileCheckLabel();
         if (isVisible) {
             mobileMenu.classList.remove('visible');
             // Unblur
@@ -3172,6 +3199,7 @@
             toggleMobileMenu();
             return;
         }
+        syncMobileCheckLabel();
         const fab = document.getElementById('mobileMenuFab');
         const rect = fab ? fab.getBoundingClientRect() : null;
         const menuWidth = 250;
@@ -4214,6 +4242,9 @@
                 backgroundCanvas.classList.remove('fade-out');
                 if (replayCanvas) replayCanvas.classList.remove('fade-out');
                 isTransitioning = false;
+                document.dispatchEvent(new CustomEvent('thelo:stage', {
+                    detail: { index: currentStageIndex, type: (lessonStages[currentStageIndex] || {}).type || '' }
+                }));
 
                 // --- NEW FIX: FORCE FOCUS BACK TO CORE APP ---
                 // This ensures that immediately after the slide changes,
@@ -4240,6 +4271,7 @@
         // FULL UPDATED FUNCTION
     async function displayLessonComplete() {
       isLessonFinished = true;
+      document.dispatchEvent(new CustomEvent('thelo:lesson-complete'));
       updateMenuFabVisibility();
       stopCenterCorrection(); // Stop any auto-panning
       isStudentInputAllowed = false;

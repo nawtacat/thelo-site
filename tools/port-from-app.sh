@@ -65,6 +65,8 @@ port "$SRC/scan.html"   "$HERE/scan/index.html"       "scan"
 port "$SRC/jumptest.html" "$HERE/jump/index.html"     "jump test"
 cp "$SRC/scan-pad.js" "$HERE/scan/scan-pad.js"
 cp "$SRC/scan-pad.js" "$HERE/jump/scan-pad.js"
+# The first-run tutorial is loaded by the dashboard, the lesson and the scan page.
+for d in sdashboard learn scan; do cp "$SRC/tutorial.js" "$HERE/$d/tutorial.js"; done
 
 echo
 echo "--- verification ---"
@@ -94,6 +96,13 @@ check "$HERE/learn/index.html" 'pointer: coarse' 'pointer detection' present
 check "$HERE/scan/index.html" 'src="scan-pad.js"' 'scan whiteboard script' present
 check "$HERE/jump/index.html" 'src="scan-pad.js"' 'jump-test whiteboard script' present
 check "$HERE/sdashboard/index.html" 'jumptest\.html?' 'raw jumptest.html link' gone
+for d in sdashboard learn scan; do
+    if cmp -s "$SRC/tutorial.js" "$HERE/$d/tutorial.js"; then
+        echo "  ok    tutorial script matches the app  ($d)"
+    else
+        echo "  FAIL  tutorial script differs from the app  ($d)"; fail=$((fail+1))
+    fi
+done
 if cmp -s "$SRC/scan-pad.js" "$HERE/jump/scan-pad.js"; then
     echo "  ok    jump-test whiteboard script matches the app"
 else
