@@ -927,17 +927,32 @@ async function checkAnswer() {
     clearNotice('practice-feedback');
 
     try {
-        // Reuses the EXISTING callable — no backend change needed for checking.
-        const analyze = fns.httpsCallable('analyzeMathDrawing');
-        const res = await analyze({
-            userImage: padImageBase64(),
-            questionImage: null,
-            problemText: p.problemText,
-            correctAnswer: p.correctAnswer,
-            solutionSteps: p.solutionSteps,
-            customInstructions: 'The student is solving a practice problem generated from a scanned question. Judge only whether their final answer is mathematically correct; be encouraging and specific about any mistake.',
-            language: lang
-        });
+        // checkAnswer (scan codebase) replaces analyzeMathDrawing for checking answers:
+// the old one compared only the first plain number of each answer, so "x² + 4",
+// "−6", lists and Yes/No were marked wrong even when right. If checkAnswer is not
+// deployed yet, or fails, fall back to the old checker so a check never just breaks.
+        const image = padImageBase64();
+        let res;
+        try {
+            res = await fns.httpsCallable('checkAnswer')({
+                imageBase64: image,
+                problemText: p.problemText,
+                correctAnswer: p.correctAnswer,
+                solutionSteps: p.solutionSteps,
+                language: lang
+            });
+        } catch (err) {
+            console.warn('checkAnswer unavailable, using analyzeMathDrawing', err);
+            res = await fns.httpsCallable('analyzeMathDrawing')({
+                userImage: image,
+                questionImage: null,
+                problemText: p.problemText,
+                correctAnswer: p.correctAnswer,
+                solutionSteps: p.solutionSteps,
+                customInstructions: 'The student is solving a practice problem generated from a scanned question. Judge only whether their final answer is mathematically correct; be encouraging and specific about any mistake.',
+                language: lang
+            });
+        }
         const { status, feedback } = res.data || {};
 
         if (status === 'correct') {

@@ -616,8 +616,9 @@
                     status = 'correct';
                 } else {
                     try {
-                        const result = await functions.httpsCallable('analyzeMathDrawing')({
-                            userImage: pad.exportImage(),
+                        const image = pad.exportImage();
+                        const legacy = {
+                            userImage: image,
                             questionImage: null,
                             problemText: q.p || plain(q.q),
                             correctAnswer: q.a || '',
@@ -627,11 +628,25 @@
                                 `This is a placement test with one attempt. Mark the work 'correct' only if the student's final answer matches the correct answer (${q.a}); an equivalent form counts. Reply in one short sentence and do not reveal the correct answer.`,
                             ].filter(Boolean).join('\n'),
                             language: LANG,
-                        });
+                        };
+                        // checkAnswer (scan codebase) replaces analyzeMathDrawing for checking answers:
+                        // the old one compared only the first plain number of each answer, so "x² + 4",
+                        // "−6", lists and Yes/No were marked wrong even when right. If checkAnswer is not
+                        // deployed yet, or fails, fall back to the old checker so a check never just breaks.
+                        let result;
+                        try {
+                            result = await functions.httpsCallable('checkAnswer')({
+                                imageBase64: image, problemText: legacy.problemText, correctAnswer: legacy.correctAnswer,
+                                solutionSteps: legacy.solutionSteps, note: q.x || '', language: LANG,
+                            });
+                        } catch (err) {
+                            console.warn('checkAnswer unavailable, using analyzeMathDrawing', err);
+                            result = await functions.httpsCallable('analyzeMathDrawing')(legacy);
+                        }
                         status = result.data && result.data.status;
                         feedback = (result.data && result.data.feedback) || '';
                     } catch (e) {
-                        console.error('analyzeMathDrawing failed', e);
+                        console.error('answer check failed', e);
                     }
                 }
                 if (status !== 'correct' && status !== 'incorrect') {

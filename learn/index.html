@@ -5815,6 +5815,20 @@ ${langLine}`;
         const finalCanvas = scaleCanvasToMaxSize(tempCanvas, maxSize);
         return finalCanvas.toDataURL("image/png");
     }
+    // checkAnswer (scan codebase) replaces analyzeMathDrawing for checking answers:
+// the old one compared only the first plain number of each answer, so "x² + 4",
+// "−6", lists and Yes/No were marked wrong even when right. If checkAnswer is not
+// deployed yet, or fails, fall back to the old checker so a check never just breaks.
+    async function callAnswerChecker(data, legacyPayload) {
+        try {
+            return await firebase.functions().httpsCallable('checkAnswer')(data);
+        } catch (err) {
+            if (err && ['functions/unauthenticated', 'functions/resource-exhausted'].includes(err.code)) throw err;
+            console.warn('checkAnswer unavailable, using analyzeMathDrawing', err);
+            return firebase.functions().httpsCallable('analyzeMathDrawing')(legacyPayload);
+        }
+    }
+
     async function checkHandwritingAnswer() {
       console.log("Auth state at time of call:", isAuthReady);
       if (!isAuthReady || !auth.currentUser) {
@@ -5893,11 +5907,18 @@ ${langLine}`;
         };
 
         try {
-          const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
-          const result = await analyzeMathDrawing(payload);
+          const expected = String(currentStageData.correctAnswerOcr ?? currentStageData.correctAnswer ?? '');
+          const result = await callAnswerChecker({
+            imageBase64: base64ImageData,
+            problemText: currentStageData.problemText || currentStageData.headline || '',
+            correctAnswer: expected,
+            solutionSteps: currentStageData.solutionSteps || currentStageData.solutionStepsEnglish || '',
+            note: currentStageData.customInstructions || '',
+            language: currentLang
+          }, payload);
           const { status, feedback, detectedAnswer } = result.data;
 
-            logSolutionAttempt(status, feedback, detectedAnswer, currentStageData.correctAnswerOcr, base64ImageData);
+            logSolutionAttempt(status, feedback, detectedAnswer, expected, base64ImageData);
 
           // Was showOnCanvasFeedback(feedback, undefined, 'success') -- a third
           // argument to a two-parameter function, so `type` fell back to 'info'
@@ -6029,7 +6050,6 @@ ${langLine}`;
                 language: currentLang
             };
 
-            const analyzeMathDrawing = firebase.functions().httpsCallable('analyzeMathDrawing');
             if (!hasSufficientInkForCheck()) {
                 addChatMessage('AI', formatAIMessage('drawActivityWarning'));
                 playRandomFeedback('disapprove');
@@ -6038,7 +6058,15 @@ ${langLine}`;
                 return;
             }
 
-            const result = await analyzeMathDrawing(payload);
+            const result = await callAnswerChecker({
+                imageBase64: userInkBase64,
+                questionImage: questionContextBase64,
+                problemText: currentStageData.problemText || currentStageData.headline || '',
+                correctAnswer: String(currentStageData.correctAnswer || ''),
+                solutionSteps: currentStageData.solutionSteps || '',
+                note: currentStageData.customInstructions || '',
+                language: currentLang
+            }, payload);
             const { status, feedback, detectedAnswer } = result.data;
 
             logSolutionAttempt(status, feedback, detectedAnswer, currentStageData.correctAnswer, userInkBase64);
