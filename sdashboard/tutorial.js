@@ -1,5 +1,5 @@
 /*
- * Thelo's first-run tutorial, told by the Thelo icon.
+ * thelo's first-run tutorial, told by the thelo icon.
  *
  * It runs once per student on every device (the record is in this device's
  * localStorage, keyed by uid), so the web app and the phone app each show it the
@@ -32,7 +32,7 @@
             next: 'Next', go: "Let's go", startLesson: 'Start the lesson', skip: 'Skip tutorial', gotIt: 'Got it',
             finish: "Let's start!", ok: 'OK',
             skipped: 'No problem! You can start the tutorial again any time: Profile → Start Tutorial.',
-            welcome: "Hi{name}! I'm Thelo 👋 Let me show you around. It takes about 3 minutes.",
+            welcome: "Hi{name}! I'm thelo 👋 Let me show you around. It takes about 3 minutes.",
             hero: 'Your next lesson always waits here. Tap Continue to pick up where you left off.',
             folders: 'Your course is split into sections, like folders. Tap one to open it. Lessons open one by one: finish a lesson to unlock the next.',
             locked: "A lock 🔒 means you haven't reached that lesson yet.",
@@ -45,11 +45,11 @@
             lHeadline: 'Each step starts with a short explanation at the top, and I draw the rest on the board for you.',
             lProgress: 'This bar follows the drawing. Drag the dot to rewind or watch it again.',
             lFab: "This round button opens the lesson menu. It's always here, in the corner.",
-            lMenu: 'Go / Check: moves you on, and on a question I check your answer.\nHint: a small clue when you are stuck on a question.\nNext Stage / Previous Stage: move through the lesson.\nClear: wipe your writing.\nFinish Lesson: leave the lesson.',
+            lMenu: 'Go / Check: moves you on, and on a question I check your answer.\nHint: a small clue when you are stuck on a question.\nStep by step: we solve the question together, one small step at a time.\nNext Stage / Previous Stage: move through the lesson.\nClear: wipe your writing.\nFinish Lesson: leave the lesson.',
             lBtnNext: 'This button moves you on. On a question it turns into Check, and I check your answer.',
             lBtnClear: 'Clear wipes your writing off the board.',
             lBtnPrev: 'This takes you back to the previous step.',
-            lBtnBook: 'Thelobook is your notebook for working things out.',
+            lBtnBook: 'thelobook is your notebook for working things out.',
             lBtnCalc: 'A graphing calculator, whenever you need one.',
             lGesture: 'Write with one finger. To move the board, drag it with two fingers.\nAssistive Panning moves it for you while you write. You can turn it off in Profile.',
             lGoNextMobile: 'Now open the menu and tap {nextStage}.',
@@ -57,25 +57,26 @@
             lBoard2: 'Watch the board, then go to the next step.',
             lMcqMobile: 'A question! Tap the answer you think is right, then open the menu and tap {check}. When it turns green, tap {next} to go on.',
             lMcqDesk: 'A question! Click the answer you think is right, then press {check}. When it turns green, press {next} to go on.',
-            lWriteMobile: 'Now write the answer on the board with your finger, then open the menu and tap {check}. I read your handwriting! Stuck? Tap {hint}.',
-            lWriteDesk: 'Now write the answer on the board, then press {check}. I read your handwriting! Stuck? Press {hint}.',
+            lWriteMobile: 'Now write the answer on the board with your finger, then open the menu and tap {check}. I read your handwriting! Stuck? Tap {hint}, or {guide} and we solve it together.',
+            lWriteDesk: 'Now write the answer on the board, then press {check}. I read your handwriting! Stuck? Press {hint}, or {guide} and we solve it together.',
             afterWelcome: 'Great job with your first lesson! 🎉 Now a quick look at the rest of the app.',
             scanNav: "Scan helps with any problem from your book or homework. Let's open it.",
             sCamera: 'Take a photo of one problem…',
             sGallery: '…or choose a picture you already have.',
             sTips: 'For the best result: one problem at a time, good light, page flat.',
+            sExplain: "Don't understand a topic? Tap here: ask one short question or send one picture, and I explain it one small step at a time.",
             sAfter: 'Then I explain the solution step by step and give you similar problems to practise. On the practice board, move with two fingers and pinch to zoom.',
             pLang: "Change the app's language here.",
             pPan: "Assistive Panning moves the board for you while you write, so you never run out of space. Some people love it, others don't: switch it on or off right here.",
             pTutorial: 'Want to see this tour again? Tap Start Tutorial.',
             courses: 'In Courses you can change your grade or language. Moving up a grade needs a short test.',
-            final: "That's it, you're ready! Have fun learning with Thelo.",
+            final: "That's it, you're ready! Have fun learning with thelo.",
         },
         hy: {
             next: 'Հաջորդը', go: 'Սկսենք', startLesson: 'Սկսել դասը', skip: 'Բաց թողնել ուղեցույցը', gotIt: 'Պարզ է',
             finish: 'Սկսենք', ok: 'Լավ',
             skipped: 'Ոչինչ։ Ուղեցույցը կարող ես նորից սկսել ցանկացած պահի՝ Պրոֆիլ → Սկսել ուղեցույցը։',
-            welcome: 'Բարև{name}։ Ես Thelo-ն եմ 👋 Եկ ցույց տամ, թե ինչպես է ամեն ինչ աշխատում։ Դա կտևի մոտ 3 րոպե։',
+            welcome: 'Բարև{name}։ Ես thelo-ն եմ 👋 Եկ ցույց տամ, թե ինչպես է ամեն ինչ աշխատում։ Դա կտևի մոտ 3 րոպե։',
             hero: 'Քո հաջորդ դասը միշտ սպասում է այստեղ։ Սեղմիր «Շարունակել»՝ կանգնած տեղից շարունակելու համար։',
             folders: 'Դասընթացը բաժանված է բաժինների՝ թղթապանակների պես։ Սեղմիր՝ բացելու համար։ Դասերը բացվում են հերթով. ավարտիր դասը, և հաջորդը կբացվի։',
             locked: 'Կողպեքը 🔒 նշանակում է, որ դեռ չես հասել այդ դասին։',
@@ -88,11 +89,11 @@
             lHeadline: 'Ամեն քայլ սկսվում է վերևում գրված կարճ բացատրությամբ, իսկ մնացածը ես նկարում եմ գրատախտակին։',
             lProgress: 'Այս գիծը հետևում է նկարին։ Քաշիր կետը՝ հետ տալու կամ նորից դիտելու համար։',
             lFab: 'Այս կլոր կոճակը բացում է դասի ընտրացանկը։ Այն միշտ այստեղ է՝ անկյունում։',
-            lMenu: 'Գնալ / Ստուգել՝ տանում է առաջ, իսկ հարցի ժամանակ ես ստուգում եմ պատասխանդ։\nՀուշում՝ փոքր օգնություն, երբ հարցի ժամանակ խրվել ես։\nՀաջորդ փուլ / Նախորդ փուլ՝ շարժվել դասի մեջ։\nՄաքրել՝ ջնջել գրածդ։\nԱվարտել դասը՝ դուրս գալ դասից։',
+            lMenu: 'Գնալ / Ստուգել՝ տանում է առաջ, իսկ հարցի ժամանակ ես ստուգում եմ պատասխանդ։\nՀուշում՝ փոքր օգնություն, երբ հարցի ժամանակ խրվել ես։\nՔայլ առ քայլ՝ հարցը լուծում ենք միասին, մեկ փոքր քայլով։\nՀաջորդ փուլ / Նախորդ փուլ՝ շարժվել դասի մեջ։\nՄաքրել՝ ջնջել գրածդ։\nԱվարտել դասը՝ դուրս գալ դասից։',
             lBtnNext: 'Այս կոճակը տանում է առաջ։ Հարցի ժամանակ այն դառնում է «Ստուգել», և ես ստուգում եմ պատասխանդ։',
             lBtnClear: '«Մաքրել»-ը ջնջում է գրածդ գրատախտակից։',
             lBtnPrev: 'Սա վերադարձնում է նախորդ քայլին։',
-            lBtnBook: 'Thelobook-ը քո տետրն է՝ հաշվարկներ անելու համար։',
+            lBtnBook: '«Թելոգիրք»-ը քո տետրն է՝ հաշվարկներ անելու համար։',
             lBtnCalc: 'Գրաֆիկական հաշվիչ, երբ պետք լինի։',
             lGesture: 'Գրիր մեկ մատով։ Գրատախտակը տեղաշարժելու համար քաշիր այն երկու մատով։\nՕգնող ոլորումը գրելիս ինքն է տեղաշարժում գրատախտակը։ Այն կարող ես անջատել Պրոֆիլում։',
             lGoNextMobile: 'Հիմա բացիր ընտրացանկը և սեղմիր «{nextStage}»։',
@@ -100,19 +101,20 @@
             lBoard2: 'Դիտիր գրատախտակը, հետո անցիր հաջորդ քայլին։',
             lMcqMobile: 'Հարց։ Սեղմիր այն պատասխանը, որը ճիշտ ես համարում, հետո բացիր ընտրացանկը և սեղմիր «{check}»։ Երբ այն կանաչի, սեղմիր «{next}»՝ առաջ գնալու համար։',
             lMcqDesk: 'Հարց։ Ընտրիր այն պատասխանը, որը ճիշտ ես համարում, հետո սեղմիր «{check}»։ Երբ այն կանաչի, սեղմիր «{next}»՝ առաջ գնալու համար։',
-            lWriteMobile: 'Հիմա գրատախտակին մատով գրիր պատասխանը, հետո բացիր ընտրացանկը և սեղմիր «{check}»։ Ես կարդում եմ ձեռագիրդ։ Խրվե՞լ ես. սեղմիր «{hint}»։',
-            lWriteDesk: 'Հիմա գրատախտակին գրիր պատասխանը, հետո սեղմիր «{check}»։ Ես կարդում եմ ձեռագիրդ։ Խրվե՞լ ես. սեղմիր «{hint}»։',
+            lWriteMobile: 'Հիմա գրատախտակին մատով գրիր պատասխանը, հետո բացիր ընտրացանկը և սեղմիր «{check}»։ Ես կարդում եմ ձեռագիրդ։ Խրվե՞լ ես. սեղմիր «{hint}» կամ «{guide}», ու կլուծենք միասին։',
+            lWriteDesk: 'Հիմա գրատախտակին գրիր պատասխանը, հետո սեղմիր «{check}»։ Ես կարդում եմ ձեռագիրդ։ Խրվե՞լ ես. սեղմիր «{hint}» կամ «{guide}», ու կլուծենք միասին։',
             afterWelcome: 'Կեցցե՛ս, դու ավարտեցիր քո առաջին դասը 🎉 Հիմա արագ նայենք հավելվածի մնացած մասերին։',
             scanNav: '«Սկան»-ն օգնում է դասագրքի կամ տնայինի ցանկացած խնդրի հարցում։ Եկ բացենք այն։',
             sCamera: 'Լուսանկարիր մեկ խնդիր…',
             sGallery: '…կամ ընտրիր արդեն ունեցած նկարը։',
             sTips: 'Լավագույն արդյունքի համար՝ մեկ խնդիր, լավ լույս, հարթ էջ։',
+            sExplain: 'Ինչ-որ թեմա չե՞ս հասկանում։ Սեղմիր այստեղ՝ գրիր մեկ կարճ հարց կամ ուղարկիր մեկ նկար, և ես կբացատրեմ այն փոքր քայլերով։',
             sAfter: 'Հետո ես քայլ առ քայլ բացատրում եմ լուծումը և տալիս նմանատիպ խնդիրներ՝ վարժվելու համար։ Վարժության գրատախտակին շարժվիր երկու մատով, իսկ մեծացնելու համար մատներդ հեռացրու իրարից։',
             pLang: 'Այստեղ փոխում ես հավելվածի լեզուն։',
             pPan: 'Օգնող ոլորումը գրելիս ինքն է տեղաշարժում գրատախտակը, որպեսզի տեղը չվերջանա։ Ոմանք այն շատ են սիրում, ոմանք՝ ոչ. միացրու կամ անջատիր հենց այստեղ։',
             pTutorial: 'Ուզո՞ւմ ես նորից տեսնել այս ուղեցույցը։ Սեղմիր «Սկսել ուղեցույցը»։',
             courses: '«Դասընթացներ»-ում կարող ես փոխել դասարանը կամ լեզուն։ Ավելի բարձր դասարան անցնելու համար պետք է կարճ թեստ հանձնել։',
-            final: 'Վերջ, դու պատրաստ ես։ Հաճելի ուսուցում Thelo-ի հետ։',
+            final: 'Վերջ, դու պատրաստ ես։ Հաճելի ուսուցում thelo-ի հետ։',
         },
     };
     const words = (lang) => TEXT[lang] || TEXT.en;
@@ -202,7 +204,7 @@
 
     /**
      * Show one step and resolve with 'next', 'skip' or 'event'.
-     *   text       what Thelo says (\n for new lines)
+     *   text       what thelo says (\n for new lines)
      *   target     element, () => element|rect, or nothing (centred)
      *   mode       'modal': dims the screen and waits for Next;
      *              'coach': no dimming, the page stays usable (a pulsing ring marks the target)
@@ -234,7 +236,7 @@
             const bubble = document.createElement('div');
             bubble.className = 'tt-bubble' + (lang === 'hy' ? ' tt-hy' : '') + (mode === 'coach' ? ' tt-coach' : '');
             bubble.innerHTML = `
-                <div class="tt-avatar"><img alt="Thelo" src="${AVATAR}"></div>
+                <div class="tt-avatar"><img alt="thelo" src="${AVATAR}"></div>
                 <div class="tt-card">
                     <p class="tt-text"></p>
                     ${opts.fingers ? '<div class="tt-fingers"><span></span><span></span></div>' : ''}
@@ -442,6 +444,7 @@
             for (const s of [
                 { text: W.sCamera, target: () => document.getElementById('btn-camera') },
                 { text: W.sGallery, target: () => document.getElementById('btn-gallery') },
+                { text: W.sExplain, target: () => document.getElementById('btn-explain') },
                 { text: W.sTips, target: () => { const t = document.getElementById('lbl-tips'); return t ? t.parentElement : null; } },
                 { text: W.sAfter, fingers: true, place: 'center' },
             ]) {
@@ -481,8 +484,8 @@
         const touch = mobile || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
         const uid = activeUid();
         const api = window.theloLessonApi || {};
-        const fallback = lang === 'en' ? { start: 'Go', check: 'Check', next: 'Next', nextStage: 'Next Stage', hint: 'Hint' }
-                                       : { start: 'Գնալ', check: 'Ստուգել', next: 'Հաջորդը', nextStage: 'Հաջորդ փուլ', hint: 'Հուշում' };
+        const fallback = lang === 'en' ? { start: 'Go', check: 'Check', next: 'Next', nextStage: 'Next Stage', hint: 'Hint', guide: 'Step by step' }
+                                       : { start: 'Գնալ', check: 'Ստուգել', next: 'Հաջորդը', nextStage: 'Հաջորդ փուլ', hint: 'Հուշում', guide: 'Քայլ առ քայլ' };
         let labels = fallback;
         try { labels = Object.assign({}, fallback, api.labels ? api.labels() : {}); } catch (e) { /* keep the fallback */ }
         const say = (key) => fmt(W[key], labels);

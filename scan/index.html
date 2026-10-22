@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>Thelo — Scan</title>
+<title>thelo — Scan</title>
 <script>
 if (window.parent === window) {
     const destination = new URL('/sdashboard/', location.href);
@@ -278,13 +278,40 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
 }
 .nav-item.active { color: var(--thelo-blue); }
 .nav-item i { font-size: 1.1rem; }
+/* ---- explain it to me ---- */
+.or-line { display: flex; align-items: center; gap: 0.6rem; margin: 1rem 0 0.85rem; color: var(--slate-400);
+    font-size: 0.78rem; font-weight: 700; }
+.or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--slate-200); }
+.btn-explain { background: #F5F3FF; color: #6D28D9; border: 1.5px solid #DDD6FE; }
+.ask-sub { font-size: 0.88rem; color: var(--slate-500); line-height: 1.5; margin-bottom: 0.8rem; }
+#ask-text { width: 100%; min-height: 6.5rem; resize: vertical; border: 1.5px solid var(--slate-200); border-radius: 12px;
+    padding: 0.75rem 0.85rem; font-family: inherit; font-size: 1rem; color: var(--thelo-text); background: var(--white); }
+#ask-text:focus { outline: none; border-color: var(--thelo-blue); }
+.ask-count { text-align: right; font-size: 0.75rem; color: var(--slate-400); margin-top: 0.25rem; }
+.ask-photo { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.6rem; }
+.ask-photo .btn { width: auto; padding: 0.6rem 0.9rem; font-size: 0.9rem; }
+#ask-thumb { display: none; position: relative; }
+#ask-thumb img { height: 64px; max-width: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--slate-200); display: block; }
+#ask-thumb button { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; border: none;
+    background: var(--thelo-text); color: var(--white); font-size: 14px; line-height: 24px; padding: 0; cursor: pointer; }
+.ex-head { display: flex; align-items: center; gap: 0.7rem; }
+.ex-head img { width: 38px; height: 38px; border-radius: 50%; border: 2.5px solid var(--thelo-blue); background: var(--white); padding: 4px; }
+.ex-topic { font-weight: 800; font-size: 1.05rem; }
+.ex-step { display: flex; gap: 0.8rem; padding: 0.85rem 0; border-top: 1px solid var(--slate-200); animation: fade 0.3s ease; }
+.ex-step:first-child { border-top: none; padding-top: 0.2rem; }
+.ex-step .step-num { background: #EDE9FE; color: #6D28D9; }
+.ex-text { font-size: 0.98rem; line-height: 1.6; white-space: pre-line; }
+.ex-loading { display: none; align-items: center; gap: 0.6rem; color: var(--slate-500); font-weight: 600; font-size: 0.9rem; padding: 0.4rem 0; }
+.ex-loading.on { display: flex; }
+.ex-loading .spinner { width: 22px; height: 22px; border-width: 3px; margin: 0; }
+.ex-end { display: none; text-align: center; color: var(--slate-500); font-weight: 600; font-size: 0.9rem; margin: 0.2rem 0 0.9rem; }
 </style>
     <link rel="stylesheet" href="/assets/thelo-web.css">
 </head>
 <body>
 
 <header>
-    <img src="https://thelo.ink/img/bluethelo.svg" alt="Thelo" onerror="this.style.display='none'">
+    <img src="https://thelo.ink/img/bluethelo.svg" alt="thelo" onerror="this.style.display='none'">
     <span class="title" id="hdr-title">Scan a problem</span>
     <span class="spacer"></span>
     <span class="badge" id="points-badge">⭐ 0</span>
@@ -305,6 +332,10 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
         <button class="btn btn-primary" id="btn-camera" disabled><i class="fa-solid fa-camera"></i> <span id="lbl-camera">Take photo</span></button>
         <div class="btn-gap"></div>
         <button class="btn btn-ghost" id="btn-gallery" disabled><i class="fa-regular fa-image"></i> <span id="lbl-gallery">Choose from gallery</span></button>
+
+        <!-- "Explain it to me": not a problem to solve, a topic the student does not get. -->
+        <div class="or-line"><span id="lbl-or">Don't understand a topic?</span></div>
+        <button class="btn btn-explain" id="btn-explain" disabled><i class="fa-regular fa-lightbulb"></i> <span id="lbl-explain">Explain it to me</span></button>
 
         <!-- Fills the dead space under the buttons with something actually useful. -->
         <div class="tips">
@@ -415,6 +446,48 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
         <button class="btn btn-ghost" id="btn-home"><span id="lbl-home">Back to home</span></button>
     </section>
 
+    <!-- 7. ASK (explain it to me) -->
+    <section id="screen-ask" class="screen">
+        <div class="card">
+            <div class="card-label" id="lbl-ask">Explain it to me</div>
+            <div class="ask-sub" id="ask-sub">Ask about ONE thing you don't understand. Write a short question or add one picture, and thelo explains it one small step at a time.</div>
+            <textarea id="ask-text" maxlength="300" placeholder="e.g. What is a logarithm?"></textarea>
+            <div class="ask-count" id="ask-count">0 / 300</div>
+            <div class="ask-photo">
+                <button class="btn btn-ghost" id="btn-ask-photo" type="button"><i class="fa-regular fa-image"></i> <span id="lbl-ask-photo">Add one picture</span></button>
+                <div id="ask-thumb"><img id="ask-img" alt=""><button type="button" id="btn-ask-remove" aria-label="Remove">×</button></div>
+            </div>
+            <input type="file" id="ask-file" accept="image/*" style="display:none">
+        </div>
+        <div id="ask-error"></div>
+        <div class="btn-row">
+            <button class="btn btn-ghost" id="btn-ask-back"><span id="lbl-ask-back">Back</span></button>
+            <button class="btn btn-primary" id="btn-ask-go"><span id="lbl-ask-go">Explain</span></button>
+        </div>
+    </section>
+
+    <!-- 8. EXPLANATION, one small step at a time -->
+    <section id="screen-explain" class="screen">
+        <div class="card">
+            <div class="ex-head">
+                <img src="https://thelo.ink/img/thelofavicon.png" alt="thelo">
+                <div>
+                    <div class="card-label" style="margin-bottom:0.1rem" id="lbl-ex-topic">Topic</div>
+                    <div class="ex-topic" id="ex-topic"></div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div id="ex-steps"></div>
+            <div class="ex-loading" id="ex-loading"><div class="spinner"></div><span id="lbl-ex-thinking">thelo is thinking…</span></div>
+        </div>
+        <div id="ex-error"></div>
+        <div class="ex-end" id="ex-end">That's the whole idea. 🎉</div>
+        <button class="btn btn-primary" id="btn-ex-more"><span id="lbl-ex-more">Explain the next step</span></button>
+        <div class="btn-gap"></div>
+        <button class="btn btn-ghost" id="btn-ex-other"><span id="lbl-ex-other">Ask something else</span></button>
+    </section>
+
 </main>
 
 <nav class="nav-bar">
@@ -508,7 +581,16 @@ const TXT = {
         offline: "You appear to be offline. Connect and try again.",
         signIn: "Please sign in from the home tab first.",
         summary: (a, b) => `You solved ${a} of ${b} practice problems.`,
-        noCamera: "Camera could not be opened. If this keeps happening, the app may need the camera permission enabled in Android settings."
+        noCamera: "Camera could not be opened. If this keeps happening, the app may need the camera permission enabled in Android settings.",
+        orTopic: "Don't understand a topic?", explain: "Explain it to me",
+        askSub: "Ask about ONE thing you don't understand. Write a short question or add one picture, and thelo explains it one small step at a time.",
+        askPlaceholder: "e.g. What is a logarithm?", askPhoto: "Add one picture", askBack: "Back", askGo: "Explain",
+        exTopic: "Topic", exThinking: "thelo is thinking…", exMore: "Explain the next step", exOther: "Ask something else",
+        exEnd: "That's the whole idea. 🎉",
+        askEmpty: "Write a short question or add one picture.",
+        askNotMath: "I can only help with maths questions.",
+        askFailed: "Couldn't explain that right now. Try again.",
+        askCap: "That's a lot of questions for today. Come back tomorrow!"
     },
     hy: {
         hdr: "Սկանավորել խնդիրը", capTitle: "Ուղղեք տեսախցիկը խնդրին",
@@ -533,7 +615,16 @@ const TXT = {
         offline: "Կապ չկա։ Միացեք ինտերնետին և փորձեք կրկին։",
         signIn: "Նախ մուտք գործեք գլխավոր էջից։",
         summary: (a, b) => `Դուք լուծեցիք ${b}-ից ${a} խնդիր։`,
-        noCamera: "Տեսախցիկը չբացվեց։ Ստուգեք հավելվածի թույլտվությունները։"
+        noCamera: "Տեսախցիկը չբացվեց։ Ստուգեք հավելվածի թույլտվությունները։",
+        orTopic: "Ինչ-որ թեմա չե՞ք հասկանում", explain: "Բացատրիր ինձ",
+        askSub: "Հարցրեք ՄԵԿ բանի մասին, որը չեք հասկանում։ Գրեք կարճ հարց կամ ավելացրեք մեկ նկար, և thelo-ն կբացատրի այն փոքր քայլերով։",
+        askPlaceholder: "օր.՝ Ի՞նչ է լոգարիթմը", askPhoto: "Ավելացնել մեկ նկար", askBack: "Հետ", askGo: "Բացատրել",
+        exTopic: "Թեմա", exThinking: "thelo-ն մտածում է…", exMore: "Բացատրիր հաջորդ քայլը", exOther: "Հարցնել այլ բան",
+        exEnd: "Ահա և ամբողջ գաղափարը։ 🎉",
+        askEmpty: "Գրեք կարճ հարց կամ ավելացրեք մեկ նկար։",
+        askNotMath: "Ես կարող եմ օգնել միայն մաթեմատիկայի հարցերով։",
+        askFailed: "Հիմա չստացվեց բացատրել։ Փորձեք կրկին։",
+        askCap: "Այսօր շատ հարցեր եղան։ Վերադարձեք վաղը։"
     }
 };
 let lang = scanParams.get('lang') === 'hy' ? 'hy' : 'en';
@@ -554,8 +645,15 @@ function applyLang() {
         'pad-hint': T.padHint,
         'nav-courses': T.navCourses, 'nav-profile': T.navProfile,
         'lbl-tips': T.tips, 'tip-1': T.tip1, 'tip-2': T.tip2, 'tip-3': T.tip3,
-        'lbl-fs-exit': T.fsExit, 'pad-controls-hint': T.padControls
+        'lbl-fs-exit': T.fsExit, 'pad-controls-hint': T.padControls,
+        'lbl-or': T.orTopic, 'lbl-explain': T.explain, 'lbl-ask': T.explain, 'ask-sub': T.askSub,
+        'lbl-ask-photo': T.askPhoto, 'lbl-ask-back': T.askBack, 'lbl-ask-go': T.askGo,
+        'lbl-ex-topic': T.exTopic, 'lbl-ex-thinking': T.exThinking, 'lbl-ex-more': T.exMore,
+        'lbl-ex-other': T.exOther, 'ex-end': T.exEnd
     };
+    document.getElementById('ask-text').placeholder = T.askPlaceholder;
+    const active = document.querySelector('.screen.active');
+    if (active && (active.id === 'screen-ask' || active.id === 'screen-explain')) document.getElementById('hdr-title').textContent = T.explain;
     for (const id in map) { const el = document.getElementById(id); if (el) el.textContent = map[id]; }
     const tools = { 'btn-eraser': T.eraser, 'btn-pan': T.pan, 'btn-undo': T.undo, 'btn-pad-home': T.boardHome, 'btn-fs': T.fullscreen };
     for (const [id, label] of Object.entries(tools)) {
@@ -570,6 +668,7 @@ function show(name) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const el = document.getElementById('screen-' + name);
     if (el) el.classList.add('active');
+    document.getElementById('hdr-title').textContent = (name === 'ask' || name === 'explain') ? T.explain : T.hdr;
     document.querySelector('main').scrollTop = 0;
 }
 
@@ -900,6 +999,117 @@ function logEvent(type, extra = {}) {
     }).catch(() => {});
 }
 
+/* ---------------- explain it to me ----------------
+   The student asks about ONE thing they don't understand (a short question or
+   one picture). explainConcept explains one small idea and stops; "Explain the
+   next step" sends what was already said, so the next answer builds on it. */
+let askImage = null;            // data URL of the one picture, or null
+let askSent = null;             // { text, image } of the question being explained
+let explained = [];             // explanations so far, oldest first
+let explainBusy = false;
+
+function resetAsk() {
+    askImage = null;
+    document.getElementById('ask-text').value = '';
+    document.getElementById('ask-count').textContent = '0 / 300';
+    document.getElementById('ask-thumb').style.display = 'none';
+    clearNotice('ask-error');
+}
+
+document.getElementById('btn-explain').onclick = () => {
+    resetAsk();
+    show('ask');
+    logEvent('explain_opened', {});
+};
+document.getElementById('ask-text').oninput = (e) => {
+    document.getElementById('ask-count').textContent = `${e.target.value.length} / 300`;
+};
+document.getElementById('btn-ask-photo').onclick = () => {
+    const input = document.getElementById('ask-file');
+    input.value = ''; input.click();
+};
+document.getElementById('ask-file').onchange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    clearNotice('ask-error');
+    try {
+        askImage = await downscale(file, 1400, 0.85);
+        document.getElementById('ask-img').src = askImage;
+        document.getElementById('ask-thumb').style.display = 'block';
+    } catch (err) {
+        console.error(err);
+        notice('ask-error', T.failed, 'wrong');
+    }
+};
+document.getElementById('btn-ask-remove').onclick = () => {
+    askImage = null;
+    document.getElementById('ask-thumb').style.display = 'none';
+};
+document.getElementById('btn-ask-back').onclick = () => show('capture');
+document.getElementById('btn-ex-other').onclick = () => { resetAsk(); show('ask'); };
+
+document.getElementById('btn-ask-go').onclick = () => {
+    const text = document.getElementById('ask-text').value.trim();
+    if (!text && !askImage) { notice('ask-error', T.askEmpty, 'info'); return; }
+    if (!navigator.onLine) { notice('ask-error', T.offline, 'wrong'); return; }
+    if (!fns || !auth?.currentUser) { notice('ask-error', T.signIn, 'wrong'); return; }
+    askSent = { text, image: askImage };
+    explained = [];
+    document.getElementById('ex-topic').textContent = text || '…';
+    document.getElementById('ex-steps').innerHTML = '';
+    show('explain');
+    explainNext();
+};
+document.getElementById('btn-ex-more').onclick = () => explainNext();
+
+async function explainNext() {
+    if (explainBusy || !askSent) return;
+    explainBusy = true;
+    clearNotice('ex-error');
+    const more = document.getElementById('btn-ex-more');
+    more.style.display = 'none';
+    document.getElementById('ex-end').style.display = 'none';
+    document.getElementById('ex-loading').classList.add('on');
+    try {
+        const explainConcept = fns.httpsCallable('explainConcept');
+        const res = await explainConcept({
+            text: askSent.text,
+            imageBase64: askSent.image ? askSent.image.replace(/^data:image\/[a-zA-Z+]+;base64,/, '') : null,
+            language: lang,
+            previous: explained.slice()
+        });
+        const d = res.data || {};
+        if (!d.isMath) {
+            // Not a maths question: back to the form, with thelo's reason.
+            notice('ask-error', d.rejectReason || T.askNotMath, 'wrong');
+            show('ask');
+            return;
+        }
+        if (d.topic) document.getElementById('ex-topic').textContent = d.topic;
+        explained.push(d.explanation || '');
+        const step = document.createElement('div');
+        step.className = 'ex-step';
+        step.innerHTML = `<div class="step-num">${explained.length}</div><div class="ex-text">${escapeHtml(d.explanation)}</div>`;
+        document.getElementById('ex-steps').appendChild(step);
+        if (d.hasMore) more.style.display = 'flex';
+        else document.getElementById('ex-end').style.display = 'block';
+        logEvent('explain_step', { step: explained.length });
+        requestAnimationFrame(() => step.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+    } catch (err) {
+        console.error('explainConcept failed:', err);
+        const msg = err.code === 'functions/unauthenticated' ? T.signIn
+                  : err.code === 'functions/not-found' ? 'explainConcept is not deployed yet.'
+                  : err.code === 'functions/resource-exhausted' ? T.askCap
+                  : T.askFailed;
+        notice('ex-error', msg, 'wrong');
+        if (explained.length) more.style.display = 'flex';
+        else { notice('ask-error', msg, 'wrong'); show('ask'); }
+    } finally {
+        explainBusy = false;
+        document.getElementById('ex-loading').classList.remove('on');
+    }
+}
+
 /* ---------------- boot ---------------- */
 applyLang();
 renderPoints();
@@ -926,7 +1136,7 @@ async function authHasSettled() {
 // Keep capture disabled until we know who this is, so nobody starts a scan that
 // is going to fail on an unauthenticated callable.
 function setCaptureEnabled(on) {
-    ['btn-camera', 'btn-gallery'].forEach(id => {
+    ['btn-camera', 'btn-gallery', 'btn-explain'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = !on;
     });
