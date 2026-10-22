@@ -1833,7 +1833,7 @@
                 hint: "Հուշում",
                 guideMe: "Քայլ առ քայլ", guideTitle: "Քայլ առ քայլ՝ thelo-ի հետ", guideCheck: "Ստուգել քայլը",
                 guideThinking: "Մտածում եմ…", guideStep: "Քայլ {n}", guideNeedInk: "Նախ գրիր այս քայլը գրատախտակին։",
-                guideFail: "Չստացվեց կապվել։ Փորձիր նորից։", guideDone: "Լուծեցիր։ Հիմա ստուգում եմ պատասխանդ…",
+                guideFail: "Չստացվեց կապվել։ Փորձիր նորից։", guideDone: "Լուծեցիր։ Կեցցե՛ս 🎉",
                 hintThinking: "Մտածում եմ...",
                 hintLevelLabel: "Հուշում {level}/3",
                 hintExhausted: "Այլ հուշում չկա։ Փորձի՛ր հիմա ինքդ։",
@@ -1912,7 +1912,7 @@
       hint: "Hint",
       guideMe: "Step by step", guideTitle: "Step by step with thelo", guideCheck: "Check this step",
       guideThinking: "Thinking…", guideStep: "Step {n}", guideNeedInk: "Write this step on the board first.",
-      guideFail: "Couldn't reach thelo. Try again.", guideDone: "You solved it! Now I'm checking your answer…",
+      guideFail: "Couldn't reach thelo. Try again.", guideDone: "You solved it! 🎉",
       hintThinking: "Thinking...",
       hintLevelLabel: "Hint {level}/3",
       hintExhausted: "That's all the hints for this one. Have a go now.",
@@ -5019,14 +5019,25 @@
         #guidePanel .g-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
         #guidePanel .g-check { border: none; border-radius: 12px; background: #2563EB; color: #fff; font: inherit; font-size: 14px; font-weight: 800;
             padding: 8px 16px; cursor: pointer; white-space: nowrap; }
-        #guidePanel .g-check:disabled { background: #cbd5e1; cursor: default; }`;
+        #guidePanel .g-check:disabled { background: #cbd5e1; cursor: default; }
+        #guidePanel .g-avatar { cursor: pointer; }
+        #guidePanel .g-min { border: none; background: none; font-size: 22px; line-height: 1; color: #94a3b8; cursor: pointer; padding: 0 4px; }
+        #guidePanel .g-mini { display: none; align-items: center; gap: 6px; background: #fff; border-radius: 999px; padding: 5px;
+            box-shadow: 0 10px 24px rgba(15,23,42,.22); margin-bottom: 4px; }
+        #guidePanel .g-open { border: none; background: none; font: inherit; font-size: 13px; font-weight: 800; color: #475569;
+            padding: 6px 8px 6px 10px; cursor: pointer; white-space: nowrap; }
+        #guidePanel .g-mini .g-check { padding: 7px 14px; font-size: 13px; border-radius: 999px; }
+        #guidePanel.min { width: auto; }
+        #guidePanel.min .g-card { display: none; }
+        #guidePanel.min .g-mini { display: flex; }`;
         document.head.appendChild(style);
         guidePanel = document.createElement('div');
         guidePanel.id = 'guidePanel';
         guidePanel.innerHTML = `
             <div class="g-avatar"><img alt="thelo" src="${GUIDE_AVATAR}"></div>
+            <div class="g-mini"><button class="g-open" type="button"></button><button class="g-check" type="button"></button></div>
             <div class="g-card">
-                <div class="g-head"><span class="g-title"></span><span class="g-count"></span><button class="g-x" type="button">×</button></div>
+                <div class="g-head"><span class="g-title"></span><span class="g-count"></span><button class="g-min" type="button">–</button><button class="g-x" type="button">×</button></div>
                 <div class="g-feedback"></div>
                 <div class="g-prompt"></div>
                 <div class="g-actions"><button class="g-check" type="button"></button></div>
@@ -5034,14 +5045,28 @@
         // Taps on the panel must never reach the board as strokes.
         ['pointerdown', 'touchstart', 'mousedown'].forEach(ev => guidePanel.addEventListener(ev, e => e.stopPropagation(), { passive: true }));
         guidePanel.querySelector('.g-x').onclick = () => stopGuide();
-        guidePanel.querySelector('.g-check').onclick = () => checkGuideStep();
+        guidePanel.querySelector('.g-min').onclick = () => setGuideMinimised(true);
+        guidePanel.querySelector('.g-open').onclick = () => setGuideMinimised(false);
+        guidePanel.querySelector('.g-avatar').onclick = () => setGuideMinimised(!guidePanel.classList.contains('min'));
+        guidePanel.querySelectorAll('.g-check').forEach(b => { b.onclick = () => checkGuideStep(); });
+        // Writing on the board folds the panel away, so it never sits on top of the work.
+        const fold = () => { if (guide.active && guidePanel.classList.contains('open')) setGuideMinimised(true); };
+        canvas.addEventListener('touchstart', fold, { passive: true });
+        canvas.addEventListener('mousedown', fold);
         document.body.appendChild(guidePanel);
         return guidePanel;
     }
 
+    function setGuideMinimised(min) {
+        if (guidePanel) guidePanel.classList.toggle('min', Boolean(min));
+    }
+
+    // New instructions or feedback open the panel so they get read; the "thinking"
+    // state leaves it as it is, so a check started from the folded pill stays folded.
     function renderGuide({ feedback = '', kind = '', prompt = guide.current, busy = guide.busy, canCheck = true } = {}) {
         const TXT = getCurrentUIText();
         const p = ensureGuidePanel();
+        if (!busy) setGuideMinimised(false);
         p.classList.toggle('hy', currentLang === 'hy');
         p.classList.toggle('busy', busy);
         p.querySelector('.g-title').textContent = TXT.guideTitle;
@@ -5051,10 +5076,13 @@
         fb.textContent = busy ? TXT.guideThinking : feedback;
         fb.className = 'g-feedback' + (busy ? '' : (kind === 'ok' ? ' ok' : kind === 'no' ? ' no' : ''));
         p.querySelector('.g-prompt').textContent = busy ? '' : prompt;
-        const btn = p.querySelector('.g-check');
-        btn.textContent = TXT.guideCheck;
-        btn.disabled = busy || !canCheck;
-        btn.style.display = canCheck ? '' : 'none';
+        p.querySelectorAll('.g-check').forEach(btn => {
+            btn.textContent = TXT.guideCheck;
+            btn.disabled = busy || !canCheck;
+            btn.style.display = canCheck ? '' : 'none';
+        });
+        p.querySelector('.g-open').textContent = busy ? TXT.guideThinking
+            : `${p.querySelector('.g-count').textContent || TXT.guideMe} ▴`;
         p.classList.add('open');
     }
 
@@ -5116,12 +5144,9 @@
                 guide.current = '';
                 renderGuide({ feedback: d.feedback ? `${d.feedback} ${TXT.guideDone}` : TXT.guideDone, kind: 'ok', canCheck: false });
                 logGuideEvent('guide_finished');
-                // The answer is on the board: hand over to the normal Check.
-                setTimeout(() => {
-                    if (guide.stage !== currentStageIndex) return;
-                    stopGuide();
-                    handleNextCheckClick();
-                }, 1800);
+                // The guide has just checked the final answer on the board, so there is
+                // no second Check: the stage counts as solved straight away.
+                markStageSolved();
                 return;
             }
             if (d.nextPrompt) guide.current = d.nextPrompt;
@@ -5137,7 +5162,7 @@
         guide.active = false;
         guide.busy = false;
         guide.current = '';
-        if (guidePanel) guidePanel.classList.remove('open');
+        if (guidePanel) guidePanel.classList.remove('open', 'min');
         updateGuideButtons();
     }
 
@@ -5884,33 +5909,7 @@ ${langLine}`;
           }
 
           if (status === 'correct') {
-            logHandwritingAttempt('correct');
-            clearMistake();
-            const timeSpent = Math.round((Date.now() - stageStartTime) / 1000);
-            const lessonFileName = new URLSearchParams(window.location.search).get('lessonFile');
-            db.collection("analytics_events").add({
-                type: "stage_completed",
-                userId: auth.currentUser.uid,
-                lessonId: lessonFileName ? lessonFileName.replace('.json', '') : 'unknown',
-                stageIndex: currentStageIndex,
-                attempts: attemptsInCurrentStage,
-                timeSpentSeconds: timeSpent,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            bumpStageCompletedKpis(attemptsInCurrentStage, timeSpent);
-
-            const pointsGained = 10;
-            playRandomFeedback('approve');
-            userPoints += pointsGained;
-            sessionPoints += pointsGained;
-            updatePointsDisplay();
-            updateUserPointsInFirestore(pointsGained);
-            nextCheckBtn.classList.add('correct');
-            isStudentInputAllowed = false;
-            keepScreenFrozenUntilNextStage = true;
-            if (clearBtn) clearBtn.disabled = true;
-            nextCheckBtn.textContent = TXT.correct;
-            setTimeout(nextStage, 2500);
+            markStageSolved();
           } else {
             logHandwritingAttempt('incorrect');
             recordMistake(feedback);
@@ -5937,6 +5936,41 @@ ${langLine}`;
         finalizeAnswerCheck();
       }
     }
+
+    // A handwritten answer was accepted (by Check, or at the end of Step by step):
+    // points, analytics, then on to the next stage.
+    function markStageSolved() {
+        const TXT = getCurrentUIText();
+        nextCheckBtn.disabled = true;
+        logHandwritingAttempt('correct');
+        clearMistake();
+        const timeSpent = Math.round((Date.now() - stageStartTime) / 1000);
+        const lessonFileName = new URLSearchParams(window.location.search).get('lessonFile');
+        db.collection("analytics_events").add({
+            type: "stage_completed",
+            userId: auth.currentUser.uid,
+            lessonId: lessonFileName ? lessonFileName.replace('.json', '') : 'unknown',
+            stageIndex: currentStageIndex,
+            attempts: attemptsInCurrentStage,
+            timeSpentSeconds: timeSpent,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        bumpStageCompletedKpis(attemptsInCurrentStage, timeSpent);
+
+        const pointsGained = 10;
+        playRandomFeedback('approve');
+        userPoints += pointsGained;
+        sessionPoints += pointsGained;
+        updatePointsDisplay();
+        updateUserPointsInFirestore(pointsGained);
+        nextCheckBtn.classList.add('correct');
+        isStudentInputAllowed = false;
+        keepScreenFrozenUntilNextStage = true;
+        if (clearBtn) clearBtn.disabled = true;
+        nextCheckBtn.textContent = TXT.correct;
+        setTimeout(nextStage, 2500);
+    }
+
     async function checkMathDrawing(isMcqContext = false) {
         if (!auth.currentUser) {
             console.error("User is not authenticated.");
