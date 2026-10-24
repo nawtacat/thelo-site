@@ -4384,9 +4384,6 @@
           lessonStartTime = null;
         }
 
-        // Log completion to tutor immediately so UI navigation doesn't race it.
-        // This is intentionally independent from progress/streak writes.
-        await logLessonActivityToTutor('Completed');
 
         // Update progress and streak
         try {
@@ -4474,7 +4471,6 @@
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 recordLessonStartedKpis(lessonFile.replace('.json', ''));
-                logLessonActivityToTutor('Started');
             }
             transitionToStage(getRequestedStartStage());
             return;
@@ -5918,7 +5914,7 @@ ${langLine}`;
           }, payload);
           const { status, feedback, detectedAnswer } = result.data;
 
-            logSolutionAttempt(status, feedback, detectedAnswer, expected, base64ImageData);
+            logSolutionAttempt(status, feedback, detectedAnswer, expected);
 
           // Was showOnCanvasFeedback(feedback, undefined, 'success') -- a third
           // argument to a two-parameter function, so `type` fell back to 'info'
@@ -6069,7 +6065,7 @@ ${langLine}`;
             }, payload);
             const { status, feedback, detectedAnswer } = result.data;
 
-            logSolutionAttempt(status, feedback, detectedAnswer, currentStageData.correctAnswer, userInkBase64);
+            logSolutionAttempt(status, feedback, detectedAnswer, currentStageData.correctAnswer);
 
             if (status === 'correct') {
                 showOnCanvasFeedback(feedback, 'success');
@@ -7135,13 +7131,14 @@ ${langLine}`;
         }
     };
 
-    async function logSolutionAttempt(status, feedback, detectedAnswer, correctAnswer, imageBase64) {
+    // Text only: the board image is no longer saved (there are no tutors to review it,
+    // and firestore.rules now rejects attempts that carry one).
+    async function logSolutionAttempt(status, feedback, detectedAnswer, correctAnswer) {
         const user = auth.currentUser;
         const lessonFileName = new URLSearchParams(window.location.search).get('lessonFile');
         const lessonId = lessonFileName ? lessonFileName.split('/').pop().replace('.json', '') : 'unknown';
 
         try {
-            // Store the base64 bitmap directly in Firestore to avoid index/storage rule issues
             await db.collection('solution_attempts').add({
                 userId: user ? user.uid : 'anonymous',
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
@@ -7150,8 +7147,7 @@ ${langLine}`;
                 status: status, // strictly "correct" or "incorrect"
                 correctAnswer: String(correctAnswer),
                 detectedAnswer: detectedAnswer || '',
-                feedback: feedback || '',
-                userInputImage: imageBase64 // This is the bitmap string
+                feedback: feedback || ''
             });
         } catch (e) {
             console.error("Error logging solution attempt:", e);

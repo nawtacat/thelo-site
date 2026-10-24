@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>thelo · compete</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" crossorigin="anonymous">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" crossorigin="anonymous"></script>
+    <style>
+        /*
+         * Live maths competitions between students. Opened from the Compete tab in
+         * home.html, or from a shared link:  compete.html?code=ABCDE
+         *
+         * Rooms, answers and scores are run by the `compete` Cloud Function
+         * (thelo-backend/functions/compete.js); this page only reads
+         * compete_rooms/{code} and its players, and works out what to show from the
+         * room's fixed timeline and the server clock.
+         */
+        :root {
+            --thelo-blue: #2563EB;
+            --thelo-blue-dark: #1d4ed8;
+            --thelo-bg: #F8F9FA;
+            --thelo-text: #111827;
+            --grid-color: #E5E7EB;
+            --slate-200: #e2e8f0;
+            --slate-400: #94a3b8;
+            --slate-500: #64748b;
+            --white: #ffffff;
+            --green: #16A34A;
+            --green-bg: #DCFCE7;
+            --red: #DC2626;
+            --red-bg: #FEE2E2;
+            --gold: #F59E0B;
+            --silver: #94A3B8;
+            --bronze: #C2773B;
+            --tile-0: #2563EB;
+            --tile-1: #F59E0B;
+            --tile-2: #10B981;
+            --tile-3: #8B5CF6;
+        }
+        @font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-Regular.otf'); font-weight: 400; }
+        @font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-SemiBold.otf'); font-weight: 600; }
+        @font-face { font-family: 'Montserrat Arm'; src: url('/fonts/Montserratarm-ExtraBold.otf'); font-weight: 800; }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; }
+        body {
+            font-family: 'Manrope', sans-serif; background: var(--thelo-bg); color: var(--thelo-text);
+            height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+            background-image:
+                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        body.lang-hy { font-family: 'Montserrat Arm', 'Manrope', sans-serif; }
+        .wrap { width: 100%; max-width: 560px; margin: 0 auto; }
+
+        header.cp-top {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: calc(env(safe-area-inset-top) + 1rem) 1.25rem 0.5rem;
+        }
+        .icon-btn {
+            width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--grid-color);
+            background: var(--white); color: var(--slate-500); font-size: 1.05rem; cursor: pointer; flex-shrink: 0;
+        }
+        .cp-title { flex: 1; font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .cp-title i { color: var(--gold); }
+        main#cp-main { flex: 1; overflow-y: auto; padding: 0.5rem 1.25rem calc(env(safe-area-inset-bottom) + 1.25rem); display: flex; flex-direction: column; }
+
+        .card {
+            background: var(--white); border: 1px solid var(--grid-color); border-radius: 1.1rem;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06); padding: 1.25rem; margin-bottom: 1rem;
+        }
+        .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--slate-500); font-weight: 800; margin-bottom: 0.6rem; }
+        h1.big { font-size: 1.6rem; font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; }
+        p.body { font-size: 0.98rem; line-height: 1.5; color: #374151; }
+        .muted { color: var(--slate-500); }
+        .center { flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+
+        .btn {
+            width: 100%; padding: 1rem; border-radius: 1rem; font-weight: 800; font-size: 1.05rem; font-family: inherit;
+            border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 0.5rem; transition: 0.15s;
+        }
+        .btn:active:not(:disabled) { transform: scale(0.98); }
+        .btn-primary { background: var(--thelo-blue); color: var(--white); box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.35); }
+        .btn-gold { background: linear-gradient(135deg, #F59E0B, #F97316); color: var(--white); box-shadow: 0 10px 20px -5px rgba(245, 158, 11, 0.45); }
+        .btn-primary:disabled, .btn-gold:disabled { background: var(--slate-200); color: var(--slate-400); box-shadow: none; cursor: default; }
+        .btn-ghost { background: none; color: var(--slate-500); font-weight: 700; margin-top: 0.3rem; }
+        .btn-white { background: var(--white); color: var(--thelo-text); border: 1.5px solid var(--grid-color); }
+        .row { display: flex; gap: 0.6rem; }
+        .row > * { flex: 1; }
+
+        /* ---- landing */
+        .hero {
+            background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 45%, #7C3AED 100%); color: var(--white);
+            border: none; position: relative; overflow: hidden;
+        }
+        .hero h1 { color: var(--white); }
+        .hero p { color: rgba(255,255,255,0.9); }
+        .hero .trophy { position: absolute; right: -10px; bottom: -18px; font-size: 7.5rem; color: rgba(255,255,255,0.14); transform: rotate(-12deg); }
+        .stats { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+        .chip {
+            display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.75rem; border-radius: 999px;
+            font-weight: 700; font-size: 0.85rem; background: rgba(255,255,255,0.18);
+        }
+        .chip.light { background: #EFF6FF; color: var(--thelo-blue); }
+        .or { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0; color: var(--slate-400); font-weight: 700; font-size: 0.85rem; }
+        .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--grid-color); }
+        .code-input {
+            width: 100%; font: inherit; font-size: 1.6rem; font-weight: 800; letter-spacing: 0.35em; text-align: center; text-transform: uppercase;
+            padding: 0.8rem; border-radius: 1rem; border: 2px solid var(--grid-color); background: var(--white); margin-bottom: 0.6rem;
+        }
+        .code-input:focus { outline: none; border-color: var(--thelo-blue); }
+        .how { list-style: none; display: grid; gap: 0.6rem; }
+        .how li { display: flex; gap: 0.7rem; align-items: flex-start; font-size: 0.92rem; line-height: 1.4; font-weight: 600; }
+        .how i { width: 1.2rem; text-align: center; color: var(--thelo-blue); margin-top: 0.15rem; }
+        .error { background: var(--red-bg); color: #7F1D1D; border-radius: 0.9rem; padding: 0.8rem 1rem; font-weight: 700; margin-bottom: 0.8rem; font-size: 0.92rem; }
+
+        /* ---- create */
+        .pills { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .pill {
+            font: inherit; font-weight: 800; font-size: 0.95rem; padding: 0.6rem 0.95rem; border-radius: 0.8rem; cursor: pointer;
+            background: var(--white); border: 2px solid var(--grid-color); color: var(--thelo-text); min-width: 3rem;
+        }
+        .pill.on { border-color: var(--thelo-blue); background: #EFF6FF; color: var(--thelo-blue); }
+        .topics { display: grid; gap: 0.45rem; max-height: 15rem; overflow-y: auto; padding-right: 0.2rem; }
+        .topic {
+            text-align: left; font: inherit; font-weight: 700; font-size: 0.92rem; padding: 0.7rem 0.85rem; border-radius: 0.8rem;
+            background: var(--white); border: 2px solid var(--grid-color); cursor: pointer; line-height: 1.35;
+        }
+        .topic.on { border-color: var(--thelo-blue); background: #EFF6FF; }
+
+        /* ---- lobby */
+        .code-big { font-size: 2.6rem; font-weight: 800; letter-spacing: 0.3em; text-align: center; margin: 0.2rem 0 0.8rem; padding-left: 0.3em; }
+        .players { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 0.8rem; }
+        .player { text-align: center; }
+        .player.new { animation: pop 0.35s ease; }
+        .player .nm { font-weight: 700; font-size: 0.82rem; margin-top: 0.35rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .avatar {
+            width: 56px; height: 56px; border-radius: 50%; margin: 0 auto; position: relative; display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 1.4rem; color: var(--white); background: var(--thelo-blue); border: 3px solid var(--white);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+        .avatar .crown { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); color: var(--gold); font-size: 1rem; }
+        .avatar.sm { width: 34px; height: 34px; font-size: 0.95rem; border-width: 2px; }
+        .waiting { display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: 700; color: var(--slate-500); padding: 0.9rem; }
+        .dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--slate-400); margin: 0 2px; animation: blink 1.2s infinite; }
+        .dots span:nth-child(2) { animation-delay: 0.2s; } .dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+        @keyframes pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        /* ---- countdown */
+        .count-num { font-size: 7rem; font-weight: 800; color: var(--thelo-blue); animation: pulse 1s ease infinite; }
+        @keyframes pulse { 0% { transform: scale(1.25); opacity: 0.3; } 30% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.95); opacity: 1; } }
+
+        /* ---- question */
+        .q-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+        .q-top .grow { flex: 1; font-weight: 800; color: var(--slate-500); font-size: 0.9rem; }
+        .badge { display: inline-flex; align-items: center; gap: 0.35rem; background: var(--white); border: 1px solid var(--grid-color); border-radius: 999px; padding: 0.35rem 0.7rem; font-weight: 800; font-size: 0.88rem; }
+        .badge .fa-fire { color: #F97316; }
+        .badge .fa-bolt { color: var(--gold); }
+        .timer { height: 10px; background: var(--slate-200); border-radius: 999px; overflow: hidden; margin-bottom: 1rem; }
+        .timer div { height: 100%; width: 100%; background: linear-gradient(90deg, #22C55E, #2563EB); border-radius: 999px; }
+        .timer.low div { background: linear-gradient(90deg, #F97316, #DC2626); }
+        .q-text { font-size: 1.25rem; font-weight: 800; line-height: 1.45; word-wrap: break-word; }
+        .q-text .katex { font-size: 1.05em; }
+        .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+        .tile {
+            font: inherit; color: var(--white); font-weight: 800; font-size: 1.05rem; text-align: left; line-height: 1.3;
+            min-height: 5.2rem; padding: 0.8rem 0.9rem; border-radius: 1rem; border: none; cursor: pointer; position: relative;
+            box-shadow: 0 5px 0 rgba(0,0,0,0.18); display: flex; align-items: center; gap: 0.6rem; transition: 0.15s;
+        }
+        .tile .k { width: 1.8rem; height: 1.8rem; border-radius: 0.5rem; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.95rem; }
+        .tile:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,0.18); }
+        .tile:disabled { cursor: default; }
+        .tiles.locked .tile:not(.picked) { opacity: 0.35; }
+        .tile.picked { outline: 4px solid var(--thelo-text); outline-offset: 2px; }
+        .tile.right { opacity: 1 !important; box-shadow: 0 0 0 4px var(--green), 0 5px 0 rgba(0,0,0,0.18); }
+        .tile.right::after { content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; position: absolute; right: 0.6rem; top: 0.5rem; }
+        .tile.dim { opacity: 0.3 !important; }
+        .answer-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.8rem; }
+        .answer-box {
+            flex: 1; min-height: 3.6rem; display: flex; align-items: center; padding: 0 1rem; background: var(--white);
+            border: 2px solid var(--thelo-blue); border-radius: 0.9rem; font-size: 1.6rem; font-weight: 800;
+        }
+        .answer-box.empty::after { content: '?'; color: var(--slate-400); }
+        .unit { font-size: 1.3rem; font-weight: 700; color: var(--slate-500); }
+        .keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.8rem; }
+        .key {
+            font: inherit; font-size: 1.35rem; font-weight: 800; padding: 0.75rem 0; border-radius: 0.8rem;
+            background: var(--white); border: 1px solid var(--grid-color); box-shadow: 0 2px 0 var(--grid-color); cursor: pointer; color: var(--thelo-text);
+        }
+        .key.op { color: var(--thelo-blue); }
+        .key:active { transform: translateY(1px); box-shadow: none; }
+        .key:disabled { color: var(--slate-400); }
+        .locked-note { text-align: center; font-weight: 800; color: var(--thelo-blue); padding: 0.8rem; animation: pulse2 1.6s ease infinite; }
+        @keyframes pulse2 { 50% { opacity: 0.55; } }
+        .answered { text-align: center; font-weight: 700; color: var(--slate-500); font-size: 0.88rem; margin-top: 0.4rem; }
+
+        /* ---- reveal */
+        .verdict { border-radius: 1.1rem; padding: 1.1rem; text-align: center; margin-bottom: 1rem; color: var(--white); animation: pop 0.35s ease; }
+        .verdict.right { background: linear-gradient(135deg, #16A34A, #22C55E); }
+        .verdict.wrong { background: linear-gradient(135deg, #DC2626, #F43F5E); }
+        .verdict.late { background: linear-gradient(135deg, #64748B, #94A3B8); }
+        .verdict .v-title { font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        .verdict .v-points { font-size: 2.2rem; font-weight: 800; margin-top: 0.2rem; }
+        .verdict .v-streak { margin-top: 0.3rem; font-weight: 800; }
+        .the-answer { font-weight: 800; font-size: 1.1rem; }
+        .board { display: grid; gap: 0.45rem; }
+        .board .rowp {
+            display: flex; align-items: center; gap: 0.7rem; background: var(--white); border: 1px solid var(--grid-color);
+            border-radius: 0.9rem; padding: 0.55rem 0.8rem; transition: transform 0.4s ease;
+        }
+        .board .rowp.me { border: 2px solid var(--thelo-blue); background: #EFF6FF; }
+        .board .rk { width: 1.7rem; font-weight: 800; text-align: center; }
+        .board .nm { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .board .sc { font-weight: 800; }
+        .board .mv { width: 1.2rem; font-size: 0.8rem; text-align: center; }
+        .mv.up { color: var(--green); } .mv.down { color: var(--red); }
+        .next-in { text-align: center; color: var(--slate-500); font-weight: 700; margin-top: 0.8rem; font-size: 0.9rem; }
+
+        /* ---- final */
+        .podium { display: flex; align-items: flex-end; justify-content: center; gap: 0.5rem; margin: 0.5rem 0 1rem; }
+        .podium .pl { flex: 1; max-width: 9rem; text-align: center; }
+        .podium .nm { font-weight: 800; font-size: 0.88rem; margin: 0.35rem 0 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .podium .sc { font-weight: 800; color: var(--slate-500); font-size: 0.85rem; margin-bottom: 0.35rem; }
+        .podium .step { border-radius: 0.9rem 0.9rem 0 0; color: var(--white); font-weight: 800; font-size: 1.8rem; display: flex; align-items: flex-start; justify-content: center; padding-top: 0.5rem; animation: rise 0.7s ease both; }
+        .podium .p1 .step { height: 7.5rem; background: linear-gradient(180deg, #FBBF24, #F59E0B); animation-delay: 0.5s; }
+        .podium .p2 .step { height: 5.5rem; background: linear-gradient(180deg, #CBD5E1, #94A3B8); animation-delay: 0.25s; }
+        .podium .p3 .step { height: 4rem; background: linear-gradient(180deg, #E0A36B, #C2773B); }
+        @keyframes rise { from { transform: scaleY(0); transform-origin: bottom; } to { transform: scaleY(1); transform-origin: bottom; } }
+        .mine { display: flex; align-items: center; justify-content: space-around; text-align: center; }
+        .mine b { display: block; font-size: 1.5rem; font-weight: 800; }
+        .mine span { font-size: 0.78rem; font-weight: 700; color: var(--slate-500); text-transform: uppercase; }
+
+        #cp-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
+        #cp-toast {
+            position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 1.5rem); transform: translateX(-50%) translateY(20px);
+            background: var(--thelo-text); color: var(--white); padding: 0.7rem 1.1rem; border-radius: 999px; font-weight: 700; font-size: 0.9rem;
+            opacity: 0; transition: 0.25s; pointer-events: none; z-index: 70; white-space: nowrap;
+        }
+        #cp-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .modal-back { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); display: none; align-items: flex-end; justify-content: center; z-index: 80; }
+        .modal-back.show { display: flex; }
+        .modal { background: var(--white); width: 100%; max-width: 560px; border-radius: 1.25rem 1.25rem 0 0; padding: 1.5rem 1.25rem calc(env(safe-area-inset-bottom) + 1.25rem); }
+        .modal p { font-weight: 700; font-size: 1.02rem; line-height: 1.45; margin-bottom: 1rem; }
+        .btn-red { background: var(--red); color: var(--white); }
+        .spinner { width: 42px; height: 42px; border: 4px solid var(--slate-200); border-top-color: var(--thelo-blue); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <link rel="stylesheet" href="/assets/thelo-web.css">
+</head>
+<body data-thelo-page="compete">
+    <header class="cp-top wrap">
+        <button class="icon-btn" id="cp-back" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+        <div class="cp-title"><i class="fa-solid fa-trophy"></i> <span id="cp-title"></span></div>
+        <button class="icon-btn" id="cp-sound" aria-label="Sound"><i class="fa-solid fa-volume-high"></i></button>
+    </header>
+    <main id="cp-main" class="wrap"></main>
+    <canvas id="cp-confetti"></canvas>
+    <div id="cp-toast"></div>
+    <div class="modal-back" id="cp-modal">
+        <div class="modal">
+            <p id="cp-modal-text"></p>
+            <button class="btn btn-red" id="cp-modal-yes"></button>
+            <button class="btn btn-ghost" id="cp-modal-no"></button>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+
+        const ASSET_ORIGIN = 'https://thelo.ink';
+        const SHARE_BASE = 'https://thelo.ink/compete/?code=';
+        const FOLDER_NAMES = { 5: 'FIVE', 6: 'SIX', 7: 'SEVEN', 8: 'EIGHT', 9: 'NINE', 10: 'TEN', 11: 'ELEVEN', 12: 'TWELVE' };
+        const TILE_KEYS = ['A', 'B', 'C', 'D'];
+        const params = new URLSearchParams(location.search);
+
+        const TEXT = {
+            en: {
+                title: 'Compete',
+                heroTitle: 'Maths battle with friends',
+                heroBody: 'Same questions, same moment, one winner. Be right and be fast!',
+                played: '{n} played', wins: '{n} wins',
+                create: 'Create a room', or: 'or join one', codePh: 'CODE', join: 'Join',
+                how1: 'Create a room and share its code with your friends.',
+                how2: 'Everyone gets the same question at the same time.',
+                how3: 'Right and fast earns the most points. Keep a streak for a bonus 🔥',
+                how4: 'The top three win stars ⭐ for their profile.',
+                setup: 'New room', grade: 'Grade', stream: 'Course', gen: 'General', adv: 'Advanced',
+                topic: 'Topic', everything: 'Everything in grade {g}', questions: 'Questions', seconds: 'Seconds per question',
+                createRoom: 'Create the room', creating: 'Creating…', loadingTopics: 'Loading topics…',
+                roomCode: 'Room code', copy: 'Copy link', share: 'Share', copied: 'Link copied!',
+                players: 'Players · {n}', you: 'you', start: 'Start the game', startAlone: 'Start (just you)',
+                waitHost: 'Waiting for {name} to start', leave: 'Leave the room',
+                summary: 'Grade {g} · {n} questions · {s} s', closed: 'The host closed this room.',
+                getReady: 'Get ready!', question: 'Question {i} of {n}',
+                sent: 'Answer locked in!', answeredN: '{a} of {n} answered', typeAnswer: 'Type the answer', send: 'Send',
+                right: 'Correct!', wrong: 'Not quite', late: 'Time\'s up!', streak: '🔥 {n} in a row',
+                answerWas: 'The answer: {a}', nextIn: 'Next question in {s}…', finalIn: 'Results in {s}…',
+                standings: 'Standings', over: 'Game over!', winner: '{name} wins!', youWon: 'You won! 🎉',
+                yourPlace: 'Place', score: 'Points', stars: 'Stars', correct: 'Correct',
+                playAgain: 'Play again', joinRematch: 'Join the rematch', waitRematch: 'Waiting for {name} to start a rematch…',
+                home: 'Back to home', loading: 'Loading…', counting: 'Counting the scores…',
+                leaveGame: 'Leave the game? Your score stays, but you stop playing.', leaveYes: 'Leave', stay: 'Keep playing',
+                errNoRoom: 'There is no room with that code.', errStarted: 'That game has already started.',
+                errFull: 'That room is full.', errQuestions: 'This topic does not have enough questions yet. Pick another one.',
+                errSignIn: 'Please sign in from the home screen first.', errGeneric: 'Something went wrong. Check your connection and try again.',
+                errCode: 'A room code has 5 letters and numbers.',
+            },
+            hy: {
+                title: 'Մրցույթ',
+                heroTitle: 'Մաթեմատիկական մրցույթ ընկերների հետ',
+                heroBody: 'Նույն հարցերը, նույն պահին, մեկ հաղթող։ Եղիր ճիշտ և արագ։',
+                played: '{n} խաղ', wins: '{n} հաղթանակ',
+                create: 'Ստեղծել սենյակ', or: 'կամ միացիր', codePh: 'ԿՈԴ', join: 'Միանալ',
+                how1: 'Ստեղծիր սենյակ և կոդը ուղարկիր ընկերներիդ։',
+                how2: 'Բոլորը նույն հարցը ստանում են միաժամանակ։',
+                how3: 'Ճիշտ և արագ պատասխանը տալիս է ամենաշատ միավորը։ Անընդմեջ ճիշտ պատասխանները բոնուս են տալիս 🔥',
+                how4: 'Առաջին երեքը աստղեր ⭐ են ստանում իրենց պրոֆիլի համար։',
+                setup: 'Նոր սենյակ', grade: 'Դասարան', stream: 'Հոսք', gen: 'Ընդհանուր', adv: 'Խորացված',
+                topic: 'Թեմա', everything: '{g}-րդ դասարանի ամբողջ նյութը', questions: 'Հարցեր', seconds: 'Վայրկյան ամեն հարցին',
+                createRoom: 'Ստեղծել սենյակը', creating: 'Ստեղծվում է…', loadingTopics: 'Թեմաները բեռնվում են…',
+                roomCode: 'Սենյակի կոդը', copy: 'Պատճենել հղումը', share: 'Կիսվել', copied: 'Հղումը պատճենված է։',
+                players: 'Խաղացողներ · {n}', you: 'դու', start: 'Սկսել խաղը', startAlone: 'Սկսել (մենակ)',
+                waitHost: 'Սպասում ենք, որ {name}-ը սկսի', leave: 'Դուրս գալ սենյակից',
+                summary: '{g}-րդ դասարան · {n} հարց · {s} վ', closed: 'Սենյակը փակվել է։',
+                getReady: 'Պատրաստվի՛ր։', question: 'Հարց {i} / {n}',
+                sent: 'Պատասխանն ուղարկված է։', answeredN: 'Պատասխանել է {a}-ը {n}-ից', typeAnswer: 'Գրիր պատասխանը', send: 'Ուղարկել',
+                right: 'Ճիշտ է։', wrong: 'Սխալ է', late: 'Ժամանակն ավարտվեց։', streak: '🔥 {n} անընդմեջ',
+                answerWas: 'Պատասխանը՝ {a}', nextIn: 'Հաջորդ հարցը {s} վ հետո…', finalIn: 'Արդյունքները {s} վ հետո…',
+                standings: 'Աղյուսակ', over: 'Խաղն ավարտվեց։', winner: 'Հաղթեց {name}-ը։', youWon: 'Դու հաղթեցիր։ 🎉',
+                yourPlace: 'Տեղ', score: 'Միավոր', stars: 'Աստղ', correct: 'Ճիշտ',
+                playAgain: 'Նորից խաղալ', joinRematch: 'Միանալ նոր խաղին', waitRematch: 'Սպասում ենք, որ {name}-ը սկսի նոր խաղ…',
+                home: 'Վերադառնալ գլխավոր էջ', loading: 'Բեռնվում է…', counting: 'Միավորները հաշվվում են…',
+                leaveGame: 'Դուրս գա՞լ խաղից։ Միավորներդ կմնան, բայց այլևս չես խաղա։', leaveYes: 'Դուրս գալ', stay: 'Շարունակել խաղը',
+                errNoRoom: 'Այդ կոդով սենյակ չկա։', errStarted: 'Այդ խաղն արդեն սկսվել է։',
+                errFull: 'Սենյակը լցված է։', errQuestions: 'Այս թեմայում դեռ բավարար հարցեր չկան։ Ընտրիր ուրիշ թեմա։',
+                errSignIn: 'Նախ մուտք գործիր գլխավոր էջից։', errGeneric: 'Ինչ-որ բան չստացվեց։ Ստուգիր կապը և փորձիր նորից։',
+                errCode: 'Սենյակի կոդը 5 տառ և թիվ է։',
+            },
+        };
+        let LANG = params.get('lang') === 'en' ? 'en' : 'hy';
+        let T = TEXT[LANG];
+        const fmt = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => (v && k in v ? v[k] : ''));
+        function setLang(lang) {
+            LANG = lang === 'en' ? 'en' : 'hy';
+            T = TEXT[LANG];
+            document.body.classList.toggle('lang-hy', LANG === 'hy');
+            document.documentElement.lang = LANG;
+            document.getElementById('cp-title').textContent = T.title;
+        }
+        setLang(LANG);
+
+        const $main = document.getElementById('cp-main');
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const goHome = () => { location.href = '/sdashboard/'; };
+
+        // ------------------------------------------------------------------ firebase
+        const firebaseConfig = { apiKey: "AIzaSyAbnPpcIt88B0jIAoLUdC71zmQDvR_fdu8", authDomain: "physmathacademy-722b3.firebaseapp.com", databaseURL: "https://physmathacademy-722b3-default-rtdb.firebaseio.com", projectId: "physmathacademy-722b3", storageBucket: "physmathacademy-722b3.appspot.com", messagingSenderId: "1093640992262", appId: "1:1093640992262:web:35b1bf4d2364bcf745f587" };
+        let db = null, auth = null, functions = null;
+        try {
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore(); auth = firebase.auth(); functions = firebase.functions();
+        } catch (e) {
+            console.error('Firebase unavailable', e);
+        }
+
+        // The server decides every time limit; this tracks how far our clock is from it.
+        let clockOffset = 0, bestRtt = Infinity;
+        const serverNow = () => Date.now() + clockOffset;
+        async function api(action, data) {
+            const t0 = Date.now();
+            const res = await functions.httpsCallable('compete')(Object.assign({ action }, data));
+            const t1 = Date.now();
+            if (res.data && res.data.now && t1 - t0 < bestRtt) {
+                bestRtt = t1 - t0;
+                clockOffset = res.data.now - (t0 + t1) / 2;
+            }
+            return res.data || {};
+        }
+        function errorText(e) {
+            const m = (e && e.message) || '';
+            if (m === 'no-room') return T.errNoRoom;
+            if (m === 'already-started') return T.errStarted;
+            if (m === 'room-full') return T.errFull;
+            if (m === 'not-enough-questions') return T.errQuestions;
+            if (m === 'bad-code') return T.errCode;
+            if (e && e.code === 'functions/unauthenticated') return T.errSignIn;
+            return T.errGeneric;
+        }
+
+        // ------------------------------------------------------------------ helpers
+        /** Text with /K ... K/ KaTeX segments, as written by lesson-gen. */
+        function renderRich(el, text) {
+            el.textContent = '';
+            const re = /\/K\s?([\s\S]*?)\s?K\//g;
+            let last = 0, m;
+            const src = String(text ?? '');
+            while ((m = re.exec(src))) {
+                if (m.index > last) el.appendChild(document.createTextNode(src.slice(last, m.index)));
+                const span = document.createElement('span');
+                try { katex.render(m[1], span, { throwOnError: false }); } catch (e) { span.textContent = m[1]; }
+                el.appendChild(span);
+                last = re.lastIndex;
+            }
+            if (last < src.length) el.appendChild(document.createTextNode(src.slice(last)));
+        }
+        const plain = (s) => String(s ?? '').replace(/\/K\s?|\s?K\//g, '');
+        const numText = (n) => (LANG === 'hy' ? String(n).replace('.', ',') : String(n)).replace(/^-/, '−');
+
+        const AVATAR_COLORS = ['#2563EB', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899', '#0EA5E9', '#F97316', '#14B8A6'];
+        function avatarHTML(p, extra = '') {
+            const name = (p && p.name) || '?';
+            let h = 0;
+            for (const ch of name) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+            const inner = p && p.avatar ? `<img src="${esc(p.avatar)}" alt="" onerror="this.remove()">` : '';
+            return `<div class="avatar ${extra}" style="background:${AVATAR_COLORS[h % AVATAR_COLORS.length]}">${esc([...name][0] || '?')}${inner}</div>`;
+        }
+        function toast(text) {
+            const el = document.getElementById('cp-toast');
+            el.textContent = text;
+            el.classList.add('show');
+            clearTimeout(toast.timer);
+            toast.timer = setTimeout(() => el.classList.remove('show'), 1800);
+        }
+        const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { /* not supported */ } };
+
+        // ------------------------------------------------------------------ sound (tiny synth, no files)
+        let muted = false;
+        try { muted = localStorage.getItem('theloCompeteMute') === '1'; } catch (e) { /* private mode */ }
+        let audio = null;
+        function tone(freq, start, dur, type = 'sine', gain = 0.12) {
+            if (muted) return;
+            try {
+                audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+                if (audio.state === 'suspended') audio.resume();
+                const o = audio.createOscillator(), g = audio.createGain();
+                o.type = type; o.frequency.value = freq;
+                g.gain.setValueAtTime(gain, audio.currentTime + start);
+                g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + start + dur);
+                o.connect(g); g.connect(audio.destination);
+                o.start(audio.currentTime + start); o.stop(audio.currentTime + start + dur + 0.02);
+            } catch (e) { /* no audio */ }
+        }
+        const sfx = {
+            tick: () => tone(880, 0, 0.08, 'square', 0.05),
+            go: () => { tone(660, 0, 0.12); tone(990, 0.12, 0.25); },
+            right: () => { tone(660, 0, 0.12, 'triangle'); tone(880, 0.1, 0.12, 'triangle'); tone(1320, 0.2, 0.3, 'triangle'); },
+            wrong: () => { tone(220, 0, 0.25, 'sawtooth', 0.06); tone(165, 0.18, 0.35, 'sawtooth', 0.06); },
+            join: () => tone(1040, 0, 0.12, 'triangle', 0.08),
+            fanfare: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.14, i === 3 ? 0.6 : 0.16, 'triangle')),
+        };
+        function drawSound() {
+            document.querySelector('#cp-sound i').className = muted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
+        }
+        document.getElementById('cp-sound').onclick = () => {
+            muted = !muted;
+            try { localStorage.setItem('theloCompeteMute', muted ? '1' : '0'); } catch (e) { /* private mode */ }
+            drawSound();
+        };
+        drawSound();
+
+        // ------------------------------------------------------------------ confetti
+        function confetti() {
+            const cv = document.getElementById('cp-confetti');
+            const ctx = cv.getContext('2d');
+            cv.width = innerWidth * devicePixelRatio; cv.height = innerHeight * devicePixelRatio;
+            const colors = ['#2563EB', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899', '#FACC15'];
+            const bits = Array.from({ length: 160 }, () => ({
+                x: Math.random() * cv.width, y: -Math.random() * cv.height * 0.5, r: (4 + Math.random() * 6) * devicePixelRatio,
+                vx: (Math.random() - 0.5) * 3 * devicePixelRatio, vy: (2 + Math.random() * 4) * devicePixelRatio,
+                a: Math.random() * Math.PI, va: (Math.random() - 0.5) * 0.3, c: colors[Math.floor(Math.random() * colors.length)],
+            }));
+            const t0 = performance.now();
+            (function frame(t) {
+                ctx.clearRect(0, 0, cv.width, cv.height);
+                bits.forEach(b => {
+                    b.x += b.vx; b.y += b.vy; b.a += b.va; b.vy += 0.04 * devicePixelRatio;
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a); ctx.fillStyle = b.c;
+                    ctx.fillRect(-b.r / 2, -b.r / 4, b.r, b.r / 2); ctx.restore();
+                });
+                if (t - t0 < 4500) requestAnimationFrame(frame); else ctx.clearRect(0, 0, cv.width, cv.height);
+            })(t0);
+        }
+
+        // ------------------------------------------------------------------ state
+        let user = null, profile = {};
+        let room = null, players = [], code = null;
+        let unsubRoom = null, unsubPlayers = null;
+        let phaseKey = '';
+        const mine = {};                 // question index -> { correct, points, streak, late, answer }
+        const revealed = {};             // question index -> answer, for questions we did not answer
+        let lastRanks = {}, rankBase = {}, rankBaseFor = -1;   // uid -> rank, for the up/down arrows
+        let finishAsked = false;
+
+        function stopListening() {
+            if (unsubRoom) unsubRoom(); if (unsubPlayers) unsubPlayers();
+            unsubRoom = unsubPlayers = null;
+        }
+        const ranked = () => players.slice().sort((a, b) => (b.score - a.score) || (b.correct - a.correct) || (a.joinedAt - b.joinedAt));
+        const me = () => players.find(p => p.id === (user && user.uid)) || {};
+        const isHost = () => room && user && room.hostId === user.uid;
+        const hostName = () => (players.find(p => p.id === (room && room.hostId)) || {}).name || '…';
+
+        // ------------------------------------------------------------------ screens
+        let backAction = goHome;
+        document.getElementById('cp-back').onclick = () => backAction();
+
+        function screen(html) {
+            $main.innerHTML = html;
+            $main.scrollTop = 0;
+        }
+        function showMessage(text, button = T.home, onClick = goHome) {
+            stopListening();
+            backAction = goHome;
+            screen(`<div class="center"><p class="body" style="margin-bottom:1.2rem">${esc(text)}</p>
+                    <button class="btn btn-primary" id="cp-msg-btn">${esc(button)}</button></div>`);
+            document.getElementById('cp-msg-btn').onclick = onClick;
+        }
+        function showLoading(text = T.loading) {
+            screen(`<div class="center"><div class="spinner"></div><p class="muted" style="font-weight:700">${esc(text)}</p></div>`);
+        }
+
+        // --- landing
+        function showLanding(error = '') {
+            stopListening();
+            room = null; code = null; phaseKey = '';
+            backAction = goHome;
+            const st = profile.competeStats || {};
+            screen(`
+                <div class="card hero">
+                    <i class="fa-solid fa-trophy trophy"></i>
+                    <h1 class="big">${esc(T.heroTitle)}</h1>
+                    <p class="body">${esc(T.heroBody)}</p>
+                    <div class="stats">
+                        <span class="chip"><i class="fa-solid fa-gamepad"></i> ${esc(fmt(T.played, { n: st.played || 0 }))}</span>
+                        <span class="chip"><i class="fa-solid fa-crown"></i> ${esc(fmt(T.wins, { n: st.wins || 0 }))}</span>
+                    </div>
+                </div>
+                ${error ? `<div class="error">${esc(error)}</div>` : ''}
+                <button class="btn btn-gold" id="cp-create"><i class="fa-solid fa-plus"></i> ${esc(T.create)}</button>
+                <div class="or">${esc(T.or)}</div>
+                <input class="code-input" id="cp-code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${esc(T.codePh)}">
+                <button class="btn btn-primary" id="cp-join" disabled>${esc(T.join)}</button>
+                <div class="card" style="margin-top:1.2rem">
+                    <ul class="how">
+                        <li><i class="fa-solid fa-key"></i> ${esc(T.how1)}</li>
+                        <li><i class="fa-solid fa-bolt"></i> ${esc(T.how2)}</li>
+                        <li><i class="fa-solid fa-gauge-high"></i> ${esc(T.how3)}</li>
+                        <li><i class="fa-solid fa-star"></i> ${esc(T.how4)}</li>
+                    </ul>
+                </div>`);
+            const input = document.getElementById('cp-code');
+            const joinBtn = document.getElementById('cp-join');
+            input.oninput = () => {
+                input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                joinBtn.disabled = input.value.length !== 5;
+            };
+            input.onkeydown = (e) => { if (e.key === 'Enter' && !joinBtn.disabled) joinBtn.click(); };
+            joinBtn.onclick = () => joinRoom(input.value);
+            document.getElementById('cp-create').onclick = showCreate;
+        }
+
+        // --- create
+        function folderFor(grade, stream) {
+            const hs = Number(grade) >= 10;
+            return `${FOLDER_NAMES[grade]}${hs ? (stream === 'adv' ? '-ADV' : '-GEN') : ''}-${LANG === 'en' ? 'EN' : 'HY'}`;
+        }
+        const poolCache = {};
+        async function loadUnits(folder) {
+            if (!poolCache[folder]) {
+                const res = await fetch(`${ASSET_ORIGIN}/lessons/${encodeURIComponent(folder)}/tests.json`, { cache: 'no-cache' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const pool = await res.json();
+                poolCache[folder] = (pool.units || [])
+                    .map(u => ({ unit: u.unit, title: plain(u.title || ''), n: (u.lessons || []).reduce((s, l) => s + ((l.quick || []).length), 0) }))
+                    .filter(u => u.n >= 5);
+            }
+            return poolCache[folder];
+        }
+        function showCreate() {
+            const prefs = profile.preferences || {};
+            const choice = {
+                grade: Math.min(12, Math.max(5, Number(prefs.grade) || 7)),
+                stream: prefs.stream === 'adv' ? 'adv' : 'gen',
+                unit: 0, unitTitle: '', count: 10, seconds: 20,
+            };
+            backAction = () => showLanding();
+            const pills = (name, values, label, current) => `<div class="pills" data-name="${name}">${values.map(v =>
+                `<button class="pill${v === current ? ' on' : ''}" data-v="${v}">${esc(label(v))}</button>`).join('')}</div>`;
+            screen(`
+                <h1 class="big" style="margin:0.3rem 0 1rem">${esc(T.setup)}</h1>
+                <div class="card">
+                    <div class="label">${esc(T.grade)}</div>
+                    ${pills('grade', [5, 6, 7, 8, 9, 10, 11, 12], v => v, choice.grade)}
+                    <div id="cp-stream-wrap" style="margin-top:0.9rem"></div>
+                </div>
+                <div class="card">
+                    <div class="label">${esc(T.topic)}</div>
+                    <div class="topics" id="cp-topics"></div>
+                </div>
+                <div class="card">
+                    <div class="label">${esc(T.questions)}</div>
+                    ${pills('count', [5, 10, 15], v => v, choice.count)}
+                    <div class="label" style="margin-top:1rem">${esc(T.seconds)}</div>
+                    ${pills('seconds', [10, 20, 30], v => `${v} s`, choice.seconds)}
+                </div>
+                <div id="cp-create-error"></div>
+                <button class="btn btn-gold" id="cp-make"><i class="fa-solid fa-door-open"></i> ${esc(T.createRoom)}</button>`);
+
+            const drawStream = () => {
+                const wrap = document.getElementById('cp-stream-wrap');
+                wrap.innerHTML = choice.grade >= 10
+                    ? `<div class="label">${esc(T.stream)}</div>${pills('stream', ['gen', 'adv'], v => (v === 'adv' ? T.adv : T.gen), choice.stream)}`
+                    : '';
+                wireAll();
+            };
+            const drawTopics = async () => {
+                const box = document.getElementById('cp-topics');
+                const folder = folderFor(choice.grade, choice.stream);
+                box.innerHTML = `<p class="muted" style="font-weight:700">${esc(T.loadingTopics)}</p>`;
+                choice.unit = 0; choice.unitTitle = '';
+                let units = [];
+                try { units = await loadUnits(folder); } catch (e) { console.warn('topics', e); }
+                if (folder !== folderFor(choice.grade, choice.stream)) return;      // changed meanwhile
+                const items = [{ unit: 0, title: fmt(T.everything, { g: choice.grade }) }].concat(units);
+                box.innerHTML = items.map(u => `<button class="topic${u.unit === 0 ? ' on' : ''}" data-u="${u.unit}">${esc(u.title)}</button>`).join('');
+                box.querySelectorAll('.topic').forEach(b => {
+                    b.onclick = () => {
+                        choice.unit = Number(b.dataset.u);
+                        choice.unitTitle = choice.unit ? b.textContent : '';
+                        box.querySelectorAll('.topic').forEach(x => x.classList.toggle('on', x === b));
+                    };
+                });
+            };
+            function wireAll() {
+                $main.querySelectorAll('.pills').forEach(group => {
+                    group.querySelectorAll('.pill').forEach(b => {
+                        b.onclick = () => {
+                            const name = group.dataset.name;
+                            choice[name] = name === 'stream' ? b.dataset.v : Number(b.dataset.v);
+                            group.querySelectorAll('.pill').forEach(x => x.classList.toggle('on', x === b));
+                            if (name === 'grade') { drawStream(); drawTopics(); }
+                            if (name === 'stream') drawTopics();
+                        };
+                    });
+                });
+            }
+            drawStream();
+            drawTopics();
+            const make = document.getElementById('cp-make');
+            make.onclick = async () => {
+                make.disabled = true;
+                make.textContent = T.creating;
+                try {
+                    const r = await api('create', {
+                        folder: folderFor(choice.grade, choice.stream), unit: choice.unit, unitTitle: choice.unitTitle,
+                        count: choice.count, seconds: choice.seconds,
+                    });
+                    enterRoom(r.code);
+                } catch (e) {
+                    console.error('create failed', e);
+                    document.getElementById('cp-create-error').innerHTML = `<div class="error">${esc(errorText(e))}</div>`;
+                    make.disabled = false;
+                    make.innerHTML = `<i class="fa-solid fa-door-open"></i> ${esc(T.createRoom)}`;
+                }
+            };
+        }
+
+        // --- joining and listening
+        async function joinRoom(raw) {
+            const c = String(raw || '').trim().toUpperCase();
+            showLoading();
+            try {
+                await api('join', { code: c });
+                enterRoom(c);
+            } catch (e) {
+                console.error('join failed', e);
+                showLanding(errorText(e));
+            }
+        }
+
+        function enterRoom(c) {
+            stopListening();
+            code = c; room = null; players = []; phaseKey = ''; finishAsked = false; finalDrawn = false;
+            lastRanks = {}; rankBase = {}; rankBaseFor = -1;
+            Object.keys(mine).forEach(k => delete mine[k]);
+            Object.keys(revealed).forEach(k => delete revealed[k]);
+            try { history.replaceState(null, '', `${location.pathname}?code=${c}`); } catch (e) { /* file:// */ }
+            showLoading();
+            const ref = db.collection('compete_rooms').doc(c);
+            unsubRoom = ref.onSnapshot(snap => {
+                if (!snap.exists) { showMessage(T.errNoRoom); return; }
+                room = snap.data();
+                render(true);
+            }, err => { console.error(err); showMessage(T.errGeneric); });
+            unsubPlayers = ref.collection('players').onSnapshot(snap => {
+                const before = players.length;
+                players = snap.docs.map(d => Object.assign({ id: d.id, score: 0, correct: 0 }, d.data()));
+                const m = me();
+                // Answers given before a reload come back from our own player document.
+                Object.entries(m.answers || {}).forEach(([i, a]) => {
+                    if (!mine[i]) mine[i] = { correct: a.c, points: a.p, streak: null };
+                });
+                if (room && room.status === 'lobby' && players.length > before && before) sfx.join();
+                render(false);
+            });
+        }
+
+        // ------------------------------------------------------------------ the game clock
+        function phase() {
+            if (!room) return { kind: 'loading' };
+            if (room.status === 'closed') return { kind: 'closed' };
+            if (room.status === 'lobby') return { kind: 'lobby' };
+            if (room.status === 'finished') return { kind: 'final' };
+            const q = room.seconds * 1000, slot = q + room.revealMs;
+            const t = serverNow() - room.startAt.toMillis();
+            if (t < 0) return { kind: 'countdown', left: -t };
+            const i = Math.floor(t / slot);
+            if (i >= room.count) return { kind: 'final' };
+            const within = t - i * slot;
+            if (within < q) return { kind: 'question', i, left: q - within, total: q };
+            return { kind: 'reveal', i, left: slot - within, last: i === room.count - 1 };
+        }
+
+        function render(roomChanged) {
+            const p = phase();
+            const key = p.kind === 'question' || p.kind === 'reveal' ? `${p.kind}${p.i}` : p.kind;
+            if (key !== phaseKey) {
+                phaseKey = key;
+                if (p.kind === 'lobby') showLobby();
+                else if (p.kind === 'closed') showMessage(T.closed, T.home, () => showLanding());
+                else if (p.kind === 'countdown') showCountdown();
+                else if (p.kind === 'question') showQuestion(p.i);
+                else if (p.kind === 'reveal') showReveal(p.i);
+                else if (p.kind === 'final') showFinal();
+                return;
+            }
+            // Same screen: refresh the live parts.
+            if (p.kind === 'lobby') drawLobbyPlayers();
+            else if (p.kind === 'question') drawAnsweredCount(p.i);
+            else if (p.kind === 'reveal') drawBoard(p.i);
+            else if (p.kind === 'final' && (roomChanged || !finalDrawn)) showFinal();
+        }
+
+        let lastSecond = null;
+        setInterval(() => {
+            if (!room) return;
+            const p = phase();
+            const key = p.kind === 'question' || p.kind === 'reveal' ? `${p.kind}${p.i}` : p.kind;
+            if (key !== phaseKey) { render(false); return; }
+            if (p.kind === 'countdown') {
+                const s = Math.ceil(p.left / 1000);
+                const el = document.getElementById('cp-count');
+                if (el && el.textContent !== String(s)) { el.textContent = s; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; sfx.tick(); }
+            } else if (p.kind === 'question') {
+                const bar = document.getElementById('cp-timer');
+                if (bar) {
+                    bar.firstElementChild.style.width = `${Math.max(0, p.left / p.total * 100)}%`;
+                    bar.classList.toggle('low', p.left < 5000);
+                }
+                const s = Math.ceil(p.left / 1000);
+                if (s <= 3 && s !== lastSecond && !mine[p.i]) sfx.tick();
+                lastSecond = s;
+            } else if (p.kind === 'reveal') {
+                const el = document.getElementById('cp-next');
+                if (el) el.textContent = fmt(p.last ? T.finalIn : T.nextIn, { s: Math.max(1, Math.ceil(p.left / 1000)) });
+                if (p.last && !finishAsked && p.left < (room.revealMs - 2000)) askFinish();
+            } else if (p.kind === 'final' && room.status === 'playing' && !finishAsked) {
+                askFinish();
+            }
+        }, 100);
+
+        async function askFinish() {
+            finishAsked = true;
+            try {
+                await api('finish', { code });
+            } catch (e) {
+                // Too early by our clock, or a blip: try again shortly.
+                setTimeout(() => { finishAsked = false; }, 1500);
+            }
+        }
+
+        // --- lobby
+        function showLobby() {
+            backAction = async () => {
+                const c = code;
+                showLanding();
+                try { await api('leave', { code: c }); } catch (e) { /* the room expires anyway */ }
+            };
+            const link = SHARE_BASE + code;
+            const topic = room.unitTitle || fmt(T.everything, { g: room.grade });
+            screen(`
+                <div class="card" style="text-align:center">
+                    <div class="label">${esc(T.roomCode)}</div>
+                    <div class="code-big">${esc(code)}</div>
+                    <div class="row">
+                        <button class="btn btn-white" id="cp-copy"><i class="fa-regular fa-copy"></i> ${esc(T.copy)}</button>
+                        ${navigator.share ? `<button class="btn btn-white" id="cp-share"><i class="fa-solid fa-share-nodes"></i> ${esc(T.share)}</button>` : ''}
+                    </div>
+                    <div class="stats" style="justify-content:center">
+                        <span class="chip light"><i class="fa-solid fa-book"></i> ${esc(topic)}</span>
+                        <span class="chip light"><i class="fa-solid fa-stopwatch"></i> ${esc(fmt(T.summary, { g: room.grade, n: room.count, s: room.seconds }))}</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="label" id="cp-pcount"></div>
+                    <div class="players" id="cp-players"></div>
+                </div>
+                <div id="cp-lobby-action"></div>
+                <button class="btn btn-ghost" id="cp-leave">${esc(T.leave)}</button>`);
+            document.getElementById('cp-copy').onclick = async () => {
+                try { await navigator.clipboard.writeText(link); toast(T.copied); }
+                catch (e) { toast(link); }
+            };
+            const shareBtn = document.getElementById('cp-share');
+            if (shareBtn) shareBtn.onclick = () => navigator.share({ title: 'thelo', text: `${T.heroTitle} · ${code}`, url: link }).catch(() => {});
+            document.getElementById('cp-leave').onclick = () => backAction();
+            drawLobbyPlayers();
+        }
+        function drawLobbyPlayers() {
+            const list = document.getElementById('cp-players');
+            if (!list || !room) return;
+            document.getElementById('cp-pcount').textContent = fmt(T.players, { n: players.length });
+            // Only players who just arrived pop in; the list redraws on every update.
+            const seen = drawLobbyPlayers.seen || (drawLobbyPlayers.seen = new Set());
+            list.innerHTML = players.slice().sort((a, b) => a.joinedAt - b.joinedAt).map(p => `
+                <div class="player${seen.has(p.id) ? '' : ' new'}">
+                    ${avatarHTML(p).replace('</div>', p.id === room.hostId ? '<i class="fa-solid fa-crown crown"></i></div>' : '</div>')}
+                    <div class="nm">${esc(p.name)}${user && p.id === user.uid ? ` <span class="muted">(${esc(T.you)})</span>` : ''}</div>
+                </div>`).join('');
+            players.forEach(p => seen.add(p.id));
+            const action = document.getElementById('cp-lobby-action');
+            if (isHost()) {
+                if (!document.getElementById('cp-start')) {
+                    action.innerHTML = `<button class="btn btn-gold" id="cp-start"></button>`;
+                    document.getElementById('cp-start').onclick = async (e) => {
+                        e.currentTarget.disabled = true;
+                        try { await api('start', { code }); }
+                        catch (err) { toast(errorText(err)); e.currentTarget.disabled = false; }
+                    };
+                }
+                document.getElementById('cp-start').innerHTML = `<i class="fa-solid fa-play"></i> ${esc(players.length > 1 ? T.start : T.startAlone)}`;
+            } else {
+                action.innerHTML = `<div class="waiting">${esc(fmt(T.waitHost, { name: hostName() }))} <span class="dots"><span></span><span></span><span></span></span></div>`;
+            }
+        }
+
+        // --- countdown
+        function showCountdown() {
+            backAction = confirmLeaveGame;
+            screen(`<div class="center"><p class="label" style="font-size:1rem">${esc(T.getReady)}</p>
+                    <div class="count-num" id="cp-count">${Math.ceil(phase().left / 1000)}</div>
+                    <p class="muted" style="font-weight:700">${esc(room.unitTitle || fmt(T.everything, { g: room.grade }))}</p></div>`);
+            sfx.tick();
+        }
+        function confirmLeaveGame() {
+            const modal = document.getElementById('cp-modal');
+            document.getElementById('cp-modal-text').textContent = T.leaveGame;
+            document.getElementById('cp-modal-yes').textContent = T.leaveYes;
+            document.getElementById('cp-modal-no').textContent = T.stay;
+            document.getElementById('cp-modal-yes').onclick = () => { stopListening(); goHome(); };
+            document.getElementById('cp-modal-no').onclick = () => modal.classList.remove('show');
+            modal.classList.add('show');
+        }
+
+        // --- question
+        function topBar(i) {
+            const m = me();
+            const streak = m.streak || 0;
+            return `<div class="q-top">
+                    <span class="grow">${esc(fmt(T.question, { i: i + 1, n: room.count }))}</span>
+                    ${streak >= 2 ? `<span class="badge"><i class="fa-solid fa-fire"></i> ${streak}</span>` : ''}
+                    <span class="badge"><i class="fa-solid fa-bolt"></i> ${(m.score || 0).toLocaleString()}</span>
+                </div>`;
+        }
+        function showQuestion(i) {
+            backAction = confirmLeaveGame;
+            lastSecond = null;
+            const q = room.questions[i];
+            const done = !!mine[i];
+            screen(`${topBar(i)}
+                <div class="timer" id="cp-timer"><div></div></div>
+                <div class="card"><div class="q-text" id="cp-q"></div></div>
+                <div id="cp-answer"></div>
+                <div class="answered" id="cp-answered"></div>`);
+            renderRich(document.getElementById('cp-q'), q.q);
+            if (i === 0) sfx.go();
+            const box = document.getElementById('cp-answer');
+            if (done) {
+                box.innerHTML = `<div class="locked-note">${esc(T.sent)}</div>`;
+            } else if (q.type === 'mcq') {
+                box.innerHTML = `<div class="tiles">${q.c.map((_, k) => `<button class="tile" data-k="${k}" style="background:var(--tile-${k % 4})"><span class="k">${TILE_KEYS[k]}</span><span class="t"></span></button>`).join('')}</div>`;
+                box.querySelectorAll('.tile').forEach(b => {
+                    renderRich(b.querySelector('.t'), q.c[Number(b.dataset.k)]);
+                    b.onclick = () => {
+                        box.querySelector('.tiles').classList.add('locked');
+                        b.classList.add('picked');
+                        box.querySelectorAll('.tile').forEach(x => { x.disabled = true; });
+                        submit(i, { choice: Number(b.dataset.k) }, box);
+                    };
+                });
+            } else {
+                let typed = '';
+                const dec = LANG === 'hy' ? ',' : '.';
+                const keys = ['7', '8', '9', '⌫', '4', '5', '6', '−', '1', '2', '3', '/', '0', dec, '', ''];
+                box.innerHTML = `<div class="answer-row"><div class="answer-box empty" id="cp-box"></div>${q.u ? `<span class="unit">${esc(q.u)}</span>` : ''}</div>
+                    <div class="keypad">${keys.map(k => k ? `<button class="key${/[⌫−\/,.]/.test(k) ? ' op' : ''}" data-k="${esc(k)}">${esc(k)}</button>` : '<span></span>').join('')}</div>
+                    <button class="btn btn-primary" id="cp-send" disabled>${esc(T.send)}</button>`;
+                const out = document.getElementById('cp-box');
+                const send = document.getElementById('cp-send');
+                box.querySelectorAll('.key').forEach(b => {
+                    b.onclick = () => {
+                        const k = b.dataset.k;
+                        if (k === '⌫') typed = typed.slice(0, -1);
+                        else if (k === '−') typed = typed.startsWith('−') ? typed.slice(1) : '−' + typed;
+                        else if (typed.length < 12) typed += k;
+                        out.textContent = typed;
+                        out.classList.toggle('empty', !typed);
+                        send.disabled = !typed;
+                    };
+                });
+                send.onclick = () => {
+                    box.querySelectorAll('.key').forEach(b => { b.disabled = true; });
+                    send.disabled = true;
+                    submit(i, { value: typed }, box);
+                };
+            }
+            drawAnsweredCount(i);
+        }
+        async function submit(i, answer, box) {
+            buzz(20);
+            try {
+                const r = await api('answer', Object.assign({ code, index: i }, answer));
+                mine[i] = Object.assign(r, { choice: answer.choice });
+                if (phaseKey === `question${i}`) box.innerHTML = `<div class="locked-note">${esc(T.sent)}</div>`;
+            } catch (e) {
+                console.error('answer failed', e);
+                toast(errorText(e));
+            }
+        }
+        function drawAnsweredCount(i) {
+            const el = document.getElementById('cp-answered');
+            if (!el) return;
+            const n = players.filter(p => p.last && p.last.i === i).length;
+            el.textContent = fmt(T.answeredN, { a: n, n: players.length });
+        }
+
+        // --- reveal
+        async function showReveal(i) {
+            backAction = confirmLeaveGame;
+            const q = room.questions[i];
+            const r = mine[i];
+            let cls, title, extra = '';
+            if (r && r.correct) {
+                cls = 'right'; title = `<i class="fa-solid fa-circle-check"></i> ${esc(T.right)}`;
+                extra = `<div class="v-points">+${r.points}</div>${r.streak >= 2 ? `<div class="v-streak">${esc(fmt(T.streak, { n: r.streak }))}</div>` : ''}`;
+                sfx.right(); buzz([30, 40, 30]);
+            } else if (r && !r.late) {
+                cls = 'wrong'; title = `<i class="fa-solid fa-circle-xmark"></i> ${esc(T.wrong)}`;
+                sfx.wrong(); buzz(120);
+            } else {
+                cls = 'late'; title = `<i class="fa-solid fa-hourglass-end"></i> ${esc(T.late)}`;
+                sfx.wrong();
+            }
+            screen(`${topBar(i)}
+                <div class="verdict ${cls}"><div class="v-title">${title}</div>${extra}</div>
+                <div class="card">
+                    <div class="q-text" id="cp-q" style="font-size:1.05rem;margin-bottom:0.6rem"></div>
+                    <div id="cp-key"></div>
+                </div>
+                <div class="label">${esc(T.standings)}</div>
+                <div class="board" id="cp-board"></div>
+                <div class="next-in" id="cp-next"></div>`);
+            renderRich(document.getElementById('cp-q'), q.q);
+            drawBoard(i);
+            let answer = r && r.answer;
+            if (!answer) {
+                try { answer = revealed[i] || (revealed[i] = (await api('reveal', { code, index: i })).answer); }
+                catch (e) { console.warn('reveal', e); }
+            }
+            const keyEl = document.getElementById('cp-key');
+            if (!answer || !keyEl || phaseKey !== `reveal${i}`) return;
+            if (q.type === 'mcq') {
+                keyEl.innerHTML = `<div class="tiles">${q.c.map((_, k) => `<button class="tile ${k === answer.choice ? 'right' : (r && r.choice === k ? 'picked dim' : 'dim')}" disabled style="background:var(--tile-${k % 4});min-height:3.6rem"><span class="k">${TILE_KEYS[k]}</span><span class="t"></span></button>`).join('')}</div>`;
+                keyEl.querySelectorAll('.tile').forEach((b, k) => renderRich(b.querySelector('.t'), q.c[k]));
+            } else {
+                keyEl.innerHTML = `<div class="the-answer"></div>`;
+                keyEl.firstElementChild.textContent = fmt(T.answerWas, { a: `${numText(answer.value)}${answer.u ? ' ' + answer.u : ''}` });
+            }
+        }
+        function drawBoard(i) {
+            const el = document.getElementById('cp-board');
+            if (!el) return;
+            const rows = ranked();
+            const ranks = {};
+            rows.forEach((p, k) => { ranks[p.id] = k + 1; });
+            // Arrows compare with the standings as they were when this reveal began.
+            if (rankBaseFor !== i) { rankBase = lastRanks; rankBaseFor = i; }
+            lastRanks = ranks;
+            const myId = user && user.uid;
+            let shown = rows.slice(0, 5);
+            if (myId && !shown.some(p => p.id === myId)) shown = shown.slice(0, 4).concat(rows.filter(p => p.id === myId));
+            el.innerHTML = shown.map(p => {
+                const before = rankBase[p.id];
+                const mv = before && before !== ranks[p.id] ? (before > ranks[p.id] ? 'up' : 'down') : '';
+                return `<div class="rowp${p.id === myId ? ' me' : ''}">
+                    <span class="rk">${ranks[p.id]}</span>${avatarHTML(p, 'sm')}
+                    <span class="nm">${esc(p.name)}</span>
+                    <span class="mv ${mv}">${mv === 'up' ? '<i class="fa-solid fa-caret-up"></i>' : mv === 'down' ? '<i class="fa-solid fa-caret-down"></i>' : ''}</span>
+                    <span class="sc">${(p.score || 0).toLocaleString()}</span></div>`;
+            }).join('');
+        }
+
+        // --- final
+        let finalDrawn = false;
+        function showFinal() {
+            backAction = () => { stopListening(); goHome(); };
+            if (room.status !== 'finished' || !room.results) {
+                finalDrawn = false;
+                screen(`<div class="center"><div class="spinner"></div><p class="muted" style="font-weight:700">${esc(T.counting)}</p></div>`);
+                return;
+            }
+            const first = !finalDrawn;
+            finalDrawn = true;
+            const res = room.results;
+            const myId = user && user.uid;
+            const my = res.find(r => r.uid === myId);
+            const podium = [res[1], res[0], res[2]];
+            const title = my && my.rank === 1 && res.length > 1 ? T.youWon : fmt(T.winner, { name: res[0].name });
+            screen(`
+                <h1 class="big" style="text-align:center;margin:0.3rem 0 0.2rem">${esc(T.over)}</h1>
+                <p class="body" style="text-align:center;font-weight:800">${esc(title)}</p>
+                <div class="podium">${podium.map((p, k) => p ? `
+                    <div class="pl p${[2, 1, 3][k]}">
+                        ${avatarHTML(p).replace('</div>', [2, 1, 3][k] === 1 ? '<i class="fa-solid fa-crown crown"></i></div>' : '</div>')}
+                        <div class="nm">${esc(p.name)}</div><div class="sc">${p.score.toLocaleString()}</div>
+                        <div class="step">${[2, 1, 3][k]}</div>
+                    </div>` : '<div class="pl"></div>').join('')}
+                </div>
+                ${my ? `<div class="card mine">
+                    <div><b>#${my.rank}</b><span>${esc(T.yourPlace)}</span></div>
+                    <div><b>${my.score.toLocaleString()}</b><span>${esc(T.score)}</span></div>
+                    <div><b>${my.correct}/${room.count}</b><span>${esc(T.correct)}</span></div>
+                    <div><b>⭐ ${my.stars}</b><span>${esc(T.stars)}</span></div>
+                </div>` : ''}
+                <div class="board" style="margin-bottom:1rem">${res.map(p => `
+                    <div class="rowp${p.uid === myId ? ' me' : ''}"><span class="rk">${p.rank}</span>${avatarHTML(p, 'sm')}
+                    <span class="nm">${esc(p.name)}</span><span class="sc">${p.score.toLocaleString()}</span></div>`).join('')}
+                </div>
+                <div id="cp-again"></div>
+                <button class="btn btn-ghost" id="cp-home">${esc(T.home)}</button>`);
+            document.getElementById('cp-home').onclick = backAction;
+            const again = document.getElementById('cp-again');
+            if (isHost()) {
+                again.innerHTML = `<button class="btn btn-gold" id="cp-rematch"><i class="fa-solid fa-rotate-right"></i> ${esc(T.playAgain)}</button>`;
+                document.getElementById('cp-rematch').onclick = async (e) => {
+                    e.currentTarget.disabled = true;
+                    try { enterRoom((await api('rematch', { code })).code); }
+                    catch (err) { toast(errorText(err)); e.currentTarget.disabled = false; }
+                };
+            } else if (room.rematch) {
+                again.innerHTML = `<button class="btn btn-gold" id="cp-rejoin"><i class="fa-solid fa-rotate-right"></i> ${esc(T.joinRematch)}</button>`;
+                document.getElementById('cp-rejoin').onclick = () => joinRoom(room.rematch);
+            } else {
+                again.innerHTML = `<div class="waiting">${esc(fmt(T.waitRematch, { name: hostName() }))} <span class="dots"><span></span><span></span><span></span></span></div>`;
+            }
+            if (first) {
+                sfx.fanfare();
+                if (my && my.rank <= 3) confetti();
+            }
+        }
+
+        // ------------------------------------------------------------------ start
+        if (!auth) { showMessage(T.errGeneric); return; }
+        showLoading();
+        auth.onAuthStateChanged(async (u) => {
+            if (!u) {
+                try { if (typeof auth.authStateReady === 'function') await auth.authStateReady(); } catch (e) { /* ignore */ }
+                if (!auth.currentUser) showMessage(T.errSignIn);
+                return;
+            }
+            if (user && user.uid === u.uid) return;
+            user = u;
+            try {
+                const snap = await db.collection('thelo-students').doc(u.uid).get();
+                profile = snap.exists ? snap.data() : {};
+            } catch (e) { console.warn('profile', e); }
+            const prefLang = profile.preferences && profile.preferences.language;
+            if (!params.get('lang') && (prefLang === 'en' || prefLang === 'hy')) setLang(prefLang);
+            const fromLink = (params.get('code') || '').trim().toUpperCase();
+            if (fromLink) joinRoom(fromLink);
+            else showLanding();
+        });
+    })();
+    </script>
+<script src="/assets/thelo-web.js"></script>
+</body>
+</html>
