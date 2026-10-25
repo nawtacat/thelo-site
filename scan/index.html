@@ -1049,7 +1049,21 @@ function awardPoints(n) {
     db.collection('thelo-students').doc(u.uid).set({
         points: firebase.firestore.FieldValue.increment(n),
         pointsAt: firebase.firestore.FieldValue.serverTimestamp()   // see firestore.rules: starsOk
-    }, { merge: true }).catch(e => console.warn('points update failed', e));
+    }, { merge: true }).then(joinWeeklyLeague).catch(e => console.warn('points update failed', e));
+}
+
+// Weekly leagues (league function, thelo-backend/functions/league.js): earning stars puts
+// the student in this week's league of their grade. Asked once a week per device.
+function joinWeeklyLeague() {
+    const user = firebase.auth().currentUser;
+    if (!user || user.isAnonymous) return;
+    const day = Math.floor((Date.now() + 4 * 3600 * 1000) / 86400000);   // Armenia time
+    const week = String(day - ((day + 3) % 7));                           // its Monday
+    const key = 'theloLeague:' + user.uid;
+    try { if (localStorage.getItem(key) === week) return; } catch (e) { /* private mode */ }
+    firebase.functions().httpsCallable('league')({ action: 'join' })
+        .then(r => { if (r.data && r.data.joined) { try { localStorage.setItem(key, week); } catch (e) { /* private mode */ } } })
+        .catch(e => console.warn('league join failed', e));
 }
 
 function logEvent(type, extra = {}) {

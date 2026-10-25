@@ -23,6 +23,10 @@
          * (thelo-backend/functions/compete.js); this page only reads
          * compete_rooms/{code} and its players, and works out what to show from the
          * room's fixed timeline and the server clock.
+         *
+         * The League tab shows the student's weekly league (the `league` function,
+         * thelo-backend/functions/league.js): students of the same grade, ranked by the
+         * stars earned this week; the top move up a level on Sunday night, the bottom down.
          */
         :root {
             --thelo-blue: #2563EB;
@@ -149,7 +153,7 @@
             font-weight: 800; font-size: 1.4rem; color: var(--white); background: var(--thelo-blue); border: 3px solid var(--white);
             box-shadow: 0 4px 12px rgba(0,0,0,0.12);
         }
-        .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+        .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--white); }   /* covers the initial underneath */
         .avatar .crown { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); color: var(--gold); font-size: 1rem; }
         .avatar.sm { width: 34px; height: 34px; font-size: 0.95rem; border-width: 2px; }
         .waiting { display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: 700; color: var(--slate-500); padding: 0.9rem; }
@@ -244,6 +248,35 @@
         .mine b { display: block; font-size: 1.5rem; font-weight: 800; }
         .mine span { font-size: 0.78rem; font-weight: 700; color: var(--slate-500); text-transform: uppercase; }
 
+        /* ---- weekly league */
+        .tabs { display: flex; gap: 4px; background: var(--white); border: 1px solid var(--grid-color); border-radius: 999px; padding: 4px; margin-bottom: 1rem; }
+        .tabs button {
+            flex: 1; font: inherit; font-weight: 800; font-size: 0.95rem; padding: 0.6rem 0.4rem; border: none; border-radius: 999px;
+            background: none; color: var(--slate-500); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.45rem;
+        }
+        .tabs button.on { background: var(--thelo-blue); color: var(--white); }
+        .lg-head { display: flex; align-items: center; gap: 0.9rem; }
+        .lg-head h1.big { margin-bottom: 0.15rem; }
+        .lg-badge { width: 64px; height: 64px; flex-shrink: 0; }
+        .lg-sub { font-weight: 700; color: var(--slate-500); font-size: 0.88rem; line-height: 1.4; }
+        .ladder { display: flex; justify-content: space-between; gap: 2px; padding: 0.35rem 0.15rem 0.2rem; margin: 0.9rem 0 0; }
+        .ladder svg { width: clamp(20px, 7vw, 30px); height: clamp(20px, 7vw, 30px); flex-shrink: 1; min-width: 0; opacity: 0.28; filter: grayscale(0.7); }
+        .ladder svg.done { opacity: 0.75; filter: none; }
+        .ladder svg.on { opacity: 1; filter: none; transform: scale(1.18); }
+        .zone { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; margin: 0.2rem 0; }
+        .zone::before, .zone::after { content: ''; flex: 1; height: 2px; border-radius: 2px; background: currentColor; opacity: 0.6; }
+        .zone.up { color: var(--green); }
+        .zone.down { color: var(--red); }
+        .board .rowp.upz .rk { color: var(--green); }
+        .board .rowp.downz .rk { color: var(--red); }
+        .board .sc .fa-star { color: var(--gold); font-size: 0.85em; }
+        .lg-last { display: flex; gap: 0.7rem; align-items: center; border-radius: 1rem; padding: 0.85rem 1rem; margin-bottom: 1rem; font-weight: 700; line-height: 1.4; }
+        .lg-last svg { width: 40px; height: 40px; flex-shrink: 0; }
+        .lg-last.up { background: var(--green-bg); color: #14532D; }
+        .lg-last.down { background: var(--red-bg); color: #7F1D1D; }
+        .lg-last.stay { background: #EFF6FF; color: #1E3A8A; }
+        .lg-last button { margin-left: auto; background: none; border: none; color: inherit; font-size: 1.1rem; cursor: pointer; opacity: 0.6; }
+
         #cp-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
         #cp-toast {
             position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 1.5rem); transform: translateX(-50%) translateY(20px);
@@ -319,6 +352,25 @@
                 errFull: 'That room is full.', errQuestions: 'This topic does not have enough questions yet. Pick another one.',
                 errSignIn: 'Please sign in from the home screen first.', errGeneric: 'Something went wrong. Check your connection and try again.',
                 errCode: 'A room code has 5 letters and numbers.',
+                tabLeague: 'League', tabBattle: 'Battle',
+                tiers: ['Point', 'Segment', 'Triangle', 'Square', 'Pentagon', 'Circle', 'Cube', 'Sphere', 'Golden ratio', 'Infinity'],
+                leagueName: '{t} League', leagueOf: 'Grade {g} · {n} students', leagueOf1: 'Grade {g}',
+                endsIn: 'Ends in {d}', dh: '{d} d {h} h', hm: '{h} h {m} min',
+                upZone: 'Promotion zone', downZone: 'Demotion zone',
+                joinTitle: "Join this week's league",
+                joinBody: 'Earn stars in a lesson, in Scan practice or in a battle, and you join the {t} League of grade {g}: up to 30 students, ranked by the stars they earn this week.',
+                toLessons: 'Go to my lessons',
+                hiddenTitle: 'You are hidden from leagues',
+                hiddenBody: 'Turn leagues back on in Profile → Weekly leagues to compete each week.',
+                alone: 'Others of your grade join as they earn stars this week.',
+                lgHow1: 'Each week you compete with up to 30 students of your grade.',
+                lgHow2: 'Stars from lessons, Scan practice and battles all count.',
+                lgHow3: 'On Sunday at midnight the top {up} move up a league and the bottom {down} move down.',
+                lgHow3top: 'On Sunday at midnight the bottom {down} move down. This is the highest league!',
+                lgHow3low: 'On Sunday at midnight the top {up} move up a league.',
+                lastUp: 'Last week: #{r} of {n}. You are now in the {t} League! 🎉',
+                lastDown: 'Last week: #{r} of {n}. You are in the {t} League now. Climb back up this week!',
+                lastStay: 'Last week: #{r} of {n} in the {t} League.',
             },
             hy: {
                 title: 'Մրցույթ',
@@ -350,6 +402,25 @@
                 errFull: 'Սենյակը լցված է։', errQuestions: 'Այս թեմայում դեռ բավարար հարցեր չկան։ Ընտրիր ուրիշ թեմա։',
                 errSignIn: 'Նախ մուտք գործիր գլխավոր էջից։', errGeneric: 'Ինչ-որ բան չստացվեց։ Ստուգիր կապը և փորձիր նորից։',
                 errCode: 'Սենյակի կոդը 5 տառ և թիվ է։',
+                tabLeague: 'Լիգա', tabBattle: 'Մրցամարտ',
+                tiers: ['Կետ', 'Հատված', 'Եռանկյուն', 'Քառակուսի', 'Հնգանկյուն', 'Շրջան', 'Խորանարդ', 'Գունդ', 'Ոսկե հատում', 'Անվերջություն'],
+                leagueName: '«{t}» լիգա', leagueOf: '{g}-րդ դասարան · {n} աշակերտ', leagueOf1: '{g}-րդ դասարան',
+                endsIn: 'Ավարտ՝ {d} հետո', dh: '{d} օր {h} ժ', hm: '{h} ժ {m} ր',
+                upZone: 'Բարձրացման գոտի', downZone: 'Իջեցման գոտի',
+                joinTitle: 'Միացիր այս շաբաթվա լիգային',
+                joinBody: 'Վաստակիր աստղեր դասում, «Սկան»-ի վարժություններում կամ մրցամարտում, և կմիանաս {g}-րդ դասարանի «{t}» լիգային՝ մինչև 30 աշակերտ, որոնք դասավորվում են այս շաբաթ վաստակած աստղերով։',
+                toLessons: 'Դեպի դասերս',
+                hiddenTitle: 'Դու թաքնված ես լիգաներից',
+                hiddenBody: 'Միացրու լիգաները Պրոֆիլ → Շաբաթական լիգաներ բաժնում՝ ամեն շաբաթ մրցելու համար։',
+                alone: 'Քո դասարանի մյուս աշակերտները կմիանան, երբ այս շաբաթ աստղեր վաստակեն։',
+                lgHow1: 'Ամեն շաբաթ մրցում ես քո դասարանի մինչև 30 աշակերտի հետ։',
+                lgHow2: 'Հաշվվում են դասերի, «Սկան»-ի վարժությունների և մրցամարտերի աստղերը։',
+                lgHow3: 'Կիրակի կեսգիշերին առաջին {up}-ը բարձրանում են մեկ լիգա, իսկ վերջին {down}-ը՝ իջնում։',
+                lgHow3top: 'Կիրակի կեսգիշերին վերջին {down}-ը իջնում են։ Սա ամենաբարձր լիգան է։',
+                lgHow3low: 'Կիրակի կեսգիշերին առաջին {up}-ը բարձրանում են մեկ լիգա։',
+                lastUp: 'Անցյալ շաբաթ՝ #{r} / {n}։ Հիմա դու «{t}» լիգայում ես 🎉',
+                lastDown: 'Անցյալ շաբաթ՝ #{r} / {n}։ Հիմա դու «{t}» լիգայում ես։ Այս շաբաթ կարող ես վերադառնալ։',
+                lastStay: 'Անցյալ շաբաթ՝ #{r} / {n} «{t}» լիգայում։',
             },
             ru: {
                 title: 'Турнир',
@@ -381,6 +452,25 @@
                 errFull: 'Комната заполнена.', errQuestions: 'В этой теме пока мало вопросов. Выбери другую.',
                 errSignIn: 'Сначала войди в аккаунт на главной.', errGeneric: 'Что-то пошло не так. Проверь подключение и попробуй снова.',
                 errCode: 'Код комнаты — 5 букв и цифр.',
+                tabLeague: 'Лига', tabBattle: 'Битва',
+                tiers: ['Точка', 'Отрезок', 'Треугольник', 'Квадрат', 'Пятиугольник', 'Круг', 'Куб', 'Шар', 'Золотое сечение', 'Бесконечность'],
+                leagueName: 'Лига «{t}»', leagueOf: '{g} класс · учеников: {n}', leagueOf1: '{g} класс',
+                endsIn: 'Закончится через {d}', dh: '{d} д {h} ч', hm: '{h} ч {m} мин',
+                upZone: 'Зона повышения', downZone: 'Зона понижения',
+                joinTitle: 'Вступи в лигу этой недели',
+                joinBody: 'Заработай звёзды в уроке, в тренировке «Скана» или в битве, и ты попадёшь в лигу «{t}» {g} класса: до 30 учеников, которых сравнивают по звёздам за эту неделю.',
+                toLessons: 'К моим урокам',
+                hiddenTitle: 'Ты скрыт(а) из лиг',
+                hiddenBody: 'Включи лиги в Профиль → Недельные лиги, чтобы соревноваться каждую неделю.',
+                alone: 'Другие ученики твоего класса присоединятся, когда заработают звёзды на этой неделе.',
+                lgHow1: 'Каждую неделю ты соревнуешься с учениками своего класса (до 30 человек).',
+                lgHow2: 'Считаются звёзды за уроки, тренировки «Скана» и битвы.',
+                lgHow3: 'В воскресенье в полночь первые {up} переходят в лигу выше, а последние {down} — в лигу ниже.',
+                lgHow3top: 'В воскресенье в полночь последние {down} переходят в лигу ниже. Это самая высокая лига!',
+                lgHow3low: 'В воскресенье в полночь первые {up} переходят в лигу выше.',
+                lastUp: 'Прошлая неделя: #{r} из {n}. Теперь ты в лиге «{t}»! 🎉',
+                lastDown: 'Прошлая неделя: #{r} из {n}. Теперь ты в лиге «{t}». На этой неделе можно вернуться!',
+                lastStay: 'Прошлая неделя: #{r} из {n} в лиге «{t}».',
             },
         };
         const knownLang = (l) => (TEXT[l] ? l : 'hy');
@@ -566,13 +656,32 @@
             screen(`<div class="center"><div class="spinner"></div><p class="muted" style="font-weight:700">${esc(text)}</p></div>`);
         }
 
-        // --- landing
+        // --- landing: League (weekly) and Battle (live rooms)
+        let landingTab = (() => { try { return localStorage.getItem('theloCompeteTab') || 'league'; } catch (e) { return 'league'; } })();
         function showLanding(error = '') {
             stopListening();
             room = null; code = null; phaseKey = '';
             backAction = goHome;
-            const st = profile.competeStats || {};
+            if (error) landingTab = 'battle';
             screen(`
+                <div class="tabs" role="tablist">
+                    <button data-tab="league" class="${landingTab === 'league' ? 'on' : ''}"><i class="fa-solid fa-ranking-star"></i> ${esc(T.tabLeague)}</button>
+                    <button data-tab="battle" class="${landingTab === 'battle' ? 'on' : ''}"><i class="fa-solid fa-bolt"></i> ${esc(T.tabBattle)}</button>
+                </div>
+                <div id="cp-tab"></div>`);
+            $main.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+                if (b.dataset.tab === landingTab) return;
+                landingTab = b.dataset.tab;
+                try { localStorage.setItem('theloCompeteTab', landingTab); } catch (e) { /* private mode */ }
+                showLanding();
+            });
+            if (landingTab === 'league') showLeague();
+            else showBattle(error);
+        }
+
+        function showBattle(error = '') {
+            const st = profile.competeStats || {};
+            document.getElementById('cp-tab').innerHTML = `
                 <div class="card hero">
                     <i class="fa-solid fa-trophy trophy"></i>
                     <h1 class="big">${esc(T.heroTitle)}</h1>
@@ -594,7 +703,7 @@
                         <li><i class="fa-solid fa-gauge-high"></i> ${esc(T.how3)}</li>
                         <li><i class="fa-solid fa-star"></i> ${esc(T.how4)}</li>
                     </ul>
-                </div>`);
+                </div>`;
             const input = document.getElementById('cp-code');
             const joinBtn = document.getElementById('cp-join');
             input.oninput = () => {
@@ -604,6 +713,114 @@
             input.onkeydown = (e) => { if (e.key === 'Enter' && !joinBtn.disabled) joinBtn.click(); };
             joinBtn.onclick = () => joinRoom(input.value);
             document.getElementById('cp-create').onclick = showCreate;
+        }
+
+        // --- weekly league
+        const TIER_COLORS = ['#94A3B8', '#64748B', '#C2773B', '#16A34A', '#0D9488', '#2563EB', '#4F46E5', '#7C3AED', '#D97706', '#E11D48'];
+        const TIER_SHAPES = [
+            '<circle cx="24" cy="24" r="5.5" fill="#fff"/>',
+            '<path d="M14 34 34 14" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="14" cy="34" r="3.5" fill="#fff"/><circle cx="34" cy="14" r="3.5" fill="#fff"/>',
+            '<path d="M24 11 37.5 35H10.5Z" fill="#fff"/>',
+            '<rect x="13" y="13" width="22" height="22" rx="2" fill="#fff"/>',
+            '<path d="M24 11.5 36.4 20.5 31.7 35.1H16.3L11.6 20.5Z" fill="#fff"/>',
+            '<circle cx="24" cy="24" r="11.5" fill="none" stroke="#fff" stroke-width="3.5"/>',
+            '<path d="M24 10.5 36 17.25V30.75L24 37.5 12 30.75V17.25Z M24 24V37.5 M24 24 12 17.25 M24 24 36 17.25" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/>',
+            '<circle cx="24" cy="24" r="12" fill="none" stroke="#fff" stroke-width="2.8"/><ellipse cx="24" cy="24" rx="12" ry="4.5" fill="none" stroke="#fff" stroke-width="2.2"/>',
+            '<text x="24" y="32.5" text-anchor="middle" font-size="25" font-weight="800" fill="#fff" font-family="serif">φ</text>',
+            '<text x="24" y="33" text-anchor="middle" font-size="30" font-weight="800" fill="#fff" font-family="sans-serif">∞</text>',
+        ];
+        const tierBadge = (t, cls = '') => `<svg class="${cls}" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="23" fill="${TIER_COLORS[t] || TIER_COLORS[0]}"/>` +
+            `<circle cx="24" cy="24" r="20.5" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>${TIER_SHAPES[t] || ''}</svg>`;
+        const leagueName = (t) => fmt(T.leagueName, { t: T.tiers[t] || T.tiers[0] });
+        function timeLeft(ms) {
+            const h = Math.max(0, Math.floor(ms / 3600000));
+            return h >= 24 ? fmt(T.dh, { d: Math.floor(h / 24), h: h % 24 }) : fmt(T.hm, { h, m: Math.max(0, Math.floor(ms / 60000) % 60) });
+        }
+
+        async function showLeague() {
+            const box = document.getElementById('cp-tab');
+            box.innerHTML = '<div class="center" style="padding:2.5rem 0"><div class="spinner"></div></div>';
+            let b;
+            const asked = Date.now();
+            try {
+                b = (await functions.httpsCallable('league')({ action: 'board' })).data || {};
+            } catch (e) {
+                console.warn('league board failed', e);
+                if (document.getElementById('cp-tab') === box) box.innerHTML = `<div class="error">${esc(T.errGeneric)}</div>`;
+                return;
+            }
+            if (landingTab !== 'league' || document.getElementById('cp-tab') !== box) return;
+            const tier = Number(b.tier) || 0;
+            const left = (b.endsAt || 0) - (b.now || asked) - (Date.now() - asked);
+
+            // last week's result, once per week on this device
+            let lastHTML = '';
+            const L = b.last;
+            const prevWeek = b.week ? new Date(Date.parse(b.week) - 7 * 86400000).toISOString().slice(0, 10) : '';
+            const seenKey = 'theloLeagueSeen:' + (user ? user.uid : '');
+            let seen = '';
+            try { seen = localStorage.getItem(seenKey) || ''; } catch (e) { /* private mode */ }
+            if (L && L.week === prevWeek && seen !== L.week) {
+                const msg = fmt(L.moved === 'up' ? T.lastUp : L.moved === 'down' ? T.lastDown : T.lastStay, { r: L.rank, n: L.of, t: T.tiers[L.newTier] || '' });
+                lastHTML = `<div class="lg-last ${esc(L.moved)}">${tierBadge(L.newTier)}<span>${esc(msg)}</span><button id="cp-last-x" aria-label="OK">✕</button></div>`;
+            }
+
+            const ladder = T.tiers.map((_, i) => tierBadge(i, i === tier ? 'on' : i < tier ? 'done' : '')).join('');
+            const head = `
+                ${lastHTML}
+                <div class="card">
+                    <div class="lg-head">
+                        ${tierBadge(tier, 'lg-badge')}
+                        <div>
+                            <h1 class="big">${esc(leagueName(tier))}</h1>
+                            <div class="lg-sub">${esc(b.joined && b.size > 1 ? fmt(T.leagueOf, { g: b.grade, n: b.size }) : fmt(T.leagueOf1, { g: b.grade }))}</div>
+                            <div class="lg-sub"><i class="fa-regular fa-clock"></i> ${esc(fmt(T.endsIn, { d: timeLeft(left) }))}</div>
+                        </div>
+                    </div>
+                    <div class="ladder">${ladder}</div>
+                </div>`;
+            const up = b.up || 0, down = b.down || 0;
+            const rule = tier >= T.tiers.length - 1 ? T.lgHow3top : tier === 0 ? T.lgHow3low : T.lgHow3;
+            const how = `
+                <div class="card">
+                    <ul class="how">
+                        <li><i class="fa-solid fa-users"></i> ${esc(T.lgHow1)}</li>
+                        <li><i class="fa-solid fa-star"></i> ${esc(T.lgHow2)}</li>
+                        <li><i class="fa-solid fa-arrow-up-wide-short"></i> ${esc(fmt(rule, { up: up || 7, down: down || 5 }))}</li>
+                    </ul>
+                </div>`;
+
+            let body;
+            if (b.hidden) {
+                body = `<div class="card"><h1 class="big" style="font-size:1.15rem">${esc(T.hiddenTitle)}</h1><p class="body">${esc(T.hiddenBody)}</p></div>`;
+            } else if (!b.joined) {
+                body = `<div class="card"><h1 class="big" style="font-size:1.15rem">${esc(T.joinTitle)}</h1>
+                        <p class="body" style="margin-bottom:1rem">${esc(fmt(T.joinBody, { t: T.tiers[tier], g: b.grade }))}</p>
+                        <button class="btn btn-primary" id="cp-to-lessons"><i class="fa-solid fa-book-open"></i> ${esc(T.toLessons)}</button></div>`;
+            } else {
+                const rows = b.rows || [];
+                const n = rows.length;
+                let list = '';
+                rows.forEach((r, i) => {
+                    const zone = i < up ? 'upz' : i >= n - down ? 'downz' : '';
+                    if (down && i === n - down && i > 0) list += `<div class="zone down">${esc(T.downZone)}</div>`;
+                    list += `<div class="rowp ${zone} ${r.me ? 'me' : ''}">
+                            <span class="rk">${r.rank}</span>${avatarHTML(r, 'sm')}
+                            <span class="nm">${esc(r.name || '…')}${r.me ? ` <span class="muted">(${esc(T.you)})</span>` : ''}</span>
+                            <span class="sc">${r.xp} <i class="fa-solid fa-star"></i></span></div>`;
+                    if (up && i === up - 1 && i < n - 1) list += `<div class="zone up">${esc(T.upZone)}</div>`;
+                });
+                body = `<div class="board">${list}</div>${n === 1 ? `<p class="next-in">${esc(T.alone)}</p>` : ''}<div style="height:1rem"></div>`;
+            }
+            box.innerHTML = head + body + how;
+            const x = document.getElementById('cp-last-x');
+            if (x) x.onclick = () => { try { localStorage.setItem(seenKey, L.week); } catch (e) { /* private mode */ } x.parentElement.remove(); };
+            if (lastHTML && L.moved === 'up' && typeof confetti === 'function') confetti();
+            const toLessons = document.getElementById('cp-to-lessons');
+            if (toLessons) toLessons.onclick = goHome;
+            // far down the list: bring the student's own row into view
+            const mine = box.querySelector('.rowp.me');
+            if (mine && mine.getBoundingClientRect().top > window.innerHeight * 1.2) mine.scrollIntoView({ block: 'center' });
         }
 
         // --- create

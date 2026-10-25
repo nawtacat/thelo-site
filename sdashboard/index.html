@@ -236,6 +236,10 @@
         .compete-card .cc-text { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
         .compete-card .cc-text b { font-size: 1.02rem; font-weight: 800; }
         .compete-card .cc-text span { font-size: 0.82rem; opacity: 0.9; line-height: 1.35; }
+        .compete-card .cc-text .cc-league { display: inline-flex; align-items: center; gap: 0.35rem; margin-top: 0.3rem; font-weight: 800; opacity: 1;
+            background: rgba(255,255,255,0.18); border-radius: 999px; padding: 0.2rem 0.6rem 0.2rem 0.25rem; align-self: flex-start; }
+        .compete-card .cc-league:empty { display: none; }
+        .compete-card .cc-league svg { width: 20px; height: 20px; flex-shrink: 0; }
         .compete-card .cc-go { opacity: 0.8; }
         .window-card-hero {
             background: var(--white); border: 1px solid var(--grid-color); border-radius: 0.75rem;
@@ -764,7 +768,7 @@
 
         <a href="/compete/" class="compete-card">
             <span class="cc-icon"><i class="fa-solid fa-trophy"></i></span>
-            <span class="cc-text"><b data-i18n="competeTitle">Compete with friends</b><span data-i18n="competeDesc">Live maths battles: same questions, same moment.</span></span>
+            <span class="cc-text"><b data-i18n="competeTitle">Leagues and battles</b><span data-i18n="competeDesc">Climb your grade's weekly league, or battle friends live.</span><span class="cc-league" id="h-league"></span></span>
             <i class="fa-solid fa-chevron-right cc-go"></i>
         </a>
 
@@ -902,6 +906,16 @@
                 </div>
                 <div class="seg" id="p-goal">
                     <button data-v="0" data-st="goalOff">Off</button><button data-v="1">1</button><button data-v="3">3</button><button data-v="5">5</button>
+                </div>
+            </div>
+
+            <div class="settings-item">
+                <div class="settings-item-content">
+                    <p class="settings-item-title" data-st="leagueTitle">Weekly leagues</p>
+                    <p class="settings-item-description" data-st="leagueDesc">Compete each week with students of your grade. They see your first name, picture and stars.</p>
+                </div>
+                <div class="settings-item-action">
+                    <button id="p-league-toggle" class="thelo-btn-secondary"></button>
                 </div>
             </div>
 
@@ -1267,35 +1281,6 @@
     const defaultStream = (grade) => HIGH_SCHOOL_GRADES.includes(String(grade)) ? 'gen' : null;
     let isSigningUp = false;
 
-    async function syncStudentToGroup(groupName) {
-        // NOTE: these were 'erikkhanoya11@gmail.com' (missing the "n") and
-        // 'AstghikArshakyan@shirakatsy.am' (capitalised). Firestore string equality is
-        // exact and case-sensitive, so BOTH lookups matched nothing and every student
-        // was written with groupId: null -- which then broke isMemberOfGroup(),
-        // bulletin posts, and tutor routing in lesson.html.
-        // Grades 5-12 have no per-grade owner, so matching is by groupName alone.
-        // Kept as an optional override: add 'grade': 'owner@email' here and that
-        // group document will be preferred when several share a groupName.
-        const teacherEmails = {};
-        try {
-            // groupName is the reliable key; match on it first so a wrong or changed
-            // owner email can no longer silently orphan every student in the group.
-            const byName = await getDocs(query(collection(db, "groups"), where("groupName", "==", groupName)));
-            if (!byName.empty) {
-                const email = (teacherEmails[groupName] || '').toLowerCase();
-                const preferred = byName.docs.find(d =>
-                    ((d.data().ownerEmail || '').toLowerCase() === email)
-                );
-                if (!preferred) {
-                    console.warn(`Group "${groupName}" found, but no document owned by ${email || '(unmapped)'}. Using ${byName.docs[0].id}. Check the ownerEmail field on that groups document.`);
-                }
-                return (preferred || byName.docs[0]).id;
-            }
-            console.warn(`No group document found with groupName == "${groupName}".`);
-        } catch (e) { console.error("Error finding group:", e); }
-        return null;
-    }
-
     const ui = {
         splash: document.getElementById('view-splash'),
         hangar: document.getElementById('view-hangar'),
@@ -1363,6 +1348,7 @@
         updatePanToggleUI();
         if (auth.currentUser) updateVerifyBanner(auth.currentUser);
         applySettingsText();
+        if (typeof refreshLeagueLine === 'function' && auth.currentUser) refreshLeagueLine();
         state.role = 'student';
         // Advance wizard only when language is chosen from wizard cards.
         if (el && typeof el.closest === 'function' && el.closest('#w-step-1')) {
@@ -1463,9 +1449,9 @@ ${STREAM_LABELS[s][lang]}`;
 
     function updateProfileText(lang) {
         const t = {
-            en: { settings: "Settings", pwT: "Password", pwD: "Update your password.", langT: "Language", curr: "Current:", log: "Logout", upNext: "Up Next", coursePlan: "Course Plan", welcome: "Welcome back,", navHangar: "Home", navCourses: "Courses", navScan: "Scan", navCompete: "Compete", navProfile: "Profile", competeTitle: "Compete with friends", competeDesc: "Live maths battles: same questions, same moment.", avatarTitle: "Choose Avatar", cancelBtn: "Cancel", saveBtn: "Save", continueBtn: "Continue", changeBtn: "Change", logoutBtn: "Logout", assistivePanTitle: "Assistive Panning", assistivePanDesc: "Automatically shifts the canvas as you write.", turnOn: "Turn On", turnOff: "Turn Off", deleteAccountTitle: "Delete Account", deleteAccountBtn: "Delete", deleteAccountDesc: "Permanently delete your account.", deleteConfirmMsg: "Are you sure you want to delete your account? This action cannot be undone.", tutorialTitle: "Tutorial", tutorialDesc: "See how thelo works, step by step.", tutorialBtn: "Start Tutorial" },
-            hy: { settings: "Կարգավորումներ", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ,", navHangar: "Տուն", navCourses: "Դասընթաց", navScan: "Սկան", navCompete: "Մրցույթ", navProfile: "Պրոֆիլ", competeTitle: "Մրցիր ընկերներիդ հետ", competeDesc: "Կենդանի մաթեմատիկական մրցույթ՝ նույն հարցերը, նույն պահին։", avatarTitle: "Ընտրեք Նկար", cancelBtn: "Չեղարկել", saveBtn: "Պահպանել", continueBtn: "Շարունակել", changeBtn: "Փոխել", logoutBtn: "Ելք", assistivePanTitle: "Օգնող ոլորում", assistivePanDesc: "Գրելիս կտավը ավտոմատ տեղաշարժվում է։", turnOn: "Միացնել", turnOff: "Անջատել", deleteAccountTitle: "Ջնջել հաշիվը", deleteAccountBtn: "Ջնջել", deleteAccountDesc: "Մշտապես ջնջեք ձեր հաշիվը:", deleteConfirmMsg: "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել ձեր հաշիվը: Այս գործողությունը հնարավոր չէ չեղարկել:", tutorialTitle: "Ուղեցույց", tutorialDesc: "Տես, թե ինչպես է աշխատում thelo-ն՝ քայլ առ քայլ։", tutorialBtn: "Սկսել ուղեցույցը" },
-            ru: { settings: "Настройки", pwT: "Пароль", pwD: "Измени свой пароль.", langT: "Язык", curr: "Сейчас:", log: "Выйти", upNext: "Дальше", coursePlan: "План курса", welcome: "С возвращением,", navHangar: "Главная", navCourses: "Курсы", navScan: "Скан", navCompete: "Турнир", navProfile: "Профиль", competeTitle: "Соревнуйся с друзьями", competeDesc: "Математические битвы вживую: одни и те же вопросы в одно и то же время.", avatarTitle: "Выбери аватар", cancelBtn: "Отмена", saveBtn: "Сохранить", continueBtn: "Продолжить", changeBtn: "Изменить", logoutBtn: "Выйти", assistivePanTitle: "Автопрокрутка", assistivePanDesc: "Доска сама сдвигается, пока ты пишешь.", turnOn: "Включить", turnOff: "Выключить", deleteAccountTitle: "Удалить аккаунт", deleteAccountBtn: "Удалить", deleteAccountDesc: "Удалить аккаунт навсегда.", deleteConfirmMsg: "Ты точно хочешь удалить аккаунт? Это действие нельзя отменить.", tutorialTitle: "Обучение", tutorialDesc: "Посмотри, как работает thelo, шаг за шагом.", tutorialBtn: "Начать обучение" }
+            en: { settings: "Settings", pwT: "Password", pwD: "Update your password.", langT: "Language", curr: "Current:", log: "Logout", upNext: "Up Next", coursePlan: "Course Plan", welcome: "Welcome back,", navHangar: "Home", navCourses: "Courses", navScan: "Scan", navCompete: "Compete", navProfile: "Profile", competeTitle: "Leagues and battles", competeDesc: "Climb your grade's weekly league, or battle friends live.", avatarTitle: "Choose Avatar", cancelBtn: "Cancel", saveBtn: "Save", continueBtn: "Continue", changeBtn: "Change", logoutBtn: "Logout", assistivePanTitle: "Assistive Panning", assistivePanDesc: "Automatically shifts the canvas as you write.", turnOn: "Turn On", turnOff: "Turn Off", deleteAccountTitle: "Delete Account", deleteAccountBtn: "Delete", deleteAccountDesc: "Permanently delete your account.", deleteConfirmMsg: "Are you sure you want to delete your account? This action cannot be undone.", tutorialTitle: "Tutorial", tutorialDesc: "See how thelo works, step by step.", tutorialBtn: "Start Tutorial" },
+            hy: { settings: "Կարգավորումներ", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ,", navHangar: "Տուն", navCourses: "Դասընթաց", navScan: "Սկան", navCompete: "Մրցույթ", navProfile: "Պրոֆիլ", competeTitle: "Լիգաներ և մրցամարտեր", competeDesc: "Բարձրացիր քո դասարանի շաբաթական լիգայում կամ մրցիր ընկերներիդ հետ։", avatarTitle: "Ընտրեք Նկար", cancelBtn: "Չեղարկել", saveBtn: "Պահպանել", continueBtn: "Շարունակել", changeBtn: "Փոխել", logoutBtn: "Ելք", assistivePanTitle: "Օգնող ոլորում", assistivePanDesc: "Գրելիս կտավը ավտոմատ տեղաշարժվում է։", turnOn: "Միացնել", turnOff: "Անջատել", deleteAccountTitle: "Ջնջել հաշիվը", deleteAccountBtn: "Ջնջել", deleteAccountDesc: "Մշտապես ջնջեք ձեր հաշիվը:", deleteConfirmMsg: "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել ձեր հաշիվը: Այս գործողությունը հնարավոր չէ չեղարկել:", tutorialTitle: "Ուղեցույց", tutorialDesc: "Տես, թե ինչպես է աշխատում thelo-ն՝ քայլ առ քայլ։", tutorialBtn: "Սկսել ուղեցույցը" },
+            ru: { settings: "Настройки", pwT: "Пароль", pwD: "Измени свой пароль.", langT: "Язык", curr: "Сейчас:", log: "Выйти", upNext: "Дальше", coursePlan: "План курса", welcome: "С возвращением,", navHangar: "Главная", navCourses: "Курсы", navScan: "Скан", navCompete: "Турнир", navProfile: "Профиль", competeTitle: "Лиги и битвы", competeDesc: "Поднимайся в недельной лиге своего класса или сразись с друзьями.", avatarTitle: "Выбери аватар", cancelBtn: "Отмена", saveBtn: "Сохранить", continueBtn: "Продолжить", changeBtn: "Изменить", logoutBtn: "Выйти", assistivePanTitle: "Автопрокрутка", assistivePanDesc: "Доска сама сдвигается, пока ты пишешь.", turnOn: "Включить", turnOff: "Выключить", deleteAccountTitle: "Удалить аккаунт", deleteAccountBtn: "Удалить", deleteAccountDesc: "Удалить аккаунт навсегда.", deleteConfirmMsg: "Ты точно хочешь удалить аккаунт? Это действие нельзя отменить.", tutorialTitle: "Обучение", tutorialDesc: "Посмотри, как работает thelo, шаг за шагом.", tutorialBtn: "Начать обучение" }
         }[lang];
 
         document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -1576,8 +1562,6 @@ ${stream[lang]}` : '');
                 document.getElementById('su-pass').value
             );
 
-            const groupId = await syncStudentToGroup(state.grade);
-
             // Atomic Profile Creation
             await setDoc(doc(db, "thelo-students", cred.user.uid), {
                 firstName: firstName,
@@ -1585,7 +1569,6 @@ ${stream[lang]}` : '');
                 email: cred.user.email,
                 profilePicture: profilePicture,
                 role: state.role,
-                groupId: groupId || null,
                 preferences: { language: state.lang, grade: state.grade, stream: state.stream || null, maxGrade: Number(state.grade) || null },
                 points: 0, lessonsCompleted: 0,
                 totalTimeSeconds: 0,
@@ -2140,10 +2123,7 @@ ${stream[lang]}` : '');
         const btn = document.getElementById('btn-update-course');
         btn.disabled = true; btn.textContent = "...";
         try {
-            const groupId = await syncStudentToGroup(courseState.grade);
-
             await updateDoc(doc(db, 'thelo-students', auth.currentUser.uid), {
-                'groupId': groupId || null,
                 'preferences.language': courseState.lang,
                 'preferences.grade': courseState.grade,
                 'preferences.stream': courseState.stream || null,
@@ -2776,6 +2756,7 @@ ${stream[lang]}` : '');
 
         ui.hList.innerHTML = listHTML;
 
+        refreshLeagueLine();
         maybeStartTutorial(u, {
             lang: userLang, grade: userGrade,
             name: (profileSnap.exists() && (profileSnap.data().firstName || profileSnap.data().name)) || '',
@@ -2835,6 +2816,7 @@ ${stream[lang]}` : '');
               board: 'Board', penTitle: 'Pen', penDesc: 'How thick your writing is on the board.', penThin: 'Thin', penNormal: 'Normal', penThick: 'Thick',
               leftTitle: 'Left-handed', leftDesc: 'Puts the lesson menu on the left and the eraser on the right.',
               soundSection: 'Sound', soundTitle: 'Sounds', soundDesc: 'Sounds in lessons and competitions.',
+              leagueTitle: 'Weekly leagues', leagueDesc: 'Compete each week with students of your grade. They see your first name, picture and stars.',
               help: 'Help', reportTitle: 'Report a problem', reportDesc: 'Something wrong in a lesson or the app? Tell us.', reportBtn: 'Write', accountEnd: 'Account',
               privacyTitle: 'Privacy policy', privacyDesc: 'What thelo keeps about you, and how to delete it.', privacyBtn: 'Read',
               on: 'Turn On', off: 'Turn Off', saved: 'Saved', saveFail: 'Could not save. Check your connection.',
@@ -2848,6 +2830,7 @@ ${stream[lang]}` : '');
               board: 'Գրատախտակ', penTitle: 'Գրիչ', penDesc: 'Որքան հաստ է գրածդ գրատախտակին։', penThin: 'Բարակ', penNormal: 'Միջին', penThick: 'Հաստ',
               leftTitle: 'Ձախլիկ', leftDesc: 'Դասի ընտրացանկը տեղափոխում է ձախ, իսկ ռետինը՝ աջ։',
               soundSection: 'Ձայն', soundTitle: 'Ձայներ', soundDesc: 'Ձայները դասերում և մրցույթներում։',
+              leagueTitle: 'Շաբաթական լիգաներ', leagueDesc: 'Ամեն շաբաթ մրցիր քո դասարանի աշակերտների հետ։ Նրանք տեսնում են քո անունը, նկարը և աստղերը։',
               help: 'Օգնություն', reportTitle: 'Հաղորդել խնդրի մասին', reportDesc: 'Ինչ-որ բան սխալ է դասում կամ հավելվածում։ Գրիր մեզ։', reportBtn: 'Գրել', accountEnd: 'Հաշիվ',
               privacyTitle: 'Գաղտնիության քաղաքականություն', privacyDesc: 'Ինչ է պահում thelo-ն քո մասին, և ինչպես ջնջել այն։', privacyBtn: 'Կարդալ',
               on: 'Միացնել', off: 'Անջատել', saved: 'Պահպանված է', saveFail: 'Չհաջողվեց պահպանել։ Ստուգիր կապը։',
@@ -2861,6 +2844,7 @@ ${stream[lang]}` : '');
               board: 'Доска', penTitle: 'Ручка', penDesc: 'Толщина линий, когда ты пишешь на доске.', penThin: 'Тонкая', penNormal: 'Средняя', penThick: 'Толстая',
               leftTitle: 'Левша', leftDesc: 'Меню урока будет слева, а ластик — справа.',
               soundSection: 'Звук', soundTitle: 'Звуки', soundDesc: 'Звуки в уроках и соревнованиях.',
+              leagueTitle: 'Недельные лиги', leagueDesc: 'Соревнуйся каждую неделю с учениками своего класса. Они видят твоё имя, картинку и звёзды.',
               help: 'Помощь', reportTitle: 'Сообщить о проблеме', reportDesc: 'Что-то не так в уроке или в приложении? Напиши нам.', reportBtn: 'Написать', accountEnd: 'Аккаунт',
               privacyTitle: 'Политика конфиденциальности', privacyDesc: 'Что thelo хранит о тебе и как это удалить.', privacyBtn: 'Читать',
               on: 'Включить', off: 'Выключить', saved: 'Сохранено', saveFail: 'Не удалось сохранить. Проверь подключение.',
@@ -2871,7 +2855,7 @@ ${stream[lang]}` : '');
     const stT = () => SETTINGS_TEXT[state.lang] || SETTINGS_TEXT.en;
     const stEsc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const stFill = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
-    const settingsState = { goal: 0, pen: 'normal', leftHanded: false, sound: true, first: '', last: '', grade: '', stream: null };
+    const settingsState = { goal: 0, pen: 'normal', leftHanded: false, sound: true, leagues: true, first: '', last: '', grade: '', stream: null };
 
     function applySettingsText() {
         const t = stT();
@@ -2888,6 +2872,8 @@ ${stream[lang]}` : '');
         if (left) left.textContent = settingsState.leftHanded ? t.off : t.on;
         const sound = document.getElementById('p-sound-toggle');
         if (sound) sound.textContent = settingsState.sound ? t.off : t.on;
+        const leagues = document.getElementById('p-league-toggle');
+        if (leagues) leagues.textContent = settingsState.leagues ? t.off : t.on;
         const ver = document.getElementById('p-version');
         if (ver) ver.textContent = APP_VERSION;
         const g = document.getElementById('p-grade-display');
@@ -2909,7 +2895,7 @@ ${stream[lang]}` : '');
         Object.assign(settingsState, {
             goal: [0, 1, 3, 5].includes(Number(prefs.dailyGoal)) ? Number(prefs.dailyGoal) : 0,
             pen: ['thin', 'normal', 'thick'].includes(prefs.pen) ? prefs.pen : 'normal',
-            leftHanded: prefs.leftHanded === true, sound: prefs.sound !== false,
+            leftHanded: prefs.leftHanded === true, sound: prefs.sound !== false, leagues: prefs.hideFromLeagues !== true,
             first: data.firstName || '', last: data.lastName || '',
             grade: prefs.grade || '', stream: prefs.stream || null,
         });
@@ -2941,6 +2927,12 @@ ${stream[lang]}` : '');
     document.getElementById('p-left-toggle').onclick = async () => {
         settingsState.leftHanded = !settingsState.leftHanded; drawSettings();
         if (!await savePrefs({ leftHanded: settingsState.leftHanded })) { settingsState.leftHanded = !settingsState.leftHanded; drawSettings(); }
+    };
+    document.getElementById('p-league-toggle').onclick = async () => {
+        settingsState.leagues = !settingsState.leagues; drawSettings();
+        if (!await savePrefs({ hideFromLeagues: !settingsState.leagues })) { settingsState.leagues = !settingsState.leagues; drawSettings(); return; }
+        try { sessionStorage.removeItem('theloLeagueLine'); } catch (e) { /* private mode */ }
+        refreshLeagueLine();
     };
     document.getElementById('p-sound-toggle').onclick = async () => {
         settingsState.sound = !settingsState.sound; drawSettings();
@@ -3016,6 +3008,42 @@ ${stream[lang]}` : '');
             }
         });
     };
+
+    // ===================== WEEKLY LEAGUE (the Compete page has the full view) =====================
+    // The Compete card shows the student's league and place, from the league function
+    // (thelo-backend/functions/league.js); asked at most every 5 minutes per tab.
+    const LEAGUE_TEXT = {
+        en: { tiers: ['Point', 'Segment', 'Triangle', 'Square', 'Pentagon', 'Circle', 'Cube', 'Sphere', 'Golden ratio', 'Infinity'], name: '{t} League', place: '#{r} of {n}', join: 'earn stars to join' },
+        hy: { tiers: ['Կետ', 'Հատված', 'Եռանկյուն', 'Քառակուսի', 'Հնգանկյուն', 'Շրջան', 'Խորանարդ', 'Գունդ', 'Ոսկե հատում', 'Անվերջություն'], name: '«{t}» լիգա', place: '#{r} / {n}', join: 'վաստակիր աստղեր՝ միանալու համար' },
+        ru: { tiers: ['Точка', 'Отрезок', 'Треугольник', 'Квадрат', 'Пятиугольник', 'Круг', 'Куб', 'Шар', 'Золотое сечение', 'Бесконечность'], name: 'Лига «{t}»', place: '#{r} из {n}', join: 'заработай звёзды, чтобы вступить' },
+    };
+    const TIER_COLORS = ['#94A3B8', '#64748B', '#C2773B', '#16A34A', '#0D9488', '#2563EB', '#4F46E5', '#7C3AED', '#D97706', '#E11D48'];
+    async function refreshLeagueLine() {
+        const el = document.getElementById('h-league');
+        const u = auth.currentUser;
+        if (!el || !u || u.isAnonymous) return;
+        let b = null;
+        try {
+            const c = JSON.parse(sessionStorage.getItem('theloLeagueLine') || 'null');
+            if (c && c.uid === u.uid && Date.now() - c.at < 5 * 60 * 1000) b = c.b;
+        } catch (e) { /* private mode */ }
+        if (!b) {
+            try {
+                const d = (await httpsCallable(functions, 'league')({ action: 'board' })).data || {};
+                const mine = (d.rows || []).find(r => r.me);
+                b = { tier: Number(d.tier) || 0, joined: !!d.joined, hidden: !!d.hidden, rank: mine ? mine.rank : null, size: d.size || 0 };
+                try { sessionStorage.setItem('theloLeagueLine', JSON.stringify({ uid: u.uid, at: Date.now(), b })); } catch (e) { /* private mode */ }
+            } catch (e) {
+                console.warn('league line unavailable', e);
+                return;
+            }
+        }
+        const t = LEAGUE_TEXT[state.lang] || LEAGUE_TEXT.en;
+        if (b.hidden) { el.textContent = ''; return; }
+        const name = stFill(t.name, { t: t.tiers[b.tier] || t.tiers[0] });
+        const dot = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="${TIER_COLORS[b.tier] || TIER_COLORS[0]}" stroke="#fff" stroke-width="1.5"/></svg>`;
+        el.innerHTML = dot + stEsc(b.joined && b.rank ? `${name} · ${stFill(t.place, { r: b.rank, n: b.size })}` : `${name} · ${t.join}`);
+    }
 
     /** "Today: 2 of 3 lessons" under Up Next, when the student has a daily goal. */
     function updateGoalLine(goal, progSnap) {

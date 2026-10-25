@@ -5720,10 +5720,24 @@ ${langLine}`;
             return userDocRef.update({
                 points: firebase.firestore.FieldValue.increment(pointsToAdd),
                 pointsAt: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(error => {
+            }).then(joinWeeklyLeague).catch(error => {
                 console.error("Error updating points in Firestore: ", error);
             });
         }
+        // Weekly leagues (league function, thelo-backend/functions/league.js): earning stars puts
+        // the student in this week's league of their grade. Asked once a week per device.
+        function joinWeeklyLeague() {
+            const user = firebase.auth().currentUser;
+            if (!user || user.isAnonymous) return;
+            const day = Math.floor((Date.now() + 4 * 3600 * 1000) / 86400000);   // Armenia time
+            const week = String(day - ((day + 3) % 7));                           // its Monday
+            const key = 'theloLeague:' + user.uid;
+            try { if (localStorage.getItem(key) === week) return; } catch (e) { /* private mode */ }
+            firebase.functions().httpsCallable('league')({ action: 'join' })
+                .then(r => { if (r.data && r.data.joined) { try { localStorage.setItem(key, week); } catch (e) { /* private mode */ } } })
+                .catch(e => console.warn('league join failed', e));
+        }
+
         /* ===== ADD THIS FUNCTION: The Main Streak Logic ======================== */
     async function updateWeeklyStreak() {
         const user = auth.currentUser;
