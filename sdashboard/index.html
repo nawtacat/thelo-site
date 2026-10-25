@@ -151,6 +151,8 @@
         .step-title { margin-bottom: 1rem; }
 
         .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+        .option-grid.lang-grid { grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+        .lang-grid .option-card { padding: 1.1rem 0.3rem; font-size: 0.95rem; }
         .option-card {
             background: #F3F4F6; border: 2px solid transparent; border-radius: 1rem;
             padding: 1.5rem clamp(0.4rem, 3vw, 1rem); text-align: center; cursor: pointer; transition: 0.2s;
@@ -613,12 +615,15 @@
 
             <div class="step-content active" id="w-step-1">
                 <h2 class="step-title">Choose Language</h2>
-                <div class="option-grid">
+                <div class="option-grid lang-grid">
                     <div class="option-card" onclick="setLang('en', this)">
                         <span class="option-icon">🇺🇸</span> English
                     </div>
                     <div class="option-card" onclick="setLang('hy', this)">
                         <span class="option-icon">🇦🇲</span> Հայերեն
+                    </div>
+                    <div class="option-card" onclick="setLang('ru', this)">
+                        <span class="option-icon">🇷🇺</span> Русский
                     </div>
                 </div>
             </div>
@@ -787,12 +792,15 @@
     <main>
         <div class="settings-window">
             <h2 class="step-title" data-i18n="langTitle">Language</h2>
-            <div class="option-grid" id="c-lang-grid">
+            <div class="option-grid lang-grid" id="c-lang-grid">
                 <div class="option-card" data-val="en" onclick="selectCourseLang('en', this)">
                     <span class="option-icon">🇺🇸</span> English
                 </div>
                 <div class="option-card" data-val="hy" onclick="selectCourseLang('hy', this)">
                     <span class="option-icon">🇦🇲</span> Հայերեն
+                </div>
+                <div class="option-card" data-val="ru" onclick="selectCourseLang('ru', this)">
+                    <span class="option-icon">🇷🇺</span> Русский
                 </div>
             </div>
 
@@ -881,8 +889,8 @@
                     <p class="settings-item-title" data-i18n="languageTitle">Language</p>
                     <p class="settings-item-description"><span data-i18n="currentLabel">Current:</span> <span class="font-bold" id="p-lang-display">English</span></p>
                 </div>
-                <div class="settings-item-action">
-                    <button id="p-lang-toggle" class="thelo-btn-secondary">Հայ</button>
+                <div class="seg" id="p-lang">
+                    <button data-v="en">EN</button><button data-v="hy">ՀԱՅ</button><button data-v="ru">РУС</button>
                 </div>
             </div>
 
@@ -1246,13 +1254,16 @@
     // what broke the logo and the avatar picker.
     const ASSET_ORIGIN = 'https://thelo.ink';
 
+    // Text for the current language: tr({ en: '...', hy: '...', ru: '...' }); English if one is missing.
+    const tr = (o, lang = state.lang) => (o[lang] ?? o.en);
+    const LANG_NAMES = { en: 'English', hy: 'Հայերեն', ru: 'Русский' };
     const state = { lang: 'en', role: 'student', grade: null, stream: null, assistivePanning: true, signupAvatar: ASSET_ORIGIN + '/img/char1.png' };
 
     // Grades 10-12 have two streams with different textbooks, so each is its own course.
     // preferences.grade stays "10"/"11"/"12" (groups, problem banks and the security rules
     // key on it); preferences.stream says which of the two courses the student follows.
     const HIGH_SCHOOL_GRADES = ['10', '11', '12'];
-    const STREAM_LABELS = { gen: { en: 'General', hy: 'Ընդհանուր' }, adv: { en: 'Advanced', hy: 'Խորացված' } };
+    const STREAM_LABELS = { gen: { en: 'General', hy: 'Ընդհանուր', ru: 'Базовый' }, adv: { en: 'Advanced', hy: 'Խորացված', ru: 'Углублённый' } };
     const defaultStream = (grade) => HIGH_SCHOOL_GRADES.includes(String(grade)) ? 'gen' : null;
     let isSigningUp = false;
 
@@ -1311,7 +1322,7 @@
         pPhoto: document.getElementById('p-photo'),
         pUid: document.getElementById('p-uid'),
         pLangDisplay: document.getElementById('p-lang-display'),
-        pLangToggle: document.getElementById('p-lang-toggle'),
+        pLang: document.getElementById('p-lang'),
         pPanToggle: document.getElementById('p-pan-toggle'),
         suAvatarPreview: document.getElementById('su-avatar-preview'),
         suAvatarBtn: document.getElementById('su-avatar-btn')
@@ -1362,7 +1373,8 @@
 function updateOfflineUI(lang) {
     const txt = {
         en: { title: "No Connection", msg: "It looks like you're offline. Please check your internet connection and try again.", btn: "Try Again" },
-        hy: { title: "Կապ չկա", msg: "Կարծես թե ինտերնետ կապը բացակայում է։ Խնդրում ենք ստուգել կապը և փորձել կրկին։", btn: "Փորձել կրկին" }
+        hy: { title: "Կապ չկա", msg: "Կարծես թե ինտերնետ կապը բացակայում է։ Խնդրում ենք ստուգել կապը և փորձել կրկին։", btn: "Փորձել կրկին" },
+        ru: { title: "Нет подключения", msg: "Похоже, ты не в сети. Проверь подключение к интернету и попробуй снова.", btn: "Попробовать снова" }
     }[lang] || { title: "No Connection", msg: "It looks like you're offline. Please check your internet connection and try again.", btn: "Try Again" };
 
     document.getElementById('offline-title').textContent = txt.title;
@@ -1384,8 +1396,9 @@ function updateLogos(lang) {
     updateOfflineUI(lang);
         const txt = {
             en: { t0: "Who are you?", tStudent: "Student", tTutor: "Tutor", t2: "Choose your Grade", t3: "Create Account", tSi: "Welcome Back", lFName: "First Name", lLName: "Last Name", lEmail: "Email", lPass: "Password", lAvatar: "Profile Photo", bAvatar: "Choose Photo", bStart: "Start Learning", bBack: "Back", bLog: "Log In", bCancel: "Cancel", verifyTitle: "Check Your Email", verifyMsg: "A verification link has been sent to your email address. Please check your inbox and click the link to activate your account.", doneBtn: "Done", tryAgain: "Try Again", tutorDash: "Tutor Dashboard", tutorWelcome: "Welcome, Tutor!", tutorDesc: "Author your own problems and share them with students.", createProb: "New Problem", myProbs: "Problem Library", navDash: "Dashboard", lProbHead: "Headline (Question Text)", lProbType: "Evaluation Type", lProbAns: "Correct Answer" },
-            hy: { t0: "Ո՞վ եք դուք", tStudent: "Աշակերտ", tTutor: "Դասավանդող", t2: "Ընտրեք ձեր դասարանը", t3: "Ստեղծել հաշիվ", tSi: "Բարի վերադարձ", lFName: "Անուն", lLName: "Ազգանուն", lEmail: "Էլ․ հասցե", lPass: "Գաղտնաբառ", lAvatar: "Նկարի ընտրություն", bAvatar: "Ընտրել նկար", bStart: "Սկսել", bBack: "Հետ", bLog: "Մուտք", bCancel: "Չեղարկել", verifyTitle: "Ստուգեք Ձեր Էլ․ Հասցեն", verifyMsg: "Հաստատման հղում է ուղարկվել ձեր էլ․ հասցեին։ Խնդրում ենք ստուգել ձեր փոստը և սեղմել հղումը՝ ձեր հաշիվն ակտիվացնելու համար։", doneBtn: "Պատրաստ է", tryAgain: "Փորձել կրկին", tutorDash: "Դասավանդողի Էջ", tutorWelcome: "Ողջու՜յն", tutorDesc: "Ստեղծեք ձեր սեփական խնդիրները և կիսվեք աշակերտների հետ:", createProb: "Նոր Խնդիր", myProbs: "Խնդիրների Գրադարան", navDash: "Գլխավոր", lProbHead: "Վերնագիր (Հարցի տեքստ)", lProbType: "Ստուգման տեսակ", lProbAns: "Ճիշտ պատասխան" }
-        }[lang];
+            hy: { t0: "Ո՞վ եք դուք", tStudent: "Աշակերտ", tTutor: "Դասավանդող", t2: "Ընտրեք ձեր դասարանը", t3: "Ստեղծել հաշիվ", tSi: "Բարի վերադարձ", lFName: "Անուն", lLName: "Ազգանուն", lEmail: "Էլ․ հասցե", lPass: "Գաղտնաբառ", lAvatar: "Նկարի ընտրություն", bAvatar: "Ընտրել նկար", bStart: "Սկսել", bBack: "Հետ", bLog: "Մուտք", bCancel: "Չեղարկել", verifyTitle: "Ստուգեք Ձեր Էլ․ Հասցեն", verifyMsg: "Հաստատման հղում է ուղարկվել ձեր էլ․ հասցեին։ Խնդրում ենք ստուգել ձեր փոստը և սեղմել հղումը՝ ձեր հաշիվն ակտիվացնելու համար։", doneBtn: "Պատրաստ է", tryAgain: "Փորձել կրկին", tutorDash: "Դասավանդողի Էջ", tutorWelcome: "Ողջու՜յն", tutorDesc: "Ստեղծեք ձեր սեփական խնդիրները և կիսվեք աշակերտների հետ:", createProb: "Նոր Խնդիր", myProbs: "Խնդիրների Գրադարան", navDash: "Գլխավոր", lProbHead: "Վերնագիր (Հարցի տեքստ)", lProbType: "Ստուգման տեսակ", lProbAns: "Ճիշտ պատասխան" },
+            ru: { t0: "Кто ты?", tStudent: "Ученик", tTutor: "Преподаватель", t2: "Выбери свой класс", t3: "Создать аккаунт", tSi: "С возвращением", lFName: "Имя", lLName: "Фамилия", lEmail: "Эл. почта", lPass: "Пароль", lAvatar: "Фото профиля", bAvatar: "Выбрать фото", bStart: "Начать учиться", bBack: "Назад", bLog: "Войти", bCancel: "Отмена", verifyTitle: "Проверь почту", verifyMsg: "Мы отправили ссылку для подтверждения на твою почту. Открой письмо и нажми на ссылку, чтобы активировать аккаунт.", doneBtn: "Готово", tryAgain: "Попробовать снова", tutorDash: "Панель преподавателя", tutorWelcome: "Добро пожаловать!", tutorDesc: "Составляйте свои задачи и делитесь ими с учениками.", createProb: "Новая задача", myProbs: "Библиотека задач", navDash: "Панель", lProbHead: "Заголовок (текст задачи)", lProbType: "Тип проверки", lProbAns: "Правильный ответ" }
+        }[lang] || {};
 
         document.getElementById('t-step-2').textContent = txt.t2;
         document.getElementById('t-step-3').textContent = txt.t3;
@@ -1432,7 +1445,8 @@ function updateLogos(lang) {
         const GRADE_IDS = ['5', '6', '7', '8', '9', '10', '11', '12'];
         const groupLabels = Object.fromEntries(GRADE_IDS.map(g => [g, {
             en: `${g}${['th','st','nd','rd'][(g % 10 < 4 && (g < 11 || g > 13)) ? g % 10 : 0]} Grade`,
-            hy: `${g}-րդ դասարան`
+            hy: `${g}-րդ դասարան`,
+            ru: `${g} класс`
         }]));
         GRADE_IDS.forEach(id => {
             const el = document.getElementById(`g-${id}`);
@@ -1444,13 +1458,14 @@ function updateLogos(lang) {
 ${STREAM_LABELS[s][lang]}`;
         }));
         const hsTitle = document.getElementById('t-high-school');
-        if (hsTitle) hsTitle.textContent = lang === 'hy' ? 'Ավագ դպրոց' : 'High School';
+        if (hsTitle) hsTitle.textContent = tr({ en: 'High School', hy: 'Ավագ դպրոց', ru: 'Старшая школа' }, lang);
     }
 
     function updateProfileText(lang) {
         const t = {
             en: { settings: "Settings", pwT: "Password", pwD: "Update your password.", langT: "Language", curr: "Current:", log: "Logout", upNext: "Up Next", coursePlan: "Course Plan", welcome: "Welcome back,", navHangar: "Home", navCourses: "Courses", navScan: "Scan", navCompete: "Compete", navProfile: "Profile", competeTitle: "Compete with friends", competeDesc: "Live maths battles: same questions, same moment.", avatarTitle: "Choose Avatar", cancelBtn: "Cancel", saveBtn: "Save", continueBtn: "Continue", changeBtn: "Change", logoutBtn: "Logout", assistivePanTitle: "Assistive Panning", assistivePanDesc: "Automatically shifts the canvas as you write.", turnOn: "Turn On", turnOff: "Turn Off", deleteAccountTitle: "Delete Account", deleteAccountBtn: "Delete", deleteAccountDesc: "Permanently delete your account.", deleteConfirmMsg: "Are you sure you want to delete your account? This action cannot be undone.", tutorialTitle: "Tutorial", tutorialDesc: "See how thelo works, step by step.", tutorialBtn: "Start Tutorial" },
-            hy: { settings: "Կարգավորումներ", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ,", navHangar: "Տուն", navCourses: "Դասընթաց", navScan: "Սկան", navCompete: "Մրցույթ", navProfile: "Պրոֆիլ", competeTitle: "Մրցիր ընկերներիդ հետ", competeDesc: "Կենդանի մաթեմատիկական մրցույթ՝ նույն հարցերը, նույն պահին։", avatarTitle: "Ընտրեք Նկար", cancelBtn: "Չեղարկել", saveBtn: "Պահպանել", continueBtn: "Շարունակել", changeBtn: "Փոխել", logoutBtn: "Ելք", assistivePanTitle: "Օգնող ոլորում", assistivePanDesc: "Գրելիս կտավը ավտոմատ տեղաշարժվում է։", turnOn: "Միացնել", turnOff: "Անջատել", deleteAccountTitle: "Ջնջել հաշիվը", deleteAccountBtn: "Ջնջել", deleteAccountDesc: "Մշտապես ջնջեք ձեր հաշիվը:", deleteConfirmMsg: "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել ձեր հաշիվը: Այս գործողությունը հնարավոր չէ չեղարկել:", tutorialTitle: "Ուղեցույց", tutorialDesc: "Տես, թե ինչպես է աշխատում thelo-ն՝ քայլ առ քայլ։", tutorialBtn: "Սկսել ուղեցույցը" }
+            hy: { settings: "Կարգավորումներ", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ,", navHangar: "Տուն", navCourses: "Դասընթաց", navScan: "Սկան", navCompete: "Մրցույթ", navProfile: "Պրոֆիլ", competeTitle: "Մրցիր ընկերներիդ հետ", competeDesc: "Կենդանի մաթեմատիկական մրցույթ՝ նույն հարցերը, նույն պահին։", avatarTitle: "Ընտրեք Նկար", cancelBtn: "Չեղարկել", saveBtn: "Պահպանել", continueBtn: "Շարունակել", changeBtn: "Փոխել", logoutBtn: "Ելք", assistivePanTitle: "Օգնող ոլորում", assistivePanDesc: "Գրելիս կտավը ավտոմատ տեղաշարժվում է։", turnOn: "Միացնել", turnOff: "Անջատել", deleteAccountTitle: "Ջնջել հաշիվը", deleteAccountBtn: "Ջնջել", deleteAccountDesc: "Մշտապես ջնջեք ձեր հաշիվը:", deleteConfirmMsg: "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել ձեր հաշիվը: Այս գործողությունը հնարավոր չէ չեղարկել:", tutorialTitle: "Ուղեցույց", tutorialDesc: "Տես, թե ինչպես է աշխատում thelo-ն՝ քայլ առ քայլ։", tutorialBtn: "Սկսել ուղեցույցը" },
+            ru: { settings: "Настройки", pwT: "Пароль", pwD: "Измени свой пароль.", langT: "Язык", curr: "Сейчас:", log: "Выйти", upNext: "Дальше", coursePlan: "План курса", welcome: "С возвращением,", navHangar: "Главная", navCourses: "Курсы", navScan: "Скан", navCompete: "Турнир", navProfile: "Профиль", competeTitle: "Соревнуйся с друзьями", competeDesc: "Математические битвы вживую: одни и те же вопросы в одно и то же время.", avatarTitle: "Выбери аватар", cancelBtn: "Отмена", saveBtn: "Сохранить", continueBtn: "Продолжить", changeBtn: "Изменить", logoutBtn: "Выйти", assistivePanTitle: "Автопрокрутка", assistivePanDesc: "Доска сама сдвигается, пока ты пишешь.", turnOn: "Включить", turnOff: "Выключить", deleteAccountTitle: "Удалить аккаунт", deleteAccountBtn: "Удалить", deleteAccountDesc: "Удалить аккаунт навсегда.", deleteConfirmMsg: "Ты точно хочешь удалить аккаунт? Это действие нельзя отменить.", tutorialTitle: "Обучение", tutorialDesc: "Посмотри, как работает thelo, шаг за шагом.", tutorialBtn: "Начать обучение" }
         }[lang];
 
         document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -1488,22 +1503,24 @@ ${STREAM_LABELS[s][lang]}`;
             if(k === 'tutorialBtn') el.textContent = t.tutorialBtn;
         });
 
-        ui.pLangDisplay.textContent = lang === 'hy' ? 'Հայերեն' : 'English';
-        ui.pLangToggle.textContent = lang === 'hy' ? 'EN' : 'Հայ';
+        ui.pLangDisplay.textContent = LANG_NAMES[lang] || LANG_NAMES.en;
+        ui.pLang.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === lang));
     }
 
     function updateCoursesText(lang) {
         const t = {
             en: { title: "Courses", lang: "Language", grade: "Grade", highSchool: "High School", update: "Update Grade" },
-            hy: { title: "Դասընթացներ", lang: "Լեզու", grade: "Դասարան", highSchool: "Ավագ դպրոց", update: "Թարմացնել" }
-        }[lang];
+            hy: { title: "Դասընթացներ", lang: "Լեզու", grade: "Դասարան", highSchool: "Ավագ դպրոց", update: "Թարմացնել" },
+            ru: { title: "Курсы", lang: "Язык", grade: "Класс", highSchool: "Старшая школа", update: "Обновить" }
+        }[lang] || {};
 
         // Grades 5-12. Built from a range rather than written out so adding a
         // year later means changing one number, not editing three places.
         const GRADE_IDS = ['5', '6', '7', '8', '9', '10', '11', '12'];
         const groupLabels = Object.fromEntries(GRADE_IDS.map(g => [g, {
             en: `${g}${['th','st','nd','rd'][(g % 10 < 4 && (g < 11 || g > 13)) ? g % 10 : 0]} Grade`,
-            hy: `${g}-րդ դասարան`
+            hy: `${g}-րդ դասարան`,
+            ru: `${g} класс`
         }]));
 
         document.querySelectorAll('#view-courses [data-i18n]').forEach(el => {
@@ -1539,14 +1556,14 @@ ${stream[lang]}` : '');
         isSigningUp = true;
         const btn = document.getElementById('btn-su-submit');
         btn.disabled = true;
-        btn.textContent = state.lang === 'hy' ? "Ստեղծվում է..." : "Creating...";
+        btn.textContent = tr({ en: "Creating...", hy: "Ստեղծվում է...", ru: "Создаём..." });
 
         try {
             if (!state.grade) {
                 isSigningUp = false;
                 btn.disabled = false;
-                btn.textContent = state.lang === 'hy' ? "Ստեղծել հաշիվ" : "Create Account";
-                showToast(state.lang === 'hy' ? "Խնդրում ենք ընտրել դասարանը։" : "Please select a grade.", true);
+                btn.textContent = tr({ en: "Create Account", hy: "Ստեղծել հաշիվ", ru: "Создать аккаунт" });
+                showToast(tr({ en: "Please select a grade.", hy: "Խնդրում ենք ընտրել դասարանը։", ru: "Пожалуйста, выбери класс." }), true);
                 window.showStep(2);
                 return;
             }
@@ -1619,6 +1636,12 @@ ${stream[lang]}` : '');
                         emailInUse: "Այս էլ․ հասցեն արդեն օգտագործվում է այլ հաշվի կողմից։",
                         invalidEmail: "Մուտքագրված էլ․ հասցեն անվավեր է։",
                         weakPassword: "Գաղտնաբառը չափազանց թույլ է։ Այն պետք է լինի առնվազն 6 նիշ։"
+                    },
+                    ru: {
+                        unknown: "Произошла неизвестная ошибка. Попробуй ещё раз.",
+                        emailInUse: "Этот адрес эл. почты уже используется другим аккаунтом.",
+                        invalidEmail: "Введён неверный адрес эл. почты.",
+                        weakPassword: "Слишком простой пароль. В нём должно быть не меньше 6 символов."
                     }
                 };
                 const msgs = errorMessages[state.lang] || errorMessages.en;
@@ -1641,7 +1664,7 @@ ${stream[lang]}` : '');
             }
             showToast(friendlyMessage, true);
             btn.disabled = false;
-            const tryAgainText = state.lang === 'hy' ? "Փորձել կրկին" : "Try Again";
+            const tryAgainText = tr({ en: "Try Again", hy: "Փորձել կրկին", ru: "Попробовать снова" });
             btn.textContent = tryAgainText;
         }
     };
@@ -1652,7 +1675,7 @@ ${stream[lang]}` : '');
         isSigningUp = false;
         const btn = document.getElementById('btn-si-submit');
         btn.disabled = true;
-        btn.textContent = state.lang === 'hy' ? "Բեռնվում է..." : "Loading...";
+        btn.textContent = tr({ en: "Loading...", hy: "Բեռնվում է...", ru: "Загрузка..." });
 
         try {
             const cred = await signInWithEmailAndPassword(auth,
@@ -1689,6 +1712,14 @@ ${stream[lang]}` : '');
                         tooManyRequests: "Չափազանց շատ անհաջող փորձեր։ Խնդրում ենք փորձել ավելի ուշ։",
                         network: "Կապի խափանում։ Ստուգեք ինտերնետը։",
                         invalidEmail: "Էլ․ հասցեի սխալ ձևաչափ։"
+                    },
+                    ru: {
+                        generic: "Неверный адрес или пароль.",
+                        userNotFound: "Аккаунт с этим адресом не найден.",
+                        wrongPassword: "Неверный пароль.",
+                        tooManyRequests: "Слишком много неудачных попыток. Попробуй позже.",
+                        network: "Ошибка сети. Проверь подключение.",
+                        invalidEmail: "Неверный формат адреса эл. почты."
                     }
                 };
 
@@ -1707,7 +1738,7 @@ ${stream[lang]}` : '');
 
                 showToast(msg, true);
                 btn.disabled = false;
-                const loginText = state.lang === 'hy' ? "Մուտք" : "Log In";
+                const loginText = tr({ en: "Log In", hy: "Մուտք", ru: "Войти" });
                 btn.textContent = loginText;
         }
     };
@@ -1951,7 +1982,7 @@ ${stream[lang]}` : '');
     // is, Firebase rejects the continue URL and we send the plain email instead).
     const VERIFY_CONTINUE_URL = 'https://thelo.ink/sdashboard/?verified=1';
     async function sendVerification(user) {
-        auth.languageCode = state.lang === 'hy' ? 'hy' : 'en';
+        auth.languageCode = ['hy', 'ru'].includes(state.lang) ? state.lang : 'en';
         try {
             await sendEmailVerification(user, { url: VERIFY_CONTINUE_URL });
         } catch (e) {
@@ -1967,6 +1998,9 @@ ${stream[lang]}` : '');
         hy: { title: 'Հաստատիր էլ. հասցեդ', text: 'Մենք հղում ենք ուղարկել {email} հասցեին։ Բացիր այն՝ հաշիվդ հաստատելու համար։ Չե՞ս գտնում. նայիր «Սպամ» կամ «Գովազդ» թղթապանակում։',
               done: 'Հաստատել եմ', resend: 'Ուղարկել նորից', sent: 'Ուղարկված է։ Ստուգիր փոստդ։', wait: 'Նորից՝ {s} վ հետո',
               notYet: 'Դեռ հաստատված չէ։ Նախ բացիր նամակի հղումը։', thanks: 'Էլ. հասցեն հաստատված է։ Շնորհակալություն։', tooMany: 'Շատ նամակներ ուղարկվեցին։ Փորձիր ավելի ուշ։' },
+        ru: { title: 'Подтверди свою почту', text: 'Мы отправили ссылку на {email}. Открой её, чтобы подтвердить аккаунт. Не можешь найти? Загляни в «Спам» или «Промоакции».',
+              done: 'Я подтвердил(а)', resend: 'Отправить ещё раз', sent: 'Отправлено! Проверь почту.', wait: 'Ещё раз через {s} с',
+              notYet: 'Пока не подтверждено. Сначала открой ссылку из письма.', thanks: 'Почта подтверждена. Спасибо!', tooMany: 'Слишком много писем. Попробуй позже.' },
     };
     const needsVerify = (u) => !!(u && !u.isAnonymous && !u.emailVerified && u.email &&
         (u.providerData || []).some(p => p.providerId === 'password'));
@@ -2167,6 +2201,10 @@ ${stream[lang]}` : '');
             hy: {
                 header: "Արժե կրկին նայել", sub: "Սխալվել ես {n} անգամ",
                 subOnce: "Սխալվել ես մեկ անգամ", fixed: "երկրորդ փորձից ստացվեց"
+            },
+            ru: {
+                header: "Стоит посмотреть ещё раз", sub: "Ошибок: {n}",
+                subOnce: "Одна ошибка", fixed: "получилось со второй попытки"
             }
         }[userLang] || FALLBACK;
 
@@ -2316,6 +2354,27 @@ ${stream[lang]}` : '');
                 cpStart: "Սկսել ստուգումը", cpTitle: "Ստուգում · {t}", cpLockedMsg: "Նախ անցիր այս դասից առաջ եղած ստուգումը։",
                 courseDone: "Դասընթացն ավարտված է 🎉",
                 courseDoneBtn: "Ընտրել հաջորդ դասարանը"
+            },
+            ru: {
+                noCourse: "Курс не найден",
+                noCourseDesc: "Не найден курс для класса",
+                comingSoon: "Скоро",
+                comingSoonDesc: "Курс скоро появится!",
+                notAvail: "Курс пока недоступен",
+                completed: "Пройдено",
+                available: "Доступно",
+                upNextSub: "Дальше",
+                locked: "Закрыто",
+                lockedMsg: "Сначала пройди уроки перед этим.",
+                lessonsDone: "{d} из {n} пройдено",
+                jumpHere: "Перейти сюда",
+                jumpSub: "Уже знаешь это? Сдай тест, чтобы открыть.",
+                jumpWait: "Снова через {h}",
+                cpMid: "Проверка: первая половина", cpEnd: "Проверка по разделу", cpPassed: "Сдано",
+                cpNext: "Сдай её, чтобы открыть следующие уроки", cpWait: "Снова через {h}", cpRevise: "Разобрать мои ошибки",
+                cpStart: "Начать проверку", cpTitle: "Проверка · {t}", cpLockedMsg: "Сначала сдай проверку перед этим уроком.",
+                courseDone: "Курс пройден! 🎉",
+                courseDoneBtn: "Выбрать следующий класс"
             }
         }[userLang] || { noCourse: "No Course Found", noCourseDesc: "No course found for Grade", comingSoon: "Coming Soon", comingSoonDesc: "Course coming soon!", notAvail: "Course not yet available", completed: "Completed", available: "Available", upNextSub: "Up Next", locked: "Locked", lockedMsg: "Finish the lessons before this one first.", lessonsDone: "{d} of {n} done", jumpHere: "Jump here", jumpSub: "Know this already? Pass a test to unlock it.", jumpWait: "Try again in {h}", courseDone: "Course complete! 🎉", courseDoneBtn: "Choose the next grade", cpMid: "Checkpoint: first half", cpEnd: "Unit checkpoint", cpPassed: "Passed", cpNext: "Pass it to open the next lessons", cpWait: "Try again in {h}", cpRevise: "Revise my mistakes", cpStart: "Start the checkpoint", cpTitle: "Checkpoint · {t}", cpLockedMsg: "Pass the checkpoint before this lesson first." };
 
@@ -2505,7 +2564,7 @@ ${stream[lang]}` : '');
         const courseComplete = pathItems.length > 0 && !frontierItem;
         const frontierUnit = frontierItem ? frontierItem.unit : pathUnits.length;
         const fillIn = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
-        const hoursText = (ms) => ms >= 3600000 ? `${Math.floor(ms / 3600000)} ${userLang === 'hy' ? 'ժ' : 'h'}` : `${Math.ceil(ms / 60000)} ${userLang === 'hy' ? 'ր' : 'min'}`;
+        const hoursText = (ms) => ms >= 3600000 ? `${Math.floor(ms / 3600000)} ${tr({ en: 'h', hy: 'ժ', ru: 'ч' }, userLang)}` : `${Math.ceil(ms / 60000)} ${tr({ en: 'min', hy: 'ր', ru: 'мин' }, userLang)}`;
         const waitFor = (ms) => fillIn(txt.jumpWait, { h: hoursText(ms) });
         const cpHref = (cp, revise) => `/jump/?kind=checkpoint&lang=${encodeURIComponent(userLang)}&course=${encodeURIComponent(courseDoc.id)}` +
             `&folder=${encodeURIComponent(cp.folder)}&unit=${cp.unitNum}&pos=${cp.pos}&title=${encodeURIComponent(cp.title)}${revise ? '&revise=1' : ''}`;
@@ -2686,7 +2745,7 @@ ${stream[lang]}` : '');
             ui.hTitle.textContent = txt.noCourse;
             const diagnostics = loadWarnings.length
                 ? `<div style="margin-top:1rem; font-size:0.75rem; opacity:0.7; text-align:left; display:inline-block">
-                       ${escapeHTML(state.lang === 'hy' ? 'Արգելափակված հարցումներ:' : 'Blocked reads:')}<br>
+                       ${escapeHTML(tr({ en: 'Blocked reads:', hy: 'Արգելափակված հարցումներ:', ru: 'Заблокированные запросы:' }))}<br>
                        ${loadWarnings.map(w => escapeHTML(w)).join('<br>')}
                    </div>`
                 : '';
@@ -2707,9 +2766,9 @@ ${stream[lang]}` : '');
 
     } catch (e) {
         console.error("Error loading hangar data:", e);
-        ui.hTitle.textContent = state.lang === 'hy' ? "Սխալ" : "Error";
+        ui.hTitle.textContent = tr({ en: "Error", hy: "Սխալ", ru: "Ошибка" });
         const detail = e && (e.code || e.message) ? ` (${e.code || e.message})` : '';
-        ui.hList.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--slate-500)">${state.lang === 'hy' ? "Տվյալները չբեռնվեցին։ Փորձեք կրկին։" : "Could not load lessons. Please try again."}<br><span style="font-size:0.75rem; opacity:0.7">${detail.replace(/[<>&]/g, '')}</span></div>`;
+        ui.hList.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--slate-500)">${tr({ en: "Could not load lessons. Please try again.", hy: "Տվյալները չբեռնվեցին։ Փորձեք կրկին։", ru: "Не удалось загрузить уроки. Попробуй ещё раз." })}<br><span style="font-size:0.75rem; opacity:0.7">${detail.replace(/[<>&]/g, '')}</span></div>`;
     }
 }
 
@@ -2717,8 +2776,9 @@ ${stream[lang]}` : '');
     function updatePanToggleUI() {
         const TXT = {
             en: { on: "Turn Off", off: "Turn On" },
-            hy: { on: "Անջատել", off: "Միացնել" }
-        }[state.lang];
+            hy: { on: "Անջատել", off: "Միացնել" },
+            ru: { on: "Выключить", off: "Включить" }
+        }[state.lang] || { on: "Turn Off", off: "Turn On" };
         ui.pPanToggle.textContent = state.assistivePanning ? TXT.on : TXT.off;
     }
 
@@ -2773,6 +2833,19 @@ ${stream[lang]}` : '');
               nameTitle: 'Քո անունը', firstName: 'Անուն', lastName: 'Ազգանուն', save: 'Պահպանել', cancel: 'Չեղարկել', send: 'Ուղարկել',
               reportPlaceholder: 'Ի՞նչ պատահեց։ Ո՞ր դասում կամ էկրանին։', reportThanks: 'Շնորհակալություն։ Նամակդ ստացանք։', reportEmpty: 'Նախ գրիր մի քանի բառ։',
               goalToday: 'Այսօր՝ {d} / {n} դաս', goalDone: 'Օրվա նպատակը կատարված է 🎉 {d} / {n}' },
+        ru: { account: 'Аккаунт', editName: 'Изменить имя', emailTitle: 'Подтверди почту', emailDesc: 'Мы отправили тебе ссылку. Не пришла? Отправь ещё раз.',
+              emailBtn: 'Отправить ссылку', emailOk: 'Почта подтверждена ✓', emailNot: 'Почта ещё не подтверждена', emailSent: 'Отправлено! Проверь почту (и «Спам»).',
+              gradeTitle: 'Класс и курс', gradeLabel: '{g} класс', gen: 'Базовый', adv: 'Углублённый',
+              learning: 'Учёба', goalTitle: 'Цель на день', goalDesc: 'Сколько уроков в день ты хочешь проходить? На главной видно, сколько уже сделано.', goalOff: 'Выкл.',
+              board: 'Доска', penTitle: 'Ручка', penDesc: 'Толщина линий, когда ты пишешь на доске.', penThin: 'Тонкая', penNormal: 'Средняя', penThick: 'Толстая',
+              leftTitle: 'Левша', leftDesc: 'Меню урока будет слева, а ластик — справа.',
+              soundSection: 'Звук', soundTitle: 'Звуки', soundDesc: 'Звуки в уроках и соревнованиях.',
+              help: 'Помощь', reportTitle: 'Сообщить о проблеме', reportDesc: 'Что-то не так в уроке или в приложении? Напиши нам.', reportBtn: 'Написать', accountEnd: 'Аккаунт',
+              privacyTitle: 'Политика конфиденциальности', privacyDesc: 'Что thelo хранит о тебе и как это удалить.', privacyBtn: 'Читать',
+              on: 'Включить', off: 'Выключить', saved: 'Сохранено', saveFail: 'Не удалось сохранить. Проверь подключение.',
+              nameTitle: 'Твоё имя', firstName: 'Имя', lastName: 'Фамилия', save: 'Сохранить', cancel: 'Отмена', send: 'Отправить',
+              reportPlaceholder: 'Что случилось? В каком уроке или на каком экране?', reportThanks: 'Спасибо! Мы получили твоё сообщение.', reportEmpty: 'Сначала напиши пару слов.',
+              goalToday: 'Сегодня: {d} из {n} уроков', goalDone: 'Цель на день выполнена! 🎉 {d} из {n}' },
     };
     const stT = () => SETTINGS_TEXT[state.lang] || SETTINGS_TEXT.en;
     const stEsc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -2782,7 +2855,7 @@ ${stream[lang]}` : '');
     function applySettingsText() {
         const t = stT();
         document.querySelectorAll('[data-st]').forEach(el => { if (t[el.dataset.st]) el.textContent = t[el.dataset.st]; });
-        document.getElementById('p-privacy-link').href = 'https://thelo.ink/privacy/?lang=' + (state.lang === 'hy' ? 'hy' : 'en');
+        document.getElementById('p-privacy-link').href = 'https://thelo.ink/privacy/?lang=' + (['hy', 'ru'].includes(state.lang) ? state.lang : 'en');
         drawSettings();
     }
     function drawSettings() {
@@ -2996,17 +3069,21 @@ ${stream[lang]}` : '');
             window.location.reload();
         } catch (err) {
             console.error(err);
-            const reauthMsg = state.lang === 'hy'
-                ? "Խնդրում ենք դուրս գալ և նորից մուտք գործել՝ հաշիվը ջնջելու համար:"
-                : "Please log out and log back in to delete your account.";
+            const reauthMsg = tr({
+                en: "Please log out and log back in to delete your account.",
+                hy: "Խնդրում ենք դուրս գալ և նորից մուտք գործել՝ հաշիվը ջնջելու համար:",
+                ru: "Чтобы удалить аккаунт, выйди и войди снова.",
+            });
             if (err.code === 'auth/requires-recent-login') showToast(reauthMsg, true);
             else showToast(err.message || "Error", true);
         }
     };
 
-    // Language Toggle
-    ui.pLangToggle.onclick = async () => {
-        const newLang = state.lang === 'en' ? 'hy' : 'en';
+    // Language: English / Armenian / Russian. The course follows it (each language has its own courses).
+    ui.pLang.onclick = async (e) => {
+        const b = e.target.closest('button[data-v]');
+        if (!b || b.dataset.v === state.lang) return;
+        const newLang = b.dataset.v;
         window.setLang(newLang, document.createElement('div'));
         if (auth.currentUser) {
             await updateDoc(doc(db, 'thelo-students', auth.currentUser.uid), { 'preferences.language': newLang });

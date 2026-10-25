@@ -8,7 +8,7 @@
  *   home.html   phase "intro": the home screen (next lesson, sections, locks, jump
  *               tests, streak, the bottom bar), then opens the demo lesson.
  *   lesson.html ?tutorial=1: the demo lesson for the student's grade and language
- *               (lessons/TUTORIAL-HY|EN, built by lesson-gen/build_tutorial.py):
+ *               (lessons/TUTORIAL-HY|EN|RU, built by lesson-gen/build_tutorial.py):
  *               the board, the replay bar, the lesson menu, two-finger moving,
  *               a multiple-choice check and a handwritten answer.
  *   home.html   phase "after": Scan (the tour continues inside scan.html, which
@@ -116,8 +116,53 @@
             courses: '«Դասընթացներ»-ում կարող ես փոխել դասարանը կամ լեզուն։ Ավելի բարձր դասարան անցնելու համար պետք է կարճ թեստ հանձնել։',
             final: 'Վերջ, դու պատրաստ ես։ Հաճելի ուսուցում thelo-ի հետ։',
         },
+        ru: {
+            next: 'Дальше', go: 'Поехали', startLesson: 'Начать урок', skip: 'Пропустить обучение', gotIt: 'Понятно',
+            finish: 'Начнём!', ok: 'Хорошо',
+            skipped: 'Ничего страшного! Обучение можно начать снова в любой момент: Профиль → Начать обучение.',
+            welcome: 'Привет{name}! Я thelo 👋 Давай покажу, как здесь всё устроено. Это займёт около 3 минут.',
+            hero: 'Здесь всегда ждёт твой следующий урок. Нажми «Продолжить», чтобы продолжить с того места, где остановился.',
+            folders: 'Курс разделён на разделы, как на папки. Нажми на раздел, чтобы открыть его. Уроки открываются по порядку: закончи урок, и откроется следующий.',
+            locked: 'Замок 🔒 значит, что ты ещё не дошёл до этого урока.',
+            jump: 'Уже знаешь раздел? Нажми «Перейти сюда» и сдай короткий тест, чтобы сразу его открыть.',
+            stats: 'Занимайся каждый день, и твоя серия 🔥 будет расти. Звёзды ⭐ — это очки, которые ты зарабатываешь.',
+            nav: 'Эта панель ведёт по приложению: Главная, Курсы, Скан, Турнир (математические битвы с друзьями) и Профиль.',
+            toLesson: 'А теперь пройдём твой первый урок вместе! Я сделал специальный урок для {grade} класса.',
+            lStart: 'Это урок. Доска работает как настоящая. Нажми в любом месте, чтобы начать.',
+            lStartDesk: 'Это урок. Доска работает как настоящая. Нажми «{start}», чтобы начать.',
+            lHeadline: 'Каждый шаг начинается с короткого объяснения сверху, а остальное я рисую для тебя на доске.',
+            lProgress: 'Эта полоска идёт вместе с рисунком. Потяни точку, чтобы перемотать или посмотреть снова.',
+            lFab: 'Эта круглая кнопка открывает меню урока. Она всегда здесь, в углу.',
+            lMenu: 'Начать / Проверить: ведёт дальше, а на вопросе я проверяю твой ответ.\nПодсказка: маленькая помощь, если застрял на вопросе.\nШаг за шагом: решаем вопрос вместе, по маленькому шагу.\nСледующий шаг / Предыдущий шаг: перемещение по уроку.\nОчистить: стереть написанное.\nЗавершить урок: выйти из урока.',
+            lBtnNext: 'Эта кнопка ведёт дальше. На вопросе она становится «Проверить», и я проверяю твой ответ.',
+            lBtnClear: '«Очистить» стирает написанное с доски.',
+            lBtnPrev: 'Эта кнопка возвращает к предыдущему шагу.',
+            lBtnBook: 'thelobook — твоя тетрадь для вычислений.',
+            lBtnCalc: 'Графический калькулятор, когда он нужен.',
+            lGesture: 'Пиши одним пальцем. Чтобы сдвинуть доску, тяни её двумя пальцами.\nАвтопрокрутка сама сдвигает доску, пока ты пишешь. Её можно выключить в Профиле.',
+            lGoNextMobile: 'Теперь открой меню и нажми «{nextStage}».',
+            lGoNextDesk: 'Теперь нажми «{next}», чтобы продолжить.',
+            lBoard2: 'Посмотри на доску, а потом переходи к следующему шагу.',
+            lMcqMobile: 'Вопрос! Нажми на ответ, который считаешь верным, потом открой меню и нажми «{check}». Когда он станет зелёным, нажми «{next}», чтобы идти дальше.',
+            lMcqDesk: 'Вопрос! Выбери ответ, который считаешь верным, потом нажми «{check}». Когда он станет зелёным, нажми «{next}», чтобы идти дальше.',
+            lWriteMobile: 'Теперь напиши ответ на доске пальцем, потом открой меню и нажми «{check}». Я читаю твой почерк! Застрял? Нажми «{hint}» или «{guide}», и решим вместе.',
+            lWriteDesk: 'Теперь напиши ответ на доске, потом нажми «{check}». Я читаю твой почерк! Застрял? Нажми «{hint}» или «{guide}», и решим вместе.',
+            afterWelcome: 'Молодец, первый урок пройден! 🎉 Теперь быстро посмотрим на остальное приложение.',
+            scanNav: '«Скан» помогает с любой задачей из учебника или домашки. Давай откроем его.',
+            sCamera: 'Сфотографируй одну задачу…',
+            sGallery: '…или выбери уже готовую картинку.',
+            sTips: 'Для лучшего результата: одна задача, хороший свет, ровная страница.',
+            sExplain: 'Не понимаешь тему? Нажми сюда: задай один короткий вопрос или отправь одну картинку, и я объясню по маленьким шагам.',
+            sAfter: 'Потом я объясняю решение шаг за шагом и даю похожие задачи для тренировки. На доске для тренировки двигай двумя пальцами, а чтобы увеличить, разведи пальцы.',
+            pLang: 'Здесь меняется язык приложения.',
+            pPan: 'Автопрокрутка сама сдвигает доску, пока ты пишешь, чтобы место не заканчивалось. Кому-то она очень нравится, кому-то нет: включи или выключи её прямо здесь.',
+            pTutorial: 'Хочешь посмотреть обучение ещё раз? Нажми «Начать обучение».',
+            courses: 'В «Курсах» можно сменить класс или язык. Чтобы перейти в класс выше, нужно сдать короткий тест.',
+            final: 'Вот и всё, ты готов! Приятной учёбы с thelo.',
+        },
     };
     const words = (lang) => TEXT[lang] || TEXT.en;
+    const knownLang = (l) => (TEXT[l] ? l : 'hy');
     const fmt = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => (v && v[k] != null ? v[k] : ''));
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const q = (sel, root) => (root || document).querySelector(sel);
@@ -397,7 +442,7 @@
         api.profile();
         await sleep(500);
         const row = (id) => { const el = document.getElementById(id); return el ? el.closest('.settings-item') : null; };
-        const langRow = row('p-lang-toggle');
+        const langRow = row('p-lang');
         if (langRow) { await bringIntoView(langRow); if (!await step({ text: W.pLang, target: langRow, next: W.next })) return; }
         const panRow = row('p-pan-toggle');
         if (panRow) { await bringIntoView(panRow); if (!await step({ text: W.pPan, target: panRow, next: W.next })) return; }
@@ -439,7 +484,7 @@
             if (running) return;
             running = true;
             reply({ event: 'scan-started' });
-            const lang = event.data.lang === 'en' ? 'en' : 'hy', W = words(lang);
+            const lang = knownLang(event.data.lang), W = words(lang);
             let result = 'done';
             for (const s of [
                 { text: W.sCamera, target: () => document.getElementById('btn-camera') },
@@ -479,13 +524,16 @@
     }
 
     async function runLesson(detail, live) {
-        const lang = detail.lang === 'en' ? 'en' : 'hy', W = words(lang);
+        const lang = knownLang(detail.lang), W = words(lang);
         const mobile = !!detail.mobile;
         const touch = mobile || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
         const uid = activeUid();
         const api = window.theloLessonApi || {};
-        const fallback = lang === 'en' ? { start: 'Go', check: 'Check', next: 'Next', nextStage: 'Next Stage', hint: 'Hint', guide: 'Step by step' }
-                                       : { start: 'Գնալ', check: 'Ստուգել', next: 'Հաջորդը', nextStage: 'Հաջորդ փուլ', hint: 'Հուշում', guide: 'Քայլ առ քայլ' };
+        const fallback = {
+            en: { start: 'Go', check: 'Check', next: 'Next', nextStage: 'Next Stage', hint: 'Hint', guide: 'Step by step' },
+            hy: { start: 'Գնալ', check: 'Ստուգել', next: 'Հաջորդը', nextStage: 'Հաջորդ փուլ', hint: 'Հուշում', guide: 'Քայլ առ քայլ' },
+            ru: { start: 'Начать', check: 'Проверить', next: 'Дальше', nextStage: 'Следующий шаг', hint: 'Подсказка', guide: 'Шаг за шагом' },
+        }[lang];
         let labels = fallback;
         try { labels = Object.assign({}, fallback, api.labels ? api.labels() : {}); } catch (e) { /* keep the fallback */ }
         const say = (key) => fmt(W[key], labels);
@@ -565,7 +613,8 @@
         isFinished(uid) { const s = getState(uid); return !!(s && (s.status === 'done' || s.status === 'skipped')); },
         lessonFile(grade, lang) {
             const g = Math.min(12, Math.max(5, Number(grade) || 7));
-            return lang === 'en' ? `TUTORIAL-EN/en-tut-${g}.json` : `TUTORIAL-HY/tut-${g}.json`;
+            if (lang === 'en' || lang === 'ru') return `TUTORIAL-${lang.toUpperCase()}/${lang}-tut-${g}.json`;
+            return `TUTORIAL-HY/tut-${g}.json`;
         },
     };
 })();
