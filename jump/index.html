@@ -22,11 +22,16 @@
          *   /jump/?kind=section&lang=hy&course=grade9-hy-math&folder=NINE-HY&from=12&to=30&unit=3&title=...
          *   /jump/?kind=grade&lang=hy&from=7&curstream=&complete=0&target=9&stream=
          *
-         * Questions come from lessons/<FOLDER>/tests.json (written by lesson-gen/build.py):
-         * quick ones (multiple choice, or a number typed on the keypad) are checked here;
-         * handwritten ones go to the same analyzeMathDrawing function the lessons use.
-         * 80% passes. Starting a test counts as a try: leaving or failing locks that test
-         * for 24 hours (thelo-students/{uid}.jumpTests).
+         *   /jump/?kind=checkpoint&lang=hy&course=grade7-hy-math&folder=SEVEN-HY&unit=1&pos=mid&title=...
+         *   ...&revise=1   opens the Revise screen of the last failed try
+         *
+         * The `assess` Cloud Function picks the questions from lessons/<FOLDER>/tests.json,
+         * checks every answer (handwritten ones with the AI checker) and writes the result;
+         * this page never sees an answer before it is given. 80% passes. Starting a test
+         * counts as a try: leaving or failing locks that test for 24 hours
+         * (thelo-students/{uid}.jumpTests, .checkpoints for checkpoints). A failed
+         * checkpoint offers Revise: each mistake with the right answer and the worked
+         * solution, then practice problems from the same lessons (checked here, not saved).
          */
         :root {
             --thelo-blue: #2563EB;
@@ -51,6 +56,7 @@
         body {
             font-family: 'Manrope', sans-serif; background: var(--thelo-bg); color: var(--thelo-text);
             height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+            overflow-wrap: anywhere;   /* long Armenian words break instead of leaving their card */
             background-image:
                 linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
                 linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
@@ -79,6 +85,7 @@
             box-shadow: 0 8px 20px rgba(0,0,0,0.06); padding: 1.5rem;
         }
         .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--slate-500); font-weight: 700; }
+        .label.brand { text-transform: none; font-size: 0.85rem; letter-spacing: 0; }   /* "thelo" is always lowercase */
         h1.title { font-size: 1.6rem; font-weight: 800; line-height: 1.25; margin: 0.4rem 0 0.9rem; }
         p.body { font-size: 1rem; line-height: 1.5; color: #374151; margin-bottom: 0.75rem; }
         .facts { list-style: none; margin: 1rem 0 0.25rem; display: grid; gap: 0.6rem; }
@@ -164,6 +171,16 @@
         .modal { background: var(--white); width: 100%; max-width: 560px; border-radius: 1.25rem 1.25rem 0 0; padding: 1.5rem 1.25rem calc(env(safe-area-inset-bottom) + 1.25rem); }
         .modal h2 { font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem; }
 
+        .review-item { padding: 1.1rem; margin-bottom: 0.8rem; }
+        .review-item .q-text { font-size: 1.05rem; margin-bottom: 0.7rem; }
+        .rv-row { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; padding: 0.45rem 0.7rem; border-radius: 0.7rem; margin-bottom: 0.35rem; font-size: 0.95rem; }
+        .rv-row span { font-weight: 700; color: var(--slate-500); font-size: 0.82rem; }
+        .rv-row.wrong { background: var(--red-bg); } .rv-row.right { background: var(--green-bg); }
+        .rv-note { font-size: 0.9rem; color: #374151; line-height: 1.45; margin: 0.4rem 0 0; }
+        .rv-steps { margin-top: 0.6rem; font-size: 0.92rem; line-height: 1.5; }
+        .rv-steps summary { font-weight: 800; color: var(--thelo-blue); cursor: pointer; }
+        .rv-steps p { margin-top: 0.35rem; }
+        .feedback .rv-steps { color: inherit; font-weight: 600; }
         .spinner { width: 42px; height: 42px; border: 4px solid var(--slate-200); border-top-color: var(--thelo-blue); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
@@ -195,12 +212,15 @@
         const ASSET_ORIGIN = 'https://thelo.ink';
         const PASS_RATIO = 0.8;
         const COOLDOWN_MS = 24 * 60 * 60 * 1000;
-        const SIZES = { section: { quick: 8, written: 2 }, grade: { quick: 12, written: 3 } };
+        // Must match SIZES in thelo-backend/functions/assess.js (the server picks the questions).
+        const SIZES = { section: { quick: 8, written: 2 }, grade: { quick: 12, written: 3 }, mid: { quick: 5, written: 1 }, end: { quick: 8, written: 2 } };
+        const PRACTICE_SIZE = 6;
         const FOLDER_NAMES = { 5: 'FIVE', 6: 'SIX', 7: 'SEVEN', 8: 'EIGHT', 9: 'NINE', 10: 'TEN', 11: 'ELEVEN', 12: 'TWELVE' };
 
         const params = new URLSearchParams(location.search);
-        const KIND = params.get('kind') === 'grade' ? 'grade' : 'section';
+        const KIND = ['grade', 'checkpoint'].includes(params.get('kind')) ? params.get('kind') : 'section';
         const LANG = params.get('lang') === 'en' ? 'en' : 'hy';
+        const REVISE = params.get('revise') === '1';
         // A local preview (http://localhost/...?demo=1) runs without an account and saves nothing.
         const DEMO = ['localhost', '127.0.0.1'].includes(location.hostname) && params.get('demo') === '1';
 
@@ -211,12 +231,15 @@
                 gradeTitle: 'Skip to grade {g}',
                 gradeBody: 'This test covers {list}. Pass it and your course switches to grade {g}.',
                 gradeList1: 'grade {a}', gradeListN: 'grades {a} to {b}',
+                midTitle: 'Checkpoint: first half of “{t}”', endTitle: 'Checkpoint: “{t}”',
+                checkpointBody: 'Show what you have learned so far. Pass it and the next lessons open.',
                 nQuestions: '{n} questions', passNeed: 'Pass with {p} correct', handwritten: '{w} of them you solve by hand',
                 tryRule: 'Starting the test counts as a try. If you leave or don\'t pass, you can try again in 24 hours.',
                 start: 'Start the test', back: 'Back',
                 loading: 'Preparing your test…', loadFail: 'The test could not be loaded. Check your connection and try again.',
                 signIn: 'Please sign in to take a test.',
                 waitTitle: 'Try again later', waitBody: 'You can take this test again in {h}.',
+                passedTitle: 'Already passed', passedBody: 'You have already passed this checkpoint. Keep going!',
                 hours: '{n} h', minutes: '{n} min',
                 question: 'Question {i} of {n}', chooseOne: 'Choose the answer', typeAnswer: 'Type the answer', writeAnswer: 'Solve it by hand and write the answer',
                 check: 'Check', checking: 'Checking…', continue: 'Continue', finish: 'See the result',
@@ -225,11 +248,17 @@
                 undo: 'Undo', clear: 'Clear', padHint: 'Write here with your finger or pen',
                 passTitle: 'You passed!', failTitle: 'Not this time',
                 passSection: 'The section is open. Keep going from there!', passGrade: 'Welcome to grade {g}!',
+                passCheckpoint: 'Well done! The next lessons are open.',
                 failBody: 'You need {p} correct to pass. Keep learning and try again in 24 hours.',
+                failCheckpoint: 'You need {p} correct to pass. Look at what went wrong, practise, and try again in 24 hours.',
                 saving: 'Saving…', saveFail: 'Your result could not be saved. Check your connection and tap to try again.',
                 toCourse: 'Go to my course', retrySave: 'Try again',
                 leaveTitle: 'Leave the test?', leaveBody: 'Leaving now counts as a try: you can take this test again in 24 hours.',
                 leave: 'Leave', stay: 'Keep going',
+                revise: 'Revise my mistakes', reviseTitle: 'What to look at again', reviseSub: 'Try again in {h}. Until then, look at each mistake and practise.',
+                yourAnswer: 'Your answer', rightAnswer: 'Right answer', noAnswer: 'no answer', howTo: 'How to solve it', handwrittenAnswer: 'handwritten',
+                practise: 'Practise similar problems', practiceTitle: 'Practice', practiceOf: 'Practice {i} of {n}',
+                practiceDone: 'You practised {n} problems and got {r} right.', practiceAgain: 'Practise more', noPractice: 'There are no more practice problems here. Open the lessons again to revise.',
             },
             hy: {
                 sectionTitle: 'Թռիչք դեպի «{t}»',
@@ -237,12 +266,15 @@
                 gradeTitle: 'Անցում {g}-րդ դասարան',
                 gradeBody: 'Թեստն ընդգրկում է {list}։ Հաջողությամբ անցնելու դեպքում քո դասընթացը կդառնա {g}-րդ դասարանինը։',
                 gradeList1: '{a}-րդ դասարանը', gradeListN: '{a}–{b}-րդ դասարանները',
+                midTitle: 'Ստուգում՝ «{t}» բաժնի առաջին կեսը', endTitle: 'Ստուգում՝ «{t}»',
+                checkpointBody: 'Ցույց տուր, թե ինչ ես սովորել մինչ այժմ։ Հաջողությամբ անցնելու դեպքում հաջորդ դասերը կբացվեն։',
                 nQuestions: '{n} հարց', passNeed: 'Անցնելու համար՝ {p} ճիշտ պատասխան', handwritten: 'Դրանցից {w}-ը լուծում ես ձեռքով',
                 tryRule: 'Թեստը սկսելը համարվում է փորձ։ Եթե դուրս գաս կամ չանցնես, կարող ես նորից փորձել 24 ժամ հետո։',
                 start: 'Սկսել թեստը', back: 'Հետ',
                 loading: 'Թեստը պատրաստվում է…', loadFail: 'Թեստը չբեռնվեց։ Ստուգիր կապը և փորձիր նորից։',
                 signIn: 'Թեստ հանձնելու համար մուտք գործիր։',
                 waitTitle: 'Փորձիր ավելի ուշ', waitBody: 'Այս թեստը կարող ես նորից հանձնել {h} հետո։',
+                passedTitle: 'Արդեն անցել ես', passedBody: 'Այս ստուգումն արդեն անցել ես։ Շարունակիր։',
                 hours: '{n} ժ', minutes: '{n} ր',
                 question: 'Հարց {i} / {n}', chooseOne: 'Ընտրիր պատասխանը', typeAnswer: 'Գրիր պատասխանը', writeAnswer: 'Լուծիր ձեռքով և գրիր պատասխանը',
                 check: 'Ստուգել', checking: 'Ստուգվում է…', continue: 'Շարունակել', finish: 'Տեսնել արդյունքը',
@@ -251,11 +283,17 @@
                 undo: 'Հետարկել', clear: 'Մաքրել', padHint: 'Գրիր այստեղ մատով կամ գրիչով',
                 passTitle: 'Անցար։', failTitle: 'Այս անգամ՝ ոչ',
                 passSection: 'Բաժինը բացված է։ Շարունակիր այնտեղից։', passGrade: 'Բարի գալուստ {g}-րդ դասարան։',
+                passCheckpoint: 'Կեցցե՛ս։ Հաջորդ դասերը բացված են։',
                 failBody: 'Անցնելու համար պետք է {p} ճիշտ պատասխան։ Շարունակիր սովորել և նորից փորձիր 24 ժամ հետո։',
+                failCheckpoint: 'Անցնելու համար պետք է {p} ճիշտ պատասխան։ Նայիր սխալներդ, վարժվիր և նորից փորձիր 24 ժամ հետո։',
                 saving: 'Պահպանվում է…', saveFail: 'Արդյունքը չպահպանվեց։ Ստուգիր կապը և փորձիր նորից։',
                 toCourse: 'Գնալ իմ դասընթացին', retrySave: 'Փորձել նորից',
                 leaveTitle: 'Դուրս գա՞լ թեստից', leaveBody: 'Հիմա դուրս գալը համարվում է փորձ. թեստը կարող ես նորից հանձնել 24 ժամ հետո։',
                 leave: 'Դուրս գալ', stay: 'Շարունակել թեստը',
+                revise: 'Կրկնել սխալներս', reviseTitle: 'Ինչին նորից նայել', reviseSub: 'Նորից կարող ես փորձել {h} հետո։ Մինչ այդ նայիր սխալներիդ և վարժվիր։',
+                yourAnswer: 'Քո պատասխանը', rightAnswer: 'Ճիշտ պատասխանը', noAnswer: 'պատասխան չկա', howTo: 'Ինչպես լուծել', handwrittenAnswer: 'ձեռագիր',
+                practise: 'Վարժվել նման խնդիրներով', practiceTitle: 'Վարժություն', practiceOf: 'Վարժություն {i} / {n}',
+                practiceDone: 'Դու վարժվեցիր {n} խնդրով, որոնցից {r}-ը՝ ճիշտ։', practiceAgain: 'Վարժվել ևս', noPractice: 'Այստեղ այլ վարժություններ չկան։ Կրկին բացիր դասերը՝ կրկնելու համար։',
             },
         }[LANG];
         const fmt = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => (v && k in v ? v[k] : ''));
@@ -297,7 +335,6 @@
             }
             if (last < src.length) el.appendChild(document.createTextNode(src.slice(last)));
         }
-        const plain = (s) => String(s ?? '').replace(/\/K\s?|\s?K\//g, '');
 
         function shuffle(a) {
             for (let i = a.length - 1; i > 0; i--) {
@@ -308,7 +345,7 @@
         }
 
         function parseNum(s) {
-            const t = String(s ?? '').replace(/[\s ]/g, '').replace(/−/g, '-').replace(/,/g, '.');
+            const t = String(s ?? '').replace(/[\s ]/g, '').replace(/−/g, '-').replace(/,/g, '.');
             if (!/^-?(\d+\.?\d*|\.\d+)(\/-?(\d+\.?\d*|\.\d+))?$/.test(t)) return NaN;
             if (t.includes('/')) {
                 const [a, b] = t.split('/').map(Number);
@@ -330,17 +367,34 @@
         }
 
         // ------------------------------------------------------------------ the test being asked for
+        // The keys must match thelo-backend/functions/assess.js.
         const spec = (() => {
             if (KIND === 'section') {
                 const course = params.get('course') || '';
                 const unit = params.get('unit') || '';
                 return {
-                    key: `s_${course}_u${unit}`,
+                    key: `s_${course}_u${unit}`, field: 'jumpTests',
                     folders: [params.get('folder') || ''],
                     from: Number(params.get('from')) || 1,
                     to: Number(params.get('to')) || 0,
+                    unit: Number(unit), course,
                     title: params.get('title') || '',
                     size: SIZES.section,
+                    server: { kind: 'section', course, folder: params.get('folder') || '', from: Number(params.get('from')) || 1, to: Number(params.get('to')) || 0, unit: Number(unit), lang: LANG },
+                };
+            }
+            if (KIND === 'checkpoint') {
+                const course = params.get('course') || '';
+                const unit = Number(params.get('unit')) || 1;
+                const pos = params.get('pos') === 'mid' ? 'mid' : 'end';
+                return {
+                    key: `c_${course}_u${unit}_${pos}`, field: 'checkpoints',
+                    folders: [params.get('folder') || ''],
+                    // lesson numbers covered (for the local demo; the server works them out itself)
+                    from: Number(params.get('from')) || 1, to: Number(params.get('to')) || 999,
+                    unit, pos, course, title: params.get('title') || '',
+                    size: SIZES[pos],
+                    server: { kind: 'checkpoint', course, unit, pos },
                 };
             }
             const target = Number(params.get('target'));
@@ -354,21 +408,27 @@
                 grades.push({ grade: g, stream: g >= 10 ? (g === cur ? (curStream || tstream || 'gen') : (tstream || 'gen')) : '' });
             }
             return {
-                key: `g_${LANG}_${target}${tstream}`,
+                key: `g_${LANG}_${target}${tstream}`, field: 'jumpTests',
                 folders: grades.map(g => folderFor(g.grade, g.stream)),
                 grades, target, tstream,
                 size: SIZES.grade,
+                server: { kind: 'grade', lang: LANG, target, stream: tstream, complete: params.get('complete') === '1' },
             };
         })();
         spec.key = spec.key.replace(/[^A-Za-z0-9_]/g, '_');
 
-        // ------------------------------------------------------------------ choosing the questions
-        /**
-         * Spread the questions evenly over the material being skipped: the lessons are cut
-         * into as many consecutive slices as there are questions, and each question comes
-         * from a random lesson of its slice. So a test over several grades asks about all
-         * of them, not just whichever has the most exercises.
-         */
+        // ------------------------------------------------------------------ questions on this device
+        // Used by the local demo and by practice (which is never scored). Real tests are
+        // picked and checked by the server (assess), which never sends the answers here.
+        async function loadPool(folder) {
+            const base = DEMO && params.get('pools') ? params.get('pools') : `${ASSET_ORIGIN}/lessons`;
+            const res = await fetch(`${base}/${encodeURIComponent(folder)}/tests.json`, { cache: 'no-cache' });
+            if (!res.ok) throw new Error(`HTTP ${res.status} for ${folder}/tests.json`);
+            return res.json();
+        }
+        const poolLessons = (pool) => (pool.units || []).flatMap(u => u.lessons || []);
+
+        /** Questions spread evenly over the lessons (same as assess.js). */
         function pickQuestions(lessons, nQuick, nWritten) {
             const used = new Set();
             const pickFrom = (ls, n, key) => {
@@ -384,48 +444,81 @@
                         const tag = `${l.id}|${key}|${qi}`;
                         if (used.has(tag)) continue;
                         used.add(tag);
-                        out.push(Object.assign({}, l[key][qi]));
+                        out.push({ q: l[key][qi], lessonId: l.id });
                         break;
                     }
                 }
                 return out;
             };
-            const written = pickFrom(lessons.filter(l => l.written && l.written.length), nWritten, 'written')
-                .map(q => Object.assign(q, { type: 'written' }));
-            const quick = pickFrom(lessons.filter(l => l.quick && l.quick.length), nQuick + (nWritten - written.length), 'quick')
-                .map(q => Object.assign(q, { type: q.c ? 'mcq' : 'num' }));
-            quick.forEach(q => {
-                if (q.type === 'mcq') {
-                    q.order = shuffle(q.c.map((_, i) => i));
-                }
-            });
-            return shuffle(quick).concat(written);       // the handwritten ones come last
-        }
-
-        async function loadPools() {
-            const pools = await Promise.all(spec.folders.map(async folder => {
-                const base = DEMO && params.get('pools') ? params.get('pools') : `${ASSET_ORIGIN}/lessons`;
-                const res = await fetch(`${base}/${encodeURIComponent(folder)}/tests.json`, { cache: 'no-cache' });
-                if (!res.ok) throw new Error(`HTTP ${res.status} for ${folder}/tests.json`);
-                return res.json();
-            }));
-            const lessons = [];
-            for (const pool of pools) {
-                for (const unit of pool.units || []) {
-                    for (const l of unit.lessons || []) {
-                        if (KIND === 'section' && (l.n < spec.from || l.n > spec.to)) continue;
-                        lessons.push(l);
-                    }
+            const written = pickFrom(lessons.filter(l => l.written && l.written.length), nWritten, 'written');
+            const quick = pickFrom(lessons.filter(l => l.quick && l.quick.length), nQuick + (nWritten - written.length), 'quick');
+            const items = [];
+            for (const { q, lessonId } of shuffle(quick)) {
+                if (Array.isArray(q.c)) {
+                    const order = shuffle(q.c.map((_, i) => i));
+                    items.push({ pub: { type: 'mcq', q: q.q, c: order.map(i => q.c[i]) }, sec: { a: order.indexOf(q.a), s: q.s || '' }, lessonId });
+                } else {
+                    items.push({ pub: { type: 'num', q: q.q, u: q.u || '' }, sec: { n: String(q.n), u: q.u || '', s: q.s || '' }, lessonId });
                 }
             }
-            return lessons;
+            for (const { q, lessonId } of written) {
+                items.push({ pub: { type: 'written', q: q.q }, sec: { a: q.a, s: q.s || '' }, lessonId });
+            }
+            return items;
         }
+        const answerText = (item) => (item.pub.type === 'mcq' ? item.pub.c[item.sec.a]
+            : item.pub.type === 'num' ? `${numText(item.sec.n)}${item.sec.u ? ' ' + item.sec.u : ''}` : item.sec.a);
+        function checkLocally(item, payload) {
+            if (item.pub.type === 'mcq') return payload.choice === item.sec.a;
+            if (item.pub.type === 'num') return sameNumber(parseNum(payload.value), parseNum(item.sec.n));
+            return true;   // demo only: handwriting is not checked on the device
+        }
+
+        // ------------------------------------------------------------------ backend
+        // The server (assess) in real use; the same logic on this device in the demo.
+        const backend = (() => {
+            if (!DEMO) {
+                let attemptId = null;
+                const call = async (action, data) => (await functions.httpsCallable('assess')(Object.assign({ action }, data))).data;
+                return {
+                    async start() { const r = await call('start', spec.server); attemptId = r.attemptId; return r; },
+                    answer: (i, payload) => call('answer', Object.assign({ attemptId, index: i }, payload)),
+                    finish: () => call('finish', { attemptId }),
+                    review: () => call('review', { key: spec.key }),
+                };
+            }
+            let items = [];
+            const results = {};
+            return {
+                async start() {
+                    const lessons = [];
+                    for (const f of spec.folders) lessons.push(...poolLessons(await loadPool(f)).filter(l => KIND === 'grade' || (l.n >= spec.from && l.n <= spec.to)));
+                    items = pickQuestions(lessons, spec.size.quick, spec.size.written);
+                    return { questions: items.map(it => it.pub), need: Math.ceil(PASS_RATIO * items.length) };
+                },
+                async answer(i, payload) {
+                    const c = checkLocally(items[i], payload);
+                    results[i] = { c, your: payload.choice ?? payload.value ?? null };
+                    return { correct: c, answer: answerText(items[i]), feedback: '' };
+                },
+                async finish() {
+                    const total = items.length, need = Math.ceil(PASS_RATIO * total);
+                    const score = Object.values(results).filter(r => r.c).length;
+                    const review = items.map((it, i) => (results[i] && results[i].c) ? null : {
+                        type: it.pub.type, q: it.pub.q, c: it.pub.c || null, your: results[i] ? results[i].your : null,
+                        answer: answerText(it), steps: it.sec.s || '', feedback: '', lessonId: it.lessonId,
+                    }).filter(Boolean);
+                    return { passed: score >= need, score, total, need, review, practice: { folders: spec.folders, lessonIds: [...new Set(review.map(r => r.lessonId))] } };
+                },
+                async review() { throw new Error('no review in the demo'); },
+            };
+        })();
 
         // ------------------------------------------------------------------ state
         let user = null;
         let studentData = {};
-        let scopeLessons = [];
         let questions = [];
+        let need = 0;
         let idx = 0;
         let correct = 0;
         let running = false;
@@ -442,11 +535,13 @@
         }
 
         // ------------------------------------------------------------------ screens
-        function showMessage(title, body, buttonText, onClick) {
+        function showMessage(title, body, buttonText, onClick, extraButton) {
             setProgress(0, 0);
             screen(`<div class="center"><div class="card"><h1 class="title">${esc(title)}</h1><p class="body">${esc(body || '')}</p></div></div>`,
-                `<button class="btn btn-primary" id="jt-msg-btn">${esc(buttonText || T.back)}</button>`);
+                `${extraButton ? `<button class="btn btn-primary" id="jt-msg-extra">${esc(extraButton.text)}</button>` : ''}
+                 <button class="btn ${extraButton ? 'btn-ghost' : 'btn-primary'}" id="jt-msg-btn">${esc(buttonText || T.back)}</button>`);
             document.getElementById('jt-msg-btn').onclick = onClick || goHome;
+            if (extraButton) document.getElementById('jt-msg-extra').onclick = extraButton.onClick;
         }
 
         function showLoading(text) {
@@ -455,29 +550,26 @@
         }
 
         function introTexts() {
-            if (KIND === 'section') {
-                return { title: fmt(T.sectionTitle, { t: spec.title }), body: T.sectionBody };
-            }
+            if (KIND === 'section') return { title: fmt(T.sectionTitle, { t: spec.title }), body: T.sectionBody };
+            if (KIND === 'checkpoint') return { title: fmt(spec.pos === 'mid' ? T.midTitle : T.endTitle, { t: spec.title }), body: T.checkpointBody };
             const gs = spec.grades.map(g => g.grade);
             const list = gs.length === 1 ? fmt(T.gradeList1, { a: gs[0] }) : fmt(T.gradeListN, { a: gs[0], b: gs[gs.length - 1] });
             return { title: fmt(T.gradeTitle, { g: spec.target }), body: fmt(T.gradeBody, { list, g: spec.target }) };
         }
 
         function showIntro() {
-            const n = questions.length;
-            const need = Math.ceil(PASS_RATIO * n);
-            const w = questions.filter(q => q.type === 'written').length;
+            const n = spec.size.quick + spec.size.written;
             const { title, body } = introTexts();
             setProgress(0, 0);
             screen(`
                 <div class="center"><div class="card">
-                    <span class="label"><i class="fa-solid fa-bolt"></i> thelo</span>
+                    <span class="label brand"><i class="fa-solid ${KIND === 'checkpoint' ? 'fa-flag-checkered' : 'fa-bolt'}"></i> thelo</span>
                     <h1 class="title">${esc(title)}</h1>
                     <p class="body">${esc(body)}</p>
                     <ul class="facts">
                         <li><i class="fa-solid fa-list-ol"></i>${esc(fmt(T.nQuestions, { n }))}</li>
-                        <li><i class="fa-solid fa-trophy"></i>${esc(fmt(T.passNeed, { p: need }))}</li>
-                        ${w ? `<li><i class="fa-solid fa-pen"></i>${esc(fmt(T.handwritten, { w }))}</li>` : ''}
+                        <li><i class="fa-solid fa-trophy"></i>${esc(fmt(T.passNeed, { p: Math.ceil(PASS_RATIO * n) }))}</li>
+                        ${spec.size.written ? `<li><i class="fa-solid fa-pen"></i>${esc(fmt(T.handwritten, { w: spec.size.written }))}</li>` : ''}
                     </ul>
                     <p class="note">${esc(T.tryRule)}</p>
                 </div></div>`,
@@ -490,19 +582,19 @@
         async function startTest() {
             const btn = document.getElementById('jt-start');
             btn.disabled = true;
-            // A test that is started and then abandoned counts as a failed try, so the
-            // try is recorded now; finishing the test overwrites it with the result.
-            if (!DEMO) {
-                try {
-                    await db.collection('thelo-students').doc(user.uid).set(
-                        { jumpTests: { [spec.key]: { failedAt: Date.now(), score: null, total: questions.length } } }, { merge: true });
-                } catch (e) {
-                    console.error('Could not record the attempt', e);
-                    btn.disabled = false;
-                    showMessage(T.loadFail, '', T.back);
-                    return;
-                }
+            showLoading(T.loading);
+            try {
+                const r = await backend.start();
+                questions = r.questions;
+                need = r.need;
+            } catch (e) {
+                console.error('Could not start the test', e);
+                if (e && e.message === 'cooldown') return showWait((e.details && e.details.retryAt) || Date.now() + COOLDOWN_MS);
+                if (e && e.message === 'already-passed') return showMessage(T.passedTitle, T.passedBody, T.toCourse);
+                showMessage(T.loadFail, '', T.back);
+                return;
             }
+            if (!questions.length) { showMessage(T.loadFail, '', T.back); return; }
             running = true;
             idx = 0; correct = 0;
             showQuestion();
@@ -521,11 +613,25 @@
             return showWritten(q);
         }
 
+        /** Sends one answer; a failed check is never the student's fault, so it can be retried. */
+        async function send(payload) {
+            try { return await backend.answer(idx, payload); }
+            catch (e) { console.error('answer failed', e); return null; }
+        }
+        function checkFailed(button) {
+            const old = document.getElementById('jt-fail');
+            if (old) old.remove();
+            button.disabled = false;
+            button.textContent = T.check;
+            const fb = document.getElementById('jt-fb') || $foot;
+            fb.insertAdjacentHTML('afterbegin', `<div class="feedback wrong" id="jt-fail"><div class="fb-body">${esc(T.checkFail)}</div></div>`);
+        }
+
         // --- multiple choice
         function showMcq(q) {
             let picked = -1;
             screen(`${questionHeader(q, T.chooseOne)}
-                    <div class="choices">${q.order.map(i => `<button class="choice" data-i="${i}"></button>`).join('')}</div>`,
+                    <div class="choices">${q.c.map((_, i) => `<button class="choice" data-i="${i}"></button>`).join('')}</div>`,
                 `<button class="btn btn-primary" id="jt-check" disabled>${esc(T.check)}</button>`);
             renderRich(document.getElementById('jt-q'), q.q);
             const buttons = [...$main.querySelectorAll('.choice')];
@@ -537,16 +643,21 @@
                     document.getElementById('jt-check').disabled = false;
                 };
             });
-            document.getElementById('jt-check').onclick = () => {
-                const ok = picked === q.a;
+            const check = document.getElementById('jt-check');
+            check.onclick = async () => {
+                check.disabled = true;
+                check.textContent = T.checking;
+                const r = await send({ choice: picked });
+                if (!r) return checkFailed(check);
+                const rightIndex = q.c.indexOf(r.answer);
                 buttons.forEach(b => {
                     b.disabled = true;
                     const i = Number(b.dataset.i);
-                    if (i === q.a) b.classList.add('right');
+                    if (i === rightIndex) b.classList.add('right');
                     else if (i === picked) b.classList.add('wrong');
                     b.classList.remove('sel');
                 });
-                answered(ok, ok ? '' : fmt(T.answerWas, { a: q.c[q.a] }));
+                answered(r.correct, r.correct ? '' : fmt(T.answerWas, { a: r.answer }));
             };
         }
 
@@ -576,15 +687,18 @@
                     draw();
                 };
             });
-            check.onclick = () => {
-                const ok = sameNumber(parseNum(typed), parseNum(q.n));
+            check.onclick = async () => {
+                check.disabled = true;
+                check.textContent = T.checking;
+                const r = await send({ value: typed });
+                if (!r) return checkFailed(check);
                 $main.querySelectorAll('.key').forEach(b => { b.disabled = true; });
-                box.classList.add(ok ? 'right' : 'wrong');
-                answered(ok, ok ? '' : fmt(T.answerWas, { a: `${numText(q.n)}${q.u ? ' ' + q.u : ''}` }));
+                box.classList.add(r.correct ? 'right' : 'wrong');
+                answered(r.correct, r.correct ? '' : fmt(T.answerWas, { a: r.answer }));
             };
         }
 
-        // --- handwritten, checked by the AI
+        // --- handwritten, checked by the AI on the server
         function showWritten(q) {
             screen(`${questionHeader(q, T.writeAnswer)}
                     <div class="pad-wrap">
@@ -611,54 +725,10 @@
                 fb.innerHTML = '';
                 check.disabled = true;
                 check.textContent = T.checking;
-                let status = null, feedback = '';
-                if (DEMO) {
-                    status = 'correct';
-                } else {
-                    try {
-                        const image = pad.exportImage();
-                        const legacy = {
-                            userImage: image,
-                            questionImage: null,
-                            problemText: q.p || plain(q.q),
-                            correctAnswer: q.a || '',
-                            solutionSteps: q.s || '',
-                            customInstructions: [
-                                q.x || '',
-                                `This is a placement test with one attempt. Mark the work 'correct' only if the student's final answer matches the correct answer (${q.a}); an equivalent form counts. Reply in one short sentence and do not reveal the correct answer.`,
-                            ].filter(Boolean).join('\n'),
-                            language: LANG,
-                        };
-                        // checkAnswer (scan codebase) replaces analyzeMathDrawing for checking answers:
-                        // the old one compared only the first plain number of each answer, so "x² + 4",
-                        // "−6", lists and Yes/No were marked wrong even when right. If checkAnswer is not
-                        // deployed yet, or fails, fall back to the old checker so a check never just breaks.
-                        let result;
-                        try {
-                            result = await functions.httpsCallable('checkAnswer')({
-                                imageBase64: image, problemText: legacy.problemText, correctAnswer: legacy.correctAnswer,
-                                solutionSteps: legacy.solutionSteps, note: q.x || '', language: LANG,
-                            });
-                        } catch (err) {
-                            console.warn('checkAnswer unavailable, using analyzeMathDrawing', err);
-                            result = await functions.httpsCallable('analyzeMathDrawing')(legacy);
-                        }
-                        status = result.data && result.data.status;
-                        feedback = (result.data && result.data.feedback) || '';
-                    } catch (e) {
-                        console.error('answer check failed', e);
-                    }
-                }
-                if (status !== 'correct' && status !== 'incorrect') {
-                    // The check itself failed: not the student's fault, let them check again.
-                    check.disabled = false;
-                    check.textContent = T.check;
-                    fb.innerHTML = `<div class="feedback wrong"><div class="fb-body">${esc(T.checkFail)}</div></div>`;
-                    return;
-                }
-                const ok = status === 'correct';
+                const r = await send({ imageBase64: pad.exportImage() });
+                if (!r) return checkFailed(check);
                 document.querySelector('.pad-wrap').style.pointerEvents = 'none';
-                answered(ok, ok ? '' : [feedback, fmt(T.answerWas, { a: q.a })].filter(Boolean).join(' '));
+                answered(r.correct, r.correct ? '' : [r.feedback, fmt(T.answerWas, { a: r.answer })].filter(Boolean).join(' '));
             };
         }
 
@@ -683,89 +753,181 @@
         // ------------------------------------------------------------------ the result
         async function finish() {
             running = false;
-            const total = questions.length;
-            const need = Math.ceil(PASS_RATIO * total);
-            const passed = correct >= need;
-            setProgress(total, total);
+            setProgress(questions.length, questions.length);
             $count.textContent = '';
             showLoading(T.saving);
+            let r;
             try {
-                if (!DEMO) await saveResult(passed, total);
+                r = await backend.finish();
             } catch (e) {
                 console.error('Saving the result failed', e);
-                showMessage(T.saveFail, '', T.retrySave, () => finishAgain(passed, total));
+                showMessage(T.saveFail, '', T.retrySave, finish);
                 return;
             }
-            showResult(passed, total, need);
+            showResult(r);
         }
 
-        async function finishAgain(passed, total) {
-            showLoading(T.saving);
-            try {
-                await saveResult(passed, total);
-                showResult(passed, total, Math.ceil(PASS_RATIO * total));
-            } catch (e) {
-                console.error('Saving the result failed again', e);
-                showMessage(T.saveFail, '', T.retrySave, () => finishAgain(passed, total));
-            }
-        }
-
-        async function saveResult(passed, total) {
-            const studentRef = db.collection('thelo-students').doc(user.uid);
-            const record = passed
-                ? { passedAt: Date.now(), failedAt: null, score: correct, total }
-                : { failedAt: Date.now(), score: correct, total };
-            if (!passed) {
-                await studentRef.set({ jumpTests: { [spec.key]: record } }, { merge: true });
-                return;
-            }
-            if (KIND === 'section') {
-                // Every lesson and practice set being skipped counts as done, so the
-                // course path continues at the section the student jumped to.
-                const ids = [];
-                scopeLessons.forEach(l => ids.push(`${l.id}-das`, `${l.id}-gorc`));
-                for (let i = 0; i < ids.length; i += 400) {
-                    const batch = db.batch();
-                    ids.slice(i, i + 400).forEach(id => batch.set(studentRef.collection('progress').doc(id), {
-                        status: 'completed', completedVia: 'jump-test',
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    }, { merge: true }));
-                    await batch.commit();
-                }
-                await studentRef.set({ jumpTests: { [spec.key]: record } }, { merge: true });
-                return;
-            }
-            // Grade test: move the student up, as the Courses screen does when it saves a grade.
-            let groupId = null;
-            try {
-                const groups = await db.collection('groups').where('groupName', '==', String(spec.target)).limit(1).get();
-                if (!groups.empty) groupId = groups.docs[0].id;
-            } catch (e) {
-                console.warn('Group lookup failed', e);
-            }
-            await studentRef.set({
-                groupId,
-                preferences: {
-                    language: LANG, grade: String(spec.target), stream: spec.target >= 10 ? (spec.tstream || 'gen') : null,
-                    maxGrade: Math.max(Number(studentData.preferences && studentData.preferences.maxGrade) || 0, spec.target),
-                },
-                jumpTests: { [spec.key]: record },
-            }, { merge: true });
-        }
-
-        function showResult(passed, total, need) {
-            const body = passed
-                ? (KIND === 'section' ? T.passSection : fmt(T.passGrade, { g: spec.target }))
-                : fmt(T.failBody, { p: need });
+        function showResult(r) {
+            const body = r.passed
+                ? (KIND === 'section' ? T.passSection : KIND === 'checkpoint' ? T.passCheckpoint : fmt(T.passGrade, { g: spec.target }))
+                : fmt(KIND === 'checkpoint' ? T.failCheckpoint : T.failBody, { p: r.need });
+            const canRevise = !r.passed && r.review && r.review.length;
             screen(`
                 <div class="center text-center">
-                    <div class="result-icon ${passed ? 'pass' : 'fail'}"><i class="fa-solid ${passed ? 'fa-trophy' : 'fa-rotate'}"></i></div>
-                    <h1 class="title">${esc(passed ? T.passTitle : T.failTitle)}</h1>
-                    <div class="score">${correct}<small> / ${total}</small></div>
+                    <div class="result-icon ${r.passed ? 'pass' : 'fail'}"><i class="fa-solid ${r.passed ? 'fa-trophy' : 'fa-rotate'}"></i></div>
+                    <h1 class="title">${esc(r.passed ? T.passTitle : T.failTitle)}</h1>
+                    <div class="score">${r.score}<small> / ${r.total}</small></div>
                     <p class="body" style="margin-top:1rem">${esc(body)}</p>
                 </div>`,
-                `<button class="btn btn-primary" id="jt-done">${esc(T.toCourse)}</button>`);
+                `${canRevise ? `<button class="btn btn-primary" id="jt-revise"><i class="fa-solid fa-book-open"></i> ${esc(T.revise)}</button>` : ''}
+                 <button class="btn ${canRevise ? 'btn-ghost' : 'btn-primary'}" id="jt-done">${esc(T.toCourse)}</button>`);
             document.getElementById('jt-done').onclick = goHome;
+            if (canRevise) document.getElementById('jt-revise').onclick = () => showReview(r, Date.now() + COOLDOWN_MS);
+        }
+
+        // ------------------------------------------------------------------ revise: mistakes, then practice
+        function showReview(r, retryAt) {
+            setProgress(0, 0);
+            const items = r.review || [];
+            screen(`
+                <h1 class="title" style="margin-top:0.25rem">${esc(T.reviseTitle)}</h1>
+                <p class="body">${esc(fmt(T.reviseSub, { h: remaining(Math.max(0, retryAt - Date.now())) }))}</p>
+                ${items.map((it, i) => `
+                    <div class="card review-item">
+                        <div class="q-text" id="rv-q-${i}"></div>
+                        <div class="rv-row wrong"><span>${esc(T.yourAnswer)}</span><b id="rv-your-${i}"></b></div>
+                        <div class="rv-row right"><span>${esc(T.rightAnswer)}</span><b id="rv-ans-${i}"></b></div>
+                        ${it.feedback ? `<p class="rv-note" id="rv-fb-${i}"></p>` : ''}
+                        ${it.steps ? `<details class="rv-steps"><summary>${esc(T.howTo)}</summary><div id="rv-steps-${i}"></div></details>` : ''}
+                    </div>`).join('')}`,
+                `${r.practice && r.practice.lessonIds.length ? `<button class="btn btn-primary" id="jt-practise"><i class="fa-solid fa-dumbbell"></i> ${esc(T.practise)}</button>` : ''}
+                 <button class="btn btn-ghost" id="jt-done">${esc(T.toCourse)}</button>`);
+            items.forEach((it, i) => {
+                renderRich(document.getElementById(`rv-q-${i}`), it.q);
+                const your = it.your === null || it.your === undefined || it.your === ''
+                    ? T.noAnswer
+                    : it.type === 'mcq' ? (it.c && it.c[it.your]) || T.noAnswer
+                    : it.type === 'num' ? numText(it.your) : `${it.your} (${T.handwrittenAnswer})`;
+                renderRich(document.getElementById(`rv-your-${i}`), your);
+                renderRich(document.getElementById(`rv-ans-${i}`), it.answer);
+                if (it.feedback) document.getElementById(`rv-fb-${i}`).textContent = it.feedback;
+                if (it.steps) {
+                    const box = document.getElementById(`rv-steps-${i}`);
+                    String(it.steps).split(/\s(?=\d+\.\s)/).forEach(s => { const p = document.createElement('p'); renderRich(p, s); box.appendChild(p); });
+                }
+            });
+            document.getElementById('jt-done').onclick = goHome;
+            const pr = document.getElementById('jt-practise');
+            if (pr) pr.onclick = () => startPractice(r.practice, items);
+        }
+
+        async function startPractice(practice, reviewed) {
+            showLoading(T.loading);
+            let pool = [];
+            try {
+                for (const f of practice.folders) pool.push(...poolLessons(await loadPool(f)).filter(l => practice.lessonIds.includes(l.id)));
+            } catch (e) {
+                console.error('practice pool', e);
+                showMessage(T.loadFail, '', T.back);
+                return;
+            }
+            // Fresh problems from the same lessons, not the ones just reviewed.
+            const seen = new Set(reviewed.map(r => r.q));
+            const lessons = pool.map(l => Object.assign({}, l, { quick: (l.quick || []).filter(q => !seen.has(q.q)) }));
+            const items = pickQuestions(lessons, PRACTICE_SIZE, 0).filter(it => !seen.has(it.pub.q));
+            if (!items.length) { showMessage(T.practiceTitle, T.noPractice, T.toCourse); return; }
+            let i = 0, right = 0;
+            const next = () => {
+                if (i >= items.length) {
+                    showMessage(T.practiceTitle, fmt(T.practiceDone, { n: items.length, r: right }), T.toCourse, goHome,
+                        { text: T.practiceAgain, onClick: () => startPractice(practice, reviewed.concat(items.map(it => ({ q: it.pub.q })))) });
+                    return;
+                }
+                practiceQuestion(items[i], i, items.length, (ok) => { if (ok) right++; i++; next(); });
+            };
+            next();
+        }
+
+        /** One practice problem: checked right here, nothing is saved. */
+        function practiceQuestion(item, i, n, done) {
+            const q = item.pub;
+            setProgress(i, n);
+            const head = `<div class="q-label label">${esc(fmt(T.practiceOf, { i: i + 1, n }))}</div><div class="q-text" id="jt-q"></div>`;
+            const after = (ok) => {
+                $foot.innerHTML = `
+                    <div class="feedback ${ok ? 'right' : 'wrong'}">
+                        <div class="fb-title"><i class="fa-solid ${ok ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>${esc(ok ? T.right : T.wrong)}</div>
+                        ${ok ? '' : '<div class="fb-body" id="jt-fb-body"></div>'}
+                        ${item.sec.s ? `<details class="rv-steps"><summary>${esc(T.howTo)}</summary><div id="jt-steps"></div></details>` : ''}
+                    </div>
+                    <button class="btn ${ok ? 'btn-green' : 'btn-red'}" id="jt-next">${esc(T.continue)}</button>`;
+                if (!ok) renderRich(document.getElementById('jt-fb-body'), fmt(T.answerWas, { a: answerText(item) }));
+                if (item.sec.s) {
+                    const box = document.getElementById('jt-steps');
+                    String(item.sec.s).split(/\s(?=\d+\.\s)/).forEach(s => { const p = document.createElement('p'); renderRich(p, s); box.appendChild(p); });
+                }
+                document.getElementById('jt-next').onclick = () => done(ok);
+            };
+            if (q.type === 'mcq') {
+                let picked = -1;
+                screen(`${head}<div class="choices">${q.c.map((_, k) => `<button class="choice" data-i="${k}"></button>`).join('')}</div>`,
+                    `<button class="btn btn-primary" id="jt-check" disabled>${esc(T.check)}</button>`);
+                renderRich(document.getElementById('jt-q'), q.q);
+                const buttons = [...$main.querySelectorAll('.choice')];
+                buttons.forEach(b => {
+                    renderRich(b, q.c[Number(b.dataset.i)]);
+                    b.onclick = () => { picked = Number(b.dataset.i); buttons.forEach(x => x.classList.toggle('sel', x === b)); document.getElementById('jt-check').disabled = false; };
+                });
+                document.getElementById('jt-check').onclick = () => {
+                    const ok = picked === item.sec.a;
+                    buttons.forEach(b => { b.disabled = true; const k = Number(b.dataset.i); if (k === item.sec.a) b.classList.add('right'); else if (k === picked) b.classList.add('wrong'); b.classList.remove('sel'); });
+                    after(ok);
+                };
+                return;
+            }
+            let typed = '';
+            const dec = LANG === 'hy' ? ',' : '.';
+            const keys = ['7', '8', '9', '⌫', '4', '5', '6', '−', '1', '2', '3', '/', '0', dec, '', ''];
+            screen(`${head}<div class="answer-row"><div class="answer-box empty" id="jt-box"></div>${q.u ? `<span class="unit">${esc(q.u)}</span>` : ''}</div>
+                    <div class="keypad">${keys.map(k => k ? `<button class="key${/[⌫−\/,.]/.test(k) ? ' op' : ''}" data-k="${esc(k)}">${esc(k)}</button>` : '<span></span>').join('')}</div>`,
+                `<button class="btn btn-primary" id="jt-check" disabled>${esc(T.check)}</button>`);
+            renderRich(document.getElementById('jt-q'), q.q);
+            const box = document.getElementById('jt-box');
+            const check = document.getElementById('jt-check');
+            $main.querySelectorAll('.key').forEach(b => {
+                b.onclick = () => {
+                    const k = b.dataset.k;
+                    if (k === '⌫') typed = typed.slice(0, -1);
+                    else if (k === '−') typed = typed.startsWith('−') ? typed.slice(1) : '−' + typed;
+                    else if (typed.length < 12) typed += k;
+                    box.textContent = typed; box.classList.toggle('empty', !typed); check.disabled = !typed;
+                };
+            });
+            check.onclick = () => {
+                const ok = sameNumber(parseNum(typed), parseNum(item.sec.n));
+                $main.querySelectorAll('.key').forEach(b => { b.disabled = true; });
+                box.classList.add(ok ? 'right' : 'wrong');
+                after(ok);
+            };
+        }
+
+        // ------------------------------------------------------------------ waiting after a failed try
+        function showWait(retryAt) {
+            const h = remaining(Math.max(0, retryAt - Date.now()));
+            const extra = KIND === 'checkpoint' && !DEMO
+                ? { text: T.revise, onClick: openReview }
+                : null;
+            showMessage(T.waitTitle, fmt(T.waitBody, { h }), T.back, goHome, extra);
+        }
+        async function openReview() {
+            showLoading(T.loading);
+            try {
+                const r = await backend.review();
+                showReview(r, r.retryAt);
+            } catch (e) {
+                console.error('review', e);
+                showMessage(T.loadFail, '', T.back);
+            }
         }
 
         // ------------------------------------------------------------------ leaving mid-test
@@ -791,24 +953,10 @@
                 } catch (e) {
                     console.warn('Could not read the student profile', e);
                 }
-                const rec = (studentData.jumpTests || {})[spec.key];
-                const failedAt = rec && rec.failedAt;
-                if (failedAt && Date.now() - failedAt < COOLDOWN_MS) {
-                    showMessage(T.waitTitle, fmt(T.waitBody, { h: remaining(COOLDOWN_MS - (Date.now() - failedAt)) }), T.back);
-                    return;
-                }
-            }
-            try {
-                scopeLessons = await loadPools();
-            } catch (e) {
-                console.error('Could not load the question pool', e);
-                showMessage(T.loadFail, '', T.back);
-                return;
-            }
-            questions = pickQuestions(scopeLessons, spec.size.quick, spec.size.written);
-            if (!questions.length) {
-                showMessage(T.loadFail, '', T.back);
-                return;
+                const rec = (studentData[spec.field] || {})[spec.key];
+                if (REVISE) return openReview();
+                if (rec && rec.passedAt && KIND === 'checkpoint') return showMessage(T.passedTitle, T.passedBody, T.toCourse);
+                if (rec && rec.failedAt && Date.now() - rec.failedAt < COOLDOWN_MS) return showWait(rec.failedAt + COOLDOWN_MS);
             }
             showIntro();
         }

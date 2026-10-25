@@ -50,6 +50,9 @@
 
         body {
             font-family: 'Manrope', sans-serif;
+            /* Armenian has very long words (Եռանկյունաչափության...). Break a word only
+               when it cannot fit on its own line, instead of letting it run out of its box. */
+            overflow-wrap: anywhere;
             background-color: var(--thelo-bg);
             color: var(--thelo-text);
             height: 100vh;
@@ -150,7 +153,8 @@
         .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
         .option-card {
             background: #F3F4F6; border: 2px solid transparent; border-radius: 1rem;
-            padding: 1.5rem 1rem; text-align: center; cursor: pointer; transition: 0.2s;
+            padding: 1.5rem clamp(0.4rem, 3vw, 1rem); text-align: center; cursor: pointer; transition: 0.2s;
+            overflow-wrap: normal;   /* «5-րդ դասարան» wraps between words, never inside one */
         }
         .option-card.selected { background: #EFF6FF; border-color: var(--thelo-blue); color: var(--thelo-blue); }
         .option-icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
@@ -209,6 +213,17 @@
         #view-profile main { padding: 1.5rem 1.5rem 1.5rem; }
         #view-courses main { padding: 1.5rem 1.5rem 1.5rem; }
 
+        /* "Confirm your email" reminder at the top of Home. */
+        .verify-card {
+            background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 0.9rem; padding: 1rem 1.1rem; margin-bottom: 1.5rem;
+        }
+        .verify-card .vc-head { display: flex; align-items: center; gap: 0.55rem; font-size: 1rem; }
+        .verify-card .vc-head i { color: #D97706; font-size: 1.2rem; }
+        .verify-card p { font-size: 0.88rem; line-height: 1.45; color: #78350F; margin: 0.45rem 0 0.8rem; }
+        .verify-card .vc-actions { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+        .verify-card .vc-actions .btn { width: auto; padding: 0.6rem 1rem; font-size: 0.9rem; }
+        .verify-card .vc-link { background: none; border: none; font: inherit; font-weight: 700; font-size: 0.88rem; color: #B45309; cursor: pointer; text-decoration: underline; padding: 0; }
+        .verify-card .vc-link:disabled { color: #D6B98C; cursor: default; text-decoration: none; }
         /* Entry to the competition page, under the Up Next card. */
         .compete-card {
             display: flex; align-items: center; gap: 0.9rem; text-decoration: none; color: var(--white);
@@ -222,7 +237,7 @@
         .compete-card .cc-go { opacity: 0.8; }
         .window-card-hero {
             background: var(--white); border: 1px solid var(--grid-color); border-radius: 0.75rem;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.06); padding: 2.5rem 2rem; margin-bottom: 3rem;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06); padding: clamp(1.75rem, 7vw, 2.5rem) clamp(1.25rem, 5.5vw, 2rem); margin-bottom: 3rem;
             position: relative; display: flex; flex-direction: column; gap: 1rem;
         }
         /* Dots */
@@ -233,7 +248,7 @@
         }
 
         .card-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--slate-500); font-weight: 700; margin-top: 0.5rem; }
-        .card-title { font-size: 1.75rem; font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; }
+        .card-title { font-size: clamp(1.3rem, 6.2vw, 1.75rem); font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; }
 
         .curriculum-header { font-size: 1.25rem; font-weight: 800; margin-bottom: 1.5rem; margin-top: 1rem; border-left: 4px solid var(--thelo-blue); padding-left: 0.75rem; line-height: 1; }
 
@@ -250,6 +265,11 @@
         .icon-active { background: #EFF6FF; color: var(--thelo-blue); }
         .icon-locked { background: var(--slate-200); color: var(--slate-500); }
         .icon-done { background: #DCFCE7; color: var(--success-green); }
+        /* Checkpoints between lessons on the course path. */
+        .icon-checkpoint { background: #FEF3C7; color: #D97706; }
+        .lesson-item.checkpoint { border-style: dashed; }
+        .lesson-item.checkpoint.active { border-style: solid; border-color: #F59E0B; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.18); }
+        .cp-revise { display: inline-block; margin-top: 0.3rem; font-weight: 800; font-size: 0.8rem; color: var(--thelo-blue); text-decoration: underline; }
 
         .lesson-item:hover:not(.locked) {
             transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
@@ -291,8 +311,16 @@
         .path-body { display: none; padding: 0 1rem 0.25rem; }
         .path-unit.open .path-body { display: block; }
         .path-body .lesson-item { padding: 0.9rem 1rem; margin-bottom: 0.75rem; gap: 1rem; }
-        .path-jump { display: flex; align-items: center; gap: 0.75rem; padding: 0 1.1rem 1rem; }
-        .path-jump-text { flex: 1; font-size: 0.8rem; font-weight: 600; color: var(--slate-500); line-height: 1.35; }
+        /* Small phones: more room for long Armenian lesson names. */
+        @media (max-width: 380px) {
+            .path-body { padding-left: 0.6rem; padding-right: 0.6rem; }
+            .path-body .lesson-item { padding: 0.75rem 0.75rem; gap: 0.7rem; }
+            .path-body .lesson-icon { width: 34px; height: 34px; font-size: 0.9rem; }
+            .path-body .lesson-name { font-size: 0.92rem; }
+        }
+        /* On a narrow phone the text goes above the button instead of being squeezed beside it. */
+        .path-jump { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 0.75rem; padding: 0 1.1rem 1rem; }
+        .path-jump-text { flex: 1 1 9rem; font-size: 0.8rem; font-weight: 600; color: var(--slate-500); line-height: 1.35; overflow-wrap: normal; }
         .btn-jump {
             border: none; border-radius: 0.75rem; padding: 0.6rem 1rem; font: inherit; font-weight: 800; font-size: 0.9rem;
             background: var(--thelo-blue); color: var(--white); cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
@@ -340,6 +368,22 @@
         .settings-item:last-of-type { border-bottom: 1px solid var(--grid-color); }
         .settings-item-content { flex-grow: 1; text-align: left; }
         .settings-item-title { font-weight: 600; font-size: 1.125rem; color: var(--thelo-text); }
+        /* Settings sections and the small segmented choices (daily goal, pen). */
+        .settings-section { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--slate-500); margin: 1.6rem 0 0.4rem; }
+        .settings-section:first-child { margin-top: 0; }
+        .settings-item-wide { flex-wrap: wrap; gap: 0.75rem; }
+        .seg { display: inline-flex; background: #F1F5F9; border-radius: 0.8rem; padding: 3px; gap: 3px; flex-shrink: 0; }
+        .seg button { border: none; background: none; font: inherit; font-weight: 700; font-size: 0.9rem; padding: 0.45rem 0.8rem; border-radius: 0.6rem; color: var(--slate-500); cursor: pointer; }
+        .seg button.on { background: var(--white); color: var(--thelo-blue); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+        .email-ok { color: var(--success-green); font-weight: 700; }
+        .email-wait { color: #B45309; font-weight: 700; }
+        #st-modal textarea, #st-modal input { width: 100%; border: 1.5px solid var(--grid-color); border-radius: 0.75rem; padding: 0.7rem 0.8rem; font: inherit; }
+        #st-modal textarea { min-height: 8rem; resize: vertical; }
+        /* Daily goal on Home. */
+        .goal-line { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; font-weight: 700; color: var(--slate-500); }
+        .goal-line .goal-bar { flex: 1; height: 8px; background: var(--slate-200); border-radius: 999px; overflow: hidden; }
+        .goal-line .goal-bar span { display: block; height: 100%; background: linear-gradient(90deg, #22C55E, #16A34A); border-radius: 999px; }
+        .goal-line.done { color: var(--success-green); }
         .settings-item-description { font-size: 0.875rem; color: #6B7280; margin-top: 0.25rem; }
         .settings-item-action { margin-left: 1.5rem; flex-shrink: 0; }
         .pair-mode-entry {
@@ -497,10 +541,14 @@
             z-index: 50;
             flex-shrink: 0;
         }
+        /* Five tabs share the bar evenly; the labels shrink a little on narrow phones
+           so no label runs into its neighbours (the tab says «Դասընթաց», which fits at 320 px). */
         .nav-item {
             display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
-            color: var(--slate-500); font-size: 0.7rem; font-weight: 600; text-decoration: none; width: 64px;
+            color: var(--slate-500); font-size: clamp(0.6rem, 2.75vw, 0.7rem); font-weight: 600; text-decoration: none;
+            flex: 1 1 0; min-width: 0; max-width: 88px;
         }
+        .nav-item span { white-space: nowrap; overflow-wrap: normal; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
         .nav-item.active { color: var(--thelo-blue); }
         .nav-item i { font-size: 1.25rem; }
 
@@ -691,12 +739,22 @@
     </header>
 
     <main>
+        <!-- Shown by updateVerifyBanner() until an email/password account confirms its address. -->
+        <div id="h-verify" class="verify-card" style="display:none;">
+            <div class="vc-head"><i class="fa-solid fa-envelope-circle-check"></i><b id="h-verify-title"></b></div>
+            <p id="h-verify-text"></p>
+            <div class="vc-actions">
+                <button class="btn btn-primary" id="h-verify-done"></button>
+                <button class="vc-link" id="h-verify-resend"></button>
+            </div>
+        </div>
         <div class="window-card-hero">
             <span class="card-label" data-i18n="upNext">Up Next</span>
             <h2 class="card-title" id="h-next-title">Loading...</h2>
             <div class="flex gap-3">
                 <button class="btn btn-primary w-full" id="h-action-btn" disabled data-i18n="continueBtn">Continue</button>
             </div>
+            <div class="goal-line" id="h-goal" style="display:none"></div>
         </div>
 
         <a href="/compete/" class="compete-card">
@@ -773,17 +831,40 @@
     <main>
         <div class="settings-window">
 
-            <!-- Profile Info -->
+            <!-- Settings, in sections. The ids of the older rows are unchanged, so their
+                 handlers below keep working; the new rows are driven by SETTINGS (script). -->
+            <h3 class="settings-section" data-st="account">Account</h3>
             <div class="settings-item">
                 <div class="settings-item-content flex items-center gap-4">
                     <img id="p-photo" src="https://placehold.co/100x100/2563EB/FFFFFF?text=P" alt="Profile" class="settings-profile-photo">
-                    <div>
+                    <div style="min-width:0">
                         <p class="settings-item-title" id="p-name">Loading...</p>
                         <p class="settings-item-description" id="p-email">Loading...</p>
+                        <p class="settings-item-description" id="p-email-status"></p>
                     </div>
                 </div>
+                <div class="settings-item-action">
+                    <button id="p-name-btn" class="thelo-btn-secondary" data-st="editName">Edit name</button>
+                </div>
             </div>
-
+            <div class="settings-item" id="p-email-row" style="display:none">
+                <div class="settings-item-content">
+                    <p class="settings-item-title" data-st="emailTitle">Confirm your email</p>
+                    <p class="settings-item-description" data-st="emailDesc">We sent you a link. Didn't get it? Send it again.</p>
+                </div>
+                <div class="settings-item-action">
+                    <button id="p-email-btn" class="thelo-btn-secondary" data-st="emailBtn">Send link</button>
+                </div>
+            </div>
+            <div class="settings-item">
+                <div class="settings-item-content">
+                    <p class="settings-item-title" data-st="gradeTitle">Grade and course</p>
+                    <p class="settings-item-description" id="p-grade-display"></p>
+                </div>
+                <div class="settings-item-action">
+                    <button id="p-grade-btn" class="thelo-btn-secondary" data-i18n="changeBtn">Change</button>
+                </div>
+            </div>
             <!-- Password -->
             <div class="settings-item">
                 <div class="settings-item-content">
@@ -794,7 +875,6 @@
                     <button id="p-pw-btn" class="thelo-btn-secondary" data-i18n="changeBtn">Change</button>
                 </div>
             </div>
-
             <!-- Language -->
             <div class="settings-item">
                 <div class="settings-item-content">
@@ -806,6 +886,36 @@
                 </div>
             </div>
 
+            <h3 class="settings-section" data-st="learning">Learning</h3>
+            <div class="settings-item settings-item-wide">
+                <div class="settings-item-content">
+                    <p class="settings-item-title" data-st="goalTitle">Daily goal</p>
+                    <p class="settings-item-description" data-st="goalDesc">How many lessons a day do you want to do? Home shows how far you are.</p>
+                </div>
+                <div class="seg" id="p-goal">
+                    <button data-v="0" data-st="goalOff">Off</button><button data-v="1">1</button><button data-v="3">3</button><button data-v="5">5</button>
+                </div>
+            </div>
+
+            <h3 class="settings-section" data-st="board">Board</h3>
+            <div class="settings-item settings-item-wide">
+                <div class="settings-item-content">
+                    <p class="settings-item-title" data-st="penTitle">Pen</p>
+                    <p class="settings-item-description" data-st="penDesc">How thick your writing is on the board.</p>
+                </div>
+                <div class="seg" id="p-pen">
+                    <button data-v="thin" data-st="penThin">Thin</button><button data-v="normal" data-st="penNormal">Normal</button><button data-v="thick" data-st="penThick">Thick</button>
+                </div>
+            </div>
+            <div class="settings-item">
+                <div class="settings-item-content">
+                    <p class="settings-item-title" data-st="leftTitle">Left-handed</p>
+                    <p class="settings-item-description" data-st="leftDesc">Puts the lesson menu on the left and the eraser on the right.</p>
+                </div>
+                <div class="settings-item-action">
+                    <button id="p-left-toggle" class="thelo-btn-secondary"></button>
+                </div>
+            </div>
             <!-- Assistive Panning -->
             <div class="settings-item">
                 <div class="settings-item-content">
@@ -817,6 +927,18 @@
                 </div>
             </div>
 
+            <h3 class="settings-section" data-st="soundSection">Sound</h3>
+            <div class="settings-item">
+                <div class="settings-item-content">
+                    <p class="settings-item-title" data-st="soundTitle">Sounds</p>
+                    <p class="settings-item-description" data-st="soundDesc">Sounds in lessons and competitions.</p>
+                </div>
+                <div class="settings-item-action">
+                    <button id="p-sound-toggle" class="thelo-btn-secondary"></button>
+                </div>
+            </div>
+
+            <h3 class="settings-section" data-st="help">Help</h3>
             <!-- Tutorial -->
             <div class="settings-item">
                 <div class="settings-item-content">
@@ -827,7 +949,17 @@
                     <button id="p-tutorial-btn" class="thelo-btn-secondary" data-i18n="tutorialBtn">Start Tutorial</button>
                 </div>
             </div>
+            <div class="settings-item">
+                <div class="settings-item-content">
+                    <p class="settings-item-title" data-st="reportTitle">Report a problem</p>
+                    <p class="settings-item-description" data-st="reportDesc">Something wrong in a lesson or the app? Tell us.</p>
+                </div>
+                <div class="settings-item-action">
+                    <button id="p-report-btn" class="thelo-btn-secondary" data-st="reportBtn">Write</button>
+                </div>
+            </div>
 
+            <h3 class="settings-section" data-st="accountEnd">Account</h3>
             <!-- Logout & Danger Zone -->
             <div class="settings-item">
                 <div class="settings-item-content">
@@ -837,7 +969,6 @@
                     <button id="p-logout-btn" class="thelo-btn-destructive" data-i18n="logoutBtn">Logout</button>
                 </div>
             </div>
-
             <!-- Delete Account -->
             <div class="settings-item border-b-0">
                 <div class="settings-item-content">
@@ -848,9 +979,8 @@
                     <button id="p-delete-btn" class="thelo-btn-destructive" data-i18n="deleteAccountBtn">Delete</button>
                 </div>
             </div>
-
             <div class="text-center text-xs text-slate-400 mt-8">
-                ID: <span id="p-uid" class="font-mono">...</span>
+                thelo <span id="p-version"></span> · ID: <span id="p-uid" class="font-mono">...</span>
             </div>
         </div>
     </main>
@@ -871,6 +1001,18 @@
 <!-- Modals & Toasts -->
 <div id="notification-toast">
     <span id="toast-msg"></span>
+</div>
+
+<!-- Settings dialog: edit name / report a problem (SETTINGS in the script fills it). -->
+<div id="st-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3 class="text-xl font-bold mb-4" id="st-modal-title"></h3>
+        <div id="st-modal-body"></div>
+        <div class="flex justify-end gap-3" style="margin-top:1rem">
+            <button type="button" class="thelo-btn-secondary" id="st-modal-cancel"></button>
+            <button type="button" class="thelo-btn" id="st-modal-save"></button>
+        </div>
+    </div>
 </div>
 
 <div id="password-modal" class="modal-overlay">
@@ -1197,6 +1339,8 @@
         updateProfileText(lang);
         updateCoursesText(lang);
         updatePanToggleUI();
+        if (auth.currentUser) updateVerifyBanner(auth.currentUser);
+        applySettingsText();
         state.role = 'student';
         // Advance wizard only when language is chosen from wizard cards.
         if (el && typeof el.closest === 'function' && el.closest('#w-step-1')) {
@@ -1295,7 +1439,7 @@ ${STREAM_LABELS[s][lang]}`;
     function updateProfileText(lang) {
         const t = {
             en: { settings: "Settings", pwT: "Password", pwD: "Update your password.", langT: "Language", curr: "Current:", log: "Logout", upNext: "Up Next", coursePlan: "Course Plan", welcome: "Welcome back,", navHangar: "Home", navCourses: "Courses", navScan: "Scan", navCompete: "Compete", navProfile: "Profile", competeTitle: "Compete with friends", competeDesc: "Live maths battles: same questions, same moment.", avatarTitle: "Choose Avatar", cancelBtn: "Cancel", saveBtn: "Save", continueBtn: "Continue", changeBtn: "Change", logoutBtn: "Logout", assistivePanTitle: "Assistive Panning", assistivePanDesc: "Automatically shifts the canvas as you write.", turnOn: "Turn On", turnOff: "Turn Off", deleteAccountTitle: "Delete Account", deleteAccountBtn: "Delete", deleteAccountDesc: "Permanently delete your account.", deleteConfirmMsg: "Are you sure you want to delete your account? This action cannot be undone.", tutorialTitle: "Tutorial", tutorialDesc: "See how thelo works, step by step.", tutorialBtn: "Start Tutorial" },
-            hy: { settings: "Կարգավորումներ", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ,", navHangar: "Տուն", navCourses: "Դասընթացներ", navScan: "Սկան", navCompete: "Մրցույթ", navProfile: "Պրոֆիլ", competeTitle: "Մրցիր ընկերներիդ հետ", competeDesc: "Կենդանի մաթեմատիկական մրցույթ՝ նույն հարցերը, նույն պահին։", avatarTitle: "Ընտրեք Նկար", cancelBtn: "Չեղարկել", saveBtn: "Պահպանել", continueBtn: "Շարունակել", changeBtn: "Փոխել", logoutBtn: "Ելք", assistivePanTitle: "Օգնող ոլորում", assistivePanDesc: "Գրելիս կտավը ավտոմատ տեղաշարժվում է։", turnOn: "Միացնել", turnOff: "Անջատել", deleteAccountTitle: "Ջնջել հաշիվը", deleteAccountBtn: "Ջնջել", deleteAccountDesc: "Մշտապես ջնջեք ձեր հաշիվը:", deleteConfirmMsg: "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել ձեր հաշիվը: Այս գործողությունը հնարավոր չէ չեղարկել:", tutorialTitle: "Ուղեցույց", tutorialDesc: "Տես, թե ինչպես է աշխատում thelo-ն՝ քայլ առ քայլ։", tutorialBtn: "Սկսել ուղեցույցը" }
+            hy: { settings: "Կարգավորումներ", pwT: "Գաղտնաբառ", pwD: "Թարմացրեք ձեր գաղտնաբառը:", langT: "Լեզու", curr: "Ընթացիկ:", log: "Ելք", upNext: "Հաջորդը", coursePlan: "Դասընթաց", welcome: "Բարի վերադարձ,", navHangar: "Տուն", navCourses: "Դասընթաց", navScan: "Սկան", navCompete: "Մրցույթ", navProfile: "Պրոֆիլ", competeTitle: "Մրցիր ընկերներիդ հետ", competeDesc: "Կենդանի մաթեմատիկական մրցույթ՝ նույն հարցերը, նույն պահին։", avatarTitle: "Ընտրեք Նկար", cancelBtn: "Չեղարկել", saveBtn: "Պահպանել", continueBtn: "Շարունակել", changeBtn: "Փոխել", logoutBtn: "Ելք", assistivePanTitle: "Օգնող ոլորում", assistivePanDesc: "Գրելիս կտավը ավտոմատ տեղաշարժվում է։", turnOn: "Միացնել", turnOff: "Անջատել", deleteAccountTitle: "Ջնջել հաշիվը", deleteAccountBtn: "Ջնջել", deleteAccountDesc: "Մշտապես ջնջեք ձեր հաշիվը:", deleteConfirmMsg: "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել ձեր հաշիվը: Այս գործողությունը հնարավոր չէ չեղարկել:", tutorialTitle: "Ուղեցույց", tutorialDesc: "Տես, թե ինչպես է աշխատում thelo-ն՝ քայլ առ քայլ։", tutorialBtn: "Սկսել ուղեցույցը" }
         }[lang];
 
         document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -1431,7 +1575,7 @@ ${stream[lang]}` : '');
             // Deliberately not awaited into the failure path: a mail that does not
             // send must never abort a signup whose account and profile already
             // exist. The student can request another from their profile.
-            sendEmailVerification(cred.user).catch(e => {
+            sendVerification(cred.user).catch(e => {
                 console.warn("Could not send verification email:", e && e.code, e && e.message);
             });
 
@@ -1787,7 +1931,80 @@ ${stream[lang]}` : '');
         const u = user || auth.currentUser;
         setActiveView(ui.hangar);
         loadHangarData(u);
+        updateVerifyBanner(u);
     };
+
+    // ===================== EMAIL VERIFICATION =====================
+    // The email comes in the student's language, and its link leads back to thelo
+    // (https://thelo.ink/... must be an authorised domain in Firebase Auth; until it
+    // is, Firebase rejects the continue URL and we send the plain email instead).
+    const VERIFY_CONTINUE_URL = 'https://thelo.ink/sdashboard/?verified=1';
+    async function sendVerification(user) {
+        auth.languageCode = state.lang === 'hy' ? 'hy' : 'en';
+        try {
+            await sendEmailVerification(user, { url: VERIFY_CONTINUE_URL });
+        } catch (e) {
+            if (e && /continue-uri|unauthorized-domain/.test(e.code || '')) await sendEmailVerification(user);
+            else throw e;
+        }
+    }
+
+    const VERIFY_TEXT = {
+        en: { title: 'Confirm your email', text: 'We sent a link to {email}. Open it to confirm your account. Can\'t find it? Look in Spam or Promotions.',
+              done: 'I\'ve confirmed', resend: 'Send it again', sent: 'Sent! Check your inbox.', wait: 'Send again in {s}s',
+              notYet: 'Not confirmed yet. Open the link in the email first.', thanks: 'Email confirmed. Thank you!', tooMany: 'Too many emails for now. Try again later.' },
+        hy: { title: 'Հաստատիր էլ. հասցեդ', text: 'Մենք հղում ենք ուղարկել {email} հասցեին։ Բացիր այն՝ հաշիվդ հաստատելու համար։ Չե՞ս գտնում. նայիր «Սպամ» կամ «Գովազդ» թղթապանակում։',
+              done: 'Հաստատել եմ', resend: 'Ուղարկել նորից', sent: 'Ուղարկված է։ Ստուգիր փոստդ։', wait: 'Նորից՝ {s} վ հետո',
+              notYet: 'Դեռ հաստատված չէ։ Նախ բացիր նամակի հղումը։', thanks: 'Էլ. հասցեն հաստատված է։ Շնորհակալություն։', tooMany: 'Շատ նամակներ ուղարկվեցին։ Փորձիր ավելի ուշ։' },
+    };
+    const needsVerify = (u) => !!(u && !u.isAnonymous && !u.emailVerified && u.email &&
+        (u.providerData || []).some(p => p.providerId === 'password'));
+    let verifyCooldownUntil = 0;
+
+    function updateVerifyBanner(user) {
+        const box = document.getElementById('h-verify');
+        if (!box) return;
+        const u = user || auth.currentUser;
+        if (!needsVerify(u)) { box.style.display = 'none'; return; }
+        const t = VERIFY_TEXT[state.lang] || VERIFY_TEXT.en;
+        document.getElementById('h-verify-title').textContent = t.title;
+        document.getElementById('h-verify-text').textContent = t.text.replace('{email}', u.email);
+        const done = document.getElementById('h-verify-done');
+        const resend = document.getElementById('h-verify-resend');
+        done.textContent = t.done;
+        const drawResend = () => {
+            const left = Math.ceil((verifyCooldownUntil - Date.now()) / 1000);
+            resend.disabled = left > 0;
+            resend.textContent = left > 0 ? t.wait.replace('{s}', left) : t.resend;
+            if (left > 0) setTimeout(drawResend, 1000);
+        };
+        drawResend();
+        done.onclick = async () => {
+            done.disabled = true;
+            try { await u.reload(); } catch (e) { /* offline: keep the banner */ }
+            done.disabled = false;
+            if (auth.currentUser && auth.currentUser.emailVerified) { box.style.display = 'none'; showToast(t.thanks); }
+            else showToast(t.notYet, true);
+        };
+        resend.onclick = async () => {
+            verifyCooldownUntil = Date.now() + 60000;
+            drawResend();
+            try { await sendVerification(u); showToast(t.sent); }
+            catch (e) { showToast(e && e.code === 'auth/too-many-requests' ? t.tooMany : (e && e.message) || t.tooMany, true); }
+        };
+        box.style.display = 'block';
+    }
+
+    // Coming back to the app after tapping the link in the email: notice it on our own.
+    document.addEventListener('visibilitychange', async () => {
+        const u = auth.currentUser;
+        if (document.visibilityState !== 'visible' || !needsVerify(u)) return;
+        try { await u.reload(); } catch (e) { return; }
+        if (auth.currentUser.emailVerified) {
+            updateVerifyBanner(auth.currentUser);
+            showToast((VERIFY_TEXT[state.lang] || VERIFY_TEXT.en).thanks);
+        }
+    });
 
     window.switchToProfile = () => {
         const u = auth.currentUser;
@@ -2062,6 +2279,9 @@ ${stream[lang]}` : '');
                 jumpHere: "Jump here",
                 jumpSub: "Know this already? Pass a test to unlock it.",
                 jumpWait: "Try again in {h}",
+                cpMid: "Checkpoint: first half", cpEnd: "Unit checkpoint", cpPassed: "Passed",
+                cpNext: "Pass it to open the next lessons", cpWait: "Try again in {h}", cpRevise: "Revise my mistakes",
+                cpStart: "Start the checkpoint", cpTitle: "Checkpoint · {t}", cpLockedMsg: "Pass the checkpoint before this lesson first.",
                 courseDone: "Course complete! 🎉",
                 courseDoneBtn: "Choose the next grade"
             },
@@ -2080,10 +2300,13 @@ ${stream[lang]}` : '');
                 jumpHere: "Թռիչք այստեղ",
                 jumpSub: "Արդեն գիտե՞ս։ Բաց այն թեստով։",
                 jumpWait: "Նորից՝ {h} հետո",
+                cpMid: "Ստուգում՝ առաջին կես", cpEnd: "Բաժնի ստուգում", cpPassed: "Անցած է",
+                cpNext: "Անցիր այն, որ հաջորդ դասերը բացվեն", cpWait: "Նորից՝ {h} հետո", cpRevise: "Կրկնել սխալներս",
+                cpStart: "Սկսել ստուգումը", cpTitle: "Ստուգում · {t}", cpLockedMsg: "Նախ անցիր այս դասից առաջ եղած ստուգումը։",
                 courseDone: "Դասընթացն ավարտված է 🎉",
                 courseDoneBtn: "Ընտրել հաջորդ դասարանը"
             }
-        }[userLang] || { noCourse: "No Course Found", noCourseDesc: "No course found for Grade", comingSoon: "Coming Soon", comingSoonDesc: "Course coming soon!", notAvail: "Course not yet available", completed: "Completed", available: "Available", upNextSub: "Up Next", locked: "Locked", lockedMsg: "Finish the lessons before this one first.", lessonsDone: "{d} of {n} done", jumpHere: "Jump here", jumpSub: "Know this already? Pass a test to unlock it.", jumpWait: "Try again in {h}", courseDone: "Course complete! 🎉", courseDoneBtn: "Choose the next grade" };
+        }[userLang] || { noCourse: "No Course Found", noCourseDesc: "No course found for Grade", comingSoon: "Coming Soon", comingSoonDesc: "Course coming soon!", notAvail: "Course not yet available", completed: "Completed", available: "Available", upNextSub: "Up Next", locked: "Locked", lockedMsg: "Finish the lessons before this one first.", lessonsDone: "{d} of {n} done", jumpHere: "Jump here", jumpSub: "Know this already? Pass a test to unlock it.", jumpWait: "Try again in {h}", courseDone: "Course complete! 🎉", courseDoneBtn: "Choose the next grade", cpMid: "Checkpoint: first half", cpEnd: "Unit checkpoint", cpPassed: "Passed", cpNext: "Pass it to open the next lessons", cpWait: "Try again in {h}", cpRevise: "Revise my mistakes", cpStart: "Start the checkpoint", cpTitle: "Checkpoint · {t}", cpLockedMsg: "Pass the checkpoint before this lesson first." };
 
         // 3. Fetch course content from all supported schemas
         let courseDoc = null;
@@ -2152,6 +2375,7 @@ ${stream[lang]}` : '');
         // Students from before maxGrade existed get it rebuilt from their finished lessons
         // (ids like 12adv-05-das / en-9-31-gorc) and passed grade tests.
         const profileData = profileSnap.exists() ? profileSnap.data() : {};
+        updateGoalLine(Number(profileData.preferences?.dailyGoal) || 0, progSnap);
         const storedMaxGrade = Number(profileData.preferences?.maxGrade) || 0;
         let maxGrade = Math.max(storedMaxGrade, Number(userGrade) || 0);
         completedIds.forEach(id => {
@@ -2222,21 +2446,76 @@ ${stream[lang]}` : '');
             const m = /unit(\d+)$/.exec(uDoc.id);
             return { title: uDoc.data().unitTitle || '', num: m ? Number(m[1]) : null, topics };
         }));
-        const pathTopics = pathUnits.flatMap(pu => pu.topics);
-        const frontierIdx = pathTopics.findIndex(t => !completedIds.has(t.id));
-        const frontier = frontierIdx >= 0 ? pathTopics[frontierIdx] : null;
-        const courseComplete = pathTopics.length > 0 && !frontier;
-        const frontierUnit = frontier ? pathUnits.findIndex(pu => pu.topics.includes(frontier)) : pathUnits.length;
+        // Checkpoints (assess function, /jump/?kind=checkpoint): at the end of every
+        // unit, and in the middle of units with at least 4 lessons -- after the first half,
+        // the same lessons the server tests. An open checkpoint blocks what follows until
+        // it is passed. It counts as passed for students who already finished something
+        // after it, or jumped past it with a section test, so nobody is blocked
+        // retroactively. Lower grades (review) have none.
+        const checkpoints = (profileSnap.exists() && profileSnap.data().checkpoints) || {};
         const jumpTests = (profileSnap.exists() && profileSnap.data().jumpTests) || {};
+        const CP_MID_MIN_LESSONS = 4;
+        const baseIdOf = (id) => id.replace(/-(das|gorc)$/, '');
+        const pathItems = [];
+        pathUnits.forEach((pu, ui_) => {
+            const unitNum = pu.num ?? ui_ + 1;
+            const folder = pu.topics.length && pu.topics[0].url.includes('/') ? pu.topics[0].url.split('/')[0] : '';
+            const lessonIds = [...new Set(pu.topics.map(t => baseIdOf(t.id)))];
+            const midAfter = lessonIds.length >= CP_MID_MIN_LESSONS ? lessonIds[Math.ceil(lessonIds.length / 2) - 1] : null;
+            const checkpoint = (pos) => {
+                const key = `c_${courseDoc ? courseDoc.id : ''}_u${unitNum}_${pos}`.replace(/[^A-Za-z0-9_]/g, '_');
+                return { kind: 'cp', pos, key, rec: checkpoints[key] || null, unit: ui_, unitNum, folder, title: pu.title };
+            };
+            pu.items = [];
+            pu.topics.forEach((t, k) => {
+                pu.items.push({ kind: 'topic', t, unit: ui_ });
+                const next = pu.topics[k + 1];
+                if (!belowReached && courseDoc && midAfter && baseIdOf(t.id) === midAfter && (!next || baseIdOf(next.id) !== midAfter)) pu.items.push(checkpoint('mid'));
+            });
+            if (!belowReached && courseDoc && pu.topics.length) pu.items.push(checkpoint('end'));
+            pathItems.push(...pu.items);
+        });
+        // Units the student has jumped into with a section test: checkpoints before them are behind.
+        const jumpedUnit = Math.max(0, ...Object.entries(jumpTests).map(([k, r]) => {
+            const m = courseDoc && r && r.passedAt ? new RegExp(`^s_${courseDoc.id.replace(/[^A-Za-z0-9_]/g, '_')}_u(\\d+)$`).exec(k) : null;
+            return m ? Number(m[1]) : 0;
+        }));
+        let doneAfter = false;
+        for (let i = pathItems.length - 1; i >= 0; i--) {
+            const it = pathItems[i];
+            if (it.kind === 'topic') { it.done = completedIds.has(it.t.id); doneAfter = doneAfter || it.done; }
+            else it.done = !!(it.rec && it.rec.passedAt) || doneAfter || it.unitNum < jumpedUnit;
+        }
+        const pathTopics = pathUnits.flatMap(pu => pu.topics);
+        const frontierIdx = pathItems.findIndex(it => !it.done);
+        const frontierItem = frontierIdx >= 0 ? pathItems[frontierIdx] : null;
+        // The first lesson not done (a jump test starts from it), even when a checkpoint comes first.
+        const frontier = pathTopics.find(t => !completedIds.has(t.id)) || null;
+        const courseComplete = pathItems.length > 0 && !frontierItem;
+        const frontierUnit = frontierItem ? frontierItem.unit : pathUnits.length;
         const fillIn = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
+        const hoursText = (ms) => ms >= 3600000 ? `${Math.floor(ms / 3600000)} ${userLang === 'hy' ? 'ժ' : 'h'}` : `${Math.ceil(ms / 60000)} ${userLang === 'hy' ? 'ր' : 'min'}`;
+        const waitFor = (ms) => fillIn(txt.jumpWait, { h: hoursText(ms) });
+        const cpHref = (cp, revise) => `/jump/?kind=checkpoint&lang=${encodeURIComponent(userLang)}&course=${encodeURIComponent(courseDoc.id)}` +
+            `&folder=${encodeURIComponent(cp.folder)}&unit=${cp.unitNum}&pos=${cp.pos}&title=${encodeURIComponent(cp.title)}${revise ? '&revise=1' : ''}`;
+        const cpWaitMs = (cp) => (cp.rec && cp.rec.failedAt ? 24 * 3600 * 1000 - (Date.now() - cp.rec.failedAt) : 0);
         // For the Courses screen: moving up one grade needs no test once this course is done.
         window.theloCoursePath = { grade: userGrade, stream: userStream, lang: userLang, complete: courseComplete, maxGrade };
 
-        if (frontier) {
+        if (frontierItem && frontierItem.kind === 'cp') {
             nextFound = true;
-            ui.hTitle.textContent = frontier.name;
+            const cp = frontierItem;
+            const wait = cpWaitMs(cp);
+            ui.hTitle.textContent = fillIn(txt.cpTitle, { t: cp.pos === 'mid' ? `${cp.title} (1/2)` : cp.title });
             ui.hBtn.disabled = false;
-            ui.hBtn.onclick = () => window.location.href = lessonHref(frontier.url);
+            ui.hBtn.textContent = wait > 0 ? txt.cpRevise : txt.cpStart;
+            if (wait > 0) ui.hTitle.textContent += ` — ${fillIn(txt.cpWait, { h: hoursText(wait) })}`;
+            ui.hBtn.onclick = () => window.location.href = cpHref(cp, wait > 0);
+        } else if (frontierItem) {
+            nextFound = true;
+            ui.hTitle.textContent = frontierItem.t.name;
+            ui.hBtn.disabled = false;
+            ui.hBtn.onclick = () => window.location.href = lessonHref(frontierItem.t.url);
         } else if (courseComplete) {
             nextFound = true;
             ui.hTitle.textContent = txt.courseDone;
@@ -2245,7 +2524,6 @@ ${stream[lang]}` : '');
             ui.hBtn.onclick = () => window.switchToCourses();
         }
 
-        let gi = 0;
         pathUnits.forEach((pu, ui_) => {
             const doneCount = pu.topics.filter(t => completedIds.has(t.id)).length;
             let state = (courseComplete || ui_ < frontierUnit) ? 'done' : (ui_ === frontierUnit ? 'current' : 'locked');
@@ -2266,9 +2544,7 @@ ${stream[lang]}` : '');
                     const waitMs = failedAt ? 24 * 3600 * 1000 - (Date.now() - failedAt) : 0;
                     const href = `/jump/?kind=section&lang=${encodeURIComponent(userLang)}&course=${encodeURIComponent(courseDoc.id)}` +
                         `&folder=${encodeURIComponent(folder)}&from=${from}&to=${to}&unit=${unitNum}&title=${encodeURIComponent(pu.title)}`;
-                    const waitText = waitMs > 0
-                        ? fillIn(txt.jumpWait, { h: waitMs >= 3600000 ? `${Math.floor(waitMs / 3600000)} h` : `${Math.ceil(waitMs / 60000)} min` })
-                        : '';
+                    const waitText = waitMs > 0 ? waitFor(waitMs) : '';
                     jumpHTML = `
                         <div class="path-jump">
                             <span class="path-jump-text">${escapeHTML(waitText || txt.jumpSub)}</span>
@@ -2280,14 +2556,44 @@ ${stream[lang]}` : '');
             }
 
             let itemsHTML = '';
-            pu.topics.forEach(t => {
-                const isDone = completedIds.has(t.id);
-                const isNext = frontier && t === frontier;
-                const isLocked = !belowReached && !isDone && frontier && gi > frontierIdx;
-                gi++;
+            pu.items.forEach(it => {
+                const at = pathItems.indexOf(it);
+                const isNext = it === frontierItem;
+                const isLocked = !belowReached && !it.done && frontierItem && at > frontierIdx;
+                if (it.kind === 'cp') {
+                    const name = it.pos === 'mid' ? txt.cpMid : txt.cpEnd;
+                    if (isLocked) {
+                        itemsHTML += `
+                            <div class="lesson-item checkpoint locked" onclick="window.pathLocked()">
+                                <div class="lesson-icon icon-locked"><i class="fa-solid fa-lock"></i></div>
+                                <div><div class="lesson-name">${escapeHTML(name)}</div><div class="lesson-sub">${escapeHTML(txt.locked)}</div></div>
+                            </div>`;
+                        return;
+                    }
+                    if (it.done) {
+                        itemsHTML += `
+                            <div class="lesson-item checkpoint">
+                                <div class="lesson-icon icon-done"><i class="fa-solid fa-flag-checkered"></i></div>
+                                <div><div class="lesson-name">${escapeHTML(name)}</div><div class="lesson-sub">${escapeHTML(txt.cpPassed)}</div></div>
+                            </div>`;
+                        return;
+                    }
+                    const wait = cpWaitMs(it);
+                    itemsHTML += `
+                        <a href="${escapeHTML(cpHref(it, wait > 0))}" class="lesson-item checkpoint active">
+                            <div class="lesson-icon icon-checkpoint"><i class="fa-solid fa-flag-checkered"></i></div>
+                            <div>
+                                <div class="lesson-name">${escapeHTML(name)}</div>
+                                <div class="lesson-sub">${escapeHTML(wait > 0 ? fillIn(txt.cpWait, { h: hoursText(wait) }) : txt.cpNext)}</div>
+                                ${wait > 0 ? `<span class="cp-revise">${escapeHTML(txt.cpRevise)}</span>` : ''}
+                            </div>
+                        </a>`;
+                    return;
+                }
+                const t = it.t;
                 if (isLocked) {
                     itemsHTML += `
-                        <div class="lesson-item locked" onclick="window.pathLocked()">
+                        <div class="lesson-item locked" onclick="window.pathLocked(${it.unit === frontierUnit && frontierItem && frontierItem.kind === 'cp' ? 'true' : ''})">
                             <div class="lesson-icon icon-locked"><i class="fa-solid fa-lock"></i></div>
                             <div>
                                 <div class="lesson-name">${escapeHTML(t.name)}</div>
@@ -2298,10 +2604,10 @@ ${stream[lang]}` : '');
                 }
                 itemsHTML += `
                     <a href="${escapeHTML(lessonHref(t.url))}" class="lesson-item ${isNext ? 'active' : ''}">
-                        <div class="lesson-icon ${isDone ? 'icon-done' : 'icon-active'}"><i class="fa-solid ${isDone ? 'fa-check' : 'fa-play'}"></i></div>
+                        <div class="lesson-icon ${it.done ? 'icon-done' : 'icon-active'}"><i class="fa-solid ${it.done ? 'fa-check' : 'fa-play'}"></i></div>
                         <div>
                             <div class="lesson-name">${escapeHTML(t.name)}</div>
-                            <div class="lesson-sub">${escapeHTML(isNext ? txt.upNextSub : (isDone ? txt.completed : txt.available))}</div>
+                            <div class="lesson-sub">${escapeHTML(isNext ? txt.upNextSub : (it.done ? txt.completed : txt.available))}</div>
                         </div>
                     </a>`;
             });
@@ -2321,7 +2627,7 @@ ${stream[lang]}` : '');
                     <div class="path-body">${itemsHTML}</div>
                 </section>`;
         });
-        window.pathLocked = () => showToast(txt.lockedMsg);
+        window.pathLocked = (byCheckpoint) => showToast(byCheckpoint ? txt.cpLockedMsg : txt.lockedMsg);
 
         // New schema support:
         // courses/{5_group..12_group}/Demo1/{doc} with fields { lessonFileUrl, topicName, order }
@@ -2421,8 +2727,207 @@ ${stream[lang]}` : '');
             const prefs = data.preferences || {};
             state.assistivePanning = prefs.assistivePanning !== false; // Default to true if undefined
             updatePanToggleUI();
+            renderSettings(data);
         }
     }
+
+    // ===================== SETTINGS (Account / Learning / Board / Sound / Help) =====================
+    // Stored in thelo-students/{uid}.preferences: dailyGoal (0, 1, 3, 5), pen ('thin' | 'normal' |
+    // 'thick'), leftHanded, sound. The lesson and competition pages read them.
+    const APP_VERSION = '2026.10.25';
+    const SETTINGS_TEXT = {
+        en: { account: 'Account', editName: 'Edit name', emailTitle: 'Confirm your email', emailDesc: "We sent you a link. Didn't get it? Send it again.",
+              emailBtn: 'Send link', emailOk: 'Email confirmed ✓', emailNot: 'Email not confirmed yet', emailSent: 'Sent! Check your inbox (and Spam).',
+              gradeTitle: 'Grade and course', gradeLabel: 'Grade {g}', gen: 'General', adv: 'Advanced',
+              learning: 'Learning', goalTitle: 'Daily goal', goalDesc: 'How many lessons a day do you want to do? Home shows how far you are.', goalOff: 'Off',
+              board: 'Board', penTitle: 'Pen', penDesc: 'How thick your writing is on the board.', penThin: 'Thin', penNormal: 'Normal', penThick: 'Thick',
+              leftTitle: 'Left-handed', leftDesc: 'Puts the lesson menu on the left and the eraser on the right.',
+              soundSection: 'Sound', soundTitle: 'Sounds', soundDesc: 'Sounds in lessons and competitions.',
+              help: 'Help', reportTitle: 'Report a problem', reportDesc: 'Something wrong in a lesson or the app? Tell us.', reportBtn: 'Write', accountEnd: 'Account',
+              on: 'Turn On', off: 'Turn Off', saved: 'Saved', saveFail: 'Could not save. Check your connection.',
+              nameTitle: 'Your name', firstName: 'First name', lastName: 'Last name', save: 'Save', cancel: 'Cancel', send: 'Send',
+              reportPlaceholder: 'What happened? Which lesson or screen?', reportThanks: 'Thank you! We got your message.', reportEmpty: 'Write a few words first.',
+              goalToday: 'Today: {d} of {n} lessons', goalDone: 'Daily goal reached! 🎉 {d} of {n}' },
+        hy: { account: 'Հաշիվ', editName: 'Փոխել անունը', emailTitle: 'Հաստատիր էլ. հասցեդ', emailDesc: 'Մենք քեզ հղում ենք ուղարկել։ Չե՞ս ստացել. ուղարկիր նորից։',
+              emailBtn: 'Ուղարկել հղումը', emailOk: 'Էլ. հասցեն հաստատված է ✓', emailNot: 'Էլ. հասցեն դեռ հաստատված չէ', emailSent: 'Ուղարկված է։ Ստուգիր փոստդ (նաև «Սպամ»-ը)։',
+              gradeTitle: 'Դասարան և դասընթաց', gradeLabel: '{g}-րդ դասարան', gen: 'Ընդհանուր', adv: 'Խորացված',
+              learning: 'Ուսուցում', goalTitle: 'Օրվա նպատակ', goalDesc: 'Քանի՞ դաս ես ուզում անել օրական։ Գլխավոր էջում կտեսնես՝ որքան ես արել։', goalOff: 'Անջատ',
+              board: 'Գրատախտակ', penTitle: 'Գրիչ', penDesc: 'Որքան հաստ է գրածդ գրատախտակին։', penThin: 'Բարակ', penNormal: 'Միջին', penThick: 'Հաստ',
+              leftTitle: 'Ձախլիկ', leftDesc: 'Դասի ընտրացանկը տեղափոխում է ձախ, իսկ ռետինը՝ աջ։',
+              soundSection: 'Ձայն', soundTitle: 'Ձայներ', soundDesc: 'Ձայները դասերում և մրցույթներում։',
+              help: 'Օգնություն', reportTitle: 'Հաղորդել խնդրի մասին', reportDesc: 'Ինչ-որ բան սխալ է դասում կամ հավելվածում։ Գրիր մեզ։', reportBtn: 'Գրել', accountEnd: 'Հաշիվ',
+              on: 'Միացնել', off: 'Անջատել', saved: 'Պահպանված է', saveFail: 'Չհաջողվեց պահպանել։ Ստուգիր կապը։',
+              nameTitle: 'Քո անունը', firstName: 'Անուն', lastName: 'Ազգանուն', save: 'Պահպանել', cancel: 'Չեղարկել', send: 'Ուղարկել',
+              reportPlaceholder: 'Ի՞նչ պատահեց։ Ո՞ր դասում կամ էկրանին։', reportThanks: 'Շնորհակալություն։ Նամակդ ստացանք։', reportEmpty: 'Նախ գրիր մի քանի բառ։',
+              goalToday: 'Այսօր՝ {d} / {n} դաս', goalDone: 'Օրվա նպատակը կատարված է 🎉 {d} / {n}' },
+    };
+    const stT = () => SETTINGS_TEXT[state.lang] || SETTINGS_TEXT.en;
+    const stEsc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const stFill = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
+    const settingsState = { goal: 0, pen: 'normal', leftHanded: false, sound: true, first: '', last: '', grade: '', stream: null };
+
+    function applySettingsText() {
+        const t = stT();
+        document.querySelectorAll('[data-st]').forEach(el => { if (t[el.dataset.st]) el.textContent = t[el.dataset.st]; });
+        drawSettings();
+    }
+    function drawSettings() {
+        const t = stT();
+        const seg = (id, v) => document.querySelectorAll(`#${id} button`).forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
+        seg('p-goal', settingsState.goal);
+        seg('p-pen', settingsState.pen);
+        const left = document.getElementById('p-left-toggle');
+        if (left) left.textContent = settingsState.leftHanded ? t.off : t.on;
+        const sound = document.getElementById('p-sound-toggle');
+        if (sound) sound.textContent = settingsState.sound ? t.off : t.on;
+        const ver = document.getElementById('p-version');
+        if (ver) ver.textContent = APP_VERSION;
+        const g = document.getElementById('p-grade-display');
+        if (g && settingsState.grade) {
+            g.textContent = stFill(t.gradeLabel, { g: settingsState.grade }) +
+                (Number(settingsState.grade) >= 10 ? ` · ${settingsState.stream === 'adv' ? t.adv : t.gen}` : '');
+        }
+        const u = auth.currentUser;
+        const status = document.getElementById('p-email-status');
+        const row = document.getElementById('p-email-row');
+        if (status && u && u.email && !u.isAnonymous) {
+            const waiting = needsVerify(u);
+            status.innerHTML = `<span class="${waiting ? 'email-wait' : 'email-ok'}">${stEsc(waiting ? t.emailNot : t.emailOk)}</span>`;
+            if (row) row.style.display = waiting ? '' : 'none';
+        }
+    }
+    function renderSettings(data) {
+        const prefs = data.preferences || {};
+        Object.assign(settingsState, {
+            goal: [0, 1, 3, 5].includes(Number(prefs.dailyGoal)) ? Number(prefs.dailyGoal) : 0,
+            pen: ['thin', 'normal', 'thick'].includes(prefs.pen) ? prefs.pen : 'normal',
+            leftHanded: prefs.leftHanded === true, sound: prefs.sound !== false,
+            first: data.firstName || '', last: data.lastName || '',
+            grade: prefs.grade || '', stream: prefs.stream || null,
+        });
+        applySettingsText();
+    }
+    async function savePrefs(changes) {
+        if (!auth.currentUser) return false;
+        try {
+            await updateDoc(doc(db, 'thelo-students', auth.currentUser.uid),
+                Object.fromEntries(Object.entries(changes).map(([k, v]) => [`preferences.${k}`, v])));
+            showToast(stT().saved);
+            return true;
+        } catch (e) {
+            console.error('Saving settings failed', e);
+            showToast(stT().saveFail, true);
+            return false;
+        }
+    }
+    document.querySelectorAll('#p-goal button').forEach(b => b.onclick = async () => {
+        const before = settingsState.goal;
+        settingsState.goal = Number(b.dataset.v); drawSettings();
+        if (!await savePrefs({ dailyGoal: settingsState.goal })) { settingsState.goal = before; drawSettings(); }
+    });
+    document.querySelectorAll('#p-pen button').forEach(b => b.onclick = async () => {
+        const before = settingsState.pen;
+        settingsState.pen = b.dataset.v; drawSettings();
+        if (!await savePrefs({ pen: settingsState.pen })) { settingsState.pen = before; drawSettings(); }
+    });
+    document.getElementById('p-left-toggle').onclick = async () => {
+        settingsState.leftHanded = !settingsState.leftHanded; drawSettings();
+        if (!await savePrefs({ leftHanded: settingsState.leftHanded })) { settingsState.leftHanded = !settingsState.leftHanded; drawSettings(); }
+    };
+    document.getElementById('p-sound-toggle').onclick = async () => {
+        settingsState.sound = !settingsState.sound; drawSettings();
+        if (!await savePrefs({ sound: settingsState.sound })) { settingsState.sound = !settingsState.sound; drawSettings(); }
+    };
+    document.getElementById('p-grade-btn').onclick = () => window.switchToCourses();
+    document.getElementById('p-email-btn').onclick = async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try { await sendVerification(auth.currentUser); showToast(stT().emailSent); }
+        catch (err) { showToast(err && err.code === 'auth/too-many-requests' ? (VERIFY_TEXT[state.lang] || VERIFY_TEXT.en).tooMany : stT().saveFail, true); }
+        setTimeout(() => { btn.disabled = false; }, 60000);
+    };
+
+    // The small dialog for "Edit name" and "Report a problem".
+    function openSettingsDialog(title, bodyHTML, saveText, onSave) {
+        const t = stT();
+        const modal = document.getElementById('st-modal');
+        document.getElementById('st-modal-title').textContent = title;
+        document.getElementById('st-modal-body').innerHTML = bodyHTML;
+        document.getElementById('st-modal-cancel').textContent = t.cancel;
+        const save = document.getElementById('st-modal-save');
+        save.textContent = saveText;
+        save.disabled = false;
+        document.getElementById('st-modal-cancel').onclick = () => { modal.style.display = 'none'; };
+        save.onclick = async () => {
+            save.disabled = true;
+            if (await onSave()) modal.style.display = 'none';
+            else save.disabled = false;
+        };
+        modal.style.display = 'flex';
+    }
+    document.getElementById('p-name-btn').onclick = () => {
+        const t = stT();
+        openSettingsDialog(t.nameTitle, `
+            <label class="input-label">${stEsc(t.firstName)}</label>
+            <input id="st-first" maxlength="40" value="${stEsc(settingsState.first)}">
+            <label class="input-label" style="margin-top:0.8rem;display:block">${stEsc(t.lastName)}</label>
+            <input id="st-last" maxlength="40" value="${stEsc(settingsState.last)}">`, t.save, async () => {
+            const first = document.getElementById('st-first').value.trim();
+            const last = document.getElementById('st-last').value.trim();
+            if (!first || !auth.currentUser) return false;
+            try {
+                await updateDoc(doc(db, 'thelo-students', auth.currentUser.uid), { firstName: first, lastName: last });
+                await updateProfile(auth.currentUser, { displayName: first }).catch(() => {});
+                Object.assign(settingsState, { first, last });
+                ui.pName.textContent = first;
+                showToast(t.saved);
+                return true;
+            } catch (e) {
+                console.error('Saving the name failed', e);
+                showToast(t.saveFail, true);
+                return false;
+            }
+        });
+    };
+    document.getElementById('p-report-btn').onclick = () => {
+        const t = stT();
+        openSettingsDialog(t.reportTitle, `<textarea id="st-report" maxlength="1000" placeholder="${stEsc(t.reportPlaceholder)}"></textarea>`, t.send, async () => {
+            const text = document.getElementById('st-report').value.trim();
+            if (text.length < 3) { showToast(t.reportEmpty, true); return false; }
+            try {
+                await addDoc(collection(db, 'feedback'), {
+                    uid: auth.currentUser ? auth.currentUser.uid : null, text, lang: state.lang, page: 'profile',
+                    version: APP_VERSION, userAgent: navigator.userAgent.slice(0, 200), createdAt: serverTimestamp(),
+                });
+                showToast(t.reportThanks);
+                return true;
+            } catch (e) {
+                console.error('Sending the report failed', e);
+                showToast(t.saveFail, true);
+                return false;
+            }
+        });
+    };
+
+    /** "Today: 2 of 3 lessons" under Up Next, when the student has a daily goal. */
+    function updateGoalLine(goal, progSnap) {
+        const el = document.getElementById('h-goal');
+        if (!el) return;
+        if (!goal) { el.style.display = 'none'; return; }
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        let done = 0;
+        progSnap.forEach(d => {
+            const p = d.data();
+            const at = p.lastAttempted && typeof p.lastAttempted.toDate === 'function' ? p.lastAttempted.toDate() : null;
+            if (p.status === 'completed' && at && at >= today) done++;
+        });
+        const t = stT();
+        el.className = `goal-line${done >= goal ? ' done' : ''}`;
+        el.innerHTML = `<i class="fa-solid fa-bullseye"></i><span>${stEsc(stFill(done >= goal ? t.goalDone : t.goalToday, { d: done, n: goal }))}</span>` +
+            `<span class="goal-bar"><span style="width:${Math.min(100, Math.round(100 * done / goal))}%"></span></span>`;
+        el.style.display = 'flex';
+    }
+
 
     // --- PROFILE ACTIONS ---
 

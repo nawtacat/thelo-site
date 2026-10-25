@@ -48,6 +48,7 @@ body {
     font-family: 'Montserrat Arm', system-ui, -apple-system, sans-serif;
     background: var(--thelo-bg);
     color: var(--thelo-text);
+    overflow-wrap: anywhere;   /* long Armenian words break instead of leaving their box */
     display: flex; flex-direction: column;
     background-image: linear-gradient(var(--grid-color) 1px, transparent 1px),
                       linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
@@ -70,9 +71,11 @@ header {
     display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;
 }
 header img { height: 30px; width: auto; }
-header .title { font-weight: 800; font-size: 1rem; }
-header .spacer { flex: 1; }
+header .title { font-weight: 800; font-size: clamp(0.85rem, 4.2vw, 1rem); line-height: 1.2; min-width: 0; flex: 1; }
+header img { flex-shrink: 0; height: clamp(22px, 7.5vw, 30px) !important; }
+header .spacer { flex: 0; }   /* the title takes the free space (it may wrap on small phones) */
 .badge {
+    white-space: nowrap; flex-shrink: 0;
     background: var(--thelo-bg); border: 1px solid var(--slate-200);
     border-radius: 999px; padding: 0.25rem 0.7rem;
     font-size: 0.8rem; font-weight: 600;
@@ -271,11 +274,13 @@ body.pad-fullscreen #btn-fs-exit { display: flex; }
     display: flex; justify-content: space-around; padding: 0.75rem 0 1.5rem;
     z-index: 50; flex-shrink: 0;
 }
+/* Five tabs share the bar evenly, like home.html, so no label runs into its neighbours. */
 .nav-item {
     display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
-    color: var(--slate-500); font-size: 0.7rem; font-weight: 600;
-    text-decoration: none; width: 64px;
+    color: var(--slate-500); font-size: clamp(0.6rem, 2.75vw, 0.7rem); font-weight: 600;
+    text-decoration: none; flex: 1 1 0; min-width: 0; max-width: 88px;
 }
+.nav-item span { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .nav-item.active { color: var(--thelo-blue); }
 .nav-item i { font-size: 1.1rem; }
 /* ---- explain it to me ---- */
@@ -608,7 +613,7 @@ const TXT = {
         practice: "Վարժվել", again: "Սկանավորել նորը", yourturn: "Ձեր հերթն է",
         clear: "Մաքրել", hint: "Հուշում", check: "Ստուգել", checking: "Ստուգվում է…",
         show: "Ցույց տուր լուծումը", done: "Հիանալի է!", doneAgain: "Սկանավորել նոր խնդիր",
-        home: "Վերադառնալ", navHome: "Տուն", navCourses: "Դասընթացներ", navScan: "Սկան", navCompete: "Մրցույթ", navProfile: "Պրոֆիլ",
+        home: "Վերադառնալ", navHome: "Տուն", navCourses: "Դասընթաց", navScan: "Սկան", navCompete: "Մրցույթ", navProfile: "Պրոֆիլ",
         tips: "Լավագույն արդյունքի համար", tip1: "Մեկ խնդիր մեկ կադրում",
         tip2: "Լավ լույս, առանց ստվերի էջին", tip3: "Պահեք էջը հարթ և ուղիղ",
         fsExit: "Պատրաստ է",
@@ -1007,7 +1012,8 @@ function awardPoints(n) {
     const u = auth?.currentUser;
     if (!u || !db) return;
     db.collection('thelo-students').doc(u.uid).set({
-        points: firebase.firestore.FieldValue.increment(n)
+        points: firebase.firestore.FieldValue.increment(n),
+        pointsAt: firebase.firestore.FieldValue.serverTimestamp()   // see firestore.rules: starsOk
     }, { merge: true }).catch(e => console.warn('points update failed', e));
 }
 

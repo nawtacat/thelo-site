@@ -668,14 +668,19 @@
         }
 
         /* ===== ADD THESE STYLES: For Smarter MCQ Layouts ===== */
+       /* Centred with left/right 0 + auto margins rather than left: 50% + translate:
+          with left: 50% a shrink-to-fit box may only use the right half of the board,
+          so long answers wrapped into a narrow column. */
        #mcqOptionsContainer.long-options {
            flex-direction: column;
            /* CHANGE: Center the shrink-to-fit buttons instead of stretching them. */
            align-items: center;
            width: fit-content;
            max-width: 92%;
-           left: 50%;
-           transform: translate(-50%, -50%);
+           left: 0;
+           right: 0;
+           margin-inline: auto;
+           transform: translateY(-50%);
        }
         #mcqOptionsContainer.short-options {
            flex-direction: row;
@@ -683,9 +688,13 @@
            align-items: center;
            width: fit-content;
            max-width: 92%;
-           left: 50%;
-           transform: translate(-50%, -50%);
+           left: 0;
+           right: 0;
+           margin-inline: auto;
+           transform: translateY(-50%);
        }
+        /* Placed below the question by placeMcqBelowHeadline() when centring would cover it. */
+        #mcqOptionsContainer.below-headline { transform: none; overflow-y: auto; }
 
 
         #mcqOptionsContainer.short-options .mcq-option-btn {
@@ -1241,6 +1250,23 @@
            box-shadow: var(--shadow-lg);
        }
          .mcq-option-btn .katex { vertical-align: middle; }
+
+       /* Long answers wrap inside their button instead of running off the board
+          (the rule above sets nowrap so short answers stay on one line). */
+       #mcqOptionsContainer .mcq-option-btn {
+           white-space: normal;
+           max-width: 100%;
+           overflow-wrap: anywhere;
+           line-height: 1.35;
+           text-align: center;
+       }
+       #mcqOptionsContainer .mcq-option-btn .katex { white-space: nowrap; }
+       /* Phones in landscape: less space between answers so all of them fit
+          under the question. */
+       @media (max-height: 480px) {
+           #mcqOptionsContainer { gap: 0.5rem; }
+           #mcqOptionsContainer .mcq-option-btn { padding: 0.55rem 1rem; }
+       }
            /* ===== NEW: Animated Feedback System ===== */
        #feedbackOverlay {
            position: fixed;
@@ -1400,6 +1426,12 @@
            /* Ensure full screen touch area */
            touch-action: none;
        }
+
+       /* Left-handed (Settings -> Board): menu handle on the left, eraser on the right,
+          Step by step panel on the right. */
+       body.left-handed #mobileMenuFab { right: auto; left: calc(0.9rem + env(safe-area-inset-left, 0px)); }
+       body.left-handed.mobile-mode #bottomBar { flex-direction: row-reverse; }
+       body.left-handed #guidePanel { left: auto; right: calc(12px + env(safe-area-inset-right, 0px)); flex-direction: row-reverse; }
 
        /* Persistent lesson-menu handle, bottom-right.
           Sits below #mobileMenu (z 2000) so the open menu always covers it, and
@@ -2068,6 +2100,7 @@
           let isInitialStageRendered = false;
           let isMcqAnsweredCorrectly = false;
           let selectedMcqIndex = null; // To store the selected MCQ option index
+          let lastHeadlineBottom = 0;   // board y where the drawn question text ends
               let isTabletMode = false;
         let isCalculatorActive = false;
         let isReplayActive = false;
@@ -2103,7 +2136,7 @@
         let thelobookDrawListenersAttached = false;
         let isThelobookEraserActive = false;
         const THELOBOOK_ERASER_LINEWIDTH = 20;
-        const THELOBOOK_PEN_LINEWIDTH = 3;
+        let THELOBOOK_PEN_LINEWIDTH = 3;   // the pen width; Settings -> Board -> Pen can change it
         let isPageSwitchingAnimation = false;
         const PAGES_PER_GRID_BATCH = 32;
         let tempFullPageCanvasForThumbnails = null;
@@ -2842,6 +2875,16 @@
         }
     }
 
+    // Settings -> Board / Sound (home.html): pen width, left-handed layout, sounds on or off.
+    let soundsOn = true;
+    function applyBoardPreferences(prefs) {
+        THELOBOOK_PEN_LINEWIDTH = { thin: 2, normal: 3, thick: 5 }[prefs.pen] || 3;
+        if (ctx && !isBoardEraserActive) ctx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        if (captureCtx) captureCtx.lineWidth = THELOBOOK_PEN_LINEWIDTH;
+        document.body.classList.toggle('left-handed', prefs.leftHanded === true);
+        soundsOn = prefs.sound !== false;
+    }
+
     function setAssistivePanningEnabled(enabled) {
         assistivePanningEnabled = enabled !== false;
         if (!assistivePanningEnabled) {
@@ -2986,6 +3029,7 @@
             mobilePendingStroke = {
                 color: '#2563eb',
                 isEraser: isBoardEraserActive,
+                lw: THELOBOOK_PEN_LINEWIDTH,
                 points: [{ x: virtualX, y: virtualY }]
             };
             mobilePendingStrokeCommitted = false;
@@ -3112,7 +3156,7 @@
             ctx.beginPath();
             ctx.globalCompositeOperation = stroke.isEraser ? 'destination-out' : 'source-over';
             ctx.strokeStyle = stroke.isEraser ? 'rgba(0,0,0,1)' : stroke.color;
-            ctx.lineWidth = stroke.isEraser ? 25 : 3;
+            ctx.lineWidth = stroke.isEraser ? 25 : (stroke.lw || THELOBOOK_PEN_LINEWIDTH);
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             if (stroke.points.length === 1) {
@@ -3563,6 +3607,10 @@
       bgCtx.textAlign = prevAlign || 'center';
       bgCtx.textBaseline = prevBase || 'top';
       bgCtx.fillStyle = prevFill || fontColor;
+
+      // Where the question ends, so the answer buttons can sit below it.
+      lastHeadlineBottom = curY;
+      placeMcqBelowHeadline();
     }
 
           function stopCurrentStageAudio(){ if (currentStageAudio && !currentStageAudio.paused) { currentStageAudio.pause(); console.log("Current stage audio paused.");} }
@@ -3743,9 +3791,30 @@
 
         mcqOptionsContainer.style.display = 'flex';
         mcqOptionsContainer.style.opacity = '1';
+        placeMcqBelowHeadline();
 
         // Set the initial selection to the first option
         updateMcqSelectionVisuals(0);
+    }
+
+    /**
+     * The answers are centred on the board, which on a phone in landscape can put
+     * them on top of the question. When it would, move them to just under the
+     * question instead (and let them scroll if they still do not fit).
+     */
+    function placeMcqBelowHeadline() {
+        const c = mcqOptionsContainer;
+        if (!c || c.style.display === 'none' || c.classList.contains('side-by-side')) return;
+        c.classList.remove('below-headline');
+        c.style.top = '';
+        c.style.maxHeight = '';
+        const boardH = (c.offsetParent || c.parentElement).clientHeight;
+        const minTop = lastHeadlineBottom + 12;
+        const centredTop = boardH / 2 - c.offsetHeight / 2;
+        if (centredTop >= minTop) return;
+        c.classList.add('below-headline');
+        c.style.top = `${minTop}px`;
+        c.style.maxHeight = `${Math.max(120, boardH - minTop - 12)}px`;
     }
     /**
      * Updates the visual state of MCQ buttons based on the selected index.
@@ -4577,7 +4646,7 @@
                 updateUserPointsInFirestore(pts);
                 updatePointsDisplay();
                 addChatMessage('AI', formatAIMessage('pointsGained', { points: pts }));
-                if (window.userInteracted) {
+                if (window.userInteracted && soundsOn) {
                     gotItSoundPlayer.currentTime = 0;
                     gotItSoundPlayer.play().catch(() => {});
                 }
@@ -4794,7 +4863,7 @@
     }
         function playAudio(audioElement){ return new Promise((resolve, reject) => { if (!audioElement || !(audioElement instanceof HTMLAudioElement)) { return reject(new Error("Invalid audio element")); } if (!window.userInteracted) { return resolve(); } audioElement.currentTime = 0; const playPromise = audioElement.play(); if(playPromise !== undefined) { playPromise.then(resolve).catch(error => { reject(error); }); } else { resolve(); } }); }
         function playRandomFeedback(soundType){
-            if (!window.userInteracted || isThelobookActive || isPageGridVisible) return;
+            if (!window.userInteracted || !soundsOn || isThelobookActive || isPageGridVisible) return;
             let soundArray;
             if (currentLang === 'en') soundArray = (soundType === 'approve') ? approveSounds_en : disapproveSounds_en;
             else soundArray = (soundType === 'approve') ? approveSounds_hy : disapproveSounds_hy;
@@ -5565,9 +5634,11 @@ ${langLine}`;
 
             const userDocRef = db.collection('thelo-students').doc(user.uid);
 
-            // Use FieldValue.increment for atomic updates to prevent race conditions
+            // Use FieldValue.increment for atomic updates to prevent race conditions.
+            // pointsAt: firestore.rules allows a small award at most once a second.
             return userDocRef.update({
-                points: firebase.firestore.FieldValue.increment(pointsToAdd)
+                points: firebase.firestore.FieldValue.increment(pointsToAdd),
+                pointsAt: firebase.firestore.FieldValue.serverTimestamp()
             }).catch(error => {
                 console.error("Error updating points in Firestore: ", error);
             });
@@ -6759,6 +6830,7 @@ ${langLine}`;
         document.body.addEventListener('keydown', interactionListener, { once: true });
         document.body.addEventListener('touchstart', interactionListener, { once: true });
         window.addEventListener('resize', resizeCanvases);
+        window.addEventListener('resize', () => placeMcqBelowHeadline());
         if (prevBtn) prevBtn.onclick = previousStage;
         if (nextCheckBtn) nextCheckBtn.onclick = handleNextCheckClick;
         const fullscreenBtn = document.getElementById('fullscreenBtn');
@@ -6977,6 +7049,7 @@ ${langLine}`;
                             cachedStudentProfile = userData;
                             userPoints = userData.points || 0;
                             setAssistivePanningEnabled(userData.preferences?.assistivePanning !== false);
+                            applyBoardPreferences(userData.preferences || {});
 
                             // The profile usually lands after loadLesson has already
                             // picked a language, so re-apply the student's choice now
