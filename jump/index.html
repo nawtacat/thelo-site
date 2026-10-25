@@ -332,6 +332,16 @@
             },
         }[LANG];
         const fmt = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => (v && k in v ? v[k] : ''));
+        // The same test in the other languages. Keys differ only by the language
+        // (c_grade5_hy_math_u1_end / c_grade5_ru_math_u1_end, g_hy_7 / g_ru_7): a pass or a
+        // 24-hour wait in one language counts in all of them.
+        const sameTestKeys = (key) => {
+            let m = /^([sc])_(grade\d+(?:gen|adv)?)_(hy|en|ru)_math_(.+)$/.exec(key);
+            if (m) return ['hy', 'en', 'ru'].map(l => `${m[1]}_${m[2]}_${l}_math_${m[4]}`);
+            m = /^g_(hy|en|ru)_(.+)$/.exec(key);
+            if (m) return ['hy', 'en', 'ru'].map(l => `g_${l}_${m[2]}`);
+            return [key];
+        };
 
         if (LANG === 'hy') document.body.classList.add('lang-hy');
         document.documentElement.lang = LANG;
@@ -519,7 +529,7 @@
                     async start() { const r = await call('start', spec.server); attemptId = r.attemptId; return r; },
                     answer: (i, payload) => call('answer', Object.assign({ attemptId, index: i }, payload)),
                     finish: () => call('finish', { attemptId }),
-                    review: () => call('review', { key: spec.key }),
+                    review: () => call('review', { key: spec.reviewKey || spec.key }),
                 };
             }
             let items = [];
@@ -988,10 +998,15 @@
                 } catch (e) {
                     console.warn('Could not read the student profile', e);
                 }
-                const rec = (studentData[spec.field] || {})[spec.key];
+                // The same test in the other languages counts too (the server checks the same).
+                const records = studentData[spec.field] || {};
+                const recs = sameTestKeys(spec.key).filter(k => records[k]).map(k => Object.assign({ key: k }, records[k]));
+                const passed = recs.find(r => r.passedAt);
+                const lastFail = recs.filter(r => r.failedAt).sort((a, b) => b.failedAt - a.failedAt)[0];
+                if (lastFail && !passed) spec.reviewKey = lastFail.key;   // Revise shows the attempt that failed, in its language
                 if (REVISE) return openReview();
-                if (rec && rec.passedAt && KIND === 'checkpoint') return showMessage(T.passedTitle, T.passedBody, T.toCourse);
-                if (rec && rec.failedAt && Date.now() - rec.failedAt < COOLDOWN_MS) return showWait(rec.failedAt + COOLDOWN_MS);
+                if (passed && KIND === 'checkpoint') return showMessage(T.passedTitle, T.passedBody, T.toCourse);
+                if (!passed && lastFail && Date.now() - lastFail.failedAt < COOLDOWN_MS) return showWait(lastFail.failedAt + COOLDOWN_MS);
             }
             showIntro();
         }

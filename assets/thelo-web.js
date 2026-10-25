@@ -1,5 +1,5 @@
 /* ===========================================================================
-   Thelo — desktop layer, script half.
+   thelo — desktop layer, script half.
 
    Loaded at the end of every ported page. Companion to thelo-web.css.
 
@@ -33,9 +33,9 @@
        The app pages are all called "thelo", which is fine in a task switcher on
        a phone and useless across a dozen browser tabs. */
     var titles = {
-        lesson:    'Lesson · Thelo',
-        scan:      'Scan a problem · Thelo',
-        dashboard: 'My lessons · Thelo'
+        lesson:    'Lesson · thelo',
+        scan:      'Scan a problem · thelo',
+        dashboard: 'My lessons · thelo'
     };
     if (titles[page] && (document.title === 'thelo' || !document.title)) {
         document.title = titles[page];

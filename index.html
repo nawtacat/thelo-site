@@ -236,7 +236,8 @@ html[lang="hy"] .hero-title {
     .lang-btn:hover { opacity: 1; }
 
     /* Entry point into the student app. updateAuthUI() rewrites the href and
-       label: /auth when signed out, straight to the dashboard when signed in. */
+       label: the app's own sign-up / sign-in (/sdashboard) when signed out,
+       straight to the dashboard when signed in. */
     .nav-auth-btn {
         display: inline-flex;
         align-items: center;
@@ -620,7 +621,7 @@ html[lang="hy"] .hero-title {
             </ul>
         </div>
         <div class="nav-controls">
-            <a href="/auth" class="nav-auth-btn" data-i18n="navAuth">Log in</a>
+            <a href="/sdashboard/" class="nav-auth-btn" data-i18n="navAuth">Log in</a>
              <div class="lang-switcher">
                   <!-- SUGGESTION: Convert these spans to buttons for accessibility -->
                   <span id="lang-en" class="lang-btn opacity-60" aria-label="Switch to English">EN</span>
@@ -640,7 +641,7 @@ html[lang="hy"] .hero-title {
             <li><a href="#why" class="nav-link font-semibold" data-i18n="navWhy"></a></li>
             <li><a href="#thelopad" class="nav-link font-semibold" data-i18n="navThelopad"></a></li>
             <li><a href="#partnership" class="nav-link font-semibold" data-i18n="navPartner"></a></li>
-            <li><a href="/auth" class="nav-auth-btn" data-i18n="navAuth">Log in</a></li>
+            <li><a href="/sdashboard/" class="nav-auth-btn" data-i18n="navAuth">Log in</a></li>
         </ul>
     </div>
 </nav>
@@ -856,7 +857,8 @@ html[lang="hy"] .hero-title {
                     // --- END CHANGE ---
                     anchor.textContent = T.navDash;
                 } else {
-                    anchor.href = "/auth";
+                    // the same sign-up as in the app, in the language chosen here
+                    anchor.href = `/sdashboard/?lang=${lang}`;
                     anchor.textContent = T.navAuth;
                 }
             });
@@ -961,46 +963,9 @@ html[lang="hy"] .hero-title {
             currentUser = user;
 
             if (currentUser) {
-                // --- START MODIFICATION ---
-                // User is logged in, check if they are a tutor or student
-                console.log("User logged in:", currentUser.email); // Debugging line
-                let isTutor = false;
-                let isStudent = false;
-                
-                // Default target dashboard
-                targetDashboard = "/sdashboard"; 
-
-                try {
-                    // Check tutors collection (using email as ID)
-                    const tutorDocRef = doc(db, "tutors", currentUser.email);
-                    const tutorDocSnap = await getDoc(tutorDocRef);
-                    if (tutorDocSnap.exists()) {
-                        console.log("User is a tutor."); // Debugging line
-                        isTutor = true;
-                        targetDashboard = "/tdashboard"; // Set target to tutor dashboard
-                    } else {
-                        // Optional: Check students collection if not a tutor (using UID as ID)
-                        const studentDocRef = doc(db, "thelo-students", currentUser.uid);
-                        const studentDocSnap = await getDoc(studentDocRef);
-                        if (studentDocSnap.exists()) {
-                            console.log("User is a student."); // Debugging line
-                            isStudent = true;
-                            targetDashboard = "/sdashboard"; // Explicitly set target
-                        } else {
-                             console.warn("User document not found in tutors or thelo-students. Defaulting to student dashboard."); // Debugging line
-                             // targetDashboard remains "/sdashboard"
-                        }
-                    }
-
-                    // Update the UI after checking Firestore
-                    updateAuthUI(currentLang, targetDashboard);
-
-                } catch (error) {
-                    console.error("Error checking user role:", error);
-                    // Fallback: update UI with default dashboard link in case of error
-                    updateAuthUI(currentLang, targetDashboard);
-                }
-                // --- END MODIFICATION ---
+                // Signed in: straight to the student app (thelo has no tutor accounts).
+                targetDashboard = "/sdashboard";
+                updateAuthUI(currentLang, targetDashboard);
 
             } else {
                 // User is logged out, update UI normally

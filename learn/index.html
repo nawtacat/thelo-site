@@ -4535,9 +4535,11 @@
         try {
           const topicId = lessonFileName.split('/').pop().replace('.json', ''); // FIX: Ensure topicId is just the filename
           const studentDocRef = db.collection('thelo-students').doc(user.uid);
-          const progressDocRef = studentDocRef.collection('progress').doc(topicId);
-          const progressDoc = await progressDocRef.get();
-          const wasAlreadyCompleted = progressDoc.exists;
+          // Done before in any language (5-01-das, en-5-01-das, ru-5-01-das are the same lesson)?
+          const baseTopicId = topicId.replace(/^(?:en|ru)-/, '');
+          const sameLessonDocs = await Promise.all(['', 'en-', 'ru-'].map(p =>
+              studentDocRef.collection('progress').doc(p + baseTopicId).get()));
+          const wasAlreadyCompleted = sameLessonDocs.some(d => d.exists);
 
           await updateStudentProgress(user.uid, topicId, {
             status: 'completed',

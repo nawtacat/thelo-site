@@ -2436,8 +2436,12 @@ ${stream[lang]}` : '');
             );
         }
 
+        // A lesson done in one language is done in all of them: progress ids differ only by
+        // the language prefix (5-01-das, en-5-01-das, ru-5-01-das), so they are kept without it.
+        const sameLesson = (id) => String(id || '').replace(/^(?:en|ru)-/, '');
         const completedIds = new Set();
-        progSnap.forEach(d => { if(d.data().status === 'completed') completedIds.add(d.id); });
+        progSnap.forEach(d => { if(d.data().status === 'completed') completedIds.add(sameLesson(d.id)); });
+        const isCompleted = (id) => completedIds.has(sameLesson(id));
 
         // The highest grade this student has reached (preferences.maxGrade). Going back to
         // a lower grade to look something up must not cost them their place: every grade up
@@ -2449,7 +2453,7 @@ ${stream[lang]}` : '');
         const storedMaxGrade = Number(profileData.preferences?.maxGrade) || 0;
         let maxGrade = Math.max(storedMaxGrade, Number(userGrade) || 0);
         completedIds.forEach(id => {
-            const m = /^(?:en-)?(\d{1,2})(?:gen|adv)?-\d+-(?:das|gorc)$/.exec(id);
+            const m = /^(\d{1,2})(?:gen|adv)?-\d+-(?:das|gorc)$/.exec(id);
             if (m) maxGrade = Math.max(maxGrade, Number(m[1]));
         });
         Object.entries(profileData.jumpTests || {}).forEach(([key, rec]) => {
@@ -2473,7 +2477,7 @@ ${stream[lang]}` : '');
         const pushLessonToList = (lessonFileUrl, topicName) => {
             if (!lessonFileUrl) return;
             const lessonId = (lessonFileUrl || "").split('/').pop().replace('.json', '');
-            const isDone = completedIds.has(lessonId);
+            const isDone = isCompleted(lessonId);
             const status = 'active';
             const iconClass = isDone ? 'icon-done' : 'icon-active';
             const icon = isDone ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-play"></i>';
@@ -2524,6 +2528,21 @@ ${stream[lang]}` : '');
         // retroactively. Lower grades (review) have none.
         const checkpoints = (profileSnap.exists() && profileSnap.data().checkpoints) || {};
         const jumpTests = (profileSnap.exists() && profileSnap.data().jumpTests) || {};
+        // The same test in the other languages. Keys differ only by the language
+        // (c_grade5_hy_math_u1_end / c_grade5_ru_math_u1_end, g_hy_7 / g_ru_7): a pass or a
+        // 24-hour wait in one language counts in all of them.
+        const sameTestKeys = (key) => {
+            let m = /^([sc])_(grade\d+(?:gen|adv)?)_(hy|en|ru)_math_(.+)$/.exec(key);
+            if (m) return ['hy', 'en', 'ru'].map(l => `${m[1]}_${m[2]}_${l}_math_${m[4]}`);
+            m = /^g_(hy|en|ru)_(.+)$/.exec(key);
+            if (m) return ['hy', 'en', 'ru'].map(l => `g_${l}_${m[2]}`);
+            return [key];
+        };
+        // One record for a test across the languages: passed if passed in any, else the latest try.
+        const sameTestRecord = (records, key) => {
+            const recs = sameTestKeys(key).map(k => records[k]).filter(Boolean);
+            return recs.find(r => r.passedAt) || recs.sort((a, b) => (b.failedAt || 0) - (a.failedAt || 0))[0] || null;
+        };
         const CP_MID_MIN_LESSONS = 4;
         const baseIdOf = (id) => id.replace(/-(das|gorc)$/, '');
         const pathItems = [];
@@ -2534,7 +2553,7 @@ ${stream[lang]}` : '');
             const midAfter = lessonIds.length >= CP_MID_MIN_LESSONS ? lessonIds[Math.ceil(lessonIds.length / 2) - 1] : null;
             const checkpoint = (pos) => {
                 const key = `c_${courseDoc ? courseDoc.id : ''}_u${unitNum}_${pos}`.replace(/[^A-Za-z0-9_]/g, '_');
-                return { kind: 'cp', pos, key, rec: checkpoints[key] || null, unit: ui_, unitNum, folder, title: pu.title };
+                return { kind: 'cp', pos, key, rec: sameTestRecord(checkpoints, key), unit: ui_, unitNum, folder, title: pu.title };
             };
             pu.items = [];
             pu.topics.forEach((t, k) => {
@@ -2547,20 +2566,21 @@ ${stream[lang]}` : '');
         });
         // Units the student has jumped into with a section test: checkpoints before them are behind.
         const jumpedUnit = Math.max(0, ...Object.entries(jumpTests).map(([k, r]) => {
-            const m = courseDoc && r && r.passedAt ? new RegExp(`^s_${courseDoc.id.replace(/[^A-Za-z0-9_]/g, '_')}_u(\\d+)$`).exec(k) : null;
-            return m ? Number(m[1]) : 0;
+            const m = courseDoc && r && r.passedAt ? /_u(\d+)$/.exec(k) : null;
+            // this course's section test, in any language
+            return m && sameTestKeys(`s_${courseDoc.id.replace(/[^A-Za-z0-9_]/g, '_')}_u${m[1]}`).includes(k) ? Number(m[1]) : 0;
         }));
         let doneAfter = false;
         for (let i = pathItems.length - 1; i >= 0; i--) {
             const it = pathItems[i];
-            if (it.kind === 'topic') { it.done = completedIds.has(it.t.id); doneAfter = doneAfter || it.done; }
+            if (it.kind === 'topic') { it.done = isCompleted(it.t.id); doneAfter = doneAfter || it.done; }
             else it.done = !!(it.rec && it.rec.passedAt) || doneAfter || it.unitNum < jumpedUnit;
         }
         const pathTopics = pathUnits.flatMap(pu => pu.topics);
         const frontierIdx = pathItems.findIndex(it => !it.done);
         const frontierItem = frontierIdx >= 0 ? pathItems[frontierIdx] : null;
         // The first lesson not done (a jump test starts from it), even when a checkpoint comes first.
-        const frontier = pathTopics.find(t => !completedIds.has(t.id)) || null;
+        const frontier = pathTopics.find(t => !isCompleted(t.id)) || null;
         const courseComplete = pathItems.length > 0 && !frontierItem;
         const frontierUnit = frontierItem ? frontierItem.unit : pathUnits.length;
         const fillIn = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
@@ -2595,7 +2615,7 @@ ${stream[lang]}` : '');
         }
 
         pathUnits.forEach((pu, ui_) => {
-            const doneCount = pu.topics.filter(t => completedIds.has(t.id)).length;
+            const doneCount = pu.topics.filter(t => isCompleted(t.id)).length;
             let state = (courseComplete || ui_ < frontierUnit) ? 'done' : (ui_ === frontierUnit ? 'current' : 'locked');
             if (belowReached && state === 'locked') state = doneCount === pu.topics.length ? 'done' : 'free';
             const icon = { done: 'fa-check', current: 'fa-play', locked: 'fa-lock', free: 'fa-folder-open' }[state];
@@ -2610,7 +2630,8 @@ ${stream[lang]}` : '');
                 if (from && to && folder) {
                     const unitNum = pu.num ?? ui_ + 1;
                     const key = `s_${courseDoc.id}_u${unitNum}`.replace(/[^A-Za-z0-9_]/g, '_');
-                    const failedAt = jumpTests[key] && jumpTests[key].failedAt;
+                    const jumpRec = sameTestRecord(jumpTests, key);
+                    const failedAt = jumpRec && !jumpRec.passedAt && jumpRec.failedAt;
                     const waitMs = failedAt ? 24 * 3600 * 1000 - (Date.now() - failedAt) : 0;
                     const href = `/jump/?kind=section&lang=${encodeURIComponent(userLang)}&course=${encodeURIComponent(courseDoc.id)}` +
                         `&folder=${encodeURIComponent(folder)}&from=${from}&to=${to}&unit=${unitNum}&title=${encodeURIComponent(pu.title)}`;
@@ -3359,6 +3380,11 @@ updateOnlineStatus();
             scanFrame.removeAttribute('src');
             delete scanFrame.dataset.user;
             setActiveView(ui.splash);
+            // Links from the website (thelo.ink, /auth): ?lang=en|hy|ru shows the sign-up in
+            // that language, ?signin=1 opens the sign-in form. Sign-up itself is the same as in the app.
+            const entry = new URLSearchParams(location.search);
+            if (['en', 'hy', 'ru'].includes(entry.get('lang'))) window.setLang(entry.get('lang'), document.createElement('div'));
+            if (entry.get('signin') === '1') window.openSignIn();
         }
 
         // Hide Loading Overlay
