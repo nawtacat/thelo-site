@@ -1861,6 +1861,7 @@
                 streakTitleExtended: "Շաբաթական շարքը երկարաձգվեց!",
                 streakBody: "Դա {streakCount} շաբաթ է անընդմեջ: Հիանալի աշխատանք:",
                 streakConfirmBtn: "Հրաշալի է!",
+                streakFrozen: "Բաց թողած շաբաթը պահպանեց սառեցումը 🧊", streakFrozenN: "Բաց թողած {n} շաբաթը պահպանեցին սառեցումները 🧊",
             limitReached: "Դուք գերազանցել եք ձեր ամսական վերլուծությունների սահմանաչափը։ Խնդրում ենք փորձել կրկին հաջորդ ամիս։",
                 hint: "Հուշում",
                 guideMe: "Քայլ առ քայլ", guideTitle: "Քայլ առ քայլ՝ thelo-ի հետ", guideCheck: "Ստուգել քայլը",
@@ -1939,6 +1940,7 @@
       streakTitleExtended: "Weekly Streak Extended!",
       streakBody: "That's {streakCount} weeks in a row. Amazing work!",
       streakConfirmBtn: "Awesome!",
+      streakFrozen: "A streak freeze covered the week you missed 🧊", streakFrozenN: "Streak freezes covered the {n} weeks you missed 🧊",
       viewDashboard: "View Your Progress",
       limitReached: "You've reached your monthly handwriting check limit. Try again next month.",
       hint: "Hint",
@@ -2018,6 +2020,7 @@
       streakTitleExtended: "Серия недель продолжается!",
       streakBody: "Уже {streakCount} недель подряд. Здорово!",
       streakConfirmBtn: "Отлично!",
+      streakFrozen: "Заморозка спасла пропущенную неделю 🧊", streakFrozenN: "Заморозки спасли {n} пропущенные недели 🧊",
       viewDashboard: "Мой прогресс",
       limitReached: "Ты исчерпал(а) месячный лимит проверок. Попробуй в следующем месяце.",
       hint: "Подсказка",
@@ -5764,11 +5767,22 @@ ${langLine}`;
             const prevWeekId = getPreviousWeekIdentifier(thisWeekId);
             let newStreakData = { ...streakData };
             let showCelebration = false;
+            // Streak freezes (bought with stars, functions/streak.js): one covers one missed week.
+            const freezes = doc.exists ? Number(doc.data().streakFreezes) || 0 : 0;
+            const missedWeeks = streakData.lastActivityWeek ? weeksBetween(streakData.lastActivityWeek, thisWeekId) - 1 : 0;
+            let usedFreezes = 0;
 
             // Scenario B: Streak Extended!
             if (prevWeekId === streakData.lastActivityWeek) {
                 newStreakData.currentStreak += 1;
                 console.log(`Weekly streak extended to ${newStreakData.currentStreak} weeks!`);
+                showCelebration = true;
+            }
+            // Scenario B2: weeks were missed, but there are enough freezes to cover them
+            else if (missedWeeks >= 1 && missedWeeks <= freezes && streakData.currentStreak > 0) {
+                usedFreezes = missedWeeks;
+                newStreakData.currentStreak += 1;
+                console.log(`Streak kept with ${usedFreezes} freeze(s): ${newStreakData.currentStreak} weeks`);
                 showCelebration = true;
             }
             // Scenario C: Streak Broken, new one starts
@@ -5784,11 +5798,12 @@ ${langLine}`;
                 newStreakData.longestStreak = newStreakData.currentStreak;
             }
 
-            // Save to Firestore and show the modal
-            await userDocRef.set({ streakData: newStreakData }, { merge: true });
+            // Save to Firestore and show the modal (firestore.rules let the phone only lower streakFreezes)
+            await userDocRef.set(Object.assign({ streakData: newStreakData },
+                usedFreezes ? { streakFreezes: freezes - usedFreezes } : {}), { merge: true });
 
             if (showCelebration) {
-                showStreakCelebrationModal(newStreakData.currentStreak, newStreakData.currentStreak === newStreakData.longestStreak && newStreakData.currentStreak > 1);
+                showStreakCelebrationModal(newStreakData.currentStreak, newStreakData.currentStreak === newStreakData.longestStreak && newStreakData.currentStreak > 1, usedFreezes);
             }
 
         } catch (error) {
@@ -5796,7 +5811,17 @@ ${langLine}`;
         }
     }
 
-    function showStreakCelebrationModal(streakCount, isNewRecord) {
+    /** Whole weeks from one ISO week id ("2026-W43") to another. */
+    function weeksBetween(fromWeekId, toWeekId) {
+        const monday = (id) => {
+            const [y, w] = String(id).split('-W').map(Number);
+            const jan4 = new Date(Date.UTC(y, 0, 4));
+            return Date.UTC(y, 0, 4 - (jan4.getUTCDay() || 7) + 1 + (w - 1) * 7);
+        };
+        return Math.round((monday(toWeekId) - monday(fromWeekId)) / (7 * 86400000));
+    }
+
+    function showStreakCelebrationModal(streakCount, isNewRecord, usedFreezes = 0) {
         const modal = document.getElementById('streakModal');
         const title = document.getElementById('streakModalTitle');
         const body = document.getElementById('streakModalBody');
@@ -5805,7 +5830,8 @@ ${langLine}`;
         const TXT = getCurrentUIText();
 
         title.textContent = isNewRecord ? TXT.streakTitleNewRecord : TXT.streakTitleExtended;
-        body.textContent = TXT.streakBody.replace('{streakCount}', streakCount);
+        body.textContent = TXT.streakBody.replace('{streakCount}', streakCount) +
+            (usedFreezes ? ' ' + (usedFreezes > 1 ? TXT.streakFrozenN : TXT.streakFrozen).replace('{n}', usedFreezes) : '');
         confirmBtn.textContent = TXT.streakConfirmBtn;
 
         const hideModal = () => modal.classList.add('modal-hidden');

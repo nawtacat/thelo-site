@@ -205,6 +205,11 @@
             padding: 0.35rem 0.75rem; font-size: 0.875rem; font-weight: 700;
             display: flex; align-items: center; gap: 0.4rem;
         }
+        button.stat-badge { font: inherit; font-size: 0.875rem; font-weight: 700; color: inherit; cursor: pointer; }
+        .stat-badge .freezes:empty { display: none; }
+        .stat-badge .freezes { color: #0EA5E9; font-weight: 800; }
+        .streak-sheet p { margin: 0 0 0.7rem; line-height: 1.45; font-weight: 600; }
+        .streak-sheet .big { font-size: 1.4rem; font-weight: 800; }
 
         /* Unified Main Scroll Area */
         .app-view main {
@@ -385,6 +390,7 @@
         .email-wait { color: #B45309; font-weight: 700; }
         #st-modal textarea, #st-modal input { width: 100%; border: 1.5px solid var(--grid-color); border-radius: 0.75rem; padding: 0.7rem 0.8rem; font: inherit; }
         #st-modal textarea { min-height: 8rem; resize: vertical; }
+        #st-modal-cancel { flex: 0 0 auto; white-space: nowrap; }   /* a long action label must not squeeze it */
         /* Daily goal on Home. */
         .goal-line { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; font-weight: 700; color: var(--slate-500); }
         .goal-line .goal-bar { flex: 1; height: 8px; background: var(--slate-200); border-radius: 999px; overflow: hidden; }
@@ -742,7 +748,7 @@
             <span id="h-username" class="skeleton"></span>
         </div>
         <div class="stats-row">
-            <div class="stat-badge"><i class="fa-solid fa-fire" style="color:var(--streak-fire)"></i> <span id="h-streak">0</span></div>
+            <button type="button" class="stat-badge" id="h-streak-btn"><i class="fa-solid fa-fire" style="color:var(--streak-fire)"></i> <span id="h-streak">0</span><span class="freezes" id="h-freezes"></span></button>
             <div class="stat-badge"><i class="fa-solid fa-star" style="color:var(--points-star)"></i> <span id="h-points">0</span></div>
         </div>
     </header>
@@ -2274,7 +2280,7 @@ ${stream[lang]}` : '');
                 ui.hName.textContent = data.firstName || data.name || "Student";
                 ui.hName.classList.remove('skeleton');
             }
-            ui.hStreak.textContent = data.streakData?.currentStreak || 0;
+            renderStreak(data);
             ui.hPoints.textContent = data.points || 0;
 
             if (data.preferences?.language) {
@@ -3009,15 +3015,117 @@ ${stream[lang]}` : '');
         });
     };
 
+    // ===================== STREAK AND STREAK FREEZES =====================
+    // The streak is weekly (lesson.html updateWeeklyStreak): a lesson every week keeps it.
+    // A streak freeze (functions/streak.js, bought with stars) covers one missed week; the
+    // lesson page uses them when the student comes back. Here: the badge, and a sheet to buy.
+    const STREAK_TEXT = {
+        en: { title: 'Weekly streak', line: '🔥 {n} weeks in a row', how: 'Do at least one lesson every week to keep your streak going.',
+              done: '✅ This week is done.', todo: '⏳ Do a lesson this week to keep it.',
+              freeze: '🧊 A streak freeze saves your streak if you miss a week. You can hold 2.', have: 'You have {f} of 2 · ⭐ {p}',
+              buy: 'Buy a freeze · 100 ⭐', ok: 'OK', full: 'You already have 2 freezes.', need: 'You need 100 ⭐ to buy a freeze.',
+              bought: 'Streak freeze bought 🧊' },
+        hy: { title: 'Շաբաթական շարք', line: '🔥 {n} շաբաթ անընդմեջ', how: 'Ամեն շաբաթ արա գոնե մեկ դաս, որ շարքդ չընդհատվի։',
+              done: '✅ Այս շաբաթն արված է։', todo: '⏳ Այս շաբաթ արա մեկ դաս՝ շարքը պահելու համար։',
+              freeze: '🧊 Սառեցումը պահպանում է շարքդ, եթե մի շաբաթ բաց թողնես։ Կարող ես ունենալ 2։', have: 'Ունես {f} / 2 · ⭐ {p}',
+              buy: 'Գնել սառեցում · 100 ⭐', ok: 'Լավ', full: 'Արդեն ունես 2 սառեցում։', need: 'Սառեցում գնելու համար պետք է 100 ⭐։',
+              bought: 'Սառեցումը գնված է 🧊' },
+        ru: { title: 'Серия недель', line: '🔥 Недель подряд: {n}', how: 'Проходи хотя бы один урок каждую неделю, чтобы серия не прервалась.',
+              done: '✅ Эта неделя засчитана.', todo: '⏳ Пройди урок на этой неделе, чтобы сохранить серию.',
+              freeze: '🧊 Заморозка сохранит серию, если пропустишь неделю. Можно иметь до 2.', have: 'У тебя {f} из 2 · ⭐ {p}',
+              buy: 'Купить заморозку · 100 ⭐', ok: 'Хорошо', full: 'У тебя уже 2 заморозки.', need: 'Для заморозки нужно 100 ⭐.',
+              bought: 'Заморозка куплена 🧊' },
+    };
+    const FREEZE_COST = 100, FREEZE_MAX = 2;
+    const streakInfo = { streak: 0, freezes: 0, points: 0, doneThisWeek: false };
+    /** ISO week id ("2026-W43"), as lesson.html stores it in streakData.lastActivityWeek. */
+    function isoWeekId(date) {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const week = Math.ceil((((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000) + 1) / 7);
+        return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+    }
+    function weeksBetween(fromWeekId, toWeekId) {
+        const monday = (id) => {
+            const [y, w] = String(id).split('-W').map(Number);
+            const jan4 = new Date(Date.UTC(y, 0, 4));
+            return Date.UTC(y, 0, 4 - (jan4.getUTCDay() || 7) + 1 + (w - 1) * 7);
+        };
+        return Math.round((monday(toWeekId) - monday(fromWeekId)) / (7 * 86400000));
+    }
+    /** The streak as it really stands: broken (0) once more weeks were missed than freezes cover. */
+    function renderStreak(data) {
+        const sd = data.streakData || {};
+        const thisWeek = isoWeekId(new Date());
+        const freezes = Number(data.streakFreezes) || 0;
+        const missed = sd.lastActivityWeek ? weeksBetween(sd.lastActivityWeek, thisWeek) - 1 : 0;
+        Object.assign(streakInfo, {
+            streak: missed <= freezes ? (Number(sd.currentStreak) || 0) : 0,
+            freezes, points: Number(data.points) || 0, doneThisWeek: sd.lastActivityWeek === thisWeek,
+        });
+        ui.hStreak.textContent = streakInfo.streak;
+        document.getElementById('h-freezes').textContent = freezes ? `🧊${freezes}` : '';
+    }
+    document.getElementById('h-streak-btn').onclick = () => {
+        const t = STREAK_TEXT[state.lang] || STREAK_TEXT.en;
+        const canBuy = streakInfo.freezes < FREEZE_MAX && streakInfo.points >= FREEZE_COST;
+        const why = streakInfo.freezes >= FREEZE_MAX ? t.full : streakInfo.points < FREEZE_COST ? t.need : '';
+        openSettingsDialog(t.title, `<div class="streak-sheet">
+                <p class="big">${stEsc(stFill(t.line, { n: streakInfo.streak }))}</p>
+                <p>${stEsc(t.how)}</p>
+                <p>${stEsc(streakInfo.doneThisWeek ? t.done : t.todo)}</p>
+                <p>${stEsc(t.freeze)}</p>
+                <p>${stEsc(stFill(t.have, { f: streakInfo.freezes, p: streakInfo.points }))}${why ? `<br><span style="color:var(--slate-500)">${stEsc(why)}</span>` : ''}</p>
+            </div>`, canBuy ? t.buy : t.ok, async () => {
+            if (!canBuy) return true;
+            try {
+                const r = (await httpsCallable(functions, 'streak')({ action: 'buyFreeze' })).data || {};
+                streakInfo.freezes = r.freezes; streakInfo.points = r.points;
+                ui.hPoints.textContent = r.points;
+                document.getElementById('h-freezes').textContent = r.freezes ? `🧊${r.freezes}` : '';
+                showToast(t.bought);
+                return true;
+            } catch (e) {
+                console.warn('buying a streak freeze failed', e);
+                const m = (e && e.message) || '';
+                showToast(/max-freezes/.test(m) ? t.full : /not-enough-stars/.test(m) ? t.need : stT().saveFail, true);
+                return false;
+            }
+        });
+    };
+
     // ===================== WEEKLY LEAGUE (the Compete page has the full view) =====================
     // The Compete card shows the student's league and place, from the league function
     // (thelo-backend/functions/league.js); asked at most every 5 minutes per tab.
     const LEAGUE_TEXT = {
-        en: { tiers: ['Point', 'Segment', 'Triangle', 'Square', 'Pentagon', 'Circle', 'Cube', 'Sphere', 'Golden ratio', 'Infinity'], name: '{t} League', place: '#{r} of {n}', join: 'earn stars to join' },
-        hy: { tiers: ['Կետ', 'Հատված', 'Եռանկյուն', 'Քառակուսի', 'Հնգանկյուն', 'Շրջան', 'Խորանարդ', 'Գունդ', 'Ոսկե հատում', 'Անվերջություն'], name: '«{t}» լիգա', place: '#{r} / {n}', join: 'վաստակիր աստղեր՝ միանալու համար' },
-        ru: { tiers: ['Точка', 'Отрезок', 'Треугольник', 'Квадрат', 'Пятиугольник', 'Круг', 'Куб', 'Шар', 'Золотое сечение', 'Бесконечность'], name: 'Лига «{t}»', place: '#{r} из {n}', join: 'заработай звёзды, чтобы вступить' },
+        en: { tiers: ['Point', 'Segment', 'Triangle', 'Square', 'Pentagon', 'Circle', 'Cube', 'Sphere', 'Golden ratio', 'Infinity'], name: '{t} League', place: '#{r} of {n}', join: 'earn stars to join',
+              up: "You're #{r} of {n}, in the promotion zone. 4 hours left: hold on to it!",
+              down: "You're close to dropping down (#{r} of {n}). 4 hours left to earn stars!",
+              mid: "4 hours left this week. You're #{r} of {n}: one more lesson could move you up!" },
+        hy: { tiers: ['Կետ', 'Հատված', 'Եռանկյուն', 'Քառակուսի', 'Հնգանկյուն', 'Շրջան', 'Խորանարդ', 'Գունդ', 'Ոսկե հատում', 'Անվերջություն'], name: '«{t}» լիգա', place: '#{r} / {n}', join: 'վաստակիր աստղեր՝ միանալու համար',
+              up: 'Դու #{r} / {n} ես՝ բարձրացման գոտում։ Մնաց 4 ժամ, պահի՛ր տեղդ։',
+              down: 'Դու մոտ ես իջնելուն (#{r} / {n})։ Մնաց 4 ժամ՝ աստղեր վաստակելու համար։',
+              mid: 'Շաբաթին մնաց 4 ժամ։ Դու #{r} / {n} ես. մեկ դաս էլ, և կարող ես բարձրանալ։' },
+        ru: { tiers: ['Точка', 'Отрезок', 'Треугольник', 'Квадрат', 'Пятиугольник', 'Круг', 'Куб', 'Шар', 'Золотое сечение', 'Бесконечность'], name: 'Лига «{t}»', place: '#{r} из {n}', join: 'заработай звёзды, чтобы вступить',
+              up: 'Ты #{r} из {n} и в зоне повышения. Осталось 4 часа: удержи место!',
+              down: 'Ты близко к понижению (#{r} из {n}). Осталось 4 часа, чтобы заработать звёзды!',
+              mid: 'До конца недели 4 часа. Ты #{r} из {n}: ещё один урок может поднять тебя выше!' },
     };
     const TIER_COLORS = ['#94A3B8', '#64748B', '#C2773B', '#16A34A', '#0D9488', '#2563EB', '#4F46E5', '#7C3AED', '#D97706', '#E11D48'];
+    /** The phone apps remind the student 4 hours before the league closes (Sunday 20:00,
+     *  Armenia time), with their place when they last opened thelo. The website has no reminder. */
+    function scheduleLeagueReminder(b, t) {
+        const bridge = window.AndroidInterface;
+        if (!bridge || typeof bridge.scheduleLeagueReminder !== 'function') return;   // the website, or an older app
+        const at = (b.endsAt || 0) - 4 * 3600 * 1000;
+        try {
+            if (b.hidden || !b.joined || !b.rank || Date.now() > at - 60 * 1000) { bridge.scheduleLeagueReminder('', '', '0'); return; }
+            const zone = b.rank <= b.up ? 'up' : b.down && b.rank > b.size - b.down ? 'down' : 'mid';
+            bridge.scheduleLeagueReminder(stFill(t.name, { t: t.tiers[b.tier] || t.tiers[0] }), stFill(t[zone], { r: b.rank, n: b.size }), String(at));
+        } catch (e) {
+            console.warn('league reminder not scheduled', e);
+        }
+    }
     async function refreshLeagueLine() {
         const el = document.getElementById('h-league');
         const u = auth.currentUser;
@@ -3031,7 +3139,8 @@ ${stream[lang]}` : '');
             try {
                 const d = (await httpsCallable(functions, 'league')({ action: 'board' })).data || {};
                 const mine = (d.rows || []).find(r => r.me);
-                b = { tier: Number(d.tier) || 0, joined: !!d.joined, hidden: !!d.hidden, rank: mine ? mine.rank : null, size: d.size || 0 };
+                b = { tier: Number(d.tier) || 0, joined: !!d.joined, hidden: !!d.hidden, rank: mine ? mine.rank : null, size: d.size || 0,
+                      up: d.up || 0, down: d.down || 0, endsAt: d.endsAt || 0 };
                 try { sessionStorage.setItem('theloLeagueLine', JSON.stringify({ uid: u.uid, at: Date.now(), b })); } catch (e) { /* private mode */ }
             } catch (e) {
                 console.warn('league line unavailable', e);
@@ -3039,6 +3148,7 @@ ${stream[lang]}` : '');
             }
         }
         const t = LEAGUE_TEXT[state.lang] || LEAGUE_TEXT.en;
+        scheduleLeagueReminder(b, t);
         if (b.hidden) { el.textContent = ''; return; }
         const name = stFill(t.name, { t: t.tiers[b.tier] || t.tiers[0] });
         const dot = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="${TIER_COLORS[b.tier] || TIER_COLORS[0]}" stroke="#fff" stroke-width="1.5"/></svg>`;
