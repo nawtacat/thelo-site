@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com" crossorigin="anonymous"></script>
 
     <link rel="manifest" href='data:application/manifest+json,{"name":"thelo","short_name":"thelo","start_url":".","display":"standalone","orientation":"portrait","theme_color":"#F8F9FA","background_color":"#F8F9FA"}'>
     <style>
@@ -1137,39 +1137,80 @@
 </div>
 
 <script>
-    // Bootstrap fallback that runs even if module scripts fail to load.
     window.__homeModuleStarted = false;
     (function () {
+        let startupNotice = false;
         const hideLoader = () => {
             const loader = document.getElementById('loading-overlay');
             if (!loader) return;
             loader.classList.add('hidden');
             setTimeout(() => { loader.style.display = 'none'; }, 500);
         };
+        const report = (message, source = '', line = 0) => {
+            hideLoader();
+            startupNotice = false;
+            let banner = document.getElementById('runtime-error-banner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'runtime-error-banner';
+                banner.setAttribute('role', 'alert');
+                banner.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top, 0px) + 12px);z-index:10001;background:#dc2626;color:#fff;padding:10px 12px;border-radius:10px;font:12px/1.35 monospace;box-shadow:0 10px 30px rgba(0,0,0,0.25);display:flex;align-items:center;gap:12px';
+                const text = document.createElement('span');
+                text.id = 'runtime-error-text';
+                text.style.cssText = 'flex:1;overflow-wrap:anywhere';
+                const retry = document.createElement('button');
+                retry.type = 'button';
+                retry.textContent = 'Retry';
+                retry.style.cssText = 'border:1px solid white;border-radius:6px;padding:6px 10px;background:transparent;color:white;font:inherit;flex-shrink:0;cursor:pointer';
+                retry.addEventListener('click', () => window.location.reload());
+                const dismiss = document.createElement('button');
+                dismiss.type = 'button';
+                dismiss.textContent = '×';
+                dismiss.setAttribute('aria-label', 'Dismiss error');
+                dismiss.style.cssText = 'border:0;background:transparent;color:white;font-size:24px;padding:4px;cursor:pointer';
+                dismiss.addEventListener('click', () => banner.remove());
+                banner.append(text, retry, dismiss);
+                document.body.appendChild(banner);
+            }
+            const detail = source ? ` (${source.split('?')[0].split('/').pop()}${line ? ':' + line : ''})` : '';
+            const explanation = message === 'Script error.' || message === 'Script error'
+                ? 'A third-party script failed. Try again; if this repeats, share this screen and the Safari console error.'
+                : String(message || 'Unknown JavaScript error');
+            document.getElementById('runtime-error-text').textContent = 'Runtime error: ' + explanation + detail;
+        };
+
+        window.TheloRuntime = {
+            hideLoader,
+            report,
+            ready() {
+                window.__homeModuleReady = true;
+                if (startupNotice) document.getElementById('runtime-error-banner')?.remove();
+                startupNotice = false;
+            }
+        };
+
+        window.addEventListener('error', event => {
+            if (event.target instanceof HTMLScriptElement) {
+                console.error('Script load failed:', event.target.src || 'main application module');
+                report('Could not load an application script. Check your connection and retry.', event.target.src);
+                return;
+            }
+            if (!event.message) return;
+            console.error('Global error:', event.error || event.message, event.filename, event.lineno);
+            report(event.message, event.filename, event.lineno);
+        }, true);
+
+        window.addEventListener('unhandledrejection', event => {
+            console.error('Unhandled promise rejection:', event.reason);
+            report(event.reason?.message || String(event.reason || 'Unhandled promise rejection'));
+        });
 
         setTimeout(() => {
+            if (window.__homeModuleReady) return;
             hideLoader();
-            if (!window.__homeModuleStarted) {
-                let banner = document.getElementById('runtime-error-banner');
-                if (!banner) {
-                    banner = document.createElement('div');
-                    banner.id = 'runtime-error-banner';
-                    banner.style.position = 'fixed';
-                    banner.style.left = '12px';
-                    banner.style.right = '12px';
-                    banner.style.bottom = '12px';
-                    banner.style.zIndex = '10001';
-                    banner.style.background = '#dc2626';
-                    banner.style.color = '#fff';
-                    banner.style.padding = '10px 12px';
-                    banner.style.borderRadius = '10px';
-                    banner.style.fontSize = '12px';
-                    banner.style.lineHeight = '1.35';
-                    banner.style.boxShadow = '0 10px 30px rgba(0,0,0,0.25)';
-                    banner.style.fontFamily = 'monospace';
-                    document.body.appendChild(banner);
-                }
-                banner.textContent = 'Runtime error: module failed to start (WebView/import issue).';
+            if (!window.__homeModuleStarted && !document.getElementById('runtime-error-banner')) {
+                report('Startup is taking longer than expected. Check your connection or tap Retry.');
+                startupNotice = true;
             }
         }, 6000);
     })();
@@ -1180,7 +1221,7 @@
 <script type="module">
     window.__homeModuleStarted = true;
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser, sendEmailVerification } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser, sendEmailVerification } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, query, orderBy, where, addDoc, serverTimestamp, onSnapshot, increment, writeBatch, deleteDoc, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 
@@ -1193,42 +1234,13 @@
         appId: "1:1093640992262:web:35b1bf4d2364bcf745f587"
     };
 
+    const forceHideLoader = window.TheloRuntime.hideLoader;
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+    const auth = initializeAuth(app, {
+        persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
+    });
     const functions = getFunctions(app, 'us-central1');
     const db = getFirestore(app);
-
-    function forceHideLoader() {
-        const loader = document.getElementById('loading-overlay');
-        if (!loader) return;
-        loader.classList.add('hidden');
-        setTimeout(() => {
-            if (loader) loader.style.display = 'none';
-        }, 500);
-    }
-
-    function showRuntimeErrorBanner(message) {
-        let banner = document.getElementById('runtime-error-banner');
-        if (!banner) {
-            banner = document.createElement('div');
-            banner.id = 'runtime-error-banner';
-            banner.style.position = 'fixed';
-            banner.style.left = '12px';
-            banner.style.right = '12px';
-            banner.style.bottom = '12px';
-            banner.style.zIndex = '10001';
-            banner.style.background = '#dc2626';
-            banner.style.color = '#fff';
-            banner.style.padding = '10px 12px';
-            banner.style.borderRadius = '10px';
-            banner.style.fontSize = '12px';
-            banner.style.lineHeight = '1.35';
-            banner.style.boxShadow = '0 10px 30px rgba(0,0,0,0.25)';
-            banner.style.fontFamily = 'monospace';
-            document.body.appendChild(banner);
-        }
-        banner.textContent = `Runtime error: ${message}`;
-    }
 
     // Fail-safe: never leave users on a blank loading screen
     setTimeout(() => {
@@ -1237,25 +1249,6 @@
             forceHideLoader();
         }
     }, 5000);
-
-    window.addEventListener('error', (event) => {
-        console.error("Global error:", event.error || event.message);
-        forceHideLoader();
-        showRuntimeErrorBanner((event && (event.message || (event.error && event.error.message))) || 'Unknown error');
-        const splash = document.getElementById('view-splash');
-        if (splash) splash.classList.add('active');
-    });
-
-    window.addEventListener('unhandledrejection', (event) => {
-        console.error("Unhandled promise rejection:", event.reason);
-        forceHideLoader();
-        const reasonMsg = event && event.reason
-            ? (event.reason.message || String(event.reason))
-            : 'Unhandled promise rejection';
-        showRuntimeErrorBanner(reasonMsg);
-        const splash = document.getElementById('view-splash');
-        if (splash) splash.classList.add('active');
-    });
 
     // Force Portrait Mode for APK
     const lockOrientation = async () => {
@@ -3529,6 +3522,7 @@ updateOnlineStatus();
         forceHideLoader();
     });
 
+    window.TheloRuntime.ready();
 </script>
 <script src="/assets/thelo-web.js"></script>
 </body>
