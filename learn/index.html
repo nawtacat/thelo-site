@@ -2196,7 +2196,11 @@
         let currentStageIndex = -1; let currentStageData = null; let isStudentInputAllowed = false;
         let drawing = false; let lastPos = { x: 0, y: 0 };
         let userDrawingOccurred = false; let isTransitioning = false;
-        let devicePixelRatio = window.devicePixelRatio || 1; window.userInteracted = false;
+        // Canvases use at most 2 device pixels per CSS pixel: sharp on every phone, and a 3x
+        // iPhone no longer draws (and keeps in memory) 2.25 times as many pixels per canvas.
+        const MAX_CANVAS_DPR = 2;
+        const canvasPixelRatio = () => Math.min(window.devicePixelRatio || 1, MAX_CANVAS_DPR);
+        let devicePixelRatio = canvasPixelRatio(); window.userInteracted = false;
         let currentReplayAnimationId = null; let currentStageAudio = null;
         let userPoints = 0;
         let sessionPoints = 0; // ADDED LINE: To track points for the current lesson session.
@@ -2465,7 +2469,7 @@
 
             const cssWidth = Math.max(1, Math.floor(rect.width));
             const cssHeight = Math.max(1, Math.floor(rect.height));
-            devicePixelRatio = window.devicePixelRatio || 1;
+            devicePixelRatio = canvasPixelRatio();
             const internalWidth = Math.floor(cssWidth * devicePixelRatio);
             const internalHeight = Math.floor(cssHeight * devicePixelRatio);
 
@@ -3182,6 +3186,9 @@
     }
 
     function handleMobileTouchEnd(e) {
+        // A tap on a button, the menu or the headline: nothing on the board changed, so do
+        // not redraw it -- that full redraw is what made buttons feel slow on phones.
+        if (!drawing && !isMobilePanning && !isMobileScrubbing && !mobilePendingStroke) return;
         if (isMobileScrubbing) {
             isMobileScrubbing = false;
             if (currentStageAudio) {
@@ -3621,7 +3628,7 @@
       measureHost.remove();
 
       // ---- build lines ----
-      const canvasW = bgCtx.canvas.width / (window.devicePixelRatio || 1);
+      const canvasW = bgCtx.canvas.width / devicePixelRatio;
       const maxWidth = canvasW * widthFraction;
 
       // FIX: Enforce a standard line height (1.5x font size is a good standard)
@@ -5968,14 +5975,16 @@ ${langLine}`;
         const width = Math.max(1, Math.ceil(maxX - minX));
         const height = Math.max(1, Math.ceil(maxY - minY));
 
-        // Create High-DPI canvas
+        // Create the canvas: sharp, but at most CHECK_IMAGE_PIXELS pixels in all
+        const CHECK_IMAGE_PIXELS = 4000000;
+        const scale = Math.max(0.1, Math.min(devicePixelRatio, Math.sqrt(CHECK_IMAGE_PIXELS / (width * height))));
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width * devicePixelRatio;
-        tempCanvas.height = height * devicePixelRatio;
+        tempCanvas.width = Math.max(1, Math.round(width * scale));
+        tempCanvas.height = Math.max(1, Math.round(height * scale));
         const tCtx = tempCanvas.getContext('2d');
 
         // Scale and Translate
-        tCtx.scale(devicePixelRatio, devicePixelRatio);
+        tCtx.scale(scale, scale);
         tCtx.translate(-minX, -minY);
 
         // Draw Background
@@ -6000,8 +6009,16 @@ ${langLine}`;
             tCtx.stroke();
         });
 
-        const finalCanvas = scaleCanvasToMaxSize(tempCanvas, maxSize);
-        return finalCanvas.toDataURL("image/png");
+        const finalCanvas = scaleCanvasToMaxSize(tempCanvas, maxSize || 2048);
+        const dataUrl = finalCanvas.toDataURL("image/png");
+        releaseCanvas(finalCanvas);
+        releaseCanvas(tempCanvas);
+        return dataUrl;
+    }
+
+    /** iOS counts a canvas against the web view's memory until it is collected; shrinking it frees that now. */
+    function releaseCanvas(c) {
+        if (c && c !== canvas && c !== backgroundCanvas && c !== cachedStaticCanvas) { c.width = 0; c.height = 0; }
     }
     // checkAnswer (scan codebase) replaces analyzeMathDrawing for checking answers:
 // the old one compared only the first plain number of each answer, so "x² + 4",
@@ -6935,7 +6952,7 @@ ${langLine}`;
             if(nextCheckBtn){nextCheckBtn.textContent = TXT.error; nextCheckBtn.disabled = true;}
             if(prevBtn)prevBtn.disabled = true;
             if(bgCtx && backgroundCanvas && backgroundCanvas.width > 0){
-                const cw = backgroundCanvas.width/(window.devicePixelRatio||1); const ch = backgroundCanvas.height/(window.devicePixelRatio||1);
+                const cw = backgroundCanvas.width/devicePixelRatio; const ch = backgroundCanvas.height/devicePixelRatio;
                 bgCtx.clearRect(0,0,cw,ch); bgCtx.font = `20px 'Mardoto-Light', system-ui, sans-serif`;
                 bgCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--thelo-text').trim();
                 bgCtx.textAlign='center';bgCtx.textBaseline='middle';
