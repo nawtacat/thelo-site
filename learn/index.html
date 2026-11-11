@@ -1503,6 +1503,9 @@
            transition-delay: 0s;
        }
 
+       /* Next Stage while the student has not done this part yet (see stageSkip). */
+       .mobile-menu-btn.locked { opacity: 0.38; }
+
        .mobile-menu-btn {
            font-family: inherit;
            /* Trimmed from 17px/14px-20px when Hint became the 6th row: six items at
@@ -1848,7 +1851,7 @@
                 thelobookOpen: "Թելոգիրք", thelobookClose: "Փակել", thelobookInk: "Գույն՝ Սև (Նշումներ)",
                 thelobookEraser: "Ջնջիչ", thelobookPen: "Գրիչ",
                 finishLesson: "Ավարտել դասը",
-                nextStage: "Հաջորդ փուլ",
+                nextStage: "Հաջորդ փուլ", finishStageFirst: "Նախ ավարտիր այս մասը։",
                 prevStage: "Նախորդ փուլ",
                 thelobookDisabledMCQ: "Թելոգիրքը հասանելի չէ հարցաշարի ժամանակ։",
                 thelobookPagesBtn: "Էջեր",
@@ -1924,7 +1927,7 @@
       thelobookOpen: "thelobook",
       thelobookClose: "Close",
       finishLesson: "Finish Lesson",
-      nextStage: "Next Stage",
+      nextStage: "Next Stage", finishStageFirst: "Finish this part first.",
       prevStage: "Previous Stage",
       thelobookInk: "Ink: Black (Notes)",
       thelobookEraser: "Eraser",
@@ -2004,7 +2007,7 @@
       thelobookOpen: "thelobook",
       thelobookClose: "Закрыть",
       finishLesson: "Завершить урок",
-      nextStage: "Следующий шаг",
+      nextStage: "Следующий шаг", finishStageFirst: "Сначала закончи эту часть.",
       prevStage: "Предыдущий шаг",
       thelobookInk: "Цвет: чёрный (заметки)",
       thelobookEraser: "Ластик",
@@ -3296,7 +3299,7 @@
 
     function toggleMobileMenu(x = null, y = null) {
         const isVisible = mobileMenu.classList.contains('visible');
-        if (!isVisible) syncMobileCheckLabel();
+        if (!isVisible) { syncMobileCheckLabel(); updateSkipButton(); }
         if (isVisible) {
             mobileMenu.classList.remove('visible');
             // Unblur
@@ -4429,10 +4432,93 @@
             });
         }, fadeDuration);
     }
-        function nextStage() {
+        /* ---- Next Stage is for parts the student has already done -------------
+         * The menu's "Next Stage" used to skip anything; it was a developer shortcut.
+         * Now it works only where the student has been before: a stage they passed in
+         * this visit or earlier on this device, or anywhere in a lesson they have
+         * completed (in any language). Staff accounts can always skip, so lessons can
+         * still be checked quickly.
+         * How far the student got is kept on the device, per student and lesson; a
+         * completed lesson is read from the progress document, so that follows the
+         * account to another phone.
+         */
+        const stageSkip = { furthest: 0, lessonDone: false, staff: false, key: null };
+
+        function stageSkipLessonId() {
+            const file = new URLSearchParams(window.location.search).get('lessonFile') || '';
+            // 5-01-das, en-5-01-das and ru-5-01-das are the same lesson.
+            return file.split('/').pop().replace('.json', '').replace(/^(?:en|ru)-/, '');
+        }
+
+        /** Staff may list students (firestore.rules) and nobody else may, so that is the test. */
+        async function isStaffAccount(user) {
+            if (!user || user.isAnonymous) return false;
+            const key = `thelo.staff.${user.uid}`;
+            try {
+                const saved = JSON.parse(localStorage.getItem(key) || 'null');
+                if (saved && Date.now() - saved.at < 7 * 864e5) return !!saved.staff;
+            } catch (e) { /* no storage */ }
+            let staff = false, known = true;
+            try {
+                const snap = await db.collection('thelo-students').limit(1).get();
+                if (snap.metadata && snap.metadata.fromCache) known = false;   // offline: says nothing
+                else staff = true;
+            } catch (e) {
+                if (!e || e.code !== 'permission-denied') known = false;
+            }
+            if (known) { try { localStorage.setItem(key, JSON.stringify({ staff, at: Date.now() })); } catch (e) { /* no storage */ } }
+            return staff;
+        }
+
+        async function loadStageSkip(user) {
+            stageSkip.furthest = 0; stageSkip.lessonDone = false; stageSkip.staff = false; stageSkip.key = null;
+            if (!user) { updateSkipButton(); return; }
+            const lessonId = stageSkipLessonId();
+            stageSkip.key = `thelo.furthest.${user.uid}.${lessonId}`;
+            try { stageSkip.furthest = Math.max(0, parseInt(localStorage.getItem(stageSkip.key), 10) || 0); } catch (e) { /* no storage */ }
+            updateSkipButton();
+            try {
+                const progress = db.collection('thelo-students').doc(user.uid).collection('progress');
+                const docs = await Promise.all(['', 'en-', 'ru-'].map(p => progress.doc(p + lessonId).get()));
+                stageSkip.lessonDone = docs.some(d => d.exists && (d.data() || {}).status !== 'in-progress');
+            } catch (e) { /* offline: what the device remembers still applies */ }
+            updateSkipButton();
+            try { stageSkip.staff = await isStaffAccount(user); } catch (e) { /* stays false */ }
+            updateSkipButton();
+        }
+
+        function noteStagePassed(index) {
+            if (index < 0 || index + 1 <= stageSkip.furthest) return;
+            stageSkip.furthest = index + 1;
+            try { if (stageSkip.key) localStorage.setItem(stageSkip.key, String(stageSkip.furthest)); } catch (e) { /* no storage */ }
+        }
+
+        function canSkipStage() {
+            return stageSkip.staff || stageSkip.lessonDone || currentStageIndex < stageSkip.furthest;
+        }
+
+        function updateSkipButton() {
+            if (mobileNextBtn) mobileNextBtn.classList.toggle('locked', !canSkipStage());
+        }
+
+        /** The menu's Next Stage. */
+        function skipStage() {
+            if (!canSkipStage()) {
+                showToast(getCurrentUIText().finishStageFirst);
+                return;
+            }
+            nextStage(true);
+        }
+
+        if (firebaseReady) auth.onAuthStateChanged(user => { loadStageSkip(user); });
+        document.addEventListener('thelo:stage', updateSkipButton);
+
+        function nextStage(skipped) {
             // Every way of moving forward -- the Go button, tapping the "correct"
             // message, the menu's Next Stage, the handwriting path's auto-advance --
             // ends up here, so review mode only has to be intercepted once.
+            // Everything but the menu's skip means the student has done this stage.
+            if (skipped !== true) noteStagePassed(currentStageIndex);
             if (isSingleQuestionReview() && currentStageIndex === getRequestedStartStage()) {
                 finishSingleQuestionReview();
                 return;
@@ -6699,11 +6785,10 @@ ${langLine}`;
         // 2. Ignore inputs with modifiers or in text fields
         if (event.ctrlKey || event.altKey || event.metaKey || ['INPUT', 'TEXTAREA'].includes(event.target.tagName.toUpperCase())) { return; }
 
-        // --- DEV FEATURE: Force Next Stage ---
-        if (event.key.toLowerCase() === 's') {
+        // --- Staff only: force the next stage with the S key ---
+        if (event.key.toLowerCase() === 's' && stageSkip.staff) {
             event.preventDefault();
-            console.log("DEV: Force advancing to next stage via 'S' key.");
-            nextStage();
+            nextStage(true);
             return; // Skip all other key handling
         }
 
@@ -7019,7 +7104,7 @@ ${langLine}`;
         }
 
         if (mobileCheckBtn) mobileCheckBtn.onclick = () => { toggleMobileMenu(); handleNextCheckClick(); };
-        if (mobileNextBtn) mobileNextBtn.onclick = () => { toggleMobileMenu(); nextStage(); };
+        if (mobileNextBtn) mobileNextBtn.onclick = () => { toggleMobileMenu(); skipStage(); };
         if (mobileEraseBtn) mobileEraseBtn.onclick = () => { toggleMobileMenu(); clearUserCanvas(); };
         if (mobilePrevBtn) mobilePrevBtn.onclick = () => {
             toggleMobileMenu();
