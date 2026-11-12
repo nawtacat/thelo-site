@@ -54,6 +54,11 @@ port () {
     perl -0pi -e 's{(function checkMobileMode\(\) \{\n)(\s*)// Mobile-only mode: always force mobile\.\n\s*isMobileMode = true;}
 {$1$2// WEB PORT: the phone build hardcodes true here. On a desktop browser we\n$2// want the mouse path, so decide from the pointing device and the width.\n$2isMobileMode = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 900;}s' "$outfile"
 
+    # --- web manifest -----------------------------------------------------
+    # The apps have no /manifest.json (home.html carries a small inline one, the
+    # lesson none). The website has a real one with icons: link that instead.
+    perl -0pi -e 's{[ \t]*<link rel="manifest"[^>]*>\r?\n}{}g; s{</head>}{    <link rel="manifest" href="/manifest.json">\n</head>}' "$outfile"
+
     # --- desktop layer ----------------------------------------------------
     perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="/assets/thelo-web.css">\n</head>}' "$outfile"
     perl -0pi -e 's{</body>}{<script src="/assets/thelo-web.js"></script>\n</body>}' "$outfile"
