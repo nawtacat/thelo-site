@@ -45,6 +45,10 @@ port () {
         -e "s|'home\\.html'|'/sdashboard/'|g" \
         -e "s|location\.href *= *'home\.html'|location.href = '/sdashboard/'|g" \
         -e "s|location\.href='home\.html'|location.href='/sdashboard/'|g" \
+        -e 's|href="vendor/|href="/vendor/|g' \
+        -e 's|src="vendor/|src="/vendor/|g' \
+        -e 's|src="img/|src="/img/|g' \
+        -e "s|'img/|'/img/|g" \
         "$infile" > "$outfile"
 
     # --- pointer mode -----------------------------------------------------
@@ -63,6 +67,10 @@ port () {
     perl -0pi -e 's{</head>}{    <link rel="stylesheet" href="/assets/thelo-web.css">\n</head>}' "$outfile"
     perl -0pi -e 's{</body>}{<script src="/assets/thelo-web.js"></script>\n</body>}' "$outfile"
 
+    # Tailwind's styles stay last in <head>, after the desktop stylesheet, as they were
+    # when the Tailwind CDN script added them at run time.
+    perl -0pi -e 's{([ \t]*<link rel="stylesheet" href="/vendor/tailwind\.css">\r?\n)(.*?)(</head>)}{$2$1$3}s' "$outfile"
+
     printf "  %-14s %-22s %s bytes\n" "$label" "${outfile#$HERE/}" "$(wc -c < "$outfile" | tr -d ' ')"
 }
 
@@ -73,10 +81,20 @@ port "$SRC/jumptest.html" "$HERE/jump/index.html"     "jump test"
 port "$SRC/compete.html" "$HERE/compete/index.html"   "compete"
 cp "$SRC/scan-pad.js" "$HERE/scan/scan-pad.js"
 cp "$SRC/scan-pad.js" "$HERE/jump/scan-pad.js"
+# The bundled third-party files (tools/web-vendor/build.py in the app repo) and the UI font.
+rm -rf "$HERE/vendor"
+cp -R "$SRC/vendor" "$HERE/vendor"
+cp "$SRC/fonts/Manrope-Variable.ttf" "$HERE/fonts/Manrope-Variable.ttf"
 # The first-run tutorial is loaded by the dashboard, the lesson and the scan page.
 for d in sdashboard learn scan; do cp "$SRC/tutorial.js" "$HERE/$d/tutorial.js"; done
 
 echo
+# home.html's Tailwind styles are built ahead of time; say so if they have gone stale.
+VENDOR_BUILD="$SRC/../../../../../../tools/web-vendor/build.py"
+if [ -f "$VENDOR_BUILD" ] && command -v python >/dev/null 2>&1 && [ -d "$(dirname "$VENDOR_BUILD")/node_modules" ]; then
+    python -B "$VENDOR_BUILD" --check || echo "  WARNING: rebuild the bundled styles, then run this script again."
+fi
+
 echo "--- verification ---"
 fail=0
 check () {
@@ -98,6 +116,14 @@ for f in "$HERE/sdashboard/index.html" "$HERE/learn/index.html" "$HERE/scan/inde
     check "$f" "'home\\.html'" 'raw home runtime route' gone
     check "$f" "'scan\\.html'" 'raw scan runtime route' gone
     check "$f" 'lesson\.html?lessonFile=' 'raw lesson.html link' gone
+done
+for f in "$HERE/sdashboard/index.html" "$HERE/learn/index.html" "$HERE/scan/index.html" "$HERE/jump/index.html" "$HERE/compete/index.html"; do
+    check "$f" '="vendor/' 'page-relative vendor path' gone
+    check "$f" 'src="img/' 'page-relative image path' gone
+done
+check "$HERE/sdashboard/index.html" 'cdn\.tailwindcss\.com' 'Tailwind CDN script' gone
+for v in vendor/fonts.css vendor/tailwind.css vendor/katex/katex.min.js vendor/katex/katex-inline-css.js vendor/fontawesome/css/all.min.css fonts/Manrope-Variable.ttf img/bluethelo.svg; do
+    if [ -s "$HERE/$v" ]; then echo "  ok    /$v present"; else echo "  FAIL  /$v missing"; fail=$((fail+1)); fi
 done
 check "$HERE/learn/index.html" 'isMobileMode = true;' 'hardcoded mobile flag' gone
 check "$HERE/learn/index.html" 'pointer: coarse' 'pointer detection' present

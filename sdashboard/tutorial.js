@@ -22,7 +22,8 @@
     'use strict';
     if (window.TheloTutorial) return;
 
-    const AVATAR = 'https://thelo.ink/img/thelofavicon.png';
+    // Bundled with the apps (img/); on the website the same file is at the site root.
+    const AVATAR = (/^https?:$/.test(location.protocol) ? '/' : '') + 'img/thelofavicon.png';
     const STORE = 'theloTutorial:';            // + uid -> { status: running|done|skipped, phase }
     const ACTIVE = 'theloTutorial.active';     // uid whose tour is running, for lesson.html / scan.html
 
