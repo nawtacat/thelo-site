@@ -15,6 +15,24 @@ if (window.parent === window) {
 <!-- Same icon set home.html uses, so the bottom bar is identical across tabs. -->
 <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
 
+<script>
+    /* Inside the apps this page is not on http(s): it is a file on Android and the app's own
+       address on the iPhone. The Firebase Auth SDK loaded below starts Google's "gapi" helper
+       for popup and redirect sign-in, which thelo does not use (email and password only), and
+       that helper cannot run on such an address. On the iPhone it failed in a way the SDK never
+       noticed, so sign-in hung for good: lessons started signed out and Check did nothing.
+       Handing the SDK a gapi that says "not available" at once makes it carry on and restore
+       the saved sign-in. On the website the real helper is left alone. */
+    if (!/^https?:$/.test(location.protocol) && !window.gapi) {
+        window.gapi = {
+            load: function (name, options) {
+                setTimeout(function () {
+                    if (options && typeof options.ontimeout === 'function') options.ontimeout();
+                }, 0);
+            }
+        };
+    }
+</script>
 <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
