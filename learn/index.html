@@ -4586,6 +4586,17 @@
     async function displayLessonComplete() {
       isLessonFinished = true;
       document.dispatchEvent(new CustomEvent('thelo:lesson-complete'));
+      // The home-screen widget (phone apps): a lesson was finished today. The app adds the
+      // day to what home.html last told it; home.html sends the full picture when it opens.
+      try {
+        const widgetBridge = window.AndroidInterface;
+        if (widgetBridge && typeof widgetBridge.updateWidget === 'function') {
+          const now = new Date();
+          const patch = { addDay: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`, next: '' };
+          if (userPoints > 0) patch.stars = userPoints;
+          widgetBridge.updateWidget(JSON.stringify(patch));
+        }
+      } catch (e) { /* the website, or an older app */ }
       updateMenuFabVisibility();
       stopCenterCorrection(); // Stop any auto-panning
       isStudentInputAllowed = false;

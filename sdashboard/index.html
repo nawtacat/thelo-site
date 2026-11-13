@@ -2584,6 +2584,21 @@ ${STREAM_LABELS[s][lang]}`;
         // (ids like 12adv-05-das / en-9-31-gorc) and passed grade tests.
         const profileData = profileSnap.exists() ? profileSnap.data() : {};
         updateGoalLine(Number(profileData.preferences?.dailyGoal) || 0, progSnap);
+
+        // For the home-screen widget: how many lessons were finished on each of the last days
+        // (the phone's own date, as the widget compares it with "today").
+        const widgetDays = {};
+        const widgetSince = Date.now() - 21 * 864e5;
+        progSnap.forEach(d => {
+            const p = d.data();
+            const at = p.lastAttempted && typeof p.lastAttempted.toDate === 'function' ? p.lastAttempted.toDate() : null;
+            if (p.status === 'completed' && at && at.getTime() >= widgetSince) widgetDays[widgetDay(at)] = (widgetDays[widgetDay(at)] || 0) + 1;
+        });
+        pushWidget({
+            signedIn: true, lang: userLang, name: profileData.firstName || profileData.name || '',
+            stars: Number(profileData.points) || 0, streak: streakInfo.streak, freezes: streakInfo.freezes,
+            goal: Number(profileData.preferences?.dailyGoal) || 0, grade: String(userGrade), days: widgetDays,
+        });
         const storedMaxGrade = Number(profileData.preferences?.maxGrade) || 0;
         let maxGrade = Math.max(storedMaxGrade, Number(userGrade) || 0);
         completedIds.forEach(id => {
@@ -2909,6 +2924,13 @@ ${STREAM_LABELS[s][lang]}`;
         }
 
         ui.hList.innerHTML = listHTML;
+
+        pushWidget({ next: ui.hTitle.textContent || '', courseDone: !!(window.theloCoursePath && window.theloCoursePath.complete) });
+        // The widget's Continue button opens home.html?go=next: straight into what is next.
+        if (new URLSearchParams(location.search).get('go') === 'next') {
+            history.replaceState(null, '', location.pathname);
+            if (!ui.hBtn.disabled) { ui.hBtn.click(); return; }
+        }
 
         refreshLeagueLine();
         maybeStartTutorial(u, {
@@ -3242,6 +3264,18 @@ ${STREAM_LABELS[s][lang]}`;
         });
     };
 
+    // ===================== HOME-SCREEN WIDGET (the phone apps) =====================
+    // The apps' home-screen widgets ("Did you do your lesson today?") are drawn by the phone,
+    // from what this page tells it here: nothing else on the phone knows the student's lessons.
+    // Each call is a patch, merged by the app into what it already has (MainActivity /
+    // WebBridge -> WidgetData / WidgetStore). The website has no bridge, so nothing happens there.
+    function pushWidget(patch) {
+        const bridge = window.AndroidInterface;
+        if (!bridge || typeof bridge.updateWidget !== 'function') return;
+        try { bridge.updateWidget(JSON.stringify(patch)); } catch (e) { console.warn('widget not updated', e); }
+    }
+    const widgetDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
     // ===================== WEEKLY LEAGUE (the Compete page has the full view) =====================
     // The Compete card shows the student's league and place, from the league function
     // (thelo-backend/functions/league.js); asked at most every 5 minutes per tab.
@@ -3297,10 +3331,13 @@ ${STREAM_LABELS[s][lang]}`;
         }
         const t = LEAGUE_TEXT[state.lang] || LEAGUE_TEXT.en;
         scheduleLeagueReminder(b, t);
-        if (b.hidden) { el.textContent = ''; return; }
+        if (b.hidden) { el.textContent = ''; pushWidget({ league: null }); return; }
         const name = stFill(t.name, { t: t.tiers[b.tier] || t.tiers[0] });
         const dot = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="${TIER_COLORS[b.tier] || TIER_COLORS[0]}" stroke="#fff" stroke-width="1.5"/></svg>`;
-        el.innerHTML = dot + stEsc(b.joined && b.rank ? `${name} · ${stFill(t.place, { r: b.rank, n: b.size })}` : `${name} · ${t.join}`);
+        const line = b.joined && b.rank ? `${name} · ${stFill(t.place, { r: b.rank, n: b.size })}` : `${name} · ${t.join}`;
+        // The widget shows the same line, in the student's language, with the league's colour.
+        pushWidget({ league: { tier: b.tier, color: TIER_COLORS[b.tier] || TIER_COLORS[0], text: line } });
+        el.innerHTML = dot + stEsc(line);
     }
 
     /** "Today: 2 of 3 lessons" under Up Next, when the student has a daily goal. */
@@ -3332,6 +3369,7 @@ ${STREAM_LABELS[s][lang]}`;
             const userDocRef = doc(db, 'thelo-students', auth.currentUser.uid);
             await updateDoc(userDocRef, { lastLogout: serverTimestamp() }).catch(console.error);
         }
+        pushWidget({ signedIn: false });
         await signOut(auth);
         window.location.reload();
     };
