@@ -2545,6 +2545,12 @@
                 ctx.putImageData(userDrawingData, 0, 0);
             }
 
+            // The snapshot of the question (mobile panning) has the old size: drawn now it
+            // would be stretched to the new one and stay under the question renderStageUI
+            // draws afresh (a tablet turned mid-lesson showed ghost copies). renderStageUI
+            // takes a new snapshot once the question is drawn.
+            cachedStaticCanvas = null;
+
             // Redraw the rest of the UI.
             if (currentStageIndex >= 0 && lessonStages.length > 0) renderStageUI(currentStageIndex, true);
 
@@ -4133,14 +4139,17 @@
             updateMenuFabVisibility();
             isStudentInputAllowed = currentStageData.studentInput === true;
 
-            // Reset and log stage metrics
-            stageStartTime = Date.now();
-            attemptsInCurrentStage = 0;
-            // New problem, so hints start gentle again.
-            resetHintsForStage();
+            // Reset and log stage metrics. Not on a resize (a tablet turned, a window
+            // resized): that redraws the same stage, it does not start it again.
             const user = auth.currentUser;
             const lessonFileName = new URLSearchParams(window.location.search).get('lessonFile');
-            if (user && lessonFileName) {
+            if (!isResize) {
+                stageStartTime = Date.now();
+                attemptsInCurrentStage = 0;
+                // New problem, so hints start gentle again.
+                resetHintsForStage();
+            }
+            if (!isResize && user && lessonFileName) {
                 db.collection("analytics_events").add({
                     type: "stage_started",
                     userId: user.uid,
