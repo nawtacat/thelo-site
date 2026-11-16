@@ -3980,6 +3980,7 @@
         // A tap/click selects the answer; the Check button then checks it (same as the arrow keys + Enter).
         if (isMcqAnsweredCorrectly) return;
         if (nextCheckBtn && nextCheckBtn.disabled) return; // wait for the "incorrect" flash to finish
+        if (typeof hideOnCanvasFeedback === 'function') hideOnCanvasFeedback();   // the last "not quite"
         updateMcqSelectionVisuals(selectedIndex);
     }/**
      * Toggles a distraction-free fullscreen mode that hides the browser's
@@ -4844,6 +4845,22 @@
                 });
                 bumpStageCompletedKpis(attemptsInCurrentStage, timeSpent);
 
+                // Stars and the review list, as for a handwritten answer. Many questions whose
+                // answer is a word (Yes / No, a kind of angle...) are choices now, because
+                // handwritten words are hard to read. Right first time: 10 stars. After a wrong
+                // pick the answer has been shown, so the second pick earns nothing.
+                if (!stagesWithPointsAwarded.has(currentStageIndex)) {
+                    stagesWithPointsAwarded.add(currentStageIndex);
+                    if (attemptsInCurrentStage === 1) {
+                        const pts = 10;
+                        userPoints += pts;
+                        sessionPoints += pts;
+                        updatePointsDisplay();
+                        updateUserPointsInFirestore(pts);
+                    }
+                }
+                clearMistake();
+
                 // The options now remain visible.
 
                 nextCheckBtn.textContent = TXT.next;
@@ -4853,8 +4870,26 @@
             } else { // Incorrect answer
                 selectedButton.classList.remove('selected');
                 selectedButton.classList.add('incorrect');
-                addChatMessage('AI', `🤔 ${mcq.feedbackIncorrect || TXT.incorrect}`);
+                // "{correctText}" in the lesson's message is the right choice (its /K … K/
+                // formulas as $…$, which the chat renders). It used to be shown as it was.
+                const correctChoice = String((mcq.choices || [])[mcq.correctIndex] || '')
+                    .replace(/\/K\s?([\s\S]*?)\s?K\//g, (_, tex) => `$${tex}$`);
+                const wrongText = String(mcq.feedbackIncorrect || TXT.incorrect).split('{correctText}').join(correctChoice);
+                addChatMessage('AI', `🤔 ${wrongText}`);
+                if (!document.getElementById('chat')) {
+                    // Phones and tablets have no chat panel, so the message (the right
+                    // answer and the worked solution) goes on the board, like the feedback
+                    // on a handwritten answer. The choices step aside while it shows (they sit
+                    // over the middle of the board); tapping the board brings them back.
+                    if (mcqOptionsContainer) mcqOptionsContainer.style.visibility = 'hidden';
+                    showOnCanvasFeedback(wrongText
+                        .replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')
+                        .replace(/\$([^$]*)\$/g, (_, tex) => texToPlain(tex)));
+                }
                 playRandomFeedback('disapprove');
+                // Onto the review list. No feedback text: it names the right choice, and the
+                // list on Home shows it.
+                recordMistake('');
 
                 setTimeout(() => {
                     buttons.forEach(b => {
@@ -5795,6 +5830,8 @@ ${langLine}`;
         feedbackAnimationId = requestAnimationFrame(animate);
     }
           function hideOnCanvasFeedback() {
+        // A multiple choice's options step aside while its "not quite" shows.
+        if (mcqOptionsContainer) mcqOptionsContainer.style.visibility = '';
         if (!feedbackCtx || !lastFeedbackDetails) return;
 
         // --- NEW: Restore the background image ---
