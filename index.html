@@ -11,6 +11,7 @@
 <meta name="theme-color" content="#F8F9FA">
 <link rel="icon" href="/img/thelofavicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/img/yarnicon.png">
+<link rel="manifest" href="/manifest.json">
 <!-- Fonts and icons are served from thelo.ink itself (tools/web-vendor), not from Google. -->
 <link rel="stylesheet" href="/vendor/fonts.css">
 <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
@@ -47,6 +48,7 @@
     .nav { position: sticky; top: 0; z-index: 50; background: rgba(248,249,250,.82); -webkit-backdrop-filter: saturate(1.4) blur(12px); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid transparent; transition: border-color .2s; }
     .nav.scrolled { border-bottom-color: var(--line); }
     .nav-in { display: flex; align-items: center; gap: 16px; height: 68px; }
+    .logo { flex-shrink: 0; }
     .logo img { height: 30px; width: auto; }
     .links { display: flex; gap: 4px; margin-left: 10px; }
     .links a { padding: 8px 12px; border-radius: 10px; font-weight: 600; color: var(--slate); font-size: .95rem; }
@@ -645,7 +647,7 @@
             parTitle: 'For parents', parSub: 'thelo is made for school students, and we treat their data with that in mind.',
             par1: 'No ads.', par2: 'We never sell anyone’s information.', par3: 'We keep only what thelo needs to teach.', par4: 'An account can be deleted, with everything in it, at any time.',
             parLink: 'Read our privacy policy',
-            endTitle: 'Ready for today’s lesson?', endSub: 'Create a free account and start with your grade.', endCta: 'Start learning, free', endCtaIn: 'Open thelo',
+            endTitle: 'Ready for today’s lesson?', endSub: 'Create a free account and start with your grade.', endCta: 'Start learning, free', endCtaIn: 'Open thelo', openApp: 'Open app', openAppCta: 'Open the thelo app',
             footSlogan: 'All of us for math and math for all.', footPrivacy: 'Privacy policy',
             weekdays: ['M', 'T', 'W', 'T', 'F', 'S', 'S']
         },
@@ -689,7 +691,7 @@
             parTitle: 'Ծնողների համար', parSub: 'thelo-ն ստեղծված է դպրոցականների համար, և նրանց տվյալներին վերաբերվում ենք հենց այդպես։',
             par1: 'Գովազդ չկա։', par2: 'Ոչ մեկի տվյալները երբեք չենք վաճառում։', par3: 'Պահում ենք միայն այն, ինչ thelo-ին պետք է սովորեցնելու համար։', par4: 'Հաշիվը կարելի է ջնջել ցանկացած պահի՝ ամբողջ պարունակությամբ։',
             parLink: 'Կարդալ գաղտնիության քաղաքականությունը',
-            endTitle: 'Պատրա՞ստ ես այսօրվա դասին', endSub: 'Ստեղծիր անվճար հաշիվ և սկսիր քո դասարանից։', endCta: 'Սկսել անվճար', endCtaIn: 'Բացել thelo-ն',
+            endTitle: 'Պատրա՞ստ ես այսօրվա դասին', endSub: 'Ստեղծիր անվճար հաշիվ և սկսիր քո դասարանից։', endCta: 'Սկսել անվճար', endCtaIn: 'Բացել thelo-ն', openApp: 'Բացել', openAppCta: 'Բացել thelo հավելվածը',
             footSlogan: 'Բոլորը թվերի՝ և թվերը բոլորի համար։', footPrivacy: 'Գաղտնիության քաղաքականություն',
             weekdays: ['Երկ', 'Երք', 'Չրք', 'Հնգ', 'Ուր', 'Շբթ', 'Կիր']
         },
@@ -733,7 +735,7 @@
             parTitle: 'Для родителей', parSub: 'thelo создан для школьников, и мы обращаемся с их данными с этим в мыслях.',
             par1: 'Никакой рекламы.', par2: 'Мы никогда не продаём ничьи данные.', par3: 'Храним только то, что нужно thelo для обучения.', par4: 'Аккаунт можно удалить в любой момент — вместе со всем содержимым.',
             parLink: 'Политика конфиденциальности',
-            endTitle: 'Готов к сегодняшнему уроку?', endSub: 'Создай бесплатный аккаунт и начни со своего класса.', endCta: 'Начать бесплатно', endCtaIn: 'Открыть thelo',
+            endTitle: 'Готов к сегодняшнему уроку?', endSub: 'Создай бесплатный аккаунт и начни со своего класса.', endCta: 'Начать бесплатно', endCtaIn: 'Открыть thelo', openApp: 'Открыть', openAppCta: 'Открыть приложение thelo',
             footSlogan: 'Все мы — для математики, и математика — для всех.', footPrivacy: 'Политика конфиденциальности',
             weekdays: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
         }
@@ -789,14 +791,30 @@
 
     function applyAuth() {
         var t = T[lang];
-        var app = '/sdashboard/?lang=' + lang;
+        // With the Android app on the phone, the buttons open the app (an intent link: Chrome
+        // hands thelo.ink/sdashboard/ to ink.thelo.app). Otherwise they open the web app.
+        var app = hasApp
+            ? 'intent://thelo.ink/sdashboard/?lang=' + lang + '#Intent;scheme=https;package=' + ANDROID_APP + ';end'
+            : '/sdashboard/?lang=' + lang;
         document.querySelectorAll('[data-auth]').forEach(function (a) {
             a.href = app;
             var kind = a.dataset.auth;
-            if (kind === 'nav' || kind === 'foot') a.textContent = signedIn ? t.navOpen : t.navAuth;
-            if (kind === 'cta') a.querySelector('span').textContent = signedIn ? t.heroCtaIn : t.heroCta;
-            if (kind === 'end') a.querySelector('span').textContent = signedIn ? t.endCtaIn : t.endCta;
+            if (kind === 'nav' || kind === 'foot') a.textContent = hasApp ? t.openApp : (signedIn ? t.navOpen : t.navAuth);
+            if (kind === 'cta') a.querySelector('span').textContent = hasApp ? t.openAppCta : (signedIn ? t.heroCtaIn : t.heroCta);
+            if (kind === 'end') a.querySelector('span').textContent = hasApp ? t.openAppCta : (signedIn ? t.endCtaIn : t.endCta);
+            if (kind === 'course' && hasApp) a.querySelector('span').textContent = t.openAppCta;
         });
+    }
+
+    // Is the thelo app installed on this Android phone? Chrome can tell, because the app and
+    // /manifest.json name each other (asset_statements in the app, related_applications here).
+    var ANDROID_APP = 'ink.thelo.app';
+    var hasApp = false;
+    if (navigator.getInstalledRelatedApps && /Android/i.test(navigator.userAgent)) {
+        navigator.getInstalledRelatedApps().then(function (apps) {
+            hasApp = (apps || []).some(function (a) { return a.id === ANDROID_APP; });
+            if (hasApp) applyAuth();
+        }).catch(function () { /* not supported here: the web buttons stay */ });
     }
 
     function apply(next) {
