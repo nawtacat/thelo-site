@@ -163,6 +163,13 @@
         .pad-wrap canvas { width: 100%; height: 100%; display: block; touch-action: none; }
         .pad-tools { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.4rem; }
         .pad-hint { position: absolute; left: 0.9rem; bottom: 0.6rem; font-size: 0.8rem; color: var(--slate-400); pointer-events: none; }
+        /* Scratch paper: work a choice or a number out by hand. Not checked, not sent. */
+        .draft-btn {
+            font: inherit; font-weight: 700; font-size: 0.92rem; color: var(--thelo-blue); background: var(--white);
+            border: 1.5px dashed var(--thelo-blue); border-radius: 0.8rem; padding: 0.5rem 0.9rem; margin: 0 0 1rem;
+            display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer;
+        }
+        .draft .pad-wrap { flex: none; height: 240px; min-height: 0; margin-bottom: 1rem; border-style: dashed; }
 
         .feedback { border-radius: 1rem; padding: 1rem 1.1rem; margin-bottom: 0.75rem; font-weight: 700; line-height: 1.4; }
         .feedback.right { background: var(--green-bg); color: #14532D; }
@@ -264,6 +271,7 @@
                 right: 'Correct!', wrong: 'Not quite', answerWas: 'Answer: {a}',
                 noInk: 'Write your solution first.', checkFail: 'The answer could not be checked. Please try again.',
                 undo: 'Undo', clear: 'Clear', padHint: 'Write here with your finger or pen',
+                draft: 'Scratch paper', draftHint: 'Work it out here. This is not checked.',
                 passTitle: 'You passed!', failTitle: 'Not this time',
                 passSection: 'The section is open. Keep going from there!', passGrade: 'Welcome to grade {g}!',
                 passCheckpoint: 'Well done! The next lessons are open.',
@@ -299,6 +307,7 @@
                 right: 'Ճիշտ է։', wrong: 'Սխալ է', answerWas: 'Պատասխանը՝ {a}',
                 noInk: 'Նախ գրիր լուծումը։', checkFail: 'Պատասխանը չստուգվեց։ Փորձիր նորից։',
                 undo: 'Հետարկել', clear: 'Մաքրել', padHint: 'Գրիր այստեղ մատով կամ գրիչով',
+                draft: 'Սևագիր', draftHint: 'Լուծիր այստեղ։ Սա չի ստուգվում։',
                 passTitle: 'Անցար։', failTitle: 'Այս անգամ՝ ոչ',
                 passSection: 'Բաժինը բացված է։ Շարունակիր այնտեղից։', passGrade: 'Բարի գալուստ {g}-րդ դասարան։',
                 passCheckpoint: 'Կեցցե՛ս։ Հաջորդ դասերը բացված են։',
@@ -334,6 +343,7 @@
                 right: 'Верно!', wrong: 'Не совсем', answerWas: 'Ответ: {a}',
                 noInk: 'Сначала напиши решение.', checkFail: 'Не удалось проверить ответ. Попробуй ещё раз.',
                 undo: 'Отменить', clear: 'Очистить', padHint: 'Пиши здесь пальцем или стилусом',
+                draft: 'Черновик', draftHint: 'Решай здесь. Это не проверяется.',
                 passTitle: 'Сдано!', failTitle: 'В этот раз не вышло',
                 passSection: 'Раздел открыт. Продолжай оттуда!', passGrade: 'Добро пожаловать в {g} класс!',
                 passCheckpoint: 'Молодец! Следующие уроки открыты.',
@@ -435,15 +445,20 @@
             if (KIND === 'section') {
                 const course = params.get('course') || '';
                 const unit = params.get('unit') || '';
+                const from = Number(params.get('from')) || 1, to = Number(params.get('to')) || 0;
+                // ranges=1-12,41-50: the lessons skipped in each subject (home.html takes Algebra
+                // and Geometry units in pairs); without it, from..to.
+                const ranges = (params.get('ranges') || '').split(',')
+                    .map(r => r.split('-').map(Number)).filter(r => r.length === 2 && r[0] >= 1 && r[1] >= r[0]);
+                if (!ranges.length) ranges.push([from, to]);
                 return {
                     key: `s_${course}_u${unit}`, field: 'jumpTests',
                     folders: [params.get('folder') || ''],
-                    from: Number(params.get('from')) || 1,
-                    to: Number(params.get('to')) || 0,
+                    from, to, ranges,
                     unit: Number(unit), course,
                     title: params.get('title') || '',
                     size: SIZES.section,
-                    server: { kind: 'section', course, folder: params.get('folder') || '', from: Number(params.get('from')) || 1, to: Number(params.get('to')) || 0, unit: Number(unit), lang: LANG },
+                    server: { kind: 'section', course, folder: params.get('folder') || '', from, to, ranges, unit: Number(unit), lang: LANG },
                 };
             }
             if (KIND === 'checkpoint') {
@@ -555,7 +570,8 @@
             return {
                 async start() {
                     const lessons = [];
-                    for (const f of spec.folders) lessons.push(...poolLessons(await loadPool(f)).filter(l => KIND === 'grade' || (l.n >= spec.from && l.n <= spec.to)));
+                    const inRange = (n) => (spec.ranges || [[spec.from, spec.to]]).some(([a, b]) => n >= a && n <= b);
+                    for (const f of spec.folders) lessons.push(...poolLessons(await loadPool(f)).filter(l => KIND === 'grade' || inRange(l.n)));
                     items = pickQuestions(lessons, spec.size.quick, spec.size.written);
                     return { questions: items.map(it => it.pub), need: Math.ceil(PASS_RATIO * items.length) };
                 },
@@ -668,6 +684,34 @@
                     <div class="q-text" id="jt-q"></div>`;
         }
 
+        // Scratch paper under a choice or number question: a pad to work it out by hand, as
+        // on the lesson board. It opens on a tap and is never checked or sent.
+        function draftHTML() {
+            return `<button class="draft-btn" id="jt-draft-btn"><i class="fa-solid fa-pencil"></i> ${esc(T.draft)}</button>
+                    <div class="draft" id="jt-draft" hidden></div>`;
+        }
+        function wireDraft() {
+            const btn = document.getElementById('jt-draft-btn');
+            const box = document.getElementById('jt-draft');
+            if (!btn || !box) return;
+            btn.onclick = () => {
+                btn.remove();
+                box.hidden = false;
+                box.innerHTML = `<div class="pad-wrap">
+                        <canvas id="jt-draft-pad"></canvas>
+                        <div class="pad-tools">
+                            <button class="icon-btn" id="jt-draft-undo" aria-label="${esc(T.undo)}"><i class="fa-solid fa-rotate-left"></i></button>
+                            <button class="icon-btn" id="jt-draft-clear" aria-label="${esc(T.clear)}"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                        <span class="pad-hint" id="jt-draft-hint">${esc(T.draftHint)}</span>
+                    </div>`;
+                const hint = document.getElementById('jt-draft-hint');
+                const pad = new ScanPad(document.getElementById('jt-draft-pad'), () => { hint.style.display = pad.hasInk ? 'none' : ''; });
+                document.getElementById('jt-draft-undo').onclick = () => pad.undo();
+                document.getElementById('jt-draft-clear').onclick = () => pad.clear();
+            };
+        }
+
         function showQuestion() {
             const q = questions[idx];
             setProgress(idx, questions.length);
@@ -694,9 +738,11 @@
         function showMcq(q) {
             let picked = -1;
             screen(`${questionHeader(q, T.chooseOne)}
+                    ${draftHTML()}
                     <div class="choices">${q.c.map((_, i) => `<button class="choice" data-i="${i}"></button>`).join('')}</div>`,
                 `<button class="btn btn-primary" id="jt-check" disabled>${esc(T.check)}</button>`);
             renderRich(document.getElementById('jt-q'), q.q);
+            wireDraft();
             const buttons = [...$main.querySelectorAll('.choice')];
             buttons.forEach(b => {
                 renderRich(b, q.c[Number(b.dataset.i)]);
@@ -730,10 +776,12 @@
             const dec = LANG === 'en' ? '.' : ',';
             const keys = ['7', '8', '9', '⌫', '4', '5', '6', '−', '1', '2', '3', '/', '0', dec, '', ''];
             screen(`${questionHeader(q, T.typeAnswer)}
+                    ${draftHTML()}
                     <div class="answer-row"><div class="answer-box empty" id="jt-box"></div>${q.u ? `<span class="unit">${esc(q.u)}</span>` : ''}</div>
                     <div class="keypad">${keys.map(k => k ? `<button class="key${/[⌫−\/,.]/.test(k) ? ' op' : ''}" data-k="${esc(k)}">${esc(k)}</button>` : '<span></span>').join('')}</div>`,
                 `<button class="btn btn-primary" id="jt-check" disabled>${esc(T.check)}</button>`);
             renderRich(document.getElementById('jt-q'), q.q);
+            wireDraft();
             const box = document.getElementById('jt-box');
             const check = document.getElementById('jt-check');
             const draw = () => {

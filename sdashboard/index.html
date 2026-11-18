@@ -2705,6 +2705,23 @@ ${STREAM_LABELS[s][lang]}`;
         };
         const CP_MID_MIN_LESSONS = 4;
         const baseIdOf = (id) => id.replace(/-(das|gorc)$/, '');
+        // Algebra and Geometry side by side, as at school (grades 7-12 have both): their units
+        // are taken in pairs. The first Algebra unit and the first Geometry unit are open
+        // together; the next pair opens once both are done. A subject with more units than the
+        // other carries on alone after the last pair. A course with one subject (grades 5-6)
+        // is a single line, as before. pu.stage is the pair, pu.track the subject.
+        const subjectOf = (title) => /^(Հանրահաշիվ|Algebra|Алгебра)/.test(title) ? 'a'
+            : /^(Երկրաչափություն|Geometry|Геометрия)/.test(title) ? 'g' : '';
+        const algebraUnits = pathUnits.filter(pu => subjectOf(pu.title) === 'a');
+        const geometryUnits = pathUnits.filter(pu => subjectOf(pu.title) === 'g');
+        const paired = algebraUnits.length > 0 && geometryUnits.length > 0
+            && algebraUnits.length + geometryUnits.length === pathUnits.length;
+        if (paired) {
+            algebraUnits.forEach((pu, i) => { pu.stage = i; pu.track = 'a'; });
+            geometryUnits.forEach((pu, i) => { pu.stage = i; pu.track = 'g'; });
+        } else {
+            pathUnits.forEach((pu, i) => { pu.stage = i; pu.track = 'x'; });
+        }
         const pathItems = [];
         pathUnits.forEach((pu, ui_) => {
             const unitNum = pu.num ?? ui_ + 1;
@@ -2724,25 +2741,44 @@ ${STREAM_LABELS[s][lang]}`;
             if (!belowReached && courseDoc && pu.topics.length) pu.items.push(checkpoint('end'));
             pathItems.push(...pu.items);
         });
-        // Units the student has jumped into with a section test: checkpoints before them are behind.
-        const jumpedUnit = Math.max(0, ...Object.entries(jumpTests).map(([k, r]) => {
+        // Units the student has jumped into with a section test: checkpoints of earlier pairs are behind.
+        const unitByNum = new Map(pathUnits.map((pu, i) => [pu.num ?? i + 1, pu]));
+        const jumpedStage = Math.max(-1, ...Object.entries(jumpTests).map(([k, r]) => {
             const m = courseDoc && r && r.passedAt ? /_u(\d+)$/.exec(k) : null;
             // this course's section test, in any language
-            return m && sameTestKeys(`s_${courseDoc.id.replace(/[^A-Za-z0-9_]/g, '_')}_u${m[1]}`).includes(k) ? Number(m[1]) : 0;
+            const ours = m && sameTestKeys(`s_${courseDoc.id.replace(/[^A-Za-z0-9_]/g, '_')}_u${m[1]}`).includes(k);
+            return ours && unitByNum.has(Number(m[1])) ? unitByNum.get(Number(m[1])).stage : -1;
         }));
-        let doneAfter = false;
-        for (let i = pathItems.length - 1; i >= 0; i--) {
-            const it = pathItems[i];
-            if (it.kind === 'topic') { it.done = isCompleted(it.t.id); doneAfter = doneAfter || it.done; }
-            else it.done = !!(it.rec && it.rec.passedAt) || doneAfter || it.unitNum < jumpedUnit;
-        }
-        const pathTopics = pathUnits.flatMap(pu => pu.topics);
-        const frontierIdx = pathItems.findIndex(it => !it.done);
-        const frontierItem = frontierIdx >= 0 ? pathItems[frontierIdx] : null;
-        // The first lesson not done (a jump test starts from it), even when a checkpoint comes first.
-        const frontier = pathTopics.find(t => !isCompleted(t.id)) || null;
-        const courseComplete = pathItems.length > 0 && !frontierItem;
-        const frontierUnit = frontierItem ? frontierItem.unit : pathUnits.length;
+        // A checkpoint is behind the student once something after it in the same subject is done.
+        const trackItems = {};
+        pathUnits.forEach(pu => (trackItems[pu.track] = trackItems[pu.track] || []).push(...pu.items));
+        Object.values(trackItems).forEach(items => {
+            let doneAfter = false;
+            for (let i = items.length - 1; i >= 0; i--) {
+                const it = items[i];
+                if (it.kind === 'topic') { it.done = isCompleted(it.t.id); doneAfter = doneAfter || it.done; }
+                else it.done = !!(it.rec && it.rec.passedAt) || doneAfter || pathUnits[it.unit].stage < jumpedStage;
+            }
+        });
+        pathUnits.forEach(pu => {
+            pu.complete = pu.items.every(it => it.done);
+            pu.frontier = pu.items.find(it => !it.done) || null;     // its first item not done
+        });
+        // A pair is open when every unit of the pairs before it is done.
+        const openStage = Math.min(Infinity, ...pathUnits.filter(pu => !pu.complete).map(pu => pu.stage));
+        const unitOpen = (pu) => pu.stage <= openStage;
+        // Units in the order shown: pair by pair, Algebra first.
+        const shownUnits = [...pathUnits].sort((a, b) => (a.stage - b.stage) || a.track.localeCompare(b.track));
+        // Up next: of the open units, the one the student is less far into (so the two
+        // subjects alternate), Algebra first when even.
+        const progressOf = (pu) => pu.items.filter(it => it.done).length / Math.max(1, pu.items.length);
+        const nextUnit = shownUnits.filter(pu => unitOpen(pu) && !pu.complete)
+            .sort((a, b) => progressOf(a) - progressOf(b))[0] || null;
+        const frontierItem = nextUnit ? nextUnit.frontier : null;
+        const pathTopics = shownUnits.flatMap(pu => pu.topics);
+        // The first lesson not done (the widget, the grade-test hint), even when a checkpoint comes first.
+        const frontier = (nextUnit && nextUnit.topics.find(t => !isCompleted(t.id))) || pathTopics.find(t => !isCompleted(t.id)) || null;
+        const courseComplete = pathItems.length > 0 && !pathUnits.some(pu => !pu.complete);
         const fillIn = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
         const hoursText = (ms) => ms >= 3600000 ? `${Math.floor(ms / 3600000)} ${tr({ en: 'h', hy: 'ժ', ru: 'ч' }, userLang)}` : `${Math.ceil(ms / 60000)} ${tr({ en: 'min', hy: 'ր', ru: 'мин' }, userLang)}`;
         const waitFor = (ms) => fillIn(txt.jumpWait, { h: hoursText(ms) });
@@ -2774,27 +2810,38 @@ ${STREAM_LABELS[s][lang]}`;
             ui.hBtn.onclick = () => window.switchToCourses();
         }
 
-        pathUnits.forEach((pu, ui_) => {
+        shownUnits.forEach((pu) => {
+            const ui_ = pathUnits.indexOf(pu);
             const doneCount = pu.topics.filter(t => isCompleted(t.id)).length;
-            let state = (courseComplete || ui_ < frontierUnit) ? 'done' : (ui_ === frontierUnit ? 'current' : 'locked');
+            let state = (courseComplete || pu.complete) ? 'done' : (unitOpen(pu) ? 'current' : 'locked');
             if (belowReached && state === 'locked') state = doneCount === pu.topics.length ? 'done' : 'free';
             const icon = { done: 'fa-check', current: 'fa-play', locked: 'fa-lock', free: 'fa-folder-open' }[state];
             const pct = pu.topics.length ? Math.round(100 * doneCount / pu.topics.length) : 0;
 
             let jumpHTML = '';
             if (state === 'locked' && frontier) {
-                const prev = pathUnits[ui_ - 1];
-                const from = lessonNumOf(frontier.id);
-                const to = prev && prev.topics.length ? lessonNumOf(prev.topics[prev.topics.length - 1].id) : null;
+                // Jumping here skips what is left of the pairs before this one: one range of
+                // lesson numbers per subject (lessons are numbered through the course, Algebra
+                // first), from its first lesson not done to the end of its last skipped unit.
+                const ranges = [];
+                [...new Set(pathUnits.map(u => u.track))].forEach(track => {
+                    const skipped = pathUnits.filter(u => u.track === track && u.stage < pu.stage);
+                    const topics = skipped.flatMap(u => u.topics);
+                    const first = topics.find(t => !isCompleted(t.id));
+                    const last = topics[topics.length - 1];
+                    const from = first && lessonNumOf(first.id), to = last && lessonNumOf(last.id);
+                    if (from && to && to >= from) ranges.push([from, to]);
+                });
                 const folder = frontier.url.includes('/') ? frontier.url.split('/')[0] : '';
-                if (from && to && folder) {
+                if (ranges.length && folder) {
                     const unitNum = pu.num ?? ui_ + 1;
                     const key = `s_${courseDoc.id}_u${unitNum}`.replace(/[^A-Za-z0-9_]/g, '_');
                     const jumpRec = sameTestRecord(jumpTests, key);
                     const failedAt = jumpRec && !jumpRec.passedAt && jumpRec.failedAt;
                     const waitMs = failedAt ? 24 * 3600 * 1000 - (Date.now() - failedAt) : 0;
                     const href = `/jump/?kind=section&lang=${encodeURIComponent(userLang)}&course=${encodeURIComponent(courseDoc.id)}` +
-                        `&folder=${encodeURIComponent(folder)}&from=${from}&to=${to}&unit=${unitNum}&title=${encodeURIComponent(pu.title)}`;
+                        `&folder=${encodeURIComponent(folder)}&from=${ranges[0][0]}&to=${ranges[0][1]}` +
+                        `&ranges=${ranges.map(r => r.join('-')).join(',')}&unit=${unitNum}&title=${encodeURIComponent(pu.title)}`;
                     const waitText = waitMs > 0 ? waitFor(waitMs) : '';
                     jumpHTML = `
                         <div class="path-jump">
@@ -2808,9 +2855,9 @@ ${STREAM_LABELS[s][lang]}`;
 
             let itemsHTML = '';
             pu.items.forEach(it => {
-                const at = pathItems.indexOf(it);
                 const isNext = it === frontierItem;
-                const isLocked = !belowReached && !it.done && frontierItem && at > frontierIdx;
+                // locked: its pair is not open yet, or it comes after the unit's first item not done
+                const isLocked = !belowReached && !it.done && (!unitOpen(pu) || it !== pu.frontier);
                 if (it.kind === 'cp') {
                     const name = it.pos === 'mid' ? txt.cpMid : txt.cpEnd;
                     if (isLocked) {
@@ -2844,7 +2891,7 @@ ${STREAM_LABELS[s][lang]}`;
                 const t = it.t;
                 if (isLocked) {
                     itemsHTML += `
-                        <div class="lesson-item locked" onclick="window.pathLocked(${it.unit === frontierUnit && frontierItem && frontierItem.kind === 'cp' ? 'true' : ''})">
+                        <div class="lesson-item locked" onclick="window.pathLocked(${unitOpen(pu) && pu.frontier && pu.frontier.kind === 'cp' ? 'true' : ''})">
                             <div class="lesson-icon icon-locked"><i class="fa-solid fa-lock"></i></div>
                             <div>
                                 <div class="lesson-name">${escapeHTML(t.name)}</div>
@@ -2858,13 +2905,13 @@ ${STREAM_LABELS[s][lang]}`;
                         <div class="lesson-icon ${it.done ? 'icon-done' : 'icon-active'}"><i class="fa-solid ${it.done ? 'fa-check' : 'fa-play'}"></i></div>
                         <div>
                             <div class="lesson-name">${escapeHTML(t.name)}</div>
-                            <div class="lesson-sub">${escapeHTML(isNext ? txt.upNextSub : (it.done ? txt.completed : txt.available))}</div>
+                            <div class="lesson-sub">${escapeHTML((isNext || it === pu.frontier) ? txt.upNextSub : (it.done ? txt.completed : txt.available))}</div>
                         </div>
                     </a>`;
             });
 
             listHTML += `
-                <section class="path-unit ${state} ${state === 'current' ? 'open' : ''}">
+                <section class="path-unit ${state} ${state === 'current' ? 'open' : ''}${paired ? ' paired' : ''}">
                     <button class="path-head" onclick="this.parentElement.classList.toggle('open')">
                         <span class="path-badge"><i class="fa-solid ${icon}"></i></span>
                         <span class="path-head-text">

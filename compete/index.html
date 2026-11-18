@@ -373,6 +373,7 @@
                 tabLeague: 'League', tabBattle: 'Battle',
                 tiers: ['Point', 'Segment', 'Triangle', 'Square', 'Pentagon', 'Circle', 'Cube', 'Sphere', 'Golden ratio', 'Infinity'],
                 leagueName: '{t} League', leagueOf: 'Grade {g} · {n} students', leagueOf1: 'Grade {g}',
+                movedUp: 'You are in the grade {g} league now. The stars you earned this week came with you.',
                 endsIn: 'Ends in {d}', dh: '{d} d {h} h', hm: '{h} h {m} min',
                 upZone: 'Promotion zone', downZone: 'Demotion zone',
                 joinTitle: "Join this week's league",
@@ -423,6 +424,7 @@
                 tabLeague: 'Լիգա', tabBattle: 'Մրցամարտ',
                 tiers: ['Կետ', 'Հատված', 'Եռանկյուն', 'Քառակուսի', 'Հնգանկյուն', 'Շրջան', 'Խորանարդ', 'Գունդ', 'Ոսկե հատում', 'Անվերջություն'],
                 leagueName: '«{t}» լիգա', leagueOf: '{g}-րդ դասարան · {n} աշակերտ', leagueOf1: '{g}-րդ դասարան',
+                movedUp: 'Այժմ {g}-րդ դասարանի լիգայում ես։ Այս շաբաթ վաստակած աստղերդ քեզ հետ են։',
                 endsIn: 'Ավարտ՝ {d} հետո', dh: '{d} օր {h} ժ', hm: '{h} ժ {m} ր',
                 upZone: 'Բարձրացման գոտի', downZone: 'Իջեցման գոտի',
                 joinTitle: 'Միացիր այս շաբաթվա լիգային',
@@ -473,6 +475,7 @@
                 tabLeague: 'Лига', tabBattle: 'Битва',
                 tiers: ['Точка', 'Отрезок', 'Треугольник', 'Квадрат', 'Пятиугольник', 'Круг', 'Куб', 'Шар', 'Золотое сечение', 'Бесконечность'],
                 leagueName: 'Лига «{t}»', leagueOf: '{g} класс · учеников: {n}', leagueOf1: '{g} класс',
+                movedUp: 'Теперь ты в лиге {g} класса. Звёзды, заработанные на этой неделе, перешли с тобой.',
                 endsIn: 'Закончится через {d}', dh: '{d} д {h} ч', hm: '{h} ч {m} мин',
                 upZone: 'Зона повышения', downZone: 'Зона понижения',
                 joinTitle: 'Вступи в лигу этой недели',
@@ -782,6 +785,14 @@
                 const msg = fmt(L.moved === 'up' ? T.lastUp : L.moved === 'down' ? T.lastDown : T.lastStay, { r: L.rank, n: L.of, t: T.tiers[L.newTier] || '' });
                 lastHTML = `<div class="lg-last ${esc(L.moved)}">${tierBadge(L.newTier)}<span>${esc(msg)}</span><button id="cp-last-x" aria-label="OK">✕</button></div>`;
             }
+            // Moved to a higher grade's league during the week (league.js): say so, once.
+            const movedKey = `theloLeagueMoved:${user ? user.uid : ''}`;
+            const movedTag = `${b.week}_${b.grade}`;
+            let movedSeen = '';
+            try { movedSeen = localStorage.getItem(movedKey) || ''; } catch (e) { /* private mode */ }
+            if (b.movedFrom && b.joined && movedSeen !== movedTag) {
+                lastHTML += `<div class="lg-last up" id="cp-moved"><i class="fa-solid fa-arrow-up" style="font-size:1.4rem"></i><span>${esc(fmt(T.movedUp, { g: b.grade }))}</span><button id="cp-moved-x" aria-label="OK">✕</button></div>`;
+            }
 
             const ladder = T.tiers.map((_, i) => tierBadge(i, i === tier ? 'on' : i < tier ? 'done' : '')).join('');
             const head = `
@@ -833,7 +844,9 @@
             box.innerHTML = head + body + how;
             const x = document.getElementById('cp-last-x');
             if (x) x.onclick = () => { try { localStorage.setItem(seenKey, L.week); } catch (e) { /* private mode */ } x.parentElement.remove(); };
-            if (lastHTML && L.moved === 'up' && typeof confetti === 'function') confetti();
+            if (x && L && L.moved === 'up' && typeof confetti === 'function') confetti();
+            const movedX = document.getElementById('cp-moved-x');
+            if (movedX) movedX.onclick = () => { try { localStorage.setItem(movedKey, movedTag); } catch (e) { /* private mode */ } movedX.parentElement.remove(); };
             const toLessons = document.getElementById('cp-to-lessons');
             if (toLessons) toLessons.onclick = goHome;
             // far down the list: bring the student's own row into view
