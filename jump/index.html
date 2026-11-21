@@ -169,7 +169,47 @@
             border: 1.5px dashed var(--thelo-blue); border-radius: 0.8rem; padding: 0.5rem 0.9rem; margin: 0 0 1rem;
             display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer;
         }
-        .draft .pad-wrap { flex: none; height: 240px; min-height: 0; margin-bottom: 1rem; border-style: dashed; }
+        /* The same board as Scan: no edges (move with two fingers or the hand tool, pinch to
+           zoom), an eraser, and a full-screen mode with the question on top. */
+        .draft-wrap {
+            position: relative; height: 260px; overflow: hidden; border-radius: 1rem;
+            border: 1.5px dashed var(--grid-color); background-color: var(--white);
+            background-image: linear-gradient(var(--grid-color) 1px, transparent 1px),
+                              linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 25px 25px;
+        }
+        .draft-wrap canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+        .draft-tools { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.35rem; z-index: 5; }
+        .draft-tool {
+            width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--grid-color);
+            background: rgba(255, 255, 255, 0.95); color: var(--slate-700, #334155); font-size: 0.92rem;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+        }
+        .draft-tool.on { background: var(--thelo-blue); color: var(--white); border-color: var(--thelo-blue); }
+        .draft-hint { position: absolute; left: 0.9rem; bottom: 0.6rem; right: 0.9rem; font-size: 0.8rem; color: var(--slate-400); pointer-events: none; }
+        .draft-controls { color: var(--slate-500); font-size: 0.78rem; line-height: 1.45; margin: 0.45rem 0 1rem; }
+        .draft-q { display: none; }
+        .draft-exit { display: none; }
+        body.draft-fs { overflow: hidden; }
+        body.draft-fs .draft-wrap {
+            position: fixed; inset: 0; z-index: 900; height: auto; border: none; border-radius: 0;
+            display: flex; flex-direction: column;
+        }
+        body.draft-fs .draft-q {
+            display: block; order: 0; flex-shrink: 0; max-height: 35vh; overflow-y: auto;
+            padding: calc(0.6rem + max(env(safe-area-inset-top, 0px), 1rem)) 1rem 0.6rem;
+            font-weight: 700; line-height: 1.4; background: var(--white); border-bottom: 1px solid var(--grid-color);
+        }
+        body.draft-fs .draft-tools { position: static; order: 1; justify-content: flex-end; padding: 0.5rem 0.75rem; background: var(--white); flex-shrink: 0; }
+        body.draft-fs .draft-wrap canvas { order: 2; flex: 1; height: 0; min-height: 0; }
+        body.draft-fs .draft-hint { display: none; }
+        body.draft-fs .draft-exit {
+            display: flex; position: fixed; z-index: 910; align-items: center; gap: 0.5rem;
+            right: calc(1rem + env(safe-area-inset-right, 0px)); bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+            padding: 0.8rem 1.15rem; border-radius: 999px; border: none; cursor: pointer;
+            background: var(--thelo-blue); color: var(--white); font: inherit; font-weight: 700;
+            box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+        }
 
         .feedback { border-radius: 1rem; padding: 1rem 1.1rem; margin-bottom: 0.75rem; font-weight: 700; line-height: 1.4; }
         .feedback.right { background: var(--green-bg); color: #14532D; }
@@ -272,6 +312,8 @@
                 noInk: 'Write your solution first.', checkFail: 'The answer could not be checked. Please try again.',
                 undo: 'Undo', clear: 'Clear', padHint: 'Write here with your finger or pen',
                 draft: 'Scratch paper', draftHint: 'Work it out here. This is not checked.',
+                draftControls: 'Move with two fingers or the hand tool, pinch to zoom: the scratch paper has no edges.',
+                draftBack: 'Back to the question', eraser: 'Eraser', pan: 'Move', boardHome: 'Back to start', fullscreen: 'Full screen',
                 passTitle: 'You passed!', failTitle: 'Not this time',
                 passSection: 'The section is open. Keep going from there!', passGrade: 'Welcome to grade {g}!',
                 passCheckpoint: 'Well done! The next lessons are open.',
@@ -308,6 +350,8 @@
                 noInk: 'Նախ գրիր լուծումը։', checkFail: 'Պատասխանը չստուգվեց։ Փորձիր նորից։',
                 undo: 'Հետարկել', clear: 'Մաքրել', padHint: 'Գրիր այստեղ մատով կամ գրիչով',
                 draft: 'Սևագիր', draftHint: 'Լուծիր այստեղ։ Սա չի ստուգվում։',
+                draftControls: 'Տեղաշարժիր երկու մատով կամ ձեռքի գործիքով, մատներով մեծացրու կամ փոքրացրու. սևագիրը եզրեր չունի։',
+                draftBack: 'Վերադառնալ հարցին', eraser: 'Ռետին', pan: 'Տեղաշարժել', boardHome: 'Վերադառնալ սկզբին', fullscreen: 'Ամբողջ էկրանով',
                 passTitle: 'Անցար։', failTitle: 'Այս անգամ՝ ոչ',
                 passSection: 'Բաժինը բացված է։ Շարունակիր այնտեղից։', passGrade: 'Բարի գալուստ {g}-րդ դասարան։',
                 passCheckpoint: 'Կեցցե՛ս։ Հաջորդ դասերը բացված են։',
@@ -344,6 +388,8 @@
                 noInk: 'Сначала напиши решение.', checkFail: 'Не удалось проверить ответ. Попробуй ещё раз.',
                 undo: 'Отменить', clear: 'Очистить', padHint: 'Пиши здесь пальцем или стилусом',
                 draft: 'Черновик', draftHint: 'Решай здесь. Это не проверяется.',
+                draftControls: 'Двигай двумя пальцами или «рукой», сведи или разведи пальцы для масштаба: у черновика нет краёв.',
+                draftBack: 'К вопросу', eraser: 'Ластик', pan: 'Двигать', boardHome: 'В начало', fullscreen: 'Во весь экран',
                 passTitle: 'Сдано!', failTitle: 'В этот раз не вышло',
                 passSection: 'Раздел открыт. Продолжай оттуда!', passGrade: 'Добро пожаловать в {g} класс!',
                 passCheckpoint: 'Молодец! Следующие уроки открыты.',
@@ -697,22 +743,61 @@
             btn.onclick = () => {
                 btn.remove();
                 box.hidden = false;
-                box.innerHTML = `<div class="pad-wrap">
+                const tool = (id, icon, title) =>
+                    `<button class="draft-tool" id="${id}" title="${esc(title)}" aria-label="${esc(title)}"><i class="fa-solid ${icon}"></i></button>`;
+                box.innerHTML = `<div class="draft-wrap" id="jt-draft-wrap">
+                        <div class="draft-q" id="jt-draft-q"></div>
                         <canvas id="jt-draft-pad"></canvas>
-                        <div class="pad-tools">
-                            <button class="icon-btn" id="jt-draft-undo" aria-label="${esc(T.undo)}"><i class="fa-solid fa-rotate-left"></i></button>
-                            <button class="icon-btn" id="jt-draft-clear" aria-label="${esc(T.clear)}"><i class="fa-solid fa-trash-can"></i></button>
+                        <div class="draft-tools">
+                            ${tool('jt-draft-eraser', 'fa-eraser', T.eraser)}
+                            ${tool('jt-draft-pan', 'fa-hand', T.pan)}
+                            ${tool('jt-draft-undo', 'fa-rotate-left', T.undo)}
+                            ${tool('jt-draft-home', 'fa-house', T.boardHome)}
+                            ${tool('jt-draft-clear', 'fa-trash-can', T.clear)}
+                            ${tool('jt-draft-fs', 'fa-expand', T.fullscreen)}
                         </div>
-                        <span class="pad-hint" id="jt-draft-hint">${esc(T.draftHint)}</span>
-                    </div>`;
+                        <span class="draft-hint" id="jt-draft-hint">${esc(T.draftHint)}</span>
+                    </div>
+                    <p class="draft-controls">${esc(T.draftControls)}</p>
+                    <button class="draft-exit" id="jt-draft-exit"><i class="fa-solid fa-compress"></i> ${esc(T.draftBack)}</button>`;
+                renderRich(document.getElementById('jt-draft-q'), questions[idx].q);
                 const hint = document.getElementById('jt-draft-hint');
                 const pad = new ScanPad(document.getElementById('jt-draft-pad'), () => { hint.style.display = pad.hasInk ? 'none' : ''; });
+                const setTool = (t) => {
+                    pad.setTool(t);
+                    document.getElementById('jt-draft-eraser').classList.toggle('on', t === 'eraser');
+                    document.getElementById('jt-draft-pan').classList.toggle('on', t === 'hand');
+                };
+                document.getElementById('jt-draft-eraser').onclick = () => setTool(pad.tool === 'eraser' ? 'pen' : 'eraser');
+                document.getElementById('jt-draft-pan').onclick = () => setTool(pad.tool === 'hand' ? 'pen' : 'hand');
                 document.getElementById('jt-draft-undo').onclick = () => pad.undo();
+                document.getElementById('jt-draft-home').onclick = () => pad.home();
                 document.getElementById('jt-draft-clear').onclick = () => pad.clear();
+                document.getElementById('jt-draft-fs').onclick = () => setDraftFullscreen(!document.body.classList.contains('draft-fs'));
+                document.getElementById('jt-draft-exit').onclick = () => setDraftFullscreen(false);
+                draftPad = pad;
             };
         }
 
+        // Full-screen scratch paper: the question on top, the board below, "Back to the
+        // question" at the bottom. The phone's Back button leaves it instead of the test.
+        let draftPad = null;
+        function setDraftFullscreen(on, updateHistory = true) {
+            if (on === document.body.classList.contains('draft-fs')) return;
+            if (draftPad) draftPad.finishStroke();
+            if (updateHistory) {
+                if (on) history.pushState({ draftFullscreen: true }, '');
+                else if (history.state && history.state.draftFullscreen) history.back();
+            }
+            document.body.classList.toggle('draft-fs', on);
+            const fs = document.getElementById('jt-draft-fs');
+            if (fs) fs.innerHTML = `<i class="fa-solid ${on ? 'fa-compress' : 'fa-expand'}"></i>`;
+        }
+        window.addEventListener('popstate', () => setDraftFullscreen(!!(history.state && history.state.draftFullscreen), false));
+
         function showQuestion() {
+            setDraftFullscreen(false);
+            draftPad = null;
             const q = questions[idx];
             setProgress(idx, questions.length);
             if (q.type === 'mcq') return showMcq(q);
